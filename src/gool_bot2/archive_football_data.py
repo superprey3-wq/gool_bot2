@@ -88,6 +88,7 @@ def _normalize(frame: pd.DataFrame, *, season: str, division: str) -> pd.DataFra
     out["total_goals"] = out["home_score"] + out["away_score"]
     out["score_diff"] = out["home_score"] - out["away_score"]
     out["over_2_5"] = ((out["final_home_score"] + out["final_away_score"]) >= 3).astype(int)
+    out["both_teams_to_score"] = ((out["final_home_score"] > 0) & (out["final_away_score"] > 0)).astype(int)
     out["another_goal"] = ((out["final_home_score"] + out["final_away_score"]) > out["total_goals"]).astype(int)
     out["goal_in_first_half"] = (out["total_goals"] > 0).astype(int)
     out["match_id"] = (

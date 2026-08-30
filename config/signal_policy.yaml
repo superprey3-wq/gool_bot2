@@ -1,0 +1,34 @@
+# Signal timing and exposure policy ported from the validated legacy GOOL runtime.
+# Odds/value gates are intentionally excluded from gool_bot2 core v1.
+
+collector:
+  interval_seconds: 60
+
+another_goal:
+  observe_from_minute: 10
+  second_half_warmup_until_minute: 55
+  max_new_signal_minute: 75
+  max_reentry_minute: 80
+  post_goal_cooldown_minutes: 5
+  min_signal_score: 75
+
+first_half_goal:
+  observe_from_minute: 0
+  signal_from_minute: 15
+  signal_to_minute: 25
+  post_goal_cooldown_minutes: 5
+  min_engine_score: 80
+  min_probability_percent: 75
+
+second_half_two_plus:
+  # Legacy strategy evaluates completed 1H at HT or very early 2H.
+  signal_at_halftime: true
+  fallback_signal_from_minute: 47
+  fallback_signal_to_minute: 50
+  min_engine_score: 80
+  stricter_score_when_strong_team_comfortably_leads: 84
+  min_probability_percent: 75
+
+exposure:
+  max_entries_per_match: 2
+  max_open_signals_per_match: 1

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.request import Request, urlopen
@@ -66,6 +67,31 @@ def _api_call(method:str,payload:dict[str,Any],timeout:int=15)->dict[str,Any]|No
             body=json.loads(response.read().decode("utf-8"));return body if isinstance(body,dict) else None
     except Exception:return None
 
+def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int=25)->dict[str,Any]|None:
+    token=_token()
+    if not token:return None
+    boundary=f"----GOOL{uuid.uuid4().hex}"
+    body=bytearray()
+    for key,value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
+        body.extend(str(value).encode("utf-8"));body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'.encode())
+    body.extend(f"Content-Type: {content_type}\r\n\r\n".encode())
+    body.extend(file_bytes);body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode())
+    req=Request(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=bytes(body),
+        headers={"Content-Type":f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urlopen(req,timeout=timeout) as response:
+            payload=json.loads(response.read().decode("utf-8"));return payload if isinstance(payload,dict) else None
+    except Exception:return None
+
 def signal_keyboard(match_id:str,head:str,entered:bool=False)->dict[str,Any]:
     code=HEAD_TO_CODE.get(head,"AG");text="✅ В игре" if entered else "🎯 В игре";return {"inline_keyboard":[[{"text":text,"callback_data":f"ig:{code}:{match_id}"}]]}
 
@@ -76,6 +102,19 @@ def send_message(chat_id:str|int,text:str,parse_mode:str="HTML",reply_markup:dic
 
 def broadcast(text:str,parse_mode:str="HTML",reply_markup:dict[str,Any]|None=None)->int:
     return sum(int(send_message(chat_id,text,parse_mode=parse_mode,reply_markup=reply_markup)) for chat_id in get_subscribers())
+
+def send_photo(chat_id:str|int,png:bytes,caption:str="",reply_markup:dict[str,Any]|None=None)->bool:
+    fields={"chat_id":str(chat_id)}
+    if caption:
+        fields["caption"]=caption
+        fields["parse_mode"]="HTML"
+    if reply_markup:
+        fields["reply_markup"]=json.dumps(reply_markup,ensure_ascii=False,separators=(",",":"))
+    result=_multipart_call("sendPhoto",fields,"photo","gool-bot2.png",png)
+    return bool(result and result.get("ok"))
+
+def broadcast_photo(png:bytes,caption:str="",reply_markup:dict[str,Any]|None=None)->int:
+    return sum(int(send_photo(chat_id,png,caption=caption,reply_markup=reply_markup)) for chat_id in get_subscribers())
 
 def send_startup_status()->int:
     return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nМодели: 3/3 ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅",reply_markup=MENU_KEYBOARD)

@@ -17,6 +17,18 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
       - run: pytest -q
+      - name: Build Monkey deployment bundle
+        run: |
+          mkdir -p deploy_bundle
+          cp -R src deploy_bundle/
+          cp pyproject.toml README.md .env.example deploy_bundle/
+          cp -R docs deploy_bundle/
+          (cd deploy_bundle && zip -qr ../GOOL_BOT2_MONKEY_CODE.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gool-bot2-monkey-code
+          path: GOOL_BOT2_MONKEY_CODE.zip
+          retention-days: 14
 
   football-data-train:
     if: (github.event_name == 'pull_request' && github.head_ref == 'experiment/ht-one-goal-over25') || (github.event_name == 'push' && github.ref == 'refs/heads/experiment/ht-one-goal-over25')

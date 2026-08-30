@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -17,16 +18,45 @@ from .train_hazard_models import train_hazard_models
 
 WYSCOUT_EVENTS_URL = "https://raw.githubusercontent.com/koenvo/wyscout-soccer-match-event-dataset/main/raw_data/events.zip"
 WYSCOUT_MATCHES_URL = "https://raw.githubusercontent.com/koenvo/wyscout-soccer-match-event-dataset/main/raw_data/matches.zip"
-STATSBOMB_OPEN_DATA_URL = "https://github.com/statsbomb/open-data/archive/refs/heads/master.zip"
+STATSBOMB_OPEN_DATA_URLS = (
+    "https://codeload.github.com/hudl/open-data/zip/refs/heads/master",
+    "https://codeload.github.com/statsbomb/open-data/zip/refs/heads/master",
+    "https://codeload.github.com/zagilbert/StatsBomb-open-data/zip/refs/heads/master",
+)
+DYNASTY_DATASET_URL = "https://raw.githubusercontent.com/Afriskaut/dynasty-scouting-league-2024-open-data/main/Datasets.zip"
 
 
 def _download(url: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.stat().st_size > 0:
         return
-    request = urllib.request.Request(url, headers={"User-Agent": "gool_bot2-foundation/1.1"})
-    with urllib.request.urlopen(request, timeout=180) as response, path.open("wb") as handle:
-        shutil.copyfileobj(response, handle)
+    partial = path.with_suffix(path.suffix + ".part")
+    partial.unlink(missing_ok=True)
+    request = urllib.request.Request(url, headers={"User-Agent": "gool_bot2-foundation/1.2"})
+    try:
+        with urllib.request.urlopen(request, timeout=600) as response, partial.open("wb") as handle:
+            shutil.copyfileobj(response, handle, length=1024 * 1024)
+        partial.replace(path)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
+
+
+def _download_zip_with_fallback(urls: tuple[str, ...], path: Path) -> str:
+    if path.exists() and zipfile.is_zipfile(path):
+        return "cached"
+    path.unlink(missing_ok=True)
+    errors: list[str] = []
+    for url in urls:
+        try:
+            _download(url, path)
+            if not zipfile.is_zipfile(path):
+                raise RuntimeError("downloaded file is not a valid zip archive")
+            return url
+        except Exception as exc:
+            path.unlink(missing_ok=True)
+            errors.append(f"{url}: {type(exc).__name__}: {exc}")
+    raise RuntimeError("All StatsBomb GitHub mirrors failed: " + " | ".join(errors))
 
 
 def _extract(path: Path, output: Path) -> None:
@@ -46,6 +76,38 @@ def _find_statsbomb_root(extracted: Path) -> Path:
         if (candidate / "data" / "matches").exists() and (candidate / "data" / "events").exists():
             return candidate
     raise RuntimeError("StatsBomb archive extracted, but data/matches and data/events were not found")
+
+
+def _stage_dynasty_archive(raw_root: Path) -> dict[str, object]:
+    """Download a second independent GitHub event archive for the next importer.
+
+    Afriskaut's Dynasty Scouting League archive is Apache-2.0, compact (~9 MB),
+    timestamped JSONL event data with match metadata and pitch coordinates.  We
+    stage it now so a StatsBomb network/mirror outage cannot block collecting a
+    second source, but we do not silently mix it into model training until its
+    event taxonomy is mapped and tested in a dedicated canonical importer.
+    """
+    dynasty_raw = raw_root / "dynasty"
+    dynasty_zip = dynasty_raw / "Datasets.zip"
+    dynasty_extracted = dynasty_raw / "extracted"
+    try:
+        _download(DYNASTY_DATASET_URL, dynasty_zip)
+        if not zipfile.is_zipfile(dynasty_zip):
+            raise RuntimeError("Dynasty Datasets.zip is invalid")
+        _extract(dynasty_zip, dynasty_extracted)
+        match_dirs = sum(1 for p in dynasty_extracted.rglob("events.jsonl") if p.is_file())
+        return {
+            "status": "staged",
+            "matches_with_events": int(match_dirs),
+            "path": str(dynasty_extracted),
+            "source_url": DYNASTY_DATASET_URL,
+        }
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "error": f"{type(exc).__name__}: {exc}",
+            "source_url": DYNASTY_DATASET_URL,
+        }
 
 
 def _save_pickle(bundle: object, path: Path) -> None:
@@ -74,8 +136,11 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     _extract(wyscout_events_zip, wyscout_extracted)
     _extract(wyscout_matches_zip, wyscout_extracted)
 
+    # Stage another independent open GitHub archive regardless of StatsBomb.
+    dynasty_status = _stage_dynasty_archive(raw_root)
+
     statsbomb_zip = statsbomb_raw / "open-data.zip"
-    _download(STATSBOMB_OPEN_DATA_URL, statsbomb_zip)
+    statsbomb_mirror = _download_zip_with_fallback(STATSBOMB_OPEN_DATA_URLS, statsbomb_zip)
     _extract(statsbomb_zip, statsbomb_extracted)
     statsbomb_root = _find_statsbomb_root(statsbomb_extracted)
 
@@ -119,6 +184,8 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
             "wyscout": int(wyscout_imported),
             "statsbomb": int(statsbomb_imported),
         },
+        "statsbomb_mirror_used": statsbomb_mirror,
+        "auxiliary_archives": {"dynasty_scouting_league_2024": dynasty_status},
         "matches": int(frame["match_id"].nunique()),
         "matches_by_source": source_counts,
         "training_rows": int(len(frame)),

@@ -7,6 +7,7 @@ on:
       - 'src/gool_bot2/bootstrap_foundation.py'
       - 'src/gool_bot2/prepare_foundation.py'
       - 'src/gool_bot2/train_prepared_foundation.py'
+      - 'src/gool_bot2/external_first_half_model.py'
       - 'src/gool_bot2/archive_wyscout.py'
       - 'src/gool_bot2/archive_statsbomb.py'
       - 'src/gool_bot2/archive_dataset.py'
@@ -28,6 +29,15 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
+
+      - name: Fetch and validate pretrained short-term goal models
+        run: |
+          mkdir -p data/foundation_bootstrap/artifacts
+          python -m gool_bot2.external_first_half_model \
+            --cache-dir data/pretrained/shortterm_soccer \
+            --ranks rank2 rank3 \
+            > data/foundation_bootstrap/artifacts/external_pretrained_manifest.json
+          cat data/foundation_bootstrap/artifacts/external_pretrained_manifest.json
 
       - name: Phase 1 - download import and prepare archive dataset
         run: python -m gool_bot2.prepare_foundation --work-dir data/foundation_bootstrap --step 2

@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [main, archive-foundation]
+    branches: [main, archive-foundation, experiment/ht-one-goal-over25]
   pull_request:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
       - run: pytest -q
 
   football-data-train:
-    if: github.event_name == 'pull_request' && github.head_ref == 'experiment/ht-one-goal-over25'
+    if: (github.event_name == 'pull_request' && github.head_ref == 'experiment/ht-one-goal-over25') || (github.event_name == 'push' && github.ref == 'refs/heads/experiment/ht-one-goal-over25')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:

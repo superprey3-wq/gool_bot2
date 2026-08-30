@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .train_archive_models import _jsonable_metrics, train_archive_models
+from .train_archive_models import _jsonable_metrics, train_archive_models, train_football_data_models
 from .train_hazard_models import train_hazard_models
 
 
@@ -20,6 +20,7 @@ def _save_pickle(bundle: object, path: Path) -> None:
 
 def run(work_dir: Path) -> dict[str, object]:
     processed = work_dir / "processed" / "archive_training.csv"
+    football_data_csv = work_dir / "processed" / "football_data_htft.csv"
     models = work_dir / "models"
     artifacts = work_dir / "artifacts"
     if not processed.exists():
@@ -35,6 +36,16 @@ def run(work_dir: Path) -> dict[str, object]:
     _save_pickle(direct, models / "archive_foundation.pkl")
     _save_pickle(hazard, models / "archive_hazard.pkl")
 
+    football_data = None
+    football_data_metrics = None
+    if football_data_csv.exists():
+        football_frame = pd.read_csv(football_data_csv)
+        if not football_frame.empty:
+            football_frame["kickoff_at"] = pd.to_datetime(football_frame["kickoff_at"], utc=True)
+            football_data = train_football_data_models(football_frame)
+            football_data_metrics = _jsonable_metrics(football_data)
+            _save_pickle(football_data, models / "football_data_goal_models.pkl")
+
     direct_metrics = _jsonable_metrics(direct)
     hazard_metrics = {
         "trained_at": hazard["trained_at"],
@@ -48,6 +59,10 @@ def run(work_dir: Path) -> dict[str, object]:
     (artifacts / "archive_hazard_metrics.json").write_text(
         json.dumps(hazard_metrics, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    if football_data_metrics is not None:
+        (artifacts / "football_data_goal_metrics.json").write_text(
+            json.dumps(football_data_metrics, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     summary = {
         "phase": "train",
@@ -56,10 +71,13 @@ def run(work_dir: Path) -> dict[str, object]:
         "training_rows": int(len(frame)),
         "direct": direct_metrics,
         "hazard": hazard_metrics,
+        "football_data": football_data_metrics,
         "paths": {
             "dataset": str(processed),
+            "football_data_dataset": str(football_data_csv) if football_data_csv.exists() else None,
             "foundation_model": str(models / "archive_foundation.pkl"),
             "hazard_model": str(models / "archive_hazard.pkl"),
+            "football_data_model": str(models / "football_data_goal_models.pkl") if football_data is not None else None,
         },
     }
     (artifacts / "foundation_bootstrap_summary.json").write_text(
@@ -69,7 +87,7 @@ def run(work_dir: Path) -> dict[str, object]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train GOOL foundation from a prepared archive CSV")
+    parser = argparse.ArgumentParser(description="Train GOOL foundation from prepared event and Football-Data archives")
     parser.add_argument("--work-dir", default="data/foundation_bootstrap")
     args = parser.parse_args()
     print(json.dumps(run(Path(args.work_dir)), ensure_ascii=False, indent=2))

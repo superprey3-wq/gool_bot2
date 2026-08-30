@@ -19,7 +19,10 @@ def _elapsed_delta(group: pd.DataFrame, col: str, window_minutes: int) -> pd.Ser
     This is elapsed-time based, not row-count based. Missing snapshots therefore
     cannot accidentally turn a 10-row delta into a 25-minute delta.
     """
-    times = pd.to_datetime(group["captured_at"], utc=True).astype("int64").to_numpy()
+    # Normalize explicitly to nanoseconds. Pandas 3 may otherwise preserve a
+    # microsecond datetime dtype while Timedelta.value is expressed in ns.
+    timestamps = pd.to_datetime(group["captured_at"], utc=True)
+    times = timestamps.to_numpy(dtype="datetime64[ns]").astype("int64")
     values = pd.to_numeric(group[col], errors="coerce").to_numpy(dtype=float)
     cutoff_ns = times - int(pd.Timedelta(minutes=window_minutes).value)
     prior_idx = np.searchsorted(times, cutoff_ns, side="right") - 1

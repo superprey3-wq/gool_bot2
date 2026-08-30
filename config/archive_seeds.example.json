@@ -1,0 +1,11 @@
+[
+  {
+    "league": "Example league season",
+    "results_url": "https://www.flashscore.com/football/country/league-season/results/"
+  },
+  {
+    "league": "Example with known ids",
+    "tournament_id": "d00000",
+    "season_id": "00000"
+  }
+]

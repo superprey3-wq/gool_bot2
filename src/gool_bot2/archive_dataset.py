@@ -13,13 +13,18 @@ from .archive_training import ArchiveGoalEvent, ArchiveMatch, build_archive_exam
 
 BASE_FEATURE_COLUMNS = [
     "minute", "period", "home_score", "away_score", "total_goals", "score_diff",
-    "time_remaining_nominal", "goals_last_5m", "goals_last_10m", "minutes_since_last_goal",
+    "time_remaining_nominal", "first_half_time_remaining", "goals_last_5m", "goals_last_10m", "minutes_since_last_goal",
     "home_shots", "away_shots", "home_shots_on_target", "away_shots_on_target",
     "home_xg", "away_xg", "home_corners", "away_corners", "home_yellow_cards",
-    "away_yellow_cards", "home_red_cards", "away_red_cards", "home_shots_last_5m",
-    "away_shots_last_5m", "home_sot_last_5m", "away_sot_last_5m", "home_xg_last_5m",
-    "away_xg_last_5m", "home_shots_last_10m", "away_shots_last_10m", "home_xg_last_10m",
-    "away_xg_last_10m",
+    "away_yellow_cards", "home_red_cards", "away_red_cards",
+    "home_shots_last_3m", "away_shots_last_3m", "home_xg_last_3m", "away_xg_last_3m",
+    "home_shots_last_5m", "away_shots_last_5m", "home_sot_last_5m", "away_sot_last_5m", "home_xg_last_5m",
+    "away_xg_last_5m", "home_shots_last_10m", "away_shots_last_10m", "home_xg_last_10m", "away_xg_last_10m",
+    "home_attacking_actions_last_3m", "away_attacking_actions_last_3m",
+    "home_attacking_actions_last_5m", "away_attacking_actions_last_5m",
+    "home_attacking_actions_last_10m", "away_attacking_actions_last_10m",
+    "attacking_pressure_diff_3m", "attacking_pressure_diff_5m", "attacking_pressure_diff_10m",
+    "xg_diff_last_3m", "xg_diff_last_5m", "xg_diff_last_10m",
 ]
 TARGET_COLUMNS = ["another_goal", "goal_before_ht", "over_2_5", "both_teams_to_score"]
 COUNT_TARGET_COLUMNS = [

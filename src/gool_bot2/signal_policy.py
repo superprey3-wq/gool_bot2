@@ -53,6 +53,23 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
     return GateResult(not reasons, tuple(reasons))
 
 
+def market_state_gate(head: str, home_score: int, away_score: int) -> GateResult:
+    """Reject signals whose market is already settled or outside the intended score state."""
+    home_score = int(home_score or 0)
+    away_score = int(away_score or 0)
+    total = home_score + away_score
+    reasons: list[str] = []
+
+    if head == "goal_before_ht" and (home_score != 0 or away_score != 0):
+        reasons.append("first_half_zero_zero_only")
+    elif head == "over_2_5" and total >= 3:
+        reasons.append("over25_already_won")
+    elif head == "both_teams_to_score" and home_score > 0 and away_score > 0:
+        reasons.append("btts_already_won")
+
+    return GateResult(not reasons, tuple(reasons))
+
+
 def post_goal_gate(minute: int, last_goal_minute: int | None, cooldown_minutes: int = 5) -> GateResult:
     if last_goal_minute is None:
         return GateResult(True)

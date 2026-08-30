@@ -16,6 +16,10 @@ from .providers.common import UA, http_text
 FINISHED_COARSE_STATUS = "3"
 
 
+class ArchiveIntegrityError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class SeasonSeed:
     tournament_id: str
@@ -144,14 +148,25 @@ class FlashscoreArchiveBackfill:
                     side=str(item["side"]),
                 )
             )
+
+        expected_goals = ref.home_score + ref.away_score
+        if len(goals) != expected_goals:
+            raise ArchiveIntegrityError(
+                f"{ref.match_id}: timeline goals={len(goals)} final_score_goals={expected_goals}"
+            )
         return ArchiveMatch(match_id=ref.match_id, kickoff_at=ref.kickoff_at, goals=tuple(goals))
 
     def iter_season(self, seed: SeasonSeed) -> Iterable[tuple[HistoricalMatchRef, ArchiveMatch]]:
         for ref in self.season_matches(seed):
-            archive_match = self.fetch_archive_match(ref)
-            yield ref, archive_match
-            if self.delay_seconds:
-                time.sleep(self.delay_seconds)
+            try:
+                archive_match = self.fetch_archive_match(ref)
+            except Exception as exc:
+                print(f"skip_match={ref.match_id} error={type(exc).__name__}:{exc}", flush=True)
+            else:
+                yield ref, archive_match
+            finally:
+                if self.delay_seconds:
+                    time.sleep(self.delay_seconds)
 
 
 def _serialize(ref: HistoricalMatchRef, match: ArchiveMatch, seed: SeasonSeed) -> dict[str, object]:
@@ -173,11 +188,12 @@ def backfill_to_jsonl(seed: SeasonSeed, output: Path, delay_seconds: float = 2.2
     output.parent.mkdir(parents=True, exist_ok=True)
     existing: set[str] = set()
     if output.exists():
-        for line in output.read_text(encoding="utf-8").splitlines():
-            try:
-                existing.add(str(json.loads(line)["match_id"]))
-            except (json.JSONDecodeError, KeyError, TypeError):
-                continue
+        with output.open("r", encoding="utf-8") as existing_file:
+            for line in existing_file:
+                try:
+                    existing.add(str(json.loads(line)["match_id"]))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    continue
 
     backfill = FlashscoreArchiveBackfill(delay_seconds=delay_seconds)
     saved = 0

@@ -81,6 +81,8 @@ def event_features(events: list[dict[str, Any]], minute: float) -> dict[str, flo
         "away_xg": xg("away"),
         "home_corners": count("corner", "home"),
         "away_corners": count("corner", "away"),
+        "home_yellow_cards": count("yellow_card", "home"),
+        "away_yellow_cards": count("yellow_card", "away"),
         "home_red_cards": count("red_card", "home"),
         "away_red_cards": count("red_card", "away"),
         "home_shots_last_5m": count("shot", "home", minute - 5.0),

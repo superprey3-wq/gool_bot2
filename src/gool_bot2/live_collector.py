@@ -43,8 +43,6 @@ class LiveSnapshotCollector:
     def _eligible_for_detail(minute: int, is_halftime: bool) -> bool:
         if is_halftime:
             return True
-        # Covers FH goal, another-goal, HT/early-2H and re-entry windows while
-        # avoiding detail requests during the first warm-up minutes and late FT.
         return 10 <= minute <= 80
 
     def _secondary_due(self, match_id: str, minute: int) -> bool:
@@ -62,6 +60,24 @@ class LiveSnapshotCollector:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    def _attach_flashscore_assets(self, record: dict[str, Any], match_meta: dict[str, Any]) -> None:
+        fs = ((record.get("providers") or {}).get("flashscore") or {})
+        meta = fs.get("meta") or {}
+        home_logo = self.flashscore.team_logo_url(
+            str(match_meta.get("home_team_slug") or ""),
+            str(match_meta.get("home_team_id") or ""),
+        )
+        away_logo = self.flashscore.team_logo_url(
+            str(match_meta.get("away_team_slug") or ""),
+            str(match_meta.get("away_team_id") or ""),
+        )
+        if home_logo:
+            meta["home_logo_url"] = home_logo
+        if away_logo:
+            meta["away_logo_url"] = away_logo
+        fs["meta"] = meta
+        record["providers"]["flashscore"] = fs
 
     def collect_once(self) -> dict[str, int]:
         now = datetime.now(timezone.utc)
@@ -107,6 +123,12 @@ class LiveSnapshotCollector:
                         "reasons": list(pref.reasons),
                     }
 
+                    # Signal cards use the real team crests from Flashscore. The
+                    # lookup is cached per team, so after the first occurrence it
+                    # adds no extra page request for that club in this process.
+                    if pref.candidate or match.is_halftime:
+                        self._attach_flashscore_assets(record, match.meta)
+
                     if pref.candidate:
                         counters["candidate"] += 1
                         if self._secondary_due(match.provider_match_id, minute):
@@ -127,7 +149,7 @@ class LiveSnapshotCollector:
                             counters["secondary"] += int(bool(fm)) + int(bool(sc))
 
                 self._append(record, now)
-            except Exception as exc:  # collector must not die because one match/provider failed
+            except Exception as exc:
                 counters["errors"] += 1
                 error_record = {
                     "schema_version": 1,
@@ -149,7 +171,6 @@ class LiveSnapshotCollector:
                 counters = self.collect_once()
                 print(json.dumps({"collector": counters, "at": datetime.now(timezone.utc).isoformat()}), flush=True)
             except Exception as exc:
-                # Top-level protection: network/provider failures cannot terminate the daemon.
                 print(json.dumps({"collector_error": f"{type(exc).__name__}: {exc}"}), flush=True)
             elapsed = time.monotonic() - started
             remaining = max(1.0, interval_seconds - elapsed)

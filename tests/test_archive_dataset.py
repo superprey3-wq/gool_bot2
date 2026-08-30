@@ -28,13 +28,15 @@ def test_archive_row_contains_only_past_event_features_and_future_labels():
     assert row["second_half_goals_total"] == 2.0
     assert row["another_goal"] == 1
     assert row["goal_before_ht"] == 1
-    assert row["two_plus_goals_second_half"] == 1
+    assert row["over_2_5"] == 1.0
+    assert row["both_teams_to_score"] == 1.0
 
 
-def test_second_half_count_labels_not_used_for_prematch_head_after_2h_starts():
+def test_second_half_labels_keep_hazard_count_and_live_targets():
     row = record_to_rows(_record(), cutoffs=range(60, 61))[0]
     assert row["future_goals_count"] == 1.0
     assert row["future_first_half_goals"] is None
-    assert row["second_half_goals_total"] is None
+    assert row["second_half_goals_total"] == 2.0
     assert row["goal_before_ht"] is None
-    assert row["two_plus_goals_second_half"] is None
+    assert row["over_2_5"] == 1.0
+    assert row["both_teams_to_score"] == 1.0

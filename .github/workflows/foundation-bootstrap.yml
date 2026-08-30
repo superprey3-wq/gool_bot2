@@ -14,6 +14,10 @@ on:
       - 'src/gool_bot2/train_archive_models.py'
       - 'src/gool_bot2/train_hazard_models.py'
       - 'src/gool_bot2/evaluate_ht_over25_proxy.py'
+      - 'src/gool_bot2/local_ensemble.py'
+      - 'src/gool_bot2/signal_worker.py'
+      - 'src/gool_bot2/signal_policy.py'
+      - 'src/gool_bot2/telegram.py'
       - '.github/workflows/foundation-bootstrap.yml'
   workflow_dispatch:
 
@@ -38,8 +42,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          rm -rf data/known_good
-          mkdir -p data/known_good models data/foundation_bootstrap/models data/foundation_bootstrap/artifacts
+          rm -rf data/known_good data/known_good_fd
+          mkdir -p data/known_good data/known_good_fd models data/foundation_bootstrap/models data/foundation_bootstrap/artifacts
+
           gh run download 33322385093 \
             --repo "${{ github.repository }}" \
             --name gool-wyscout-statsbomb-foundation \
@@ -49,6 +54,15 @@ jobs:
           cp models/archive_foundation.pkl data/foundation_bootstrap/models/archive_foundation_known_good.pkl
           cp models/archive_hazard.pkl data/foundation_bootstrap/models/archive_hazard_known_good.pkl
           cp data/known_good/artifacts/combined_training_summary.json data/foundation_bootstrap/artifacts/known_good_training_summary.json
+
+          gh run download 33328862619 \
+            --repo "${{ github.repository }}" \
+            --name gool-football-data-three-systems \
+            --dir data/known_good_fd
+          cp data/known_good_fd/models/football_data_goal_models.pkl models/football_data_goal_models.pkl
+          cp models/football_data_goal_models.pkl data/foundation_bootstrap/models/football_data_goal_models_known_good.pkl
+          cp data/known_good_fd/artifacts/football_data_goal_metrics.json data/foundation_bootstrap/artifacts/football_data_goal_metrics_known_good.json
+
           python - <<'PY'
           import json
           import pickle
@@ -56,18 +70,25 @@ jobs:
 
           direct_path = Path('models/archive_foundation.pkl')
           hazard_path = Path('models/archive_hazard.pkl')
+          football_data_path = Path('models/football_data_goal_models.pkl')
           with direct_path.open('rb') as fh:
               direct = pickle.load(fh)
           with hazard_path.open('rb') as fh:
               hazard = pickle.load(fh)
+          with football_data_path.open('rb') as fh:
+              football_data = pickle.load(fh)
           status = {
               'status': 'installed',
-              'source_run_id': 33322385093,
-              'source_artifact': 'gool-wyscout-statsbomb-foundation',
+              'event_source_run_id': 33322385093,
+              'event_source_artifact': 'gool-wyscout-statsbomb-foundation',
+              'football_data_source_run_id': 33328862619,
+              'football_data_source_artifact': 'gool-football-data-three-systems',
               'direct_model': str(direct_path),
               'hazard_model': str(hazard_path),
+              'football_data_model': str(football_data_path),
               'direct_heads': sorted(direct.get('heads', {}).keys()),
               'hazard_heads': sorted(hazard.get('heads', {}).keys()),
+              'football_data_heads': sorted(football_data.get('heads', {}).keys()),
           }
           Path('data/foundation_bootstrap/artifacts/known_good_model_install.json').write_text(
               json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8'

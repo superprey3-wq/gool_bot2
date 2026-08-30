@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .archive_dataset import build_dataframe
+from .archive_statsbomb import import_statsbomb
 from .archive_wyscout import import_wyscout
 from .train_archive_models import _jsonable_metrics, train_archive_models
 from .train_hazard_models import train_hazard_models
@@ -16,14 +17,15 @@ from .train_hazard_models import train_hazard_models
 
 WYSCOUT_EVENTS_URL = "https://raw.githubusercontent.com/koenvo/wyscout-soccer-match-event-dataset/main/raw_data/events.zip"
 WYSCOUT_MATCHES_URL = "https://raw.githubusercontent.com/koenvo/wyscout-soccer-match-event-dataset/main/raw_data/matches.zip"
+STATSBOMB_OPEN_DATA_URL = "https://github.com/statsbomb/open-data/archive/refs/heads/master.zip"
 
 
 def _download(url: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.stat().st_size > 0:
         return
-    request = urllib.request.Request(url, headers={"User-Agent": "gool_bot2-foundation/1.0"})
-    with urllib.request.urlopen(request, timeout=120) as response, path.open("wb") as handle:
+    request = urllib.request.Request(url, headers={"User-Agent": "gool_bot2-foundation/1.1"})
+    with urllib.request.urlopen(request, timeout=180) as response, path.open("wb") as handle:
         shutil.copyfileobj(response, handle)
 
 
@@ -31,6 +33,19 @@ def _extract(path: Path, output: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path) as archive:
         archive.extractall(output)
+
+
+def _find_statsbomb_root(extracted: Path) -> Path:
+    if (extracted / "data" / "matches").exists() and (extracted / "data" / "events").exists():
+        return extracted
+    for candidate in extracted.iterdir():
+        if candidate.is_dir() and (candidate / "data" / "matches").exists() and (candidate / "data" / "events").exists():
+            return candidate
+    for matches_dir in extracted.rglob("matches"):
+        candidate = matches_dir.parent.parent
+        if (candidate / "data" / "matches").exists() and (candidate / "data" / "events").exists():
+            return candidate
+    raise RuntimeError("StatsBomb archive extracted, but data/matches and data/events were not found")
 
 
 def _save_pickle(bundle: object, path: Path) -> None:
@@ -42,24 +57,34 @@ def _save_pickle(bundle: object, path: Path) -> None:
 
 
 def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, object]:
-    raw = work_dir / "raw" / "wyscout"
-    extracted = raw / "extracted"
-    archive_jsonl = work_dir / "raw" / "open_event_archive.jsonl"
+    raw_root = work_dir / "raw"
+    wyscout_raw = raw_root / "wyscout"
+    wyscout_extracted = wyscout_raw / "extracted"
+    statsbomb_raw = raw_root / "statsbomb"
+    statsbomb_extracted = statsbomb_raw / "extracted"
+    archive_jsonl = raw_root / "open_event_archive.jsonl"
     processed = work_dir / "processed" / "archive_training.csv"
     models = work_dir / "models"
     artifacts = work_dir / "artifacts"
 
-    events_zip = raw / "events.zip"
-    matches_zip = raw / "matches.zip"
-    _download(WYSCOUT_EVENTS_URL, events_zip)
-    _download(WYSCOUT_MATCHES_URL, matches_zip)
-    _extract(events_zip, extracted)
-    _extract(matches_zip, extracted)
+    wyscout_events_zip = wyscout_raw / "events.zip"
+    wyscout_matches_zip = wyscout_raw / "matches.zip"
+    _download(WYSCOUT_EVENTS_URL, wyscout_events_zip)
+    _download(WYSCOUT_MATCHES_URL, wyscout_matches_zip)
+    _extract(wyscout_events_zip, wyscout_extracted)
+    _extract(wyscout_matches_zip, wyscout_extracted)
 
-    imported = import_wyscout(extracted, archive_jsonl, limit=limit)
+    statsbomb_zip = statsbomb_raw / "open-data.zip"
+    _download(STATSBOMB_OPEN_DATA_URL, statsbomb_zip)
+    _extract(statsbomb_zip, statsbomb_extracted)
+    statsbomb_root = _find_statsbomb_root(statsbomb_extracted)
+
+    wyscout_imported = import_wyscout(wyscout_extracted, archive_jsonl, limit=limit)
+    statsbomb_imported = import_statsbomb(statsbomb_root, archive_jsonl, limit=limit)
+
     frame = build_dataframe(archive_jsonl, cutoffs=range(1, 91, max(1, int(step))))
     if frame.empty:
-        raise RuntimeError("Wyscout import produced no training rows")
+        raise RuntimeError("Open event archives produced no training rows")
     processed.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(processed, index=False)
 
@@ -82,11 +107,20 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
         json.dumps(hazard_metrics, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    source_counts = {
+        str(source): int(count)
+        for source, count in frame.groupby("source")["match_id"].nunique().to_dict().items()
+    } if "source" in frame.columns else {}
+
     summary = {
         "completed_at": datetime.now(timezone.utc).isoformat(),
-        "source": "wyscout_open_event_dataset",
-        "new_matches_imported": imported,
+        "source": "wyscout_plus_statsbomb_open_event_archives",
+        "new_matches_imported": {
+            "wyscout": int(wyscout_imported),
+            "statsbomb": int(statsbomb_imported),
+        },
         "matches": int(frame["match_id"].nunique()),
+        "matches_by_source": source_counts,
         "training_rows": int(len(frame)),
         "step_minutes": int(step),
         "direct": direct_metrics,
@@ -104,7 +138,7 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download Wyscout open events and train the first real GOOL foundation models")
+    parser = argparse.ArgumentParser(description="Download Wyscout + StatsBomb open events and train GOOL foundation models")
     parser.add_argument("--work-dir", default="data/foundation_bootstrap")
     parser.add_argument("--step", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None)

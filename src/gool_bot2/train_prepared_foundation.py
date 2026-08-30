@@ -52,6 +52,27 @@ def run(work_dir: Path) -> dict[str, object]:
         "match_counts": hazard["match_counts"],
         "heads": {name: head.metrics for name, head in hazard["heads"].items()},
     }
+
+    # Hybrid bundle keeps the event models (StatsBomb + Wyscout) and the large
+    # HT/FT Football-Data experts together. We deliberately do not average weak
+    # Football-Data heads into stronger event heads without validation. Instead
+    # the routing manifest uses the best source for each situation and keeps the
+    # auxiliary experts available as contextual priors for later calibrated blending.
+    hybrid = {
+        "format_version": 1,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "event_direct": direct,
+        "event_hazard": hazard,
+        "football_data": football_data,
+        "routing": {
+            "another_goal_live": {"primary": "event_direct:another_goal", "auxiliary": "football_data:another_goal_ht"},
+            "goal_before_ht_live": {"primary": "event_direct:goal_before_ht", "auxiliary": "football_data:goal_before_ht_prematch"},
+            "over_2_5_live": {"primary": "event_direct:over_2_5", "auxiliary": "football_data:over_2_5_ht"},
+            "over_2_5_halftime": {"primary": "football_data:over_2_5_ht", "auxiliary": "event_direct:over_2_5"},
+        },
+    }
+    _save_pickle(hybrid, models / "hybrid_goal_models.pkl")
+
     artifacts.mkdir(parents=True, exist_ok=True)
     (artifacts / "archive_foundation_metrics.json").write_text(
         json.dumps(direct_metrics, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -63,21 +84,26 @@ def run(work_dir: Path) -> dict[str, object]:
         (artifacts / "football_data_goal_metrics.json").write_text(
             json.dumps(football_data_metrics, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+    (artifacts / "hybrid_routing.json").write_text(
+        json.dumps(hybrid["routing"], ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     summary = {
-        "phase": "train",
+        "phase": "train_hybrid",
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "matches": int(frame["match_id"].nunique()),
         "training_rows": int(len(frame)),
         "direct": direct_metrics,
         "hazard": hazard_metrics,
         "football_data": football_data_metrics,
+        "hybrid_routing": hybrid["routing"],
         "paths": {
             "dataset": str(processed),
             "football_data_dataset": str(football_data_csv) if football_data_csv.exists() else None,
             "foundation_model": str(models / "archive_foundation.pkl"),
             "hazard_model": str(models / "archive_hazard.pkl"),
             "football_data_model": str(models / "football_data_goal_models.pkl") if football_data is not None else None,
+            "hybrid_model": str(models / "hybrid_goal_models.pkl"),
         },
     }
     (artifacts / "foundation_bootstrap_summary.json").write_text(
@@ -87,7 +113,7 @@ def run(work_dir: Path) -> dict[str, object]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train GOOL foundation from prepared event and Football-Data archives")
+    parser = argparse.ArgumentParser(description="Train hybrid GOOL foundation from StatsBomb, Wyscout and Football-Data")
     parser.add_argument("--work-dir", default="data/foundation_bootstrap")
     args = parser.parse_args()
     print(json.dumps(run(Path(args.work_dir)), ensure_ascii=False, indent=2))

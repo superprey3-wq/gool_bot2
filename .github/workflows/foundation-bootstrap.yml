@@ -1,0 +1,37 @@
+name: foundation-bootstrap
+
+on:
+  push:
+    branches: [foundation-bootstrap]
+    paths:
+      - 'src/gool_bot2/bootstrap_foundation.py'
+      - 'src/gool_bot2/archive_wyscout.py'
+      - 'src/gool_bot2/archive_dataset.py'
+      - 'src/gool_bot2/train_archive_models.py'
+      - 'src/gool_bot2/train_hazard_models.py'
+      - '.github/workflows/foundation-bootstrap.yml'
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Download open archive and train GOOL models
+        run: python -m gool_bot2.bootstrap_foundation --work-dir data/foundation_bootstrap --step 2
+      - name: Show training summary
+        run: cat data/foundation_bootstrap/artifacts/foundation_bootstrap_summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gool-foundation-models
+          path: |
+            data/foundation_bootstrap/models/*.pkl
+            data/foundation_bootstrap/artifacts/*.json
+          retention-days: 14

@@ -11,7 +11,14 @@ from typing import Any
 from .journal import append_analysis, entry_rows, load_signal_journal, save_signal_journal
 from .local_ensemble import LocalFootballEnsemble
 from .match_context import card_context
-from .signal_policy import combine_gates, exposure_gate, model_threshold_gate, post_goal_gate, time_gate
+from .signal_policy import (
+    combine_gates,
+    exposure_gate,
+    market_state_gate,
+    model_threshold_gate,
+    post_goal_gate,
+    time_gate,
+)
 from .telegram import broadcast, signal_keyboard
 
 HEAD_LABELS = {
@@ -177,19 +184,29 @@ class SignalWorker:
         if _settle_pending(record, journal):
             save_signal_journal(self.journal_path, journal)
 
-        if not (record.get("prefilter") or {}).get("candidate"):
+        minute = int(match.get("minute") or 0)
+        is_halftime = bool(match.get("is_halftime"))
+        candidate = bool((record.get("prefilter") or {}).get("candidate"))
+
+        # Normal live heads still require the football prefilter. Halftime BTTS/O2.5
+        # must be evaluated even when that prefilter is false because their model is
+        # a dedicated halftime score model and would otherwise never see quiet HTs.
+        if not candidate and not is_halftime:
             return 0
         if not self._ensure_model():
             return 0
 
-        minute = int(match.get("minute") or 0)
-        is_halftime = bool(match.get("is_halftime"))
         model_result = self.model.predict(record)
         cards = card_context(record)
         emitted = 0
         entered = entry_rows(journal)
+        home_score = int(match.get("home_score") or 0)
+        away_score = int(match.get("away_score") or 0)
 
         for head in HEAD_LABELS:
+            if not candidate and head not in {"over_2_5", "both_teams_to_score"}:
+                continue
+
             probability = model_result.get("blended", {}).get(head)
             disagreement = model_result.get("disagreement", {}).get(head)
             if probability is None or disagreement is None:
@@ -204,6 +221,7 @@ class SignalWorker:
 
             gates = combine_gates(
                 time_gate(head, minute, is_halftime=is_halftime, is_reentry=False),
+                market_state_gate(head, home_score, away_score),
                 post_goal_gate(minute, _last_goal_minute(record), cooldown_minutes=cooldown),
                 exposure_gate(match_id, entered, max_entries=2, max_open=1),
                 model_threshold_gate(head, float(probability), float(probability) * 100.0),
@@ -231,7 +249,7 @@ class SignalWorker:
                 "away": match.get("away"),
                 "league": match.get("league"),
                 "minute": minute,
-                "score": [match.get("home_score", 0), match.get("away_score", 0)],
+                "score": [home_score, away_score],
                 "head": head,
                 "probability": float(probability),
                 "direct_probability": model_result.get("direct", {}).get(head),
@@ -259,7 +277,7 @@ class SignalWorker:
                 "home": match.get("home"),
                 "away": match.get("away"),
                 "league": match.get("league"),
-                "score": [match.get("home_score", 0), match.get("away_score", 0)],
+                "score": [home_score, away_score],
                 "probability": float(probability),
                 "direct_probability": model_result.get("direct", {}).get(head),
                 "hazard_probability": model_result.get("hazard", {}).get(head),

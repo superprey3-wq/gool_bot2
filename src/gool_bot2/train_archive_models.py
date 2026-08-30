@@ -129,13 +129,11 @@ def train_archive_models(frame: pd.DataFrame) -> dict[str, Any]:
 
 
 def train_football_data_models(frame: pd.DataFrame) -> dict[str, Any]:
-    """Train leakage-safe auxiliary models from Football-Data HT/FT history.
+    """Train every requested leakage-safe Football-Data target in one pass.
 
-    `over_2_5_ht` and `another_goal_ht` are evaluated exactly at the halftime
-    whistle using the known HT score plus rolling form calculated from earlier
-    matches only. `goal_before_ht_prematch` intentionally excludes the current
-    halftime score and serves as a historical prior for the live first-half
-    event model.
+    Halftime heads use only the known HT score plus rolling priors from matches
+    played earlier. The first-half-goal head is prematch-only because Football-
+    Data has no minute-level event stream for the current first half.
     """
     frame = frame.copy()
     frame["kickoff_at"] = pd.to_datetime(frame["kickoff_at"], utc=True)
@@ -143,15 +141,21 @@ def train_football_data_models(frame: pd.DataFrame) -> dict[str, Any]:
 
     ht_features = ["home_score", "away_score", "total_goals", "score_diff", *PRIOR_COLUMNS]
     prematch_features = list(PRIOR_COLUMNS)
+    target_specs = {
+        "over_2_5_ht": ("over_2_5", ht_features),
+        "both_teams_to_score_ht": ("both_teams_to_score", ht_features),
+        "another_goal_ht": ("another_goal", ht_features),
+        "goal_before_ht_prematch": ("goal_in_first_half", prematch_features),
+    }
     heads = {
-        "over_2_5_ht": _fit_head(train, calibration, test, "over_2_5", ht_features),
-        "another_goal_ht": _fit_head(train, calibration, test, "another_goal", ht_features),
-        "goal_before_ht_prematch": _fit_head(train, calibration, test, "goal_in_first_half", prematch_features),
+        name: _fit_head(train, calibration, test, target, features)
+        for name, (target, features) in target_specs.items()
     }
     return {
-        "format_version": 1,
+        "format_version": 2,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "feature_columns": {"halftime": ht_features, "prematch": prematch_features},
+        "target_specs": {name: target for name, (target, _) in target_specs.items()},
         "heads": heads,
         "match_counts": {
             "train": int(train.match_id.nunique()),

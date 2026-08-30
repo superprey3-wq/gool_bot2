@@ -37,7 +37,7 @@ def run(work_dir: Path) -> dict[str, object]:
     summary = {
         "phase": "football_data_train",
         "import": import_summary,
-        "targets": ["another_goal_ht", "goal_before_ht_prematch", "over_2_5_ht"],
+        "targets": list(bundle["heads"].keys()),
         "metrics": metrics,
         "model": str(model_path),
         "metrics_file": str(metrics_path),
@@ -49,7 +49,7 @@ def run(work_dir: Path) -> dict[str, object]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download Football-Data and train the three GOOL goal systems")
+    parser = argparse.ArgumentParser(description="Download Football-Data and train all configured GOOL target models")
     parser.add_argument("--work-dir", default="data/football_data_training")
     args = parser.parse_args()
     print(json.dumps(run(Path(args.work_dir)), ensure_ascii=False, indent=2))

@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 from .archive_dataset import build_dataframe
-from .archive_football_data import import_football_data
 from .archive_statsbomb import import_statsbomb
 from .archive_wyscout import import_wyscout
 from .bootstrap_foundation import (
@@ -24,6 +23,10 @@ def _error_status(exc: Exception) -> dict[str, object]:
     return {"status": "unavailable", "error": f"{type(exc).__name__}: {exc}"}
 
 
+def _write_status(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, object]:
     raw_root = work_dir / "raw"
     wyscout_raw = raw_root / "wyscout"
@@ -32,7 +35,6 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     statsbomb_extracted = statsbomb_raw / "extracted"
     archive_jsonl = raw_root / "open_event_archive.jsonl"
     processed = work_dir / "processed" / "archive_training.csv"
-    football_data_csv = work_dir / "processed" / "football_data_htft.csv"
     artifacts = work_dir / "artifacts"
 
     artifacts.mkdir(parents=True, exist_ok=True)
@@ -43,47 +45,72 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     statsbomb_imported = 0
     statsbomb_mirror: str | None = None
 
-    # Prepare each event source independently. A temporary outage in one public
-    # archive must not prevent the other source from reaching model training.
+    def persist_progress(stage: str) -> None:
+        _write_status(
+            artifacts / "foundation_source_status.json",
+            {
+                "phase": "prepare_sources",
+                "stage": stage,
+                "event_sources": source_status,
+                "statsbomb_mirror_used": statsbomb_mirror,
+            },
+        )
+
+    print("[foundation] starting Wyscout preparation", flush=True)
+    persist_progress("wyscout_start")
     try:
         wyscout_events_zip = wyscout_raw / "events.zip"
         wyscout_matches_zip = wyscout_raw / "matches.zip"
         _download(WYSCOUT_EVENTS_URL, wyscout_events_zip)
+        print("[foundation] Wyscout events downloaded", flush=True)
         _download(WYSCOUT_MATCHES_URL, wyscout_matches_zip)
+        print("[foundation] Wyscout matches downloaded", flush=True)
         _extract(wyscout_events_zip, wyscout_extracted)
         _extract(wyscout_matches_zip, wyscout_extracted)
+        print("[foundation] Wyscout archives extracted", flush=True)
         wyscout_imported = int(import_wyscout(wyscout_extracted, archive_jsonl, limit=limit))
         source_status["wyscout"] = {"status": "prepared", "matches_imported": wyscout_imported}
+        print(f"[foundation] Wyscout imported matches={wyscout_imported}", flush=True)
     except Exception as exc:
         source_status["wyscout"] = _error_status(exc)
+        print(f"[foundation] Wyscout unavailable: {source_status['wyscout']}", flush=True)
+    persist_progress("wyscout_done")
 
     dynasty_status = _stage_dynasty_archive(raw_root)
 
+    print("[foundation] starting StatsBomb preparation", flush=True)
+    persist_progress("statsbomb_start")
     try:
         statsbomb_zip = statsbomb_raw / "open-data.zip"
         statsbomb_mirror = _download_zip_with_fallback(STATSBOMB_OPEN_DATA_URLS, statsbomb_zip)
+        print(f"[foundation] StatsBomb downloaded mirror={statsbomb_mirror}", flush=True)
         _extract(statsbomb_zip, statsbomb_extracted)
         statsbomb_root = _find_statsbomb_root(statsbomb_extracted)
+        print(f"[foundation] StatsBomb extracted root={statsbomb_root}", flush=True)
         statsbomb_imported = int(import_statsbomb(statsbomb_root, archive_jsonl, limit=limit))
         source_status["statsbomb"] = {
             "status": "prepared",
             "matches_imported": statsbomb_imported,
             "mirror": statsbomb_mirror,
         }
+        print(f"[foundation] StatsBomb imported matches={statsbomb_imported}", flush=True)
     except Exception as exc:
         source_status["statsbomb"] = _error_status(exc)
+        print(f"[foundation] StatsBomb unavailable: {source_status['statsbomb']}", flush=True)
+    persist_progress("statsbomb_done")
 
-    # Always persist source diagnostics before building the dataframe so a
-    # failed run leaves a useful artifact instead of an opaque red circle.
     diagnostic = {
         "phase": "prepare_sources",
+        "stage": "sources_done",
         "event_sources": source_status,
         "statsbomb_mirror_used": statsbomb_mirror,
         "auxiliary_archives": {"dynasty_scouting_league_2024": dynasty_status},
+        "football_data_htft": {
+            "status": "skipped",
+            "reason": "Not needed for live event heads; trained separately in tests workflow",
+        },
     }
-    (artifacts / "foundation_source_status.json").write_text(
-        json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _write_status(artifacts / "foundation_source_status.json", diagnostic)
 
     if not archive_jsonl.exists() or archive_jsonl.stat().st_size == 0:
         failure = {
@@ -91,35 +118,22 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
             "status": "failed",
             "reason": "No usable Wyscout or StatsBomb event rows were imported",
         }
-        (artifacts / "foundation_prepare_summary.json").write_text(
-            json.dumps(failure, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _write_status(artifacts / "foundation_prepare_summary.json", failure)
         raise RuntimeError(
             "No usable event source was prepared. "
             f"Wyscout={source_status.get('wyscout')}; StatsBomb={source_status.get('statsbomb')}"
         )
 
+    print("[foundation] building minute-level event dataframe", flush=True)
     frame = build_dataframe(archive_jsonl, cutoffs=range(1, 91, max(1, int(step))))
     if frame.empty:
         failure = {**diagnostic, "status": "failed", "reason": "Open event archives produced no training rows"}
-        (artifacts / "foundation_prepare_summary.json").write_text(
-            json.dumps(failure, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _write_status(artifacts / "foundation_prepare_summary.json", failure)
         raise RuntimeError("Open event archives produced no training rows")
 
     processed.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(processed, index=False)
-
-    # Football-Data remains optional and separate from the live event heads.
-    try:
-        football_data_status = import_football_data(football_data_csv)
-        football_data_status["status"] = "prepared"
-    except Exception as exc:
-        football_data_status = {
-            "status": "unavailable",
-            "error": f"{type(exc).__name__}: {exc}",
-            "dataset": str(football_data_csv),
-        }
+    print(f"[foundation] event dataset saved rows={len(frame)} matches={frame['match_id'].nunique()}", flush=True)
 
     source_counts = {
         str(source): int(count)
@@ -131,7 +145,7 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
         "status": "prepared",
         "event_sources": source_status,
         "new_matches_imported": {"wyscout": wyscout_imported, "statsbomb": statsbomb_imported},
-        "football_data_htft": football_data_status,
+        "football_data_htft": diagnostic["football_data_htft"],
         "statsbomb_mirror_used": statsbomb_mirror,
         "auxiliary_archives": {"dynasty_scouting_league_2024": dynasty_status},
         "matches": int(frame["match_id"].nunique()),
@@ -140,14 +154,12 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
         "step_minutes": int(step),
         "dataset": str(processed),
     }
-    (artifacts / "foundation_prepare_summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _write_status(artifacts / "foundation_prepare_summary.json", summary)
     return summary
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prepare Wyscout + StatsBomb + Football-Data archives without training")
+    parser = argparse.ArgumentParser(description="Prepare Wyscout + StatsBomb event archives without unrelated Football-Data downloads")
     parser.add_argument("--work-dir", default="data/foundation_bootstrap")
     parser.add_argument("--step", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None)

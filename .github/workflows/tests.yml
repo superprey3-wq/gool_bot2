@@ -17,3 +17,35 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
       - run: pytest -q
+
+  foundation-train:
+    if: github.event_name == 'pull_request' && github.head_ref == 'experiment/ht-one-goal-over25'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Prepare Wyscout and StatsBomb foundation archive
+        run: python -m gool_bot2.prepare_foundation --work-dir data/foundation_bootstrap --step 2
+      - name: Train direct hazard and dedicated halftime models
+        run: python -m gool_bot2.train_prepared_foundation --work-dir data/foundation_bootstrap
+      - name: Evaluate halftime score to final score archive splits
+        run: python -m gool_bot2.evaluate_ht_over25_proxy
+      - name: Show training summary
+        run: cat data/foundation_bootstrap/artifacts/foundation_bootstrap_summary.json
+      - name: Show halftime archive report
+        run: cat data/foundation_bootstrap/artifacts/halftime_final_score_report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-ht-experiment-models
+          path: |
+            data/foundation_bootstrap/models/*.pkl
+            data/foundation_bootstrap/artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 14

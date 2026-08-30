@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+data/raw/
+data/interim/
+data/processed/
+artifacts/
+models/

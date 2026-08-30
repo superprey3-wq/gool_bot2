@@ -17,6 +17,10 @@ on:
       - '.github/workflows/foundation-bootstrap.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   train:
     runs-on: ubuntu-latest
@@ -30,9 +34,49 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
 
+      - name: Install last known-good trained GOOL models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf data/known_good
+          mkdir -p data/known_good models data/foundation_bootstrap/models data/foundation_bootstrap/artifacts
+          gh run download 33322385093 \
+            --repo "${{ github.repository }}" \
+            --name gool-wyscout-statsbomb-foundation \
+            --dir data/known_good
+          cp data/known_good/models/archive_foundation_wyscout_statsbomb.pkl models/archive_foundation.pkl
+          cp data/known_good/models/archive_hazard_wyscout_statsbomb.pkl models/archive_hazard.pkl
+          cp models/archive_foundation.pkl data/foundation_bootstrap/models/archive_foundation_known_good.pkl
+          cp models/archive_hazard.pkl data/foundation_bootstrap/models/archive_hazard_known_good.pkl
+          cp data/known_good/artifacts/combined_training_summary.json data/foundation_bootstrap/artifacts/known_good_training_summary.json
+          python - <<'PY'
+          import json
+          import pickle
+          from pathlib import Path
+
+          direct_path = Path('models/archive_foundation.pkl')
+          hazard_path = Path('models/archive_hazard.pkl')
+          with direct_path.open('rb') as fh:
+              direct = pickle.load(fh)
+          with hazard_path.open('rb') as fh:
+              hazard = pickle.load(fh)
+          status = {
+              'status': 'installed',
+              'source_run_id': 33322385093,
+              'source_artifact': 'gool-wyscout-statsbomb-foundation',
+              'direct_model': str(direct_path),
+              'hazard_model': str(hazard_path),
+              'direct_heads': sorted(direct.get('heads', {}).keys()),
+              'hazard_heads': sorted(hazard.get('heads', {}).keys()),
+          }
+          Path('data/foundation_bootstrap/artifacts/known_good_model_install.json').write_text(
+              json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+          print(json.dumps(status, ensure_ascii=False, indent=2))
+          PY
+
       - name: Fetch and validate pretrained short-term goal models
         run: |
-          mkdir -p data/foundation_bootstrap/artifacts
           python -m gool_bot2.external_first_half_model \
             --cache-dir data/pretrained/shortterm_soccer \
             --ranks rank2 rank3 \

@@ -5,19 +5,46 @@ This is the production checklist for replacing the legacy GOOL/Monkey runtime wi
 ## Required runtime
 
 - Python 3.11+
-- persistent writable data directory, recommended `/data`
+- persistent writable runtime directory
 - three trained model files:
-  - `/data/models/archive_foundation.pkl`
-  - `/data/models/archive_hazard.pkl`
-  - `/data/models/football_data_goal_models.pkl`
+  - `${RUNTIME_DATA_DIR}/models/archive_foundation.pkl`
+  - `${RUNTIME_DATA_DIR}/models/archive_hazard.pkl`
+  - `${RUNTIME_DATA_DIR}/models/football_data_goal_models.pkl`
 - environment file based on `.env.example`
 - Telegram bot token and at least one recipient/subscriber
 
 The core live runtime does not require bookmaker odds or an LLM.
 
+## How legacy GOOL used Monkey
+
+The legacy repository did not run as one self-contained process on the main bot host. It had a remote Monkey worker/relay architecture:
+
+- `best_bet_remote_worker.py` was intended to run on MonkeyBytes.
+- The Monkey worker used `/home/container/monkey_live_context.json` as shared live truth and `/home/container/remote_best_bet_state.json` as worker state.
+- The main GOOL process polled Monkey over HTTP using `GOOL_REMOTE_BEST_BET_URL` (default `/bestbet`) and `GOOL_STRONG_FEED_URL` (default `/strong`) and then relayed approved signals to Telegram.
+
+GOOL Bot 2 does not need this relay architecture when it is deployed directly on the Monkey/main server. The collector and signal worker should run locally on the same server and share one runtime directory. Do not restore the old `remote_best_bet_relay`, `remote_strong_proguz_patch`, `/bestbet`, `/strong`, or `monkey_live_context.json` bridge unless a separate remote-worker architecture is intentionally reintroduced later.
+
+## Monkey server layout
+
+For a direct Monkey deployment, use the host path already used by the old Monkey worker instead of assuming `/data` exists:
+
+```text
+RUNTIME_DATA_DIR=/home/container/gool_bot2_data
+GOOL_INBOX_DIR=/home/container/gool_bot2_data/raw/live
+SIGNAL_JOURNAL_PATH=/home/container/gool_bot2_data/live/signal_journal.json
+SIGNAL_ANALYSIS_PATH=/home/container/gool_bot2_data/live/gool_bot2_analysis.jsonl
+ARCHIVE_FOUNDATION_MODEL=/home/container/gool_bot2_data/models/archive_foundation.pkl
+ARCHIVE_HAZARD_MODEL=/home/container/gool_bot2_data/models/archive_hazard.pkl
+FOOTBALL_DATA_GOAL_MODEL=/home/container/gool_bot2_data/models/football_data_goal_models.pkl
+TELEGRAM_SUBSCRIBERS_FILE=/home/container/gool_bot2_data/telegram_subscribers.json
+```
+
+If the actual Monkey installation exposes a different persistent volume, use that path consistently for every variable above. Collector and worker must point to the same `GOOL_INBOX_DIR`.
+
 ## Secret migration
 
-Copy secret **values** from the existing GOOL server environment into the new server environment. Do not commit them to Git.
+Copy secret **values** from the existing GOOL server environment into the new Monkey/main-server environment. Do not commit them to Git.
 
 The reusable variable names are:
 
@@ -33,20 +60,24 @@ The reusable variable names are:
 
 GOOL Bot 2 additionally uses the model paths and market thresholds listed in `.env.example`.
 
+Legacy Monkey-only relay variables (`GOOL_REMOTE_BEST_BET_URL`, `GOOL_STRONG_FEED_URL`, `GOOL_MONKEY_LIVE_CONTEXT`, and their relay state/poll variables) are not required by GOOL Bot 2 direct deployment.
+
 ## Start order
 
-Keep the old/temporary server online during validation.
+Keep the temporary server online during validation.
 
-1. Install the repository and dependencies on the main server.
-2. Copy the three known-good model files to `/data/models/`.
-3. Install the production environment values.
-4. Run `python -m gool_bot2.production_check`. It must print `"status": "ready"`.
-5. Start `python -m gool_bot2.live_collector --interval 60`.
-6. Start `python -m gool_bot2.signal_worker`.
-7. Confirm new JSONL snapshots appear under `/data/raw/live/`.
-8. Confirm the signal worker reads the same directory without errors.
-9. Confirm one Telegram delivery/callback path works.
-10. Only after those checks pass, stop the old/temporary server to avoid duplicate Telegram signals.
+1. Install the GOOL Bot 2 repository and dependencies on Monkey/main server.
+2. Create the selected runtime directory and its `models`, `raw/live`, and `live` subdirectories.
+3. Copy the three known-good model files into the configured model paths.
+4. Copy the existing GOOL Telegram/API secret values into the new service environment.
+5. Run `python -m gool_bot2.production_check`. It must print `"status": "ready"`.
+6. Start `python -m gool_bot2.live_collector --interval 60`.
+7. Start `python -m gool_bot2.signal_worker`.
+8. Confirm new JSONL snapshots appear under the configured `GOOL_INBOX_DIR`.
+9. Confirm the signal worker reads the same files and reports `local_model=loaded` without model errors.
+10. Confirm one Telegram delivery/callback path works.
+11. Stop the old GOOL/Monkey relay processes so they cannot send duplicate Telegram signals.
+12. Only after the new local runtime stays healthy, stop the temporary/additional server.
 
 ## Signal behavior at launch
 
@@ -59,4 +90,4 @@ Halftime BTTS/O2.5 evaluation bypasses the generic live prefilter because these 
 
 ## Rollback
 
-If the main server fails the production check, cannot collect live snapshots, cannot load a model, or cannot deliver Telegram messages, leave the temporary server running and do not cut over. Once the main server is confirmed healthy, stop the temporary server before leaving the new runtime active.
+If the Monkey/main server fails the production check, cannot collect live snapshots, cannot load a model, or cannot deliver Telegram messages, leave the temporary server running and do not cut over. Once the new local runtime is confirmed healthy, stop the legacy relay/runtime before leaving GOOL Bot 2 active.

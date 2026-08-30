@@ -32,6 +32,7 @@ def ensure_deps() -> None:
         "sklearn": "scikit-learn>=1.5",
         "pydantic": "pydantic>=2.8",
         "yaml": "pyyaml>=6.0",
+        "PIL": "pillow>=10.0",
     }
     missing = [pkg for module, pkg in packages.items() if importlib.util.find_spec(module) is None]
     if not missing:
@@ -60,7 +61,6 @@ def main() -> None:
     os.environ.setdefault("SIGNAL_ANALYSIS_PATH", str(RUNTIME_ROOT / "live" / "gool_bot2_analysis.jsonl"))
     ensure_deps()
 
-    # These names must match LocalFootballEnsemble exactly.
     models = {
         "ARCHIVE_FOUNDATION_MODEL": "archive_foundation.pkl",
         "ARCHIVE_HAZARD_MODEL": "archive_hazard.pkl",
@@ -71,7 +71,6 @@ def main() -> None:
         os.environ[env_key] = str(path)
         print(f"GOOL_BOOT model={filename} path={path}", flush=True)
 
-    # Compatibility aliases for older deployment code/tools.
     os.environ["ARCHIVE_FOUNDATION_MODEL_PATH"] = os.environ["ARCHIVE_FOUNDATION_MODEL"]
     os.environ["ARCHIVE_HAZARD_MODEL_PATH"] = os.environ["ARCHIVE_HAZARD_MODEL"]
     os.environ["FOOTBALL_DATA_GOAL_MODELS_PATH"] = os.environ["FOOTBALL_DATA_GOAL_MODEL"]

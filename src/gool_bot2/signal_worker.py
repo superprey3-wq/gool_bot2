@@ -114,23 +114,26 @@ def _message(record: dict[str, Any], head: str, probability: float, model_result
                 f"Δ={float(disagreement or 0.0) * 100:.1f}%"
             )
 
-    extra_line = ""
+    first_half_line = ""
     if head == "goal_before_ht":
         fh = model_result.get("first_half_analysis") or {}
         pressure = fh.get("pressure_score")
-        adjustment = float(fh.get("probability_adjustment") or 0.0)
-        if pressure is not None:
-            extra_line = (
+        adjustment = fh.get("probability_adjustment")
+        auc = fh.get("baseline_auc")
+        if pressure is not None and adjustment is not None:
+            first_half_line = (
                 f"\nGOOL 1T: pressure={float(pressure):.2f} | "
-                f"corr={adjustment * 100:+.1f} п.п. | base AUC={float(fh.get('baseline_auc') or 0.6946):.4f}"
+                f"corr={float(adjustment) * 100:+.1f} п.п."
             )
+            if auc is not None:
+                first_half_line += f" | base AUC={float(auc):.4f}"
 
     return (
         f"⚽ <b>{HEAD_LABELS[head]}</b>\n"
         f"{match.get('home', '?')} — {match.get('away', '?')}\n"
         f"{int(match.get('minute') or 0)}' | {match.get('home_score', 0)}:{match.get('away_score', 0)}\n"
         f"P: <b>{probability * 100:.1f}%</b>\n"
-        f"{model_line}{extra_line}\n"
+        f"{model_line}{first_half_line}\n"
         f"{_fmt_cards(cards)}\n"
         f"sources={len(record.get('providers') or {})}"
     )
@@ -298,9 +301,10 @@ class SignalWorker:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run GOOL local signal worker")
-    parser.add_argument("--inbox", default=os.getenv("GOOL_INBOX_DIR", "data/live/inbox"))
-    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL_PATH", "data/live/signal_journal.json"))
-    parser.add_argument("--analysis", default=os.getenv("SIGNAL_ANALYSIS_PATH", "data/live/gool_bot2_analysis.jsonl"))
+    runtime_data_dir = os.getenv("RUNTIME_DATA_DIR", "data")
+    parser.add_argument("--inbox", default=os.getenv("GOOL_INBOX_DIR", runtime_data_dir + "/raw/live"))
+    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL_PATH", runtime_data_dir + "/live/signal_journal.json"))
+    parser.add_argument("--analysis", default=os.getenv("SIGNAL_ANALYSIS_PATH", runtime_data_dir + "/live/gool_bot2_analysis.jsonl"))
     parser.add_argument("--sleep", type=float, default=2.0)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()

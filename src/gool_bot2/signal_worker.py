@@ -17,7 +17,8 @@ from .telegram import broadcast, signal_keyboard
 HEAD_LABELS = {
     "another_goal": "ЕЩЁ ГОЛ",
     "goal_before_ht": "ГОЛ ДО ПЕРЕРЫВА",
-    "two_plus_goals_second_half": "2+ ГОЛА ВО 2 ТАЙМЕ",
+    "over_2_5": "ТОТАЛ БОЛЬШЕ 2.5",
+    "both_teams_to_score": "ОБЕ ЗАБЬЮТ",
 }
 
 
@@ -36,17 +37,6 @@ def _last_goal_minute(record: dict[str, Any]) -> int | None:
     return max(minutes) if minutes else None
 
 
-def _second_half_goal_count(record: dict[str, Any]) -> int:
-    total = 0
-    for goal in _goal_timeline(record):
-        try:
-            if float(goal.get("minute")) > 45:
-                total += 1
-        except (TypeError, ValueError, AttributeError):
-            continue
-    return total
-
-
 def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bool:
     """Update pending outcomes using only the current/later live snapshot."""
     match = record.get("match") or {}
@@ -55,8 +45,9 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bo
         return False
     minute = int(match.get("minute") or 0)
     is_halftime = bool(match.get("is_halftime"))
-    current_total = int(match.get("home_score") or 0) + int(match.get("away_score") or 0)
-    second_half_goals = _second_half_goal_count(record)
+    home_score = int(match.get("home_score") or 0)
+    away_score = int(match.get("away_score") or 0)
+    current_total = home_score + away_score
     changed = False
 
     for row in journal:
@@ -77,8 +68,13 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bo
                 result = "won"
             elif is_halftime or minute > 45:
                 result = "lost"
-        elif head == "two_plus_goals_second_half":
-            if second_half_goals >= 2:
+        elif head == "over_2_5":
+            if current_total >= 3:
+                result = "won"
+            elif minute >= 90:
+                result = "lost"
+        elif head == "both_teams_to_score":
+            if home_score > 0 and away_score > 0:
                 result = "won"
             elif minute >= 90:
                 result = "lost"
@@ -87,7 +83,7 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bo
             row["result"] = result
             row["settled_at"] = datetime.now(timezone.utc).isoformat()
             row["settled_minute"] = minute
-            row["settled_score"] = [match.get("home_score", 0), match.get("away_score", 0)]
+            row["settled_score"] = [home_score, away_score]
             changed = True
     return changed
 
@@ -102,15 +98,28 @@ def _fmt_cards(cards: dict[str, Any]) -> str:
 
 def _message(record: dict[str, Any], head: str, probability: float, model_result: dict[str, Any], cards: dict[str, Any]) -> str:
     match = record.get("match") or {}
-    direct = model_result.get("direct", {}).get(head)
-    hazard = model_result.get("hazard", {}).get(head)
     disagreement = model_result.get("disagreement", {}).get(head)
+
+    if head in {"over_2_5", "both_teams_to_score"}:
+        model_line = f"HT-model={probability * 100:.1f}%"
+    else:
+        direct = model_result.get("direct", {}).get(head)
+        hazard = model_result.get("hazard", {}).get(head)
+        if direct is None or hazard is None:
+            model_line = "model=available"
+        else:
+            model_line = (
+                f"direct={float(direct) * 100:.1f}% | "
+                f"hazard={float(hazard) * 100:.1f}% | "
+                f"Δ={float(disagreement or 0.0) * 100:.1f}%"
+            )
+
     return (
         f"⚽ <b>{HEAD_LABELS[head]}</b>\n"
         f"{match.get('home', '?')} — {match.get('away', '?')}\n"
         f"{int(match.get('minute') or 0)}' | {match.get('home_score', 0)}:{match.get('away_score', 0)}\n"
         f"P: <b>{probability * 100:.1f}%</b>\n"
-        f"direct={float(direct) * 100:.1f}% | hazard={float(hazard) * 100:.1f}% | Δ={float(disagreement) * 100:.1f}%\n"
+        f"{model_line}\n"
         f"{_fmt_cards(cards)}\n"
         f"sources={len(record.get('providers') or {})}"
     )
@@ -172,7 +181,13 @@ class SignalWorker:
             if probability is None or disagreement is None:
                 continue
 
-            cooldown = int(os.getenv("LIVE_COOLDOWN_MINUTES", "12")) if head == "another_goal" else 5
+            if head == "another_goal":
+                cooldown = int(os.getenv("LIVE_COOLDOWN_MINUTES", "12"))
+            elif head in {"over_2_5", "both_teams_to_score"}:
+                cooldown = 0
+            else:
+                cooldown = 5
+
             gates = combine_gates(
                 time_gate(head, minute, is_halftime=is_halftime, is_reentry=False),
                 post_goal_gate(minute, _last_goal_minute(record), cooldown_minutes=cooldown),
@@ -193,6 +208,7 @@ class SignalWorker:
                 reasons.append("duplicate_pending_signal")
 
             allowed = gates.allowed and float(disagreement) <= self.max_disagreement and not duplicate
+            football_data_probability = model_result.get("football_data", {}).get(head)
             analysis = {
                 "captured_at": record.get("captured_at") or datetime.now(timezone.utc).isoformat(),
                 "match_id": match_id,
@@ -205,6 +221,7 @@ class SignalWorker:
                 "probability": float(probability),
                 "direct_probability": model_result.get("direct", {}).get(head),
                 "hazard_probability": model_result.get("hazard", {}).get(head),
+                "football_data_probability": football_data_probability,
                 "model_disagreement": float(disagreement),
                 "cards": cards,
                 "prefilter": record.get("prefilter") or {},
@@ -230,6 +247,7 @@ class SignalWorker:
                 "probability": float(probability),
                 "direct_probability": model_result.get("direct", {}).get(head),
                 "hazard_probability": model_result.get("hazard", {}).get(head),
+                "football_data_probability": football_data_probability,
                 "model_disagreement": float(disagreement),
                 "cards": cards,
                 "prefilter": record.get("prefilter") or {},

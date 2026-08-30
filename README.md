@@ -1,57 +1,134 @@
 # gool_bot2
 
-Independent live-football probability engine for three goal scenarios. This repository is built and validated separately from the legacy Monkey runtime.
+Independent live-football probability engine for three GOOL goal scenarios. This repository is built and validated separately from the legacy Monkey runtime.
 
-## First prediction heads
+## Prediction heads
 
 1. `another_goal` — probability of at least one more goal after the current snapshot.
 2. `goal_before_ht` — probability of at least one goal before half-time; valid only for first-half snapshots.
 3. `two_plus_goals_second_half` — probability of at least two goals in the second half; trained only from snapshots taken before the second half starts.
 
-## Core idea
+The football core does **not require bookmaker odds** and does not depend on an LLM/API to keep working.
 
-The core model does **not require bookmaker odds**. It learns from football context and its recent dynamics:
+## Data sources
 
-- prematch team context;
-- current minute, score and cards;
-- shots / shots on target;
-- corners;
-- dangerous attacks or equivalent pressure signals;
-- possession where available;
-- changes over the last 3/5/10/15 minutes;
-- multiple statistics providers normalized into one canonical timeline.
+- **Flashscore** — primary source of truth for match identity, minute/status, score, events and live statistics.
+- **FotMob** — candidate-only independent enrichment for shot map, xG/xGoT, momentum/lineup/rating context.
+- **365Scores** — candidate-only cross-check for shot map, xG/xGoT, shots, cards and lineup/stat availability.
 
-Bookmaker markets can be added later as a separate comparison/value layer, not as a mandatory model input.
+Provider values remain separate. Missing data is not converted into evidence and provider disagreement is retained.
 
-## Data sources (ported from the working GOOL code)
+## Archive foundation
 
-- **Flashscore** — primary source of truth for live discovery, event id, teams, league, score, minute/period and main live statistics. The adapter unions the two validated master feeds and reads event statistics / goal timeline.
-- **FotMob** — secondary enrichment and cross-check for shot map, xG/xGoT and availability of momentum/lineup/rating context.
-- **365Scores** — independent secondary enrichment for live match matching, shot map, xG/xGoT, cards and lineup/stat availability.
+The historical Flashscore archive is replayed at past cutoffs instead of treating one match as one row. A finished match can therefore become many supervised examples:
 
-Provider values are stored separately. Consensus values are derived only as extra features; raw provider disagreement is retained as `*_source_spread` instead of silently averaging sources into one truth.
+`10' -> state known at 10' -> what happened afterwards`
+
+`20' -> state known at 20' -> what happened afterwards`
+
+`HT -> state known at HT -> were there 2+ second-half goals`
+
+Only timestamped information known at cutoff `t` may be used as a feature. Final-match xG/shots/corners must **never** be copied into an earlier historical minute.
+
+Implemented archive pipeline:
+
+`season feed -> finished match ids -> goal timeline -> append-only JSONL -> minute replay -> direct classifiers + Poisson hazard experts -> chronological holdout/calibration -> local model artifacts`
+
+### Backfill one season
+
+```bash
+python -m gool_bot2.archive_flashscore \
+  --results-url 'https://www.flashscore.com/football/.../results/' \
+  --league 'League / Season' \
+  --output data/raw/flashscore_archive.jsonl
+```
+
+Or provide known `--tournament-id` and `--season-id` directly.
+
+### Backfill many seasons, resumably
+
+Copy `config/archive_seeds.example.json` to `config/archive_seeds.json`, add results URLs or known ids, then run:
+
+```bash
+python -m gool_bot2.archive_backfill_many --seeds config/archive_seeds.json
+```
+
+Existing match ids are skipped, and a broken season does not terminate the whole backfill.
+
+### Build training rows
+
+```bash
+python -m gool_bot2.archive_dataset \
+  --input data/raw/flashscore_archive.jsonl \
+  --output data/processed/archive_training.csv \
+  --step 1
+```
+
+### Train direct GOOL probability heads
+
+```bash
+python -m gool_bot2.train_archive_models
+```
+
+The split is chronological **by complete match**, so snapshots from one match can never be split across train/calibration/test. Probabilities receive a separate chronological sigmoid calibration block.
+
+### Train remaining-goals hazard experts
+
+```bash
+python -m gool_bot2.train_hazard_models
+```
+
+These models predict expected remaining goal counts (`lambda`) and derive `P(>=1)` and `P(>=2)` with Poisson probabilities. This gives GOOL an independent goal-hazard expert alongside the direct classifiers.
+
+## Live collector for tonight / Monkey
+
+```bash
+python -m gool_bot2.live_collector --interval 60
+```
+
+The collector is designed for a small server:
+
+- one lightweight Flashscore master discovery per cycle;
+- detailed Flashscore calls only in useful GOOL time windows;
+- cheap football prefilter before secondary-provider work;
+- FotMob/365 enrichment only for candidates and no more often than the configured interval;
+- append-only raw snapshots with `captured_at`, `source_observed_at`, and `ingested_at`;
+- provider/network errors are recorded and do not terminate the daemon.
+
+This live data becomes the second-stage training set for richer xG/xGoT/shots/momentum models and the future GRU sequence expert.
+
+## Model architecture
+
+Current/next model stack:
+
+`Flashscore archive replay -> archive direct heads + remaining-goal hazard`
+
+`live Flashscore/FotMob/365 snapshots -> rich tabular model -> later small GRU sequence model`
+
+`experts -> calibrated ensemble/meta-model -> hard signal policy -> Telegram`
+
+A GRU/LSTM is intentionally **not** required for the first launch. It will be trained only after enough true minute-by-minute live sequences exist and must beat the tabular/hazard baselines under chronological evaluation.
+
+## Research ideas incorporated
+
+- Football Forecasting Lab — chronological/rolling-origin evaluation, untouched future holdout, calibration discipline.
+- TheDataAthlete — football totals / gradient boosting framing.
+- soccer_xg / socceraction — xG, event and threat feature vocabulary.
+- football-lstm-betting / Seq2Event / temporal-point-process work — sequence and event-time modeling for a later GRU/hazard expert.
+- TikaML — LightGBM/Poisson and live remaining-goals concepts used as research inspiration/benchmark. Its repository currently exposes trained artifacts, but no root LICENSE file was found during the audit, so third-party model/code files are **not vendored into GOOL 2**.
 
 ## Non-negotiable validation rules
 
-- Every feature at prediction time `t` must be derived only from information with timestamp `<= t`.
-- No random train/test split for model evaluation.
-- Use chronological walk-forward validation.
-- Calibration is measured separately from discrimination.
-- Raw provider data is preserved; provider-specific parsing is isolated in adapters.
-- Final-match statistics must never be joined back into earlier live snapshots.
+- Every feature at prediction time `t` must use only information timestamped `<= t`.
+- Never random-split temporal football data.
+- Split by complete matches and chronological time.
+- Intermediate model outputs used as features must be chronological OOF.
+- Final-match statistics must never be joined into an earlier live snapshot.
+- Raw provider data is append-only and preserved.
 - The old Monkey repository remains untouched until this project is independently validated.
 
-## Initial pipeline
+## Status
 
-`Flashscore live discovery -> Flashscore/FotMob/365Scores enrichment -> provider-separated snapshot -> consensus/disagreement features -> backward-only history -> targets -> baseline model -> calibration -> walk-forward evaluation -> live inference`
+Implemented: provider adapters, live Flashscore discovery, candidate enrichment, append-only live collector, time-aware momentum, archive replay/targets, direct archive trainer, chronological calibration, Poisson hazard trainer and local foundation inference wrapper.
 
-## Build order
-
-1. Canonical snapshot/event schema.
-2. Data-source adapters: Flashscore + FotMob + 365Scores. **Implemented.**
-3. Snapshot history store.
-4. Leakage-safe target generation.
-5. Tabular baseline (LightGBM/XGBoost or sklearn baseline).
-6. Calibration and walk-forward report.
-7. Sequence model only after the baseline is measured.
-8. Later: optional market/odds layer and clean Monkey migration.
+Still required before claiming production accuracy: real archive backfill, executed tests, measured chronological metrics, richer live-feature training, ensemble calibration and end-to-end signal/Telegram runtime validation.

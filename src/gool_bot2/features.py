@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -12,19 +13,48 @@ def add_state_features(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _elapsed_delta(group: pd.DataFrame, col: str, window_minutes: int) -> pd.Series:
+    """Current value minus latest observation at or before t-window.
+
+    This is elapsed-time based, not row-count based. Missing snapshots therefore
+    cannot accidentally turn a 10-row delta into a 25-minute delta.
+    """
+    # Normalize explicitly to nanoseconds. Pandas 3 may otherwise preserve a
+    # microsecond datetime dtype while Timedelta.value is expressed in ns.
+    timestamps = pd.to_datetime(group["captured_at"], utc=True)
+    times = timestamps.to_numpy(dtype="datetime64[ns]").astype("int64")
+    values = pd.to_numeric(group[col], errors="coerce").to_numpy(dtype=float)
+    cutoff_ns = times - int(pd.Timedelta(minutes=window_minutes).value)
+    prior_idx = np.searchsorted(times, cutoff_ns, side="right") - 1
+
+    result = np.full(len(group), np.nan, dtype=float)
+    valid = prior_idx >= 0
+    if valid.any():
+        previous = values[prior_idx[valid]]
+        current = values[valid]
+        result[valid] = current - previous
+    return pd.Series(result, index=group.index)
+
+
 def add_momentum_features(
     df: pd.DataFrame,
     value_columns: list[str],
     windows: tuple[int, ...] = (3, 5, 10, 15),
 ) -> pd.DataFrame:
-    """Backward-looking deltas within a match.
+    """Add strictly backward-looking elapsed-time momentum deltas.
 
-    Input rows must represent chronological snapshots. A feature at time t uses
-    only rows at or before t; no centered/forward windows are permitted.
+    For a feature at time t and a W-minute window, the reference value is the
+    latest snapshot whose timestamp is <= t-W. No future/centered observations
+    are ever used. When there is no old-enough observation, the delta is NaN.
     """
-    out = df.sort_values(["match_id", "captured_at"]).copy()
-    grouped = out.groupby("match_id", sort=False)
+    out = df.copy()
+    out["captured_at"] = pd.to_datetime(out["captured_at"], utc=True)
+    out = out.sort_values(["match_id", "captured_at"]).copy()
+
     for col in value_columns:
         for window in windows:
-            out[f"{col}_delta_{window}"] = grouped[col].diff(window)
+            feature = pd.Series(index=out.index, dtype=float)
+            for _, group in out.groupby("match_id", sort=False):
+                feature.loc[group.index] = _elapsed_delta(group, col, int(window))
+            out[f"{col}_delta_{window}"] = feature
     return out

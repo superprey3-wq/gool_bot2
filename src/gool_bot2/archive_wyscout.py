@@ -12,6 +12,7 @@ GOAL_TAG = 101
 OWN_GOAL_TAG = 102
 ACCURATE_TAG = 1801
 RED_CARD_TAGS = {1701, 1703}
+YELLOW_CARD_TAG = 1702
 
 
 def _tags(row: dict[str, Any]) -> set[int]:
@@ -101,6 +102,8 @@ def parse_wyscout_events(events: list[dict[str, Any]], team_sides: dict[int, str
             canonical.append(CanonicalEvent(minute, period, side, "corner"))  # type: ignore[arg-type]
             continue
 
+        if YELLOW_CARD_TAG in tags:
+            canonical.append(CanonicalEvent(minute, period, side, "yellow_card"))  # type: ignore[arg-type]
         if RED_CARD_TAGS.intersection(tags):
             canonical.append(CanonicalEvent(minute, period, side, "red_card"))  # type: ignore[arg-type]
 

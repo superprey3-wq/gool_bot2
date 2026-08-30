@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import pickle
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -98,7 +97,14 @@ def _metrics(y: np.ndarray, p: np.ndarray) -> dict[str, float | None]:
     }
 
 
-def _fit_head(train: pd.DataFrame, calibration: pd.DataFrame, test: pd.DataFrame, target: str) -> TrainedHead:
+def _fit_head(
+    train: pd.DataFrame,
+    calibration: pd.DataFrame,
+    test: pd.DataFrame,
+    target: str,
+    feature_columns: list[str] | None = None,
+) -> TrainedHead:
+    feature_columns = list(feature_columns or BASE_FEATURE_COLUMNS)
     train = train[train[target].notna()].copy()
     calibration = calibration[calibration[target].notna()].copy()
     test = test[test[target].notna()].copy()
@@ -118,11 +124,11 @@ def _fit_head(train: pd.DataFrame, calibration: pd.DataFrame, test: pd.DataFrame
         l2_regularization=0.1,
         random_state=42,
     )
-    model.fit(train[BASE_FEATURE_COLUMNS], y_train)
+    model.fit(train[feature_columns], y_train)
 
-    raw_cal = model.predict_proba(calibration[BASE_FEATURE_COLUMNS])[:, 1]
+    raw_cal = model.predict_proba(calibration[feature_columns])[:, 1]
     calibrator = ProbabilityCalibrator().fit(raw_cal, y_cal)
-    raw_test = model.predict_proba(test[BASE_FEATURE_COLUMNS])[:, 1]
+    raw_test = model.predict_proba(test[feature_columns])[:, 1]
     calibrated_test = calibrator.predict(raw_test)
 
     metrics = _metrics(y_test, calibrated_test)
@@ -130,11 +136,37 @@ def _fit_head(train: pd.DataFrame, calibration: pd.DataFrame, test: pd.DataFrame
     metrics["raw_brier_score"] = float(brier_score_loss(y_test, raw_test))
     return TrainedHead(
         target=target,
-        feature_columns=list(BASE_FEATURE_COLUMNS),
+        feature_columns=feature_columns,
         model=model,
         calibrator=calibrator,
         metrics=metrics,
     )
+
+
+def _halftime_snapshot(frame: pd.DataFrame) -> pd.DataFrame:
+    """One post-whistle halftime row per match with the exact period-1 score.
+
+    The generic archive is sampled at minute cutoffs, so stoppage-time goals can
+    occur after the nominal 45' snapshot. The dedicated halftime head therefore
+    replaces score fields with the exact score from all period-1 goals while
+    keeping only information that is available by the halftime whistle.
+    """
+    required = {"halftime_home_score", "halftime_away_score", "two_plus_goals_second_half"}
+    if not required.issubset(frame.columns):
+        return pd.DataFrame(columns=frame.columns)
+
+    half = frame[(frame["period"] == 1) & frame["two_plus_goals_second_half"].notna()].copy()
+    if half.empty:
+        return half
+    half = half.sort_values(["match_id", "minute"]).groupby("match_id", as_index=False).tail(1).copy()
+    half["home_score"] = half["halftime_home_score"].astype(float)
+    half["away_score"] = half["halftime_away_score"].astype(float)
+    half["total_goals"] = half["home_score"] + half["away_score"]
+    half["score_diff"] = half["home_score"] - half["away_score"]
+    half["minute"] = 45.0
+    half["period"] = 1.0
+    half["time_remaining_nominal"] = 45.0
+    return half
 
 
 def train_archive_models(frame: pd.DataFrame) -> dict[str, Any]:
@@ -143,13 +175,28 @@ def train_archive_models(frame: pd.DataFrame) -> dict[str, Any]:
     train, calibration, test = _match_split(frame)
 
     heads = {target: _fit_head(train, calibration, test, target) for target in TARGET_COLUMNS}
+
+    # Dedicated halftime model: one sample per finished match, exact HT score,
+    # first-half event/xG/shot context, target = 2+ goals in the second half.
+    ht_train = _halftime_snapshot(train)
+    ht_calibration = _halftime_snapshot(calibration)
+    ht_test = _halftime_snapshot(test)
+    if min(len(ht_train), len(ht_calibration), len(ht_test)) > 0:
+        heads["two_plus_goals_second_half_ht"] = _fit_head(
+            ht_train,
+            ht_calibration,
+            ht_test,
+            "two_plus_goals_second_half",
+        )
+        heads["two_plus_goals_second_half_ht"].metrics["matches"] = float(len(ht_test))
+
     match_counts = {
         "train": int(train["match_id"].nunique()),
         "calibration": int(calibration["match_id"].nunique()),
         "test": int(test["match_id"].nunique()),
     }
     return {
-        "format_version": 1,
+        "format_version": 2,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "feature_columns": list(BASE_FEATURE_COLUMNS),
         "heads": heads,
@@ -166,7 +213,7 @@ def _jsonable_metrics(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train first GOOL archive models with chronological calibration")
+    parser = argparse.ArgumentParser(description="Train GOOL archive models with chronological calibration")
     parser.add_argument("--input", default="data/processed/archive_training.csv")
     parser.add_argument("--model-output", default="models/archive_foundation.pkl")
     parser.add_argument("--metrics-output", default="artifacts/archive_foundation_metrics.json")

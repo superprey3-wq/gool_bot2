@@ -1,0 +1,87 @@
+name: archive-isolation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/gool_bot2/train_wyscout_only.py'
+      - 'src/gool_bot2/diagnose_archives.py'
+      - 'src/gool_bot2/archive_wyscout.py'
+      - 'src/gool_bot2/archive_statsbomb.py'
+      - 'src/gool_bot2/archive_dataset.py'
+      - 'src/gool_bot2/train_archive_models.py'
+      - 'src/gool_bot2/train_hazard_models.py'
+      - '.github/workflows/archive-isolation.yml'
+  workflow_dispatch:
+
+jobs:
+  wyscout_train:
+    name: Wyscout train
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Train from Wyscout only
+        run: python -m gool_bot2.train_wyscout_only --work-dir data/wyscout_foundation --step 2
+      - name: Upload Wyscout models and metrics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-wyscout-foundation
+          path: |
+            data/wyscout_foundation/models/*.pkl
+            data/wyscout_foundation/artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  statsbomb_probe:
+    name: StatsBomb probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Download and import a StatsBomb probe
+        run: python -m gool_bot2.diagnose_archives statsbomb --work-dir data/archive_diagnostics --limit 25
+      - name: Upload StatsBomb diagnostic
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: statsbomb-diagnostic
+          path: data/archive_diagnostics/artifacts/statsbomb_diagnostic.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  dynasty_probe:
+    name: Dynasty probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Download and inspect Dynasty archive
+        run: python -m gool_bot2.diagnose_archives dynasty --work-dir data/archive_diagnostics
+      - name: Upload Dynasty diagnostic
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dynasty-diagnostic
+          path: data/archive_diagnostics/artifacts/dynasty_diagnostic.json
+          if-no-files-found: warn
+          retention-days: 14

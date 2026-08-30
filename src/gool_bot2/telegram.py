@@ -4,9 +4,17 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Iterable
-from urllib.parse import urlencode
+from typing import Any, Iterable
 from urllib.request import Request, urlopen
+
+from .journal import mark_in_game
+
+HEAD_TO_CODE = {
+    "another_goal": "AG",
+    "goal_before_ht": "FH",
+    "two_plus_goals_second_half": "2H",
+}
+CODE_TO_HEAD = {value: key for key, value in HEAD_TO_CODE.items()}
 
 
 def _token() -> str:
@@ -80,28 +88,106 @@ def unsubscribe(chat_id: str | int) -> bool:
     return existed
 
 
-def send_message(chat_id: str | int, text: str, parse_mode: str = "HTML") -> bool:
+def _api_call(method: str, payload: dict[str, Any], timeout: int = 15) -> dict[str, Any] | None:
     token = _token()
     if not token:
-        return False
-    payload = json.dumps({
-        "chat_id": str(chat_id),
-        "text": text,
-        "parse_mode": parse_mode,
-        "disable_web_page_preview": True,
-    }).encode("utf-8")
+        return None
     req = Request(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data=payload,
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urlopen(req, timeout=15) as response:
-            return 200 <= response.status < 300
+        with urlopen(req, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            return body if isinstance(body, dict) else None
     except Exception:
-        return False
+        return None
 
 
-def broadcast(text: str, parse_mode: str = "HTML") -> int:
-    return sum(int(send_message(chat_id, text, parse_mode=parse_mode)) for chat_id in get_subscribers())
+def signal_keyboard(match_id: str, head: str, entered: bool = False) -> dict[str, Any]:
+    code = HEAD_TO_CODE.get(head, "AG")
+    if entered:
+        return {"inline_keyboard": [[{"text": "✅ В игре", "callback_data": f"ig:{code}:{match_id}"}]]}
+    return {"inline_keyboard": [[{"text": "🎯 В игре", "callback_data": f"ig:{code}:{match_id}"}]]}
+
+
+def send_message(
+    chat_id: str | int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> bool:
+    payload: dict[str, Any] = {
+        "chat_id": str(chat_id),
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    result = _api_call("sendMessage", payload)
+    return bool(result and result.get("ok"))
+
+
+def broadcast(
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> int:
+    return sum(int(send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)) for chat_id in get_subscribers())
+
+
+def poll_in_game_callbacks(journal_path: Path, offset: int = 0) -> tuple[int, int]:
+    """Process Telegram inline-button callbacks without a separate bot framework."""
+    payload: dict[str, Any] = {"offset": int(offset), "timeout": 0, "allowed_updates": ["callback_query"]}
+    result = _api_call("getUpdates", payload, timeout=5)
+    if not result or not result.get("ok"):
+        return offset, 0
+
+    next_offset = offset
+    changed = 0
+    allowed = set(get_subscribers())
+    for update in result.get("result") or []:
+        try:
+            update_id = int(update.get("update_id"))
+            next_offset = max(next_offset, update_id + 1)
+            callback = update.get("callback_query") or {}
+            data = str(callback.get("data") or "")
+            parts = data.split(":", 2)
+            if len(parts) != 3 or parts[0] != "ig":
+                continue
+            head = CODE_TO_HEAD.get(parts[1])
+            match_id = parts[2]
+            message = callback.get("message") or {}
+            chat = message.get("chat") or {}
+            chat_id = str(chat.get("id") or "")
+            if not head or (allowed and chat_id not in allowed):
+                continue
+
+            ok = mark_in_game(journal_path, match_id, head, chat_id=chat_id)
+            _api_call(
+                "answerCallbackQuery",
+                {
+                    "callback_query_id": callback.get("id"),
+                    "text": "Записал заход в журнал" if ok else "Сигнал уже закрыт или не найден",
+                    "show_alert": False,
+                },
+                timeout=5,
+            )
+            if ok:
+                changed += 1
+                if message.get("message_id") and chat_id:
+                    _api_call(
+                        "editMessageReplyMarkup",
+                        {
+                            "chat_id": chat_id,
+                            "message_id": message.get("message_id"),
+                            "reply_markup": signal_keyboard(match_id, head, entered=True),
+                        },
+                        timeout=5,
+                    )
+        except Exception:
+            continue
+    return next_offset, changed

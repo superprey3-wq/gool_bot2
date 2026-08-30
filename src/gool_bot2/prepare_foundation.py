@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .archive_dataset import build_dataframe
+from .archive_football_data import import_football_data
 from .archive_statsbomb import import_statsbomb
 from .archive_wyscout import import_wyscout
 from .bootstrap_foundation import (
@@ -27,6 +28,7 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     statsbomb_extracted = statsbomb_raw / "extracted"
     archive_jsonl = raw_root / "open_event_archive.jsonl"
     processed = work_dir / "processed" / "archive_training.csv"
+    football_data_csv = work_dir / "processed" / "football_data_htft.csv"
     artifacts = work_dir / "artifacts"
 
     artifacts.mkdir(parents=True, exist_ok=True)
@@ -55,6 +57,23 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     processed.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(processed, index=False)
 
+    # Football-Data is intentionally kept as a separate HT/FT table. It has a
+    # very large finished-match history with exact halftime/final scores, but
+    # its shots/corners fields are full-time statistics and must not leak into
+    # a halftime prediction. The importer therefore builds only leakage-safe
+    # rolling team priors from earlier matches.
+    try:
+        football_data_status = import_football_data(football_data_csv)
+        football_data_status["status"] = "prepared"
+    except Exception as exc:
+        # A temporary external-site outage should not destroy the existing
+        # Wyscout + StatsBomb preparation path.
+        football_data_status = {
+            "status": "unavailable",
+            "error": f"{type(exc).__name__}: {exc}",
+            "dataset": str(football_data_csv),
+        }
+
     source_counts = {
         str(source): int(count)
         for source, count in frame.groupby("source")["match_id"].nunique().to_dict().items()
@@ -63,6 +82,7 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
     summary = {
         "phase": "prepare",
         "new_matches_imported": {"wyscout": int(wyscout_imported), "statsbomb": int(statsbomb_imported)},
+        "football_data_htft": football_data_status,
         "statsbomb_mirror_used": statsbomb_mirror,
         "auxiliary_archives": {"dynasty_scouting_league_2024": dynasty_status},
         "matches": int(frame["match_id"].nunique()),
@@ -78,7 +98,7 @@ def run(work_dir: Path, step: int = 2, limit: int | None = None) -> dict[str, ob
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prepare Wyscout + StatsBomb archive dataset without training")
+    parser = argparse.ArgumentParser(description="Prepare Wyscout + StatsBomb + Football-Data archives without training")
     parser.add_argument("--work-dir", default="data/foundation_bootstrap")
     parser.add_argument("--step", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None)

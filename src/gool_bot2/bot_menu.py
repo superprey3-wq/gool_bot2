@@ -29,13 +29,16 @@ def _pct(won: int, lost: int) -> str:
     return "—" if not total else f"{won / total * 100:.1f}%"
 
 
-def report_text(journal_path: Path) -> str:
+def _load_rows(path: Path) -> list[dict[str, Any]]:
     try:
-        rows = json.loads(journal_path.read_text("utf-8")) if journal_path.exists() else []
+        rows = json.loads(path.read_text("utf-8")) if path.exists() else []
     except Exception:
         rows = []
-    if not isinstance(rows, list):
-        rows = []
+    return rows if isinstance(rows, list) else []
+
+
+def report_text(journal_path: Path) -> str:
+    rows = _load_rows(journal_path)
     lines = ["📊 <b>ОТЧЁТ GOOL Bot 2</b>", ""]
     total_won = total_lost = total_pending = 0
     for head in ("another_goal", "goal_before_ht", "over_2_5", "both_teams_to_score"):
@@ -56,24 +59,36 @@ def report_text(journal_path: Path) -> str:
 
 
 def in_game_text(journal_path: Path) -> str:
-    try:
-        rows = json.loads(journal_path.read_text("utf-8")) if journal_path.exists() else []
-    except Exception:
-        rows = []
-    active = [
+    rows = _load_rows(journal_path)
+
+    # This menu is the queue of live signals the user has NOT confirmed yet.
+    pending = [
         r for r in rows
-        if bool(r.get("in_game")) and str(r.get("result") or "pending").lower() == "pending"
-    ] if isinstance(rows, list) else []
-    if not active:
-        return "🟢 <b>В ИГРЕ</b>\n\nСейчас отмеченных активных входов нет."
-    lines = ["🟢 <b>В ИГРЕ</b>", ""]
-    for row in active[-12:]:
+        if not bool(r.get("in_game"))
+        and str(r.get("result") or "pending").lower() == "pending"
+    ]
+    pending.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+
+    if not pending:
+        return "🟢 <b>В ИГРЕ</b>\n\nНеподтверждённых LIVE-сигналов сейчас нет."
+
+    lines = [
+        "🟢 <b>В ИГРЕ — ЖДУТ ПОДТВЕРЖДЕНИЯ</b>",
+        f"Неподтверждённых сигналов: <b>{len(pending)}</b>",
+        "Нажми 🎯 В игре под нужной карточкой сигнала.",
+        "",
+    ]
+    for row in pending[:12]:
         score = row.get("score") or [0, 0]
+        league = str(row.get("league") or "").strip()
+        league_line = f" · {league}" if league else ""
         lines.append(
-            f"{HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}\n"
+            f"{HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}{league_line}\n"
             f"{row.get('home','?')} — {row.get('away','?')} · {row.get('minute',0)}' · "
-            f"{score[0]}:{score[1]} · P {float(row.get('probability') or 0)*100:.1f}%"
+            f"{score[0]}:{score[1]} · P <b>{float(row.get('probability') or 0)*100:.1f}%</b>"
         )
+    if len(pending) > 12:
+        lines += ["", f"Ещё сигналов: {len(pending) - 12}"]
     return "\n\n".join(lines)
 
 

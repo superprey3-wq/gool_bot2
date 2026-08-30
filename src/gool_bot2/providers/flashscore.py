@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import re
 import time
+from functools import lru_cache
 from typing import Any
+from urllib.parse import quote
 
 from .common import ProviderMatch, UA, http_text
 
@@ -100,6 +102,39 @@ class FlashscoreProvider:
                 return body
         return ""
 
+    @staticmethod
+    @lru_cache(maxsize=1024)
+    def team_logo_url(team_slug: str, team_id: str) -> str | None:
+        """Best-effort lookup of the real Flashscore crest URL for one team.
+
+        JA/JB from the master feed are the participant ids and WU/WV are slugs.
+        Flashscore team pages embed the CDN image path. We cache the lookup so a
+        team crest is normally fetched only once per process.
+        """
+        slug = str(team_slug or "").strip().strip("/")
+        team_id = str(team_id or "").strip()
+        if not slug or not team_id:
+            return None
+        url = f"https://www.flashscore.com/team/{quote(slug)}/{quote(team_id)}/"
+        headers = {"User-Agent": UA, "Accept": "text/html,*/*", "Referer": "https://www.flashscore.com/"}
+        code, body = http_text(url, headers=headers, timeout=10)
+        if code != 200 or not body:
+            return None
+        patterns = (
+            r'"(?:image_path|small_image_path|imagePath|smallImagePath)"\s*:\s*"(https?:\\?/\\?/static\.flashscore\.com\\?/res\\?/image\\?/data\\?/[^"\\]+\.png)"',
+            r'(https://static\.flashscore\.com/res/image/data/[A-Za-z0-9_-]+\.png)',
+            r'(//static\.flashscore\.com/res/image/data/[A-Za-z0-9_-]+\.png)',
+        )
+        for pattern in patterns:
+            match = re.search(pattern, body)
+            if not match:
+                continue
+            value = match.group(1).replace("\\/", "/")
+            if value.startswith("//"):
+                value = "https:" + value
+            return value
+        return None
+
     def parse_master_live(self, body: str) -> list[ProviderMatch]:
         now = int(time.time())
         matches: list[ProviderMatch] = []
@@ -123,6 +158,20 @@ class FlashscoreProvider:
             if not home or not away:
                 continue
             minute, is_ht = _minute(f, now)
+            home_id = (f.get("JA") or "").strip()
+            away_id = (f.get("JB") or "").strip()
+            home_slug = (f.get("WU") or "").strip()
+            away_slug = (f.get("WV") or "").strip()
+            meta = {
+                "status_code": f.get("AC", ""),
+                "home_team_id": home_id,
+                "away_team_id": away_id,
+                "home_team_slug": home_slug,
+                "away_team_slug": away_slug,
+                "home_short": (f.get("WM") or "").strip(),
+                "away_short": (f.get("WN") or "").strip(),
+                "round": (f.get("ER") or "").strip(),
+            }
             matches.append(
                 ProviderMatch(
                     provider=self.name,
@@ -134,7 +183,7 @@ class FlashscoreProvider:
                     away_score=_as_int(f.get("AH"), _as_int(f.get("AU"))),
                     league=league,
                     is_halftime=is_ht,
-                    meta={"status_code": f.get("AC", "")},
+                    meta=meta,
                 )
             )
         return list({m.provider_match_id: m for m in matches}.values())

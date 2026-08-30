@@ -26,6 +26,12 @@ def _minute(event: dict[str, Any]) -> float:
     return minute + second / 60.0
 
 
+def _card_name(row: dict[str, Any]) -> str:
+    foul = (((row.get("foul_committed") or {}).get("card") or {}).get("name"))
+    bad = (((row.get("bad_behaviour") or {}).get("card") or {}).get("name"))
+    return str(foul or bad or "")
+
+
 def parse_statsbomb_events(
     events: list[dict[str, Any]],
     home_team_id: object,
@@ -78,8 +84,12 @@ def parse_statsbomb_events(
             canonical.append(CanonicalEvent(minute, period, side, "corner"))  # type: ignore[arg-type]
             continue
 
-        card_name = str((((row.get("foul_committed") or {}).get("card") or {}).get("name")) or "")
-        if card_name in {"Red Card", "Second Yellow"}:
+        card_name = _card_name(row)
+        if card_name in {"Yellow Card"}:
+            canonical.append(CanonicalEvent(minute, period, side, "yellow_card"))  # type: ignore[arg-type]
+        elif card_name in {"Red Card", "Second Yellow"}:
+            # A second-yellow dismissal is represented once as a red-card state
+            # change. The earlier yellow, when present, remains its own event.
             canonical.append(CanonicalEvent(minute, period, side, "red_card"))  # type: ignore[arg-type]
 
     canonical.sort(key=lambda event: (event.minute, event.event_type))

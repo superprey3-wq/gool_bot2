@@ -21,7 +21,7 @@ BASE_FEATURE_COLUMNS = [
     "away_xg_last_5m", "home_shots_last_10m", "away_shots_last_10m", "home_xg_last_10m",
     "away_xg_last_10m",
 ]
-TARGET_COLUMNS = ["another_goal", "goal_before_ht", "over_2_5"]
+TARGET_COLUMNS = ["another_goal", "goal_before_ht", "over_2_5", "both_teams_to_score"]
 COUNT_TARGET_COLUMNS = [
     "future_goals_count", "future_first_half_goals", "second_half_goals_total",
     "final_home_score", "final_away_score", "halftime_home_score", "halftime_away_score",
@@ -60,6 +60,7 @@ def _count_labels(match: ArchiveMatch, minute: float, period: int) -> dict[str, 
         "final_home_score": float(final_home), "final_away_score": float(final_away),
         "halftime_home_score": float(halftime_home), "halftime_away_score": float(halftime_away),
         "over_2_5": float((final_home + final_away) >= 3),
+        "both_teams_to_score": float(final_home > 0 and final_away > 0),
     }
 
 

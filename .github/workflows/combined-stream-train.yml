@@ -1,0 +1,52 @@
+name: combined-stream-train
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/gool_bot2/archive_statsbomb_stream.py'
+      - 'src/gool_bot2/train_wyscout_statsbomb_stream.py'
+      - 'src/gool_bot2/archive_statsbomb.py'
+      - 'src/gool_bot2/archive_wyscout.py'
+      - 'src/gool_bot2/archive_dataset.py'
+      - 'src/gool_bot2/train_archive_models.py'
+      - 'src/gool_bot2/train_hazard_models.py'
+      - '.github/workflows/combined-stream-train.yml'
+  workflow_dispatch:
+
+jobs:
+  train:
+    name: Wyscout + StatsBomb stream train
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Disk before training
+        run: |
+          df -h
+          free -h
+      - name: Train combined foundation
+        run: python -m gool_bot2.train_wyscout_statsbomb_stream --work-dir data/combined_foundation --step 3 --workers 6
+      - name: Show combined summary
+        if: always()
+        run: |
+          if [ -f data/combined_foundation/artifacts/combined_training_summary.json ]; then
+            cat data/combined_foundation/artifacts/combined_training_summary.json
+          fi
+          df -h
+      - name: Upload combined models and metrics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-wyscout-statsbomb-foundation
+          path: |
+            data/combined_foundation/models/*.pkl
+            data/combined_foundation/artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 14

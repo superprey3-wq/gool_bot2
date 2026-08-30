@@ -30,6 +30,8 @@ BASE_FEATURE_COLUMNS = [
     "away_xg",
     "home_corners",
     "away_corners",
+    "home_yellow_cards",
+    "away_yellow_cards",
     "home_red_cards",
     "away_red_cards",
     "home_shots_last_5m",
@@ -79,7 +81,11 @@ def _rich_event_features(record: dict[str, object], minute: float) -> dict[str, 
         return open_event_features(events, minute)
     # Flashscore goal-only archive rows remain valid. Unknown historical live
     # statistics are represented as NaN, never fake zeroes.
-    return {column: float("nan") for column in BASE_FEATURE_COLUMNS if column.startswith(("home_", "away_")) and column not in {"home_score", "away_score"}}
+    return {
+        column: float("nan")
+        for column in BASE_FEATURE_COLUMNS
+        if column.startswith(("home_", "away_")) and column not in {"home_score", "away_score"}
+    }
 
 
 def _count_labels(match: ArchiveMatch, minute: float, period: int) -> dict[str, float | None]:
@@ -95,7 +101,7 @@ def record_to_rows(record: dict[str, object], cutoffs: range | None = None) -> l
     """Expand one finished match into chronological supervised examples.
 
     Timestamped StatsBomb/Wyscout events are aggregated only up to cutoff t.
-    Flashscore rows without timestamped shot/xG history keep those features
+    Flashscore rows without timestamped shot/xG/card history keep those features
     missing instead of backfilling final-match statistics and leaking future data.
     """
     match = _archive_match(record)

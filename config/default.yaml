@@ -1,0 +1,13 @@
+snapshots:
+  cadence_seconds: 60
+  momentum_windows_minutes: [3, 5, 10, 15]
+
+evaluation:
+  strategy: walk_forward
+  calibration: true
+  metrics: [log_loss, brier_score, roc_auc]
+
+targets:
+  another_goal: true
+  goal_before_ht: true
+  two_plus_goals_second_half: true

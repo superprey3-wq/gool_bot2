@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
 from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -80,6 +83,45 @@ def _fmt_pair(pair: tuple[float | None, float | None], digits: int = 0, suffix: 
     return f"{int(round(home))}{suffix} : {int(round(away))}{suffix}"
 
 
+def _asset_cache_path() -> Path:
+    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
+    return runtime / "live" / "signal_card_assets.json"
+
+
+def _read_asset_cache() -> dict[str, Any]:
+    path = _asset_cache_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _remember_assets(match_id: str, meta: dict[str, Any], stats: dict[str, str]) -> None:
+    if not match_id:
+        return
+    path = _asset_cache_path()
+    cache = _read_asset_cache()
+    cache[str(match_id)] = {"flashscore_meta": meta, "stats_snapshot": stats}
+    if len(cache) > 500:
+        cache = dict(list(cache.items())[-500:])
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def _cached_assets(match_id: str) -> dict[str, Any]:
+    if not match_id:
+        return {}
+    return dict(_read_asset_cache().get(str(match_id)) or {})
+
+
 @lru_cache(maxsize=1024)
 def _download_logo(url: str) -> Image.Image | None:
     if not url:
@@ -107,17 +149,17 @@ def _team_logo(meta: dict[str, Any], side: str) -> Image.Image | None:
     return _download_logo(url) if url else None
 
 
-def _badge(draw: ImageDraw.ImageDraw, img: Image.Image, name: str, x: int, y: int, accent: tuple[int, int, int]) -> None:
+def _badge(draw: ImageDraw.ImageDraw, img: Image.Image | None, name: str, x: int, y: int, accent: tuple[int, int, int]) -> None:
     if img is not None:
         px = x + (150 - img.width) // 2
         py = y + (150 - img.height) // 2
-        canvas = draw._image
-        canvas.paste(img, (px, py), img)
+        draw._image.paste(img, (px, py), img)
         return
     draw.ellipse((x + 20, y + 20, x + 130, y + 130), fill=(22, 31, 46), outline=accent, width=4)
     initials = "".join(part[:1] for part in str(name).replace("-", " ").split()[:3]).upper() or "?"
-    box = draw.textbbox((0, 0), initials, font=_font(31, True))
-    draw.text((x + 75 - (box[2] - box[0]) / 2, y + 75 - 19), initials, font=_font(31, True), fill=TEXT)
+    font = _font(31, True)
+    box = draw.textbbox((0, 0), initials, font=font)
+    draw.text((x + 75 - (box[2] - box[0]) / 2, y + 56), initials, font=font, fill=TEXT)
 
 
 def _stats_for_record(record: dict[str, Any]) -> dict[str, str]:
@@ -132,7 +174,6 @@ def _stats_for_record(record: dict[str, Any]) -> dict[str, str]:
 
 
 def stats_snapshot(record: dict[str, Any]) -> dict[str, str]:
-    """Small JSON-safe snapshot saved with a signal for its later result card."""
     return _stats_for_record(record)
 
 
@@ -147,6 +188,8 @@ def render_signal_card(record: dict[str, Any], head: str, probability: float, mo
     match = record.get("match") or {}
     fs_meta = flashscore_meta(record)
     stats = _stats_for_record(record)
+    match_id = str(match.get("flashscore_event_id") or "")
+    _remember_assets(match_id, fs_meta, stats)
     home = str(match.get("home") or "?")
     away = str(match.get("away") or "?")
     league = str(match.get("league") or "Неизвестный чемпионат")
@@ -237,8 +280,9 @@ def render_result_card(row: dict[str, Any], result: str, minute: int, home_score
     home = str(row.get("home") or "?")
     away = str(row.get("away") or "?")
     league = str(row.get("league") or "Неизвестный чемпионат")
-    fs_meta = dict(row.get("flashscore_meta") or {})
-    stats = dict(row.get("stats_snapshot") or {})
+    cached = _cached_assets(str(row.get("match_id") or ""))
+    fs_meta = dict(row.get("flashscore_meta") or cached.get("flashscore_meta") or {})
+    stats = dict(row.get("stats_snapshot") or cached.get("stats_snapshot") or {})
     label = HEAD_LABELS.get(head, head.upper())
     entry_score = row.get("score") or [0, 0]
     entry_minute = int(row.get("minute") or 0)
@@ -274,7 +318,8 @@ def render_result_card(row: dict[str, Any], result: str, minute: int, home_score
     draw.text((580, 642), "ПОДТВЕРЖДЕНИЕ", font=_font(16, True), fill=MUTED)
     draw.text((580, 680), f"{minute}' · {home_score}:{away_score}", font=_font(28, True), fill=accent)
     if stats:
-        draw.text((90, 735), f"Удары {stats.get('shots','—')}   ·   В створ {stats.get('sot','—')}   ·   Угловые {stats.get('corners','—')}", font=_fit(draw, f"Удары {stats.get('shots','—')} · В створ {stats.get('sot','—')} · Угловые {stats.get('corners','—')}", 870, 19, True), fill=MUTED)
+        line = f"Удары {stats.get('shots','—')} · В створ {stats.get('sot','—')} · Угловые {stats.get('corners','—')}"
+        draw.text((90, 735), line, font=_fit(draw, line, 870, 19, True), fill=MUTED)
 
     draw.rounded_rectangle((150, 845, 930, 920), 22, fill=accent)
     _center(draw, "РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 863, _font(31, True), (4, 12, 18))

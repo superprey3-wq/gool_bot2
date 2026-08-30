@@ -5,6 +5,8 @@ on:
     branches: [main, foundation-bootstrap]
     paths:
       - 'src/gool_bot2/bootstrap_foundation.py'
+      - 'src/gool_bot2/prepare_foundation.py'
+      - 'src/gool_bot2/train_prepared_foundation.py'
       - 'src/gool_bot2/archive_wyscout.py'
       - 'src/gool_bot2/archive_statsbomb.py'
       - 'src/gool_bot2/archive_dataset.py'
@@ -25,14 +27,25 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
-      - name: Download Wyscout + StatsBomb and train GOOL models
-        run: python -m gool_bot2.bootstrap_foundation --work-dir data/foundation_bootstrap --step 2
+
+      - name: Phase 1 - download import and prepare archive dataset
+        run: python -m gool_bot2.prepare_foundation --work-dir data/foundation_bootstrap --step 2
+
+      - name: Show archive preparation summary
+        run: cat data/foundation_bootstrap/artifacts/foundation_prepare_summary.json
+
+      - name: Phase 2 - train GOOL models from prepared dataset
+        run: python -m gool_bot2.train_prepared_foundation --work-dir data/foundation_bootstrap
+
       - name: Show training summary
         run: cat data/foundation_bootstrap/artifacts/foundation_bootstrap_summary.json
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: gool-foundation-models
           path: |
             data/foundation_bootstrap/models/*.pkl
             data/foundation_bootstrap/artifacts/*.json
+          if-no-files-found: warn
           retention-days: 14

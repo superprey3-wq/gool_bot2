@@ -7,10 +7,11 @@ from typing import Any
 import pandas as pd
 
 from .archive_dataset import BASE_FEATURE_COLUMNS
+from .match_context import live_rich_features
 
 
 def live_foundation_features(record: dict[str, Any]) -> pd.DataFrame:
-    """Build the exact archive-baseline feature vector from one live fusion record."""
+    """Build the exact archive/open-event feature vector from one live record."""
     match = record.get("match", {})
     minute = float(match.get("minute") or 0.0)
     home_score = int(match.get("home_score") or 0)
@@ -21,10 +22,17 @@ def live_foundation_features(record: dict[str, Any]) -> pd.DataFrame:
     providers = record.get("providers", {})
     fs_meta = (providers.get("flashscore") or {}).get("meta") or {}
     goals = fs_meta.get("goal_timeline") or []
-    seen_minutes = [float(goal.get("minute") or 0.0) for goal in goals if float(goal.get("minute") or 0.0) <= minute]
+    seen_minutes: list[float] = []
+    for goal in goals:
+        try:
+            value = float(goal.get("minute") or 0.0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if value <= minute:
+            seen_minutes.append(value)
     last_goal = max(seen_minutes, default=None)
 
-    row = {
+    row: dict[str, Any] = {
         "minute": minute,
         "period": period,
         "home_score": home_score,
@@ -36,7 +44,8 @@ def live_foundation_features(record: dict[str, Any]) -> pd.DataFrame:
         "goals_last_10m": float(sum(1 for value in seen_minutes if value > minute - 10)),
         "minutes_since_last_goal": float(minute - last_goal) if last_goal is not None else minute,
     }
-    return pd.DataFrame([row], columns=BASE_FEATURE_COLUMNS)
+    row.update(live_rich_features(record))
+    return pd.DataFrame([row]).reindex(columns=BASE_FEATURE_COLUMNS)
 
 
 class ArchiveFoundationPredictor:

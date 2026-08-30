@@ -52,6 +52,8 @@ COUNT_TARGET_COLUMNS = [
     "second_half_goals_total",
     "final_home_score",
     "final_away_score",
+    "halftime_home_score",
+    "halftime_away_score",
 ]
 
 
@@ -85,8 +87,6 @@ def _rich_event_features(record: dict[str, object], minute: float) -> dict[str, 
     events = record.get("events")
     if isinstance(events, list):
         return open_event_features(events, minute)
-    # Flashscore goal-only archive rows remain valid. Unknown historical live
-    # statistics are represented as NaN, never fake zeroes.
     return {
         column: float("nan")
         for column in BASE_FEATURE_COLUMNS
@@ -98,24 +98,24 @@ def _count_labels(match: ArchiveMatch, minute: float, period: int) -> dict[str, 
     future = [goal for goal in match.goals if goal.minute > minute]
     final_home = sum(1 for goal in match.goals if goal.side == "home")
     final_away = sum(1 for goal in match.goals if goal.side == "away")
+    halftime_home = sum(1 for goal in match.goals if goal.period == 1 and goal.side == "home")
+    halftime_away = sum(1 for goal in match.goals if goal.period == 1 and goal.side == "away")
     return {
         "future_goals_count": float(len(future)),
         "future_first_half_goals": float(sum(1 for goal in future if goal.period == 1)) if period == 1 else None,
         "second_half_goals_total": float(sum(1 for goal in match.goals if goal.period == 2)) if period == 1 else None,
-        # Outcome-only metadata used for archive segmentation/reporting. These
-        # columns are deliberately not part of BASE_FEATURE_COLUMNS.
+        # Finished-match metadata. These are deliberately excluded from the
+        # generic live feature list. Halftime scores are safe for the dedicated
+        # post-whistle halftime model because they are known at prediction time.
         "final_home_score": float(final_home),
         "final_away_score": float(final_away),
+        "halftime_home_score": float(halftime_home),
+        "halftime_away_score": float(halftime_away),
     }
 
 
 def record_to_rows(record: dict[str, object], cutoffs: range | None = None) -> list[dict[str, object]]:
-    """Expand one finished match into chronological supervised examples.
-
-    Timestamped StatsBomb/Wyscout events are aggregated only up to cutoff t.
-    Flashscore rows without timestamped shot/xG/card history keep those features
-    missing instead of backfilling final-match statistics and leaking future data.
-    """
+    """Expand one finished match into chronological supervised examples."""
     match = _archive_match(record)
     rows: list[dict[str, object]] = []
     for example in build_archive_examples(match, cutoffs=cutoffs):

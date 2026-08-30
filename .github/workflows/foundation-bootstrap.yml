@@ -2,7 +2,7 @@ name: foundation-bootstrap
 
 on:
   push:
-    branches: [foundation-bootstrap]
+    branches: [main, foundation-bootstrap]
     paths:
       - 'src/gool_bot2/bootstrap_foundation.py'
       - 'src/gool_bot2/archive_wyscout.py'

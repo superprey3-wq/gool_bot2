@@ -12,7 +12,8 @@ from .journal import mark_in_game
 HEAD_TO_CODE = {
     "another_goal": "AG",
     "goal_before_ht": "FH",
-    "two_plus_goals_second_half": "2H",
+    "over_2_5": "O25",
+    "both_teams_to_score": "BTTS",
 }
 CODE_TO_HEAD = {value: key for key, value in HEAD_TO_CODE.items()}
 
@@ -139,55 +140,64 @@ def broadcast(
     return sum(int(send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)) for chat_id in get_subscribers())
 
 
-def poll_in_game_callbacks(journal_path: Path, offset: int = 0) -> tuple[int, int]:
-    """Process Telegram inline-button callbacks without a separate bot framework."""
-    payload: dict[str, Any] = {"offset": int(offset), "timeout": 0, "allowed_updates": ["callback_query"]}
-    result = _api_call("getUpdates", payload, timeout=5)
-    if not result or not result.get("ok"):
+def edit_message_reply_markup(chat_id: str | int, message_id: int, reply_markup: dict[str, Any]) -> bool:
+    result = _api_call(
+        "editMessageReplyMarkup",
+        {"chat_id": str(chat_id), "message_id": int(message_id), "reply_markup": reply_markup},
+    )
+    return bool(result and result.get("ok"))
+
+
+def answer_callback_query(callback_query_id: str, text: str = "") -> bool:
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+    result = _api_call("answerCallbackQuery", payload)
+    return bool(result and result.get("ok"))
+
+
+def poll_in_game_callbacks(journal_path: Path, offset: int = 0, timeout: int = 0) -> tuple[int, int]:
+    token = _token()
+    if not token:
+        return offset, 0
+    req = Request(
+        f"https://api.telegram.org/bot{token}/getUpdates",
+        data=json.dumps({"offset": offset, "timeout": timeout, "allowed_updates": ["callback_query"]}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=max(5, timeout + 5)) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return offset, 0
+    if not body.get("ok"):
         return offset, 0
 
-    next_offset = offset
     changed = 0
-    allowed = set(get_subscribers())
-    for update in result.get("result") or []:
-        try:
-            update_id = int(update.get("update_id"))
-            next_offset = max(next_offset, update_id + 1)
-            callback = update.get("callback_query") or {}
-            data = str(callback.get("data") or "")
-            parts = data.split(":", 2)
-            if len(parts) != 3 or parts[0] != "ig":
-                continue
-            head = CODE_TO_HEAD.get(parts[1])
-            match_id = parts[2]
+    next_offset = offset
+    for update in body.get("result") or []:
+        next_offset = max(next_offset, int(update.get("update_id") or 0) + 1)
+        callback = update.get("callback_query") or {}
+        data = str(callback.get("data") or "")
+        if not data.startswith("ig:"):
+            continue
+        parts = data.split(":", 2)
+        if len(parts) != 3:
+            continue
+        _, code, match_id = parts
+        head = CODE_TO_HEAD.get(code)
+        if head is None:
+            continue
+        if mark_in_game(journal_path, match_id, head):
+            changed += 1
             message = callback.get("message") or {}
             chat = message.get("chat") or {}
-            chat_id = str(chat.get("id") or "")
-            if not head or (allowed and chat_id not in allowed):
-                continue
-
-            ok = mark_in_game(journal_path, match_id, head, chat_id=chat_id)
-            _api_call(
-                "answerCallbackQuery",
-                {
-                    "callback_query_id": callback.get("id"),
-                    "text": "Записал заход в журнал" if ok else "Сигнал уже закрыт или не найден",
-                    "show_alert": False,
-                },
-                timeout=5,
-            )
-            if ok:
-                changed += 1
-                if message.get("message_id") and chat_id:
-                    _api_call(
-                        "editMessageReplyMarkup",
-                        {
-                            "chat_id": chat_id,
-                            "message_id": message.get("message_id"),
-                            "reply_markup": signal_keyboard(match_id, head, entered=True),
-                        },
-                        timeout=5,
-                    )
-        except Exception:
-            continue
+            chat_id = chat.get("id")
+            message_id = message.get("message_id")
+            if chat_id is not None and message_id is not None:
+                edit_message_reply_markup(chat_id, int(message_id), signal_keyboard(match_id, head, entered=True))
+            answer_callback_query(str(callback.get("id") or ""), "Отмечено: в игре")
+        else:
+            answer_callback_query(str(callback.get("id") or ""), "Сигнал уже отмечен или не найден")
     return next_offset, changed

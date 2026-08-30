@@ -38,11 +38,11 @@ jobs:
       - name: Phase 2 - train GOOL models from prepared dataset
         run: python -m gool_bot2.train_prepared_foundation --work-dir data/foundation_bootstrap
 
-      - name: Evaluate HT 1-0/0-1 Over 2.5-equivalent segment
+      - name: Split archive by halftime score and final score
         run: python -m gool_bot2.evaluate_ht_over25_proxy
 
-      - name: Show HT Over 2.5 proxy metrics
-        run: cat data/foundation_bootstrap/artifacts/ht_one_goal_over25_proxy_metrics.json
+      - name: Show halftime to final score report
+        run: cat data/foundation_bootstrap/artifacts/halftime_final_score_report.json
 
       - name: Show training summary
         run: cat data/foundation_bootstrap/artifacts/foundation_bootstrap_summary.json

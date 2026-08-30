@@ -46,7 +46,13 @@ BASE_FEATURE_COLUMNS = [
     "away_xg_last_10m",
 ]
 TARGET_COLUMNS = ["another_goal", "goal_before_ht", "two_plus_goals_second_half"]
-COUNT_TARGET_COLUMNS = ["future_goals_count", "future_first_half_goals", "second_half_goals_total"]
+COUNT_TARGET_COLUMNS = [
+    "future_goals_count",
+    "future_first_half_goals",
+    "second_half_goals_total",
+    "final_home_score",
+    "final_away_score",
+]
 
 
 def _archive_match(record: dict[str, object]) -> ArchiveMatch:
@@ -90,10 +96,16 @@ def _rich_event_features(record: dict[str, object], minute: float) -> dict[str, 
 
 def _count_labels(match: ArchiveMatch, minute: float, period: int) -> dict[str, float | None]:
     future = [goal for goal in match.goals if goal.minute > minute]
+    final_home = sum(1 for goal in match.goals if goal.side == "home")
+    final_away = sum(1 for goal in match.goals if goal.side == "away")
     return {
         "future_goals_count": float(len(future)),
         "future_first_half_goals": float(sum(1 for goal in future if goal.period == 1)) if period == 1 else None,
         "second_half_goals_total": float(sum(1 for goal in match.goals if goal.period == 2)) if period == 1 else None,
+        # Outcome-only metadata used for archive segmentation/reporting. These
+        # columns are deliberately not part of BASE_FEATURE_COLUMNS.
+        "final_home_score": float(final_home),
+        "final_away_score": float(final_away),
     }
 
 

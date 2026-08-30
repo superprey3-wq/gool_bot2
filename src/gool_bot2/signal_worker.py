@@ -11,8 +11,9 @@ from typing import Any
 from .journal import append_analysis, entry_rows, load_signal_journal, save_signal_journal
 from .local_ensemble import LocalFootballEnsemble
 from .match_context import card_context
+from .signal_cards import render_result_card, render_signal_card
 from .signal_policy import combine_gates, exposure_gate, market_state_gate, model_threshold_gate, post_goal_gate, time_gate
-from .telegram import broadcast, poll_telegram_updates, send_startup_status, signal_keyboard
+from .telegram import broadcast, broadcast_photo, poll_telegram_updates, send_startup_status, signal_keyboard
 
 HEAD_LABELS = {
     "another_goal": "ЕЩЁ ГОЛ",
@@ -37,24 +38,24 @@ def _last_goal_minute(record: dict[str, Any]) -> int | None:
     return max(minutes) if minutes else None
 
 
-def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bool:
+def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[dict[str, Any]]:
     match = record.get("match") or {}
     match_id = str(match.get("flashscore_event_id") or "")
     if not match_id:
-        return False
+        return []
     minute = int(match.get("minute") or 0)
     is_halftime = bool(match.get("is_halftime"))
     home_score = int(match.get("home_score") or 0)
     away_score = int(match.get("away_score") or 0)
     current_total = home_score + away_score
-    changed = False
+    settled: list[dict[str, Any]] = []
     for row in journal:
         if str(row.get("match_id")) != match_id or str(row.get("result") or "pending").lower() != "pending":
             continue
         signal_score = row.get("score") or [0, 0]
         signal_total = int(signal_score[0] or 0) + int(signal_score[1] or 0)
         head = str(row.get("head") or "")
-        result = None
+        result: str | None = None
         if head == "another_goal":
             result = "won" if current_total > signal_total else ("lost" if minute >= 90 else None)
         elif head == "goal_before_ht":
@@ -70,8 +71,26 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bo
                 "settled_minute": minute,
                 "settled_score": [home_score, away_score],
             })
-            changed = True
-    return changed
+            settled.append(dict(row))
+    return settled
+
+
+def _send_result_cards(rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        result = str(row.get("result") or "lost")
+        settled_score = row.get("settled_score") or [0, 0]
+        minute = int(row.get("settled_minute") or 0)
+        home_score = int(settled_score[0] or 0)
+        away_score = int(settled_score[1] or 0)
+        try:
+            png = render_result_card(row, result, minute, home_score, away_score)
+            caption = (
+                "✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>"
+            ) + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
+            sent = broadcast_photo(png, caption=caption)
+            print(f"result_card={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+        except Exception as exc:
+            print(f"result_card_error={type(exc).__name__}:{exc}", flush=True)
 
 
 def _fmt_cards(cards: dict[str, Any]) -> str:
@@ -146,17 +165,16 @@ class SignalWorker:
             return 0
 
         journal = load_signal_journal(self.journal_path)
-        if _settle_pending(record, journal):
+        settled = _settle_pending(record, journal)
+        if settled:
             save_signal_journal(self.journal_path, journal)
+            _send_result_cards(settled)
 
         minute = int(match.get("minute") or 0)
         is_halftime = bool(match.get("is_halftime"))
         candidate = bool((record.get("prefilter") or {}).get("candidate"))
         base = self._base_analysis(record, match_id)
 
-        # Always write one funnel row for every LIVE snapshot before any early exit.
-        # This makes the Telegram Analysis button useful even when the prefilter
-        # rejects every match and the model is never called.
         append_analysis(self.analysis_path, {
             **base,
             "head": "prefilter",
@@ -165,7 +183,6 @@ class SignalWorker:
             "decision": "PASS" if (candidate or is_halftime) else "WAIT",
             "blocks": [] if (candidate or is_halftime) else ["prefilter_rejected"],
         })
-
         if not candidate and not is_halftime:
             return 0
 
@@ -242,10 +259,22 @@ class SignalWorker:
             if not allowed:
                 continue
 
-            sent = broadcast(
-                _message(record, head, float(probability), model_result, cards),
-                reply_markup=signal_keyboard(match_id, head),
-            )
+            try:
+                png = render_signal_card(record, head, float(probability), model_result, cards)
+                sent = broadcast_photo(
+                    png,
+                    caption=f"🎯 <b>{HEAD_LABELS[head]}</b> · P {float(probability)*100:.1f}%",
+                    reply_markup=signal_keyboard(match_id, head),
+                )
+            except Exception as exc:
+                print(f"signal_card_error={type(exc).__name__}:{exc}", flush=True)
+                sent = 0
+            if sent == 0:
+                sent = broadcast(
+                    _message(record, head, float(probability), model_result, cards),
+                    reply_markup=signal_keyboard(match_id, head),
+                )
+
             journal.append({
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "match_id": match_id,

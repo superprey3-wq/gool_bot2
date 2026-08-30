@@ -23,6 +23,7 @@ BASE_FEATURE_COLUMNS = [
     "minutes_since_last_goal",
 ]
 TARGET_COLUMNS = ["another_goal", "goal_before_ht", "two_plus_goals_second_half"]
+COUNT_TARGET_COLUMNS = ["future_goals_count", "future_first_half_goals", "second_half_goals_total"]
 
 
 def _archive_match(record: dict[str, object]) -> ArchiveMatch:
@@ -51,12 +52,22 @@ def _event_features(match: ArchiveMatch, minute: float) -> dict[str, float]:
     }
 
 
+def _count_labels(match: ArchiveMatch, minute: float, period: int) -> dict[str, float | None]:
+    future = [goal for goal in match.goals if goal.minute > minute]
+    return {
+        "future_goals_count": float(len(future)),
+        "future_first_half_goals": float(sum(1 for goal in future if goal.period == 1)) if period == 1 else None,
+        "second_half_goals_total": float(sum(1 for goal in match.goals if goal.period == 2)) if period == 1 else None,
+    }
+
+
 def record_to_rows(record: dict[str, object], cutoffs: range | None = None) -> list[dict[str, object]]:
     """Expand one finished match into chronological supervised examples.
 
     Only timestamped events at or before the cutoff are used as features. Final
     match statistics are deliberately excluded because they would leak future
-    information into historical minute-level rows.
+    information into historical minute-level rows. Future count columns are
+    labels only and are never included in BASE_FEATURE_COLUMNS.
     """
     match = _archive_match(record)
     rows: list[dict[str, object]] = []
@@ -73,6 +84,7 @@ def record_to_rows(record: dict[str, object], cutoffs: range | None = None) -> l
             }
         )
         row.update(_event_features(match, example.minute))
+        row.update(_count_labels(match, example.minute, example.period))
         rows.append(row)
     return rows
 

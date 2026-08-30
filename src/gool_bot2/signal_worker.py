@@ -114,12 +114,23 @@ def _message(record: dict[str, Any], head: str, probability: float, model_result
                 f"Δ={float(disagreement or 0.0) * 100:.1f}%"
             )
 
+    extra_line = ""
+    if head == "goal_before_ht":
+        fh = model_result.get("first_half_analysis") or {}
+        pressure = fh.get("pressure_score")
+        adjustment = float(fh.get("probability_adjustment") or 0.0)
+        if pressure is not None:
+            extra_line = (
+                f"\nGOOL 1T: pressure={float(pressure):.2f} | "
+                f"corr={adjustment * 100:+.1f} п.п. | base AUC={float(fh.get('baseline_auc') or 0.6946):.4f}"
+            )
+
     return (
         f"⚽ <b>{HEAD_LABELS[head]}</b>\n"
         f"{match.get('home', '?')} — {match.get('away', '?')}\n"
         f"{int(match.get('minute') or 0)}' | {match.get('home_score', 0)}:{match.get('away_score', 0)}\n"
         f"P: <b>{probability * 100:.1f}%</b>\n"
-        f"{model_line}\n"
+        f"{model_line}{extra_line}\n"
         f"{_fmt_cards(cards)}\n"
         f"sources={len(record.get('providers') or {})}"
     )
@@ -209,6 +220,7 @@ class SignalWorker:
 
             allowed = gates.allowed and float(disagreement) <= self.max_disagreement and not duplicate
             football_data_probability = model_result.get("football_data", {}).get(head)
+            first_half_analysis = model_result.get("first_half_analysis") if head == "goal_before_ht" else None
             analysis = {
                 "captured_at": record.get("captured_at") or datetime.now(timezone.utc).isoformat(),
                 "match_id": match_id,
@@ -222,6 +234,7 @@ class SignalWorker:
                 "direct_probability": model_result.get("direct", {}).get(head),
                 "hazard_probability": model_result.get("hazard", {}).get(head),
                 "football_data_probability": football_data_probability,
+                "first_half_analysis": first_half_analysis,
                 "model_disagreement": float(disagreement),
                 "cards": cards,
                 "prefilter": record.get("prefilter") or {},
@@ -248,6 +261,7 @@ class SignalWorker:
                 "direct_probability": model_result.get("direct", {}).get(head),
                 "hazard_probability": model_result.get("hazard", {}).get(head),
                 "football_data_probability": football_data_probability,
+                "first_half_analysis": first_half_analysis,
                 "model_disagreement": float(disagreement),
                 "cards": cards,
                 "prefilter": record.get("prefilter") or {},
@@ -258,51 +272,49 @@ class SignalWorker:
             }
             journal.append(entry)
             save_signal_journal(self.journal_path, journal)
-            print(json.dumps({"signal": entry}, ensure_ascii=False), flush=True)
             emitted += 1
+
         return emitted
 
-    def process_file(self, path: Path) -> int:
-        key = str(path.resolve())
-        offset = self._offsets.get(key, 0)
-        if not path.exists():
-            return 0
-        emitted = 0
-        with path.open("r", encoding="utf-8") as handle:
-            handle.seek(offset)
-            while True:
-                line = handle.readline()
-                if not line:
-                    break
-                try:
-                    emitted += self._process(json.loads(line))
-                except Exception as exc:
-                    print(f"signal_worker_record_error={type(exc).__name__}:{exc}", flush=True)
-            self._offsets[key] = handle.tell()
-        return emitted
+    def run_once(self, inbox_dir: Path) -> int:
+        total = 0
+        for path in sorted(inbox_dir.glob("*.jsonl")):
+            key = str(path.resolve())
+            offset = self._offsets.get(key, 0)
+            with path.open("r", encoding="utf-8") as handle:
+                handle.seek(offset)
+                while True:
+                    line = handle.readline()
+                    if not line:
+                        break
+                    self._offsets[key] = handle.tell()
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    total += self._process(record)
+        return total
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GOOL local-model signal worker")
-    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
-    parser.add_argument("--live-dir", default=str(runtime / "raw/live"))
-    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL_FILE", str(runtime / "gool_bot2_signal_journal.json")))
-    parser.add_argument("--analysis-journal", default=os.getenv("ANALYSIS_JOURNAL_FILE", str(runtime / "gool_bot2_analysis.jsonl")))
-    parser.add_argument("--poll", type=int, default=5)
-    parser.add_argument("--max-disagreement", type=float, default=float(os.getenv("MODEL_MAX_DISAGREEMENT", "0.20")))
+    parser = argparse.ArgumentParser(description="Run GOOL local signal worker")
+    parser.add_argument("--inbox", default=os.getenv("GOOL_INBOX_DIR", "data/live/inbox"))
+    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL_PATH", "data/live/signal_journal.json"))
+    parser.add_argument("--analysis", default=os.getenv("SIGNAL_ANALYSIS_PATH", "data/live/gool_bot2_analysis.jsonl"))
+    parser.add_argument("--sleep", type=float, default=2.0)
+    parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
 
-    worker = SignalWorker(Path(args.journal), max_disagreement=args.max_disagreement, analysis_path=Path(args.analysis_journal))
-    live_dir = Path(args.live_dir)
+    worker = SignalWorker(Path(args.journal), analysis_path=Path(args.analysis))
+    inbox = Path(args.inbox)
+    inbox.mkdir(parents=True, exist_ok=True)
     while True:
-        try:
-            today = datetime.now(timezone.utc).date().isoformat()
-            worker.process_file(live_dir / f"{today}.jsonl")
-        except KeyboardInterrupt:
+        emitted = worker.run_once(inbox)
+        if emitted:
+            print(f"signals={emitted}", flush=True)
+        if args.once:
             break
-        except Exception as exc:
-            print(f"signal_worker_error={type(exc).__name__}:{exc}", flush=True)
-        time.sleep(max(1, args.poll))
+        time.sleep(max(0.5, args.sleep))
 
 
 if __name__ == "__main__":

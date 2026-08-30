@@ -60,15 +60,21 @@ def main() -> None:
     os.environ.setdefault("SIGNAL_ANALYSIS_PATH", str(RUNTIME_ROOT / "live" / "gool_bot2_analysis.jsonl"))
     ensure_deps()
 
+    # These names must match LocalFootballEnsemble exactly.
     models = {
-        "ARCHIVE_FOUNDATION_MODEL_PATH": "archive_foundation.pkl",
-        "ARCHIVE_HAZARD_MODEL_PATH": "archive_hazard.pkl",
-        "FOOTBALL_DATA_GOAL_MODELS_PATH": "football_data_goal_models.pkl",
+        "ARCHIVE_FOUNDATION_MODEL": "archive_foundation.pkl",
+        "ARCHIVE_HAZARD_MODEL": "archive_hazard.pkl",
+        "FOOTBALL_DATA_GOAL_MODEL": "football_data_goal_models.pkl",
     }
     for env_key, filename in models.items():
         path = find_model(filename)
         os.environ[env_key] = str(path)
         print(f"GOOL_BOOT model={filename} path={path}", flush=True)
+
+    # Compatibility aliases for older deployment code/tools.
+    os.environ["ARCHIVE_FOUNDATION_MODEL_PATH"] = os.environ["ARCHIVE_FOUNDATION_MODEL"]
+    os.environ["ARCHIVE_HAZARD_MODEL_PATH"] = os.environ["ARCHIVE_HAZARD_MODEL"]
+    os.environ["FOOTBALL_DATA_GOAL_MODELS_PATH"] = os.environ["FOOTBALL_DATA_GOAL_MODEL"]
 
     if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or not os.getenv("TELEGRAM_CHAT_ID", "").strip():
         raise RuntimeError("telegram_not_configured")

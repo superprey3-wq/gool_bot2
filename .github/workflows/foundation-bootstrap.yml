@@ -2,7 +2,7 @@ name: foundation-bootstrap
 
 on:
   push:
-    branches: [main, foundation-bootstrap]
+    branches: [main, foundation-bootstrap, experiment/ht-one-goal-over25]
     paths:
       - 'src/gool_bot2/bootstrap_foundation.py'
       - 'src/gool_bot2/prepare_foundation.py'
@@ -12,6 +12,7 @@ on:
       - 'src/gool_bot2/archive_dataset.py'
       - 'src/gool_bot2/train_archive_models.py'
       - 'src/gool_bot2/train_hazard_models.py'
+      - 'src/gool_bot2/evaluate_ht_over25_proxy.py'
       - '.github/workflows/foundation-bootstrap.yml'
   workflow_dispatch:
 
@@ -36,6 +37,12 @@ jobs:
 
       - name: Phase 2 - train GOOL models from prepared dataset
         run: python -m gool_bot2.train_prepared_foundation --work-dir data/foundation_bootstrap
+
+      - name: Evaluate HT 1-0/0-1 Over 2.5-equivalent segment
+        run: python -m gool_bot2.evaluate_ht_over25_proxy
+
+      - name: Show HT Over 2.5 proxy metrics
+        run: cat data/foundation_bootstrap/artifacts/ht_one_goal_over25_proxy_metrics.json
 
       - name: Show training summary
         run: cat data/foundation_bootstrap/artifacts/foundation_bootstrap_summary.json

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,9 +45,9 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
             reasons.append("first_half_signal_window_closed_25")
         elif minute < 15:
             reasons.append("collecting_until_15")
-    elif head == "two_plus_goals_second_half":
-        if not is_halftime and not (47 <= minute <= 50):
-            reasons.append("requires_halftime_or_47_50")
+    elif head in {"over_2_5", "both_teams_to_score"}:
+        if not is_halftime:
+            reasons.append("halftime_model_requires_halftime")
     else:
         reasons.append("unknown_head")
     return GateResult(not reasons, tuple(reasons))
@@ -63,8 +64,19 @@ def post_goal_gate(minute: int, last_goal_minute: int | None, cooldown_minutes: 
 
 def model_threshold_gate(head: str, probability: float, score: float) -> GateResult:
     probability_pct = float(probability) * 100.0 if float(probability) <= 1.0 else float(probability)
-    min_score = 75.0 if head == "another_goal" else 80.0
-    min_probability = 0.0 if head == "another_goal" else 75.0
+    if head == "another_goal":
+        min_score = float(os.getenv("ANOTHER_GOAL_MIN_SCORE", "75"))
+        min_probability = 0.0
+    elif head == "over_2_5":
+        min_score = float(os.getenv("OVER25_MIN_SCORE", "70"))
+        min_probability = float(os.getenv("OVER25_MIN_PROBABILITY", "70"))
+    elif head == "both_teams_to_score":
+        min_score = float(os.getenv("BTTS_MIN_SCORE", "70"))
+        min_probability = float(os.getenv("BTTS_MIN_PROBABILITY", "70"))
+    else:
+        min_score = 80.0
+        min_probability = 75.0
+
     reasons: list[str] = []
     if float(score) < min_score:
         reasons.append(f"score={float(score):.1f}<{min_score:.1f}")

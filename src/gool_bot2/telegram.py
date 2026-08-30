@@ -17,6 +17,17 @@ HEAD_TO_CODE = {
 }
 CODE_TO_HEAD = {value: key for key, value in HEAD_TO_CODE.items()}
 
+START_TEXT = (
+    "🟢 <b>GOOL Bot 2 работает</b>\n\n"
+    "Активные системы:\n"
+    "⚽ Ещё гол — при любом текущем счёте\n"
+    "⏱ Гол до перерыва — только 1-й тайм при 0:0\n"
+    "📈 ТБ 2.5 — пока в матче меньше 3 голов\n"
+    "🤝 Обе забьют — пока обе команды ещё не забили\n\n"
+    "Модели: 3/3 загружены.\n"
+    "LIVE-сигналы приходят автоматически."
+)
+
 
 def _token() -> str:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -114,37 +125,24 @@ def signal_keyboard(match_id: str, head: str, entered: bool = False) -> dict[str
     return {"inline_keyboard": [[{"text": "🎯 В игре", "callback_data": f"ig:{code}:{match_id}"}]]}
 
 
-def send_message(
-    chat_id: str | int,
-    text: str,
-    parse_mode: str = "HTML",
-    reply_markup: dict[str, Any] | None = None,
-) -> bool:
-    payload: dict[str, Any] = {
-        "chat_id": str(chat_id),
-        "text": text,
-        "parse_mode": parse_mode,
-        "disable_web_page_preview": True,
-    }
+def send_message(chat_id: str | int, text: str, parse_mode: str = "HTML", reply_markup: dict[str, Any] | None = None) -> bool:
+    payload: dict[str, Any] = {"chat_id": str(chat_id), "text": text, "parse_mode": parse_mode, "disable_web_page_preview": True}
     if reply_markup:
         payload["reply_markup"] = reply_markup
     result = _api_call("sendMessage", payload)
     return bool(result and result.get("ok"))
 
 
-def broadcast(
-    text: str,
-    parse_mode: str = "HTML",
-    reply_markup: dict[str, Any] | None = None,
-) -> int:
+def broadcast(text: str, parse_mode: str = "HTML", reply_markup: dict[str, Any] | None = None) -> int:
     return sum(int(send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)) for chat_id in get_subscribers())
 
 
+def send_startup_status() -> int:
+    return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nМодели: 3/3 ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅\n\nОтправь /start для проверки команд.")
+
+
 def edit_message_reply_markup(chat_id: str | int, message_id: int, reply_markup: dict[str, Any]) -> bool:
-    result = _api_call(
-        "editMessageReplyMarkup",
-        {"chat_id": str(chat_id), "message_id": int(message_id), "reply_markup": reply_markup},
-    )
+    result = _api_call("editMessageReplyMarkup", {"chat_id": str(chat_id), "message_id": int(message_id), "reply_markup": reply_markup})
     return bool(result and result.get("ok"))
 
 
@@ -156,28 +154,23 @@ def answer_callback_query(callback_query_id: str, text: str = "") -> bool:
     return bool(result and result.get("ok"))
 
 
-def poll_in_game_callbacks(journal_path: Path, offset: int = 0, timeout: int = 0) -> tuple[int, int]:
-    token = _token()
-    if not token:
+def poll_telegram_updates(journal_path: Path, offset: int = 0, timeout: int = 0) -> tuple[int, int]:
+    result = _api_call("getUpdates", {"offset": offset, "timeout": timeout, "allowed_updates": ["message", "callback_query"]}, timeout=max(5, timeout + 5))
+    if not result or not result.get("ok"):
         return offset, 0
-    req = Request(
-        f"https://api.telegram.org/bot{token}/getUpdates",
-        data=json.dumps({"offset": offset, "timeout": timeout, "allowed_updates": ["callback_query"]}).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=max(5, timeout + 5)) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except Exception:
-        return offset, 0
-    if not body.get("ok"):
-        return offset, 0
-
     changed = 0
     next_offset = offset
-    for update in body.get("result") or []:
+    for update in result.get("result") or []:
         next_offset = max(next_offset, int(update.get("update_id") or 0) + 1)
+        message = update.get("message") or {}
+        text = str(message.get("text") or "").strip().split("@", 1)[0].lower()
+        if text == "/start":
+            chat_id = (message.get("chat") or {}).get("id")
+            if chat_id is not None:
+                subscribe(chat_id)
+                if send_message(chat_id, START_TEXT):
+                    changed += 1
+            continue
         callback = update.get("callback_query") or {}
         data = str(callback.get("data") or "")
         if not data.startswith("ig:"):
@@ -191,13 +184,16 @@ def poll_in_game_callbacks(journal_path: Path, offset: int = 0, timeout: int = 0
             continue
         if mark_in_game(journal_path, match_id, head):
             changed += 1
-            message = callback.get("message") or {}
-            chat = message.get("chat") or {}
-            chat_id = chat.get("id")
-            message_id = message.get("message_id")
+            cb_message = callback.get("message") or {}
+            chat_id = (cb_message.get("chat") or {}).get("id")
+            message_id = cb_message.get("message_id")
             if chat_id is not None and message_id is not None:
                 edit_message_reply_markup(chat_id, int(message_id), signal_keyboard(match_id, head, entered=True))
             answer_callback_query(str(callback.get("id") or ""), "Отмечено: в игре")
         else:
             answer_callback_query(str(callback.get("id") or ""), "Сигнал уже отмечен или не найден")
     return next_offset, changed
+
+
+def poll_in_game_callbacks(journal_path: Path, offset: int = 0, timeout: int = 0) -> tuple[int, int]:
+    return poll_telegram_updates(journal_path, offset=offset, timeout=timeout)

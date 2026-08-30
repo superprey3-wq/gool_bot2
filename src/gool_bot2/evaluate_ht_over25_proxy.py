@@ -2,89 +2,117 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
+from collections import Counter
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
 
-def _safe_auc(y: np.ndarray, p: np.ndarray) -> float | None:
-    return float(roc_auc_score(y, p)) if len(np.unique(y)) > 1 else None
+def _score(value: float | int) -> int:
+    return int(round(float(value)))
 
 
-def evaluate(dataset_path: Path, model_path: Path) -> dict[str, object]:
+def evaluate(dataset_path: Path) -> dict[str, object]:
     frame = pd.read_csv(dataset_path, parse_dates=["kickoff_at"])
-    with model_path.open("rb") as handle:
-        bundle = pickle.load(handle)
+    required = {
+        "match_id",
+        "period",
+        "minute",
+        "home_score",
+        "away_score",
+        "second_half_goals_total",
+        "final_home_score",
+        "final_away_score",
+    }
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise RuntimeError(f"Prepared archive is missing required columns: {missing}")
 
-    head = bundle["heads"]["two_plus_goals_second_half"]
-
-    # At 45' with exactly one first-half goal (1-0 or 0-1), final Over 2.5
-    # is exactly the same event as scoring at least two goals in the second half.
-    segment = frame[
-        frame["two_plus_goals_second_half"].notna()
-        & frame["period"].eq(1)
+    # The foundation dataset is built with a 2-minute step starting at minute 1,
+    # so minute 45 is present. Keep one HT snapshot per finished match.
+    halftime = frame[
+        frame["period"].eq(1)
         & frame["minute"].between(44.5, 45.0)
-        & frame["total_goals"].eq(1)
-        & frame["score_diff"].abs().eq(1)
+        & frame["second_half_goals_total"].notna()
     ].copy()
+    halftime = halftime.sort_values(["match_id", "minute"]).groupby("match_id", as_index=False).tail(1)
 
-    if segment.empty:
-        raise RuntimeError("No halftime 1-0/0-1 rows found in prepared archive dataset")
+    if halftime.empty:
+        raise RuntimeError("No halftime rows found in prepared archive dataset")
 
-    y = segment["two_plus_goals_second_half"].astype(int).to_numpy()
-    p = np.clip(head.predict_proba(segment), 1e-6, 1 - 1e-6)
+    groups: dict[str, object] = {}
+    ht_counter: Counter[str] = Counter()
+    ft_counter: Counter[str] = Counter()
 
-    by_score: dict[str, object] = {}
-    for home_score, away_score in ((1, 0), (0, 1)):
-        part = segment[
-            segment["home_score"].eq(home_score) & segment["away_score"].eq(away_score)
-        ]
-        if part.empty:
-            continue
-        py = part["two_plus_goals_second_half"].astype(int).to_numpy()
-        pp = np.clip(head.predict_proba(part), 1e-6, 1 - 1e-6)
-        by_score[f"{home_score}-{away_score}"] = {
-            "matches": int(part["match_id"].nunique()),
-            "positive_rate": float(np.mean(py)),
-            "roc_auc": _safe_auc(py, pp),
-            "brier_score": float(brier_score_loss(py, pp)),
+    for (ht_home, ht_away), part in halftime.groupby(["home_score", "away_score"], sort=True):
+        ht = f"{_score(ht_home)}-{_score(ht_away)}"
+        finals = Counter(
+            f"{_score(row.final_home_score)}-{_score(row.final_away_score)}"
+            for row in part.itertuples()
+        )
+        matches = int(part["match_id"].nunique())
+        two_plus = int((part["second_half_goals_total"] >= 2).sum())
+        zero = int((part["second_half_goals_total"] == 0).sum())
+        one = int((part["second_half_goals_total"] == 1).sum())
+        three_plus = int((part["second_half_goals_total"] >= 3).sum())
+
+        groups[ht] = {
+            "matches": matches,
+            "second_half_goals": {
+                "0": zero,
+                "1": one,
+                "2_plus": two_plus,
+                "3_plus": three_plus,
+            },
+            "probability_2_plus_second_half_goals": two_plus / matches,
+            "final_scores": [
+                {
+                    "score": score,
+                    "matches": count,
+                    "share": count / matches,
+                }
+                for score, count in finals.most_common()
+            ],
         }
+        ht_counter[ht] += matches
+        ft_counter.update(finals)
+
+    focus_scores = ["0-0", "1-0", "0-1", "1-1", "2-0", "0-2"]
+    focus = {score: groups[score] for score in focus_scores if score in groups}
 
     return {
-        "segment": "halftime_one_goal_lead",
-        "definition": "45' snapshot with score 1-0 or 0-1",
-        "market_interpretation": "On this segment, final Over 2.5 is equivalent to >=2 second-half goals.",
-        "uses_real_market_odds": False,
-        "matches": int(segment["match_id"].nunique()),
-        "rows": int(len(segment)),
-        "positive_rate": float(np.mean(y)),
-        "roc_auc": _safe_auc(y, p),
-        "brier_score": float(brier_score_loss(y, p)),
-        "log_loss": float(log_loss(y, p, labels=[0, 1])),
-        "by_score": by_score,
+        "definition": "Finished archive matches grouped by score at halftime, then by final score",
+        "uses_bookmaker_odds": False,
+        "matches": int(halftime["match_id"].nunique()),
+        "halftime_score_groups": groups,
+        "focus": focus,
+        "most_common_halftime_scores": [
+            {"score": score, "matches": count}
+            for score, count in ht_counter.most_common(20)
+        ],
+        "most_common_final_scores": [
+            {"score": score, "matches": count}
+            for score, count in ft_counter.most_common(20)
+        ],
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate the 2+ second-half-goals head on the HT 1-0/0-1 Over 2.5-equivalent segment"
+        description="Split the prepared football archive by halftime score and final outcome"
     )
     parser.add_argument("--dataset", default="data/foundation_bootstrap/processed/archive_training.csv")
-    parser.add_argument("--model", default="data/foundation_bootstrap/models/archive_foundation.pkl")
     parser.add_argument(
         "--output",
-        default="data/foundation_bootstrap/artifacts/ht_one_goal_over25_proxy_metrics.json",
+        default="data/foundation_bootstrap/artifacts/halftime_final_score_report.json",
     )
     args = parser.parse_args()
 
-    metrics = evaluate(Path(args.dataset), Path(args.model))
+    report = evaluate(Path(args.dataset))
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(metrics, ensure_ascii=False, indent=2))
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -36,16 +36,75 @@ def _save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
-def _last_goal_minute(record: dict[str, Any]) -> int | None:
+def _goal_timeline(record: dict[str, Any]) -> list[dict[str, Any]]:
     providers = record.get("providers") or {}
-    timeline = ((providers.get("flashscore") or {}).get("meta") or {}).get("goal_timeline") or []
+    return ((providers.get("flashscore") or {}).get("meta") or {}).get("goal_timeline") or []
+
+
+def _last_goal_minute(record: dict[str, Any]) -> int | None:
     minutes = []
-    for goal in timeline:
+    for goal in _goal_timeline(record):
         try:
             minutes.append(int(float(goal.get("minute"))))
         except (TypeError, ValueError):
             continue
     return max(minutes) if minutes else None
+
+
+def _second_half_goal_count(record: dict[str, Any]) -> int:
+    total = 0
+    for goal in _goal_timeline(record):
+        try:
+            if float(goal.get("minute")) > 45:
+                total += 1
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> bool:
+    """Update pending outcomes using only the current/later live snapshot."""
+    match = record.get("match") or {}
+    match_id = str(match.get("flashscore_event_id") or "")
+    if not match_id:
+        return False
+    minute = int(match.get("minute") or 0)
+    is_halftime = bool(match.get("is_halftime"))
+    current_total = int(match.get("home_score") or 0) + int(match.get("away_score") or 0)
+    second_half_goals = _second_half_goal_count(record)
+    changed = False
+
+    for row in journal:
+        if str(row.get("match_id")) != match_id or str(row.get("result") or "pending").lower() != "pending":
+            continue
+        signal_score = row.get("score") or [0, 0]
+        signal_total = int(signal_score[0] or 0) + int(signal_score[1] or 0)
+        head = str(row.get("head") or "")
+        result: str | None = None
+
+        if head == "another_goal":
+            if current_total > signal_total:
+                result = "won"
+            elif minute >= 90:
+                result = "lost"
+        elif head == "goal_before_ht":
+            if current_total > signal_total and minute <= 45:
+                result = "won"
+            elif is_halftime or minute > 45:
+                result = "lost"
+        elif head == "two_plus_goals_second_half":
+            if second_half_goals >= 2:
+                result = "won"
+            elif minute >= 90:
+                result = "lost"
+
+        if result:
+            row["result"] = result
+            row["settled_at"] = datetime.now(timezone.utc).isoformat()
+            row["settled_minute"] = minute
+            row["settled_score"] = [match.get("home_score", 0), match.get("away_score", 0)]
+            changed = True
+    return changed
 
 
 def _message(record: dict[str, Any], head: str, probability: float, model_result: dict[str, Any]) -> str:
@@ -86,19 +145,23 @@ class SignalWorker:
             return False
 
     def _process(self, record: dict[str, Any]) -> int:
+        match = record.get("match") or {}
+        match_id = str(match.get("flashscore_event_id") or "")
+        if not match_id:
+            return 0
+
+        journal = _load_journal(self.journal_path)
+        if _settle_pending(record, journal):
+            _save_journal(self.journal_path, journal)
+
         if not (record.get("prefilter") or {}).get("candidate"):
             return 0
         if not self._ensure_model():
             return 0
 
-        match = record.get("match") or {}
-        match_id = str(match.get("flashscore_event_id") or "")
-        if not match_id:
-            return 0
         minute = int(match.get("minute") or 0)
         is_halftime = bool(match.get("is_halftime"))
         model_result = self.model.predict(record)
-        journal = _load_journal(self.journal_path)
         emitted = 0
 
         for head in HEAD_LABELS:
@@ -109,8 +172,6 @@ class SignalWorker:
             if float(disagreement) > self.max_disagreement:
                 continue
 
-            # A journal contains actual emitted entries only, so exposure_gate is
-            # not polluted by collector/debug rows.
             cooldown = int(os.getenv("LIVE_COOLDOWN_MINUTES", "12")) if head == "another_goal" else 5
             gates = combine_gates(
                 time_gate(head, minute, is_halftime=is_halftime, is_reentry=False),

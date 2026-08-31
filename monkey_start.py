@@ -54,14 +54,7 @@ def find_model(filename: str) -> Path:
 
 
 def rotate_live_inbox() -> int:
-    """Archive existing raw LIVE snapshots before starting the worker.
-
-    SignalWorker offsets are process-local. Without this rotation, a restart makes
-    it reread today's JSONL file from byte 0 and old historical snapshots can emit
-    the same signal again. We preserve every file under raw/archive and let the
-    collector create a fresh live JSONL after startup.
-    """
-    inbox = Path(os.environ.get("GOOL_INBOX_DIR", str(RUNTIME_ROOT / "raw" / "live")))
+    inbox = Path(os.environ.get("RAW_LIVE_DIR", os.environ.get("GOOL_INBOX_DIR", str(RUNTIME_ROOT / "raw" / "live"))))
     if not inbox.exists():
         return 0
     files = [path for path in inbox.glob("*.jsonl") if path.is_file() and path.stat().st_size > 0]
@@ -86,10 +79,25 @@ def rotate_live_inbox() -> int:
 def main() -> None:
     load_env(ENV_FILE)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
-    os.environ.setdefault("RUNTIME_DATA_DIR", str(RUNTIME_ROOT))
-    os.environ.setdefault("GOOL_INBOX_DIR", str(RUNTIME_ROOT / "raw" / "live"))
-    os.environ.setdefault("SIGNAL_JOURNAL_PATH", str(RUNTIME_ROOT / "live" / "signal_journal.json"))
-    os.environ.setdefault("SIGNAL_ANALYSIS_PATH", str(RUNTIME_ROOT / "live" / "gool_bot2_analysis.jsonl"))
+
+    # One canonical persistent runtime tree. Keep aliases in sync with the exact
+    # environment-variable names consumed by collector, worker and Telegram menu.
+    runtime = Path(os.environ.get("RUNTIME_DATA_DIR", str(RUNTIME_ROOT)))
+    raw_live = Path(os.environ.get("RAW_LIVE_DIR", str(runtime / "raw" / "live")))
+    journal = Path(os.environ.get("SIGNAL_JOURNAL", os.environ.get("SIGNAL_JOURNAL_PATH", str(runtime / "live" / "signal_journal.json"))))
+    analysis = Path(os.environ.get("SIGNAL_ANALYSIS_PATH", str(runtime / "live" / "gool_bot2_analysis.jsonl")))
+
+    os.environ["RUNTIME_DATA_DIR"] = str(runtime)
+    os.environ["RAW_LIVE_DIR"] = str(raw_live)
+    os.environ["GOOL_INBOX_DIR"] = str(raw_live)
+    os.environ["SIGNAL_JOURNAL"] = str(journal)
+    os.environ["SIGNAL_JOURNAL_PATH"] = str(journal)
+    os.environ["SIGNAL_ANALYSIS_PATH"] = str(analysis)
+
+    raw_live.mkdir(parents=True, exist_ok=True)
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    analysis.parent.mkdir(parents=True, exist_ok=True)
+
     ensure_deps()
 
     models = {
@@ -109,12 +117,22 @@ def main() -> None:
     if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or not os.getenv("TELEGRAM_CHAT_ID", "").strip():
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
+    print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
 
     rotate_live_inbox()
 
     env = os.environ.copy()
-    collector = subprocess.Popen([sys.executable, "-m", "gool_bot2.live_collector", "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60")], env=env)
-    worker = subprocess.Popen([sys.executable, "-m", "gool_bot2.signal_worker"], env=env)
+    collector = subprocess.Popen([
+        sys.executable, "-m", "gool_bot2.live_collector",
+        "--data-dir", str(raw_live),
+        "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60"),
+    ], env=env)
+    worker = subprocess.Popen([
+        sys.executable, "-m", "gool_bot2.signal_worker",
+        "--raw-dir", str(raw_live),
+        "--journal", str(journal),
+        "--analysis", str(analysis),
+    ], env=env)
     print(f"GOOL_BOOT running collector_pid={collector.pid} worker_pid={worker.pid}", flush=True)
     try:
         while True:

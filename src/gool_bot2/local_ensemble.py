@@ -72,15 +72,14 @@ def _pressure_overlay(values: dict[str, float | None], expectations: dict[str, t
 
 
 def _first_half_live_analysis(record: dict[str, Any]) -> dict[str, float | None]:
-    """Independent legacy-GOOL pressure analysis for a goal before halftime.
+    """Independent GOOL pressure confirmation for one more first-half goal.
 
-    The trained direct/hazard models are evaluated separately. This analyzer does
-    not change their probability anymore; it only confirms or rejects the setup.
+    The trained direct/hazard probability is kept untouched. The GOOL analyzer
+    confirms the setup from live pressure and is deliberately score-agnostic:
+    0:0, 1:0, 0:1, 2:0, 0:3, etc. are all eligible through 25'.
     """
     match = record.get("match") or {}
     minute = float(match.get("minute") or 0.0)
-    home_score = int(match.get("home_score") or 0)
-    away_score = int(match.get("away_score") or 0)
     is_halftime = bool(match.get("is_halftime"))
     output: dict[str, float | None] = {
         "pressure_score": None,
@@ -94,7 +93,7 @@ def _first_half_live_analysis(record: dict[str, Any]) -> dict[str, float | None]
         "dangerous_attacks_total": _pair_total(record, "dangerous_attacks"),
         "baseline_auc": GOAL_BEFORE_HT_BASELINE_AUC,
     }
-    if is_halftime or minute <= 0 or minute > 45 or home_score != 0 or away_score != 0:
+    if is_halftime or minute <= 0 or minute > 25:
         return output
 
     progress = max(0.08, min(1.0, minute / 45.0))
@@ -186,7 +185,7 @@ def _analyzer_confirmation(head: str, first_half: dict[str, Any], second_half: d
         minimum = float(os.getenv("GOOL_FIRST_HALF_MIN_PRESSURE", "1.00"))
         return {
             "required": True,
-            "name": "first_half_goal",
+            "name": "first_half_goal_any_score",
             "score": pressure,
             "minimum": minimum,
             "passed": pressure is not None and float(pressure) >= minimum,
@@ -318,9 +317,9 @@ class LocalFootballEnsemble:
             for head in LIVE_HEADS
         }
 
-        # Important: trained-model probabilities are never numerically modified by
-        # the GOOL analyzer. For the two strategies the analyzer understands, both
-        # independent checks must pass before `blended` exposes a signal probability.
+        # Trained-model probabilities are never numerically modified by GOOL.
+        # For goal_before_ht the model can now be evaluated at any score through
+        # 25', but GOOL live pressure still has to confirm the setup.
         trained_probability: dict[str, float | None] = {}
         blended: dict[str, float | None] = {}
         disagreement: dict[str, float | None] = {}

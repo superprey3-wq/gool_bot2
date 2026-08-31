@@ -219,11 +219,12 @@ class SignalWorker:
                 continue
 
             cooldown = int(os.getenv("LIVE_COOLDOWN_MINUTES", "12")) if head == "another_goal" else (0 if head in {"over_2_5", "both_teams_to_score"} else 5)
+            same_head_entries = [row for row in entered if str(row.get("head") or "") == head]
             gates = combine_gates(
                 time_gate(head, minute, is_halftime=is_halftime, is_reentry=False),
                 market_state_gate(head, home_score, away_score),
                 post_goal_gate(minute, _last_goal_minute(record), cooldown_minutes=cooldown),
-                exposure_gate(match_id, entered, max_entries=2, max_open=1),
+                exposure_gate(match_id, same_head_entries, max_entries=2, max_open=1),
                 model_threshold_gate(head, float(probability), float(probability) * 100.0),
             )
             reasons = list(gates.reasons)
@@ -282,71 +283,62 @@ class SignalWorker:
                 "league": match.get("league"),
                 "score": [home_score, away_score],
                 "probability": float(probability),
-                "direct_probability": model_result.get("direct", {}).get(head),
-                "hazard_probability": model_result.get("hazard", {}).get(head),
-                "football_data_probability": football_data_probability,
-                "first_half_analysis": first_half_analysis,
-                "model_disagreement": float(disagreement),
-                "cards": cards,
-                "prefilter": record.get("prefilter") or {},
                 "provider_count": len(record.get("providers") or {}),
                 "flashscore_meta": fs_meta,
                 "stats_snapshot": stat_snap,
-                "telegram_deliveries": sent,
-                "in_game": False,
                 "result": "pending",
+                "in_game": False,
             })
             save_signal_journal(self.journal_path, journal)
-            emitted += 1
+            emitted += int(sent > 0)
+
         return emitted
 
-    def run_once(self, inbox_dir: Path) -> int:
-        total = 0
-        for path in sorted(inbox_dir.glob("*.jsonl")):
-            key = str(path.resolve())
+    def run_once(self, raw_dir: Path) -> int:
+        emitted = 0
+        for path in sorted(raw_dir.glob("*.jsonl")):
+            key = str(path)
             offset = self._offsets.get(key, 0)
-            with path.open("r", encoding="utf-8") as handle:
-                handle.seek(offset)
-                while True:
-                    line = handle.readline()
-                    if not line:
-                        break
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    handle.seek(offset)
+                    for line in handle:
+                        try:
+                            record = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(record, dict):
+                            emitted += self._process(record)
                     self._offsets[key] = handle.tell()
-                    try:
-                        record = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    total += self._process(record)
-        return total
+            except FileNotFoundError:
+                continue
+        return emitted
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run GOOL local signal worker")
-    runtime_data_dir = os.getenv("RUNTIME_DATA_DIR", "data")
-    parser.add_argument("--inbox", default=os.getenv("GOOL_INBOX_DIR", runtime_data_dir + "/raw/live"))
-    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL_PATH", runtime_data_dir + "/live/signal_journal.json"))
-    parser.add_argument("--analysis", default=os.getenv("SIGNAL_ANALYSIS_PATH", runtime_data_dir + "/live/gool_bot2_analysis.jsonl"))
-    parser.add_argument("--sleep", type=float, default=2.0)
-    parser.add_argument("--once", action="store_true")
+    parser = argparse.ArgumentParser(description="Consume live collector JSONL and emit GOOL Bot 2 signals")
+    parser.add_argument("--raw-dir", default=os.getenv("RAW_LIVE_DIR", "data/raw/live"))
+    parser.add_argument("--journal", default=os.getenv("SIGNAL_JOURNAL", "data/live/gool_bot2_signals.json"))
+    parser.add_argument("--analysis", default=os.getenv("SIGNAL_ANALYSIS_PATH", "data/live/gool_bot2_analysis.jsonl"))
+    parser.add_argument("--sleep", type=float, default=float(os.getenv("SIGNAL_WORKER_SLEEP", "3")))
     args = parser.parse_args()
 
-    worker = SignalWorker(Path(args.journal), analysis_path=Path(args.analysis))
-    inbox = Path(args.inbox)
-    inbox.mkdir(parents=True, exist_ok=True)
-    telegram_offset = 0
-    startup_sent = send_startup_status()
-    print(f"telegram_startup_deliveries={startup_sent}", flush=True)
-    print(f"analysis_path={Path(args.analysis)} inbox={inbox}", flush=True)
+    raw_dir = Path(args.raw_dir)
+    journal_path = Path(args.journal)
+    analysis_path = Path(args.analysis)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    analysis_path.parent.mkdir(parents=True, exist_ok=True)
 
+    worker = SignalWorker(journal_path, analysis_path=analysis_path)
+    send_startup_status()
+    telegram_offset = 0
+    print(f"signal_worker=started raw_dir={raw_dir} journal={journal_path} analysis={analysis_path}", flush=True)
     while True:
-        telegram_offset, handled = poll_telegram_updates(Path(args.journal), offset=telegram_offset, timeout=0)
-        if handled:
-            print(f"telegram_updates={handled}", flush=True)
-        emitted = worker.run_once(inbox)
-        if emitted:
-            print(f"signals={emitted}", flush=True)
-        if args.once:
-            break
+        emitted = worker.run_once(raw_dir)
+        telegram_offset, telegram_actions = poll_telegram_updates(journal_path, offset=telegram_offset, timeout=0)
+        if emitted or telegram_actions:
+            print(f"signal_worker emitted={emitted} telegram_actions={telegram_actions}", flush=True)
         time.sleep(max(0.5, args.sleep))
 
 

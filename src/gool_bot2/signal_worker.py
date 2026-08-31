@@ -38,6 +38,63 @@ def _last_goal_minute(record: dict[str, Any]) -> int | None:
     return max(minutes) if minutes else None
 
 
+def _reconciled_score(record: dict[str, Any]) -> tuple[int, int]:
+    """Use the freshest score available from master feed + goal timeline.
+
+    Flashscore's coarse LIVE feed can briefly show 0:0 at 90' while the event
+    timeline already contains an 89' goal. Never settle from the stale lower score.
+    """
+    match = record.get("match") or {}
+    home = int(match.get("home_score") or 0)
+    away = int(match.get("away_score") or 0)
+    for goal in _goal_timeline(record):
+        score = goal.get("score") or []
+        try:
+            if len(score) >= 2:
+                home = max(home, int(score[0] or 0))
+                away = max(away, int(score[1] or 0))
+        except (TypeError, ValueError):
+            continue
+    return home, away
+
+
+def _terminal_loss_confirmed(row: dict[str, Any], minute: int, home_score: int, away_score: int) -> bool:
+    """Require two consecutive 90' snapshots with the same score before a loss.
+
+    Minute 90 is not a trustworthy final whistle marker because the provider caps
+    second-half minute display at 90 during stoppage time. One extra snapshot gives
+    late goals time to propagate before a negative result is written.
+    """
+    if minute < 90:
+        row.pop("terminal_seen_score", None)
+        row.pop("terminal_seen_count", None)
+        return False
+    score = [int(home_score), int(away_score)]
+    previous = row.get("terminal_seen_score")
+    count = int(row.get("terminal_seen_count") or 0)
+    if previous == score:
+        count += 1
+    else:
+        count = 1
+        row["terminal_seen_score"] = score
+    row["terminal_seen_count"] = count
+    return count >= 2
+
+
+def _is_won(head: str, signal_score: list[Any], minute: int, home_score: int, away_score: int) -> bool:
+    signal_total = int(signal_score[0] or 0) + int(signal_score[1] or 0)
+    current_total = home_score + away_score
+    if head == "another_goal":
+        return current_total > signal_total
+    if head == "goal_before_ht":
+        return current_total > signal_total and minute <= 45
+    if head == "over_2_5":
+        return current_total >= 3
+    if head == "both_teams_to_score":
+        return home_score > 0 and away_score > 0
+    return False
+
+
 def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[dict[str, Any]]:
     match = record.get("match") or {}
     match_id = str(match.get("flashscore_event_id") or "")
@@ -45,25 +102,25 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> li
         return []
     minute = int(match.get("minute") or 0)
     is_halftime = bool(match.get("is_halftime"))
-    home_score = int(match.get("home_score") or 0)
-    away_score = int(match.get("away_score") or 0)
-    current_total = home_score + away_score
+    home_score, away_score = _reconciled_score(record)
     settled: list[dict[str, Any]] = []
+
     for row in journal:
         if str(row.get("match_id")) != match_id or str(row.get("result") or "pending").lower() != "pending":
             continue
         signal_score = row.get("score") or [0, 0]
-        signal_total = int(signal_score[0] or 0) + int(signal_score[1] or 0)
         head = str(row.get("head") or "")
         result: str | None = None
-        if head == "another_goal":
-            result = "won" if current_total > signal_total else ("lost" if minute >= 90 else None)
+
+        if _is_won(head, signal_score, minute, home_score, away_score):
+            result = "won"
         elif head == "goal_before_ht":
-            result = "won" if current_total > signal_total and minute <= 45 else ("lost" if is_halftime or minute > 45 else None)
-        elif head == "over_2_5":
-            result = "won" if current_total >= 3 else ("lost" if minute >= 90 else None)
-        elif head == "both_teams_to_score":
-            result = "won" if home_score > 0 and away_score > 0 else ("lost" if minute >= 90 else None)
+            if is_halftime or minute > 45:
+                result = "lost"
+        elif head in {"another_goal", "over_2_5", "both_teams_to_score"}:
+            if _terminal_loss_confirmed(row, minute, home_score, away_score):
+                result = "lost"
+
         if result:
             row.update({
                 "result": result,
@@ -71,8 +128,38 @@ def _settle_pending(record: dict[str, Any], journal: list[dict[str, Any]]) -> li
                 "settled_minute": minute,
                 "settled_score": [home_score, away_score],
             })
+            row.pop("terminal_seen_score", None)
+            row.pop("terminal_seen_count", None)
             settled.append(dict(row))
     return settled
+
+
+def _correct_false_losses(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Repair a just-written false loss if a later provider snapshot reveals a goal."""
+    match = record.get("match") or {}
+    match_id = str(match.get("flashscore_event_id") or "")
+    if not match_id:
+        return []
+    minute = int(match.get("minute") or 0)
+    home_score, away_score = _reconciled_score(record)
+    corrected: list[dict[str, Any]] = []
+    for row in journal:
+        if str(row.get("match_id")) != match_id or str(row.get("result") or "").lower() != "lost":
+            continue
+        signal_score = row.get("score") or [0, 0]
+        head = str(row.get("head") or "")
+        if not _is_won(head, signal_score, minute, home_score, away_score):
+            continue
+        row.update({
+            "result": "won",
+            "corrected_from": "lost",
+            "corrected_at": datetime.now(timezone.utc).isoformat(),
+            "settled_at": datetime.now(timezone.utc).isoformat(),
+            "settled_minute": minute,
+            "settled_score": [home_score, away_score],
+        })
+        corrected.append(dict(row))
+    return corrected
 
 
 def _send_result_cards(rows: list[dict[str, Any]]) -> None:
@@ -82,13 +169,21 @@ def _send_result_cards(rows: list[dict[str, Any]]) -> None:
         minute = int(row.get("settled_minute") or 0)
         home_score = int(settled_score[0] or 0)
         away_score = int(settled_score[1] or 0)
+        corrected = str(row.get("corrected_from") or "") == "lost" and result == "won"
         try:
             png = render_result_card(row, result, minute, home_score, away_score)
-            caption = ("✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>") + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
+            if corrected:
+                caption = f"♻️ <b>ИСПРАВЛЕНО: ЗАШЁЛ</b> · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
+            else:
+                caption = ("✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>") + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
             sent = broadcast_photo(png, caption=caption)
-            print(f"result_card={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+            if sent == 0:
+                broadcast(caption + f"\n{row.get('home','?')} — {row.get('away','?')} · {minute}' · {home_score}:{away_score}")
+            print(f"result_card={result} corrected={int(corrected)} deliveries={sent} match={row.get('match_id')}", flush=True)
         except Exception as exc:
             print(f"result_card_error={type(exc).__name__}:{exc}", flush=True)
+            prefix = "♻️ <b>ИСПРАВЛЕНО: ЗАШЁЛ</b>" if corrected else ("✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>")
+            broadcast(prefix + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}\n{row.get('home','?')} — {row.get('away','?')} · {minute}' · {home_score}:{away_score}")
 
 
 def _fmt_cards(cards: dict[str, Any]) -> str:
@@ -144,6 +239,7 @@ class SignalWorker:
 
     def _base_analysis(self, record: dict[str, Any], match_id: str) -> dict[str, Any]:
         match = record.get("match") or {}
+        home_score, away_score = _reconciled_score(record)
         return {
             "captured_at": record.get("captured_at") or datetime.now(timezone.utc).isoformat(),
             "match_id": match_id,
@@ -151,7 +247,7 @@ class SignalWorker:
             "away": match.get("away"),
             "league": match.get("league"),
             "minute": int(match.get("minute") or 0),
-            "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
+            "score": [home_score, away_score],
             "prefilter": record.get("prefilter") or {},
             "provider_count": len(record.get("providers") or {}),
         }
@@ -163,10 +259,14 @@ class SignalWorker:
             return 0
 
         journal = load_signal_journal(self.journal_path)
+        corrected = _correct_false_losses(record, journal)
         settled = _settle_pending(record, journal)
-        if settled:
+        if corrected or settled:
             save_signal_journal(self.journal_path, journal)
-            _send_result_cards(settled)
+            if corrected:
+                _send_result_cards(corrected)
+            if settled:
+                _send_result_cards(settled)
 
         minute = int(match.get("minute") or 0)
         is_halftime = bool(match.get("is_halftime"))
@@ -199,8 +299,7 @@ class SignalWorker:
         cards = card_context(record)
         emitted = 0
         entered = entry_rows(journal)
-        home_score = int(match.get("home_score") or 0)
-        away_score = int(match.get("away_score") or 0)
+        home_score, away_score = _reconciled_score(record)
 
         for head in HEAD_LABELS:
             if not candidate and head not in {"over_2_5", "both_teams_to_score"}:

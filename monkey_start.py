@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path("/home/container")
@@ -52,6 +53,36 @@ def find_model(filename: str) -> Path:
     return matches[0]
 
 
+def rotate_live_inbox() -> int:
+    """Archive existing raw LIVE snapshots before starting the worker.
+
+    SignalWorker offsets are process-local. Without this rotation, a restart makes
+    it reread today's JSONL file from byte 0 and old historical snapshots can emit
+    the same signal again. We preserve every file under raw/archive and let the
+    collector create a fresh live JSONL after startup.
+    """
+    inbox = Path(os.environ.get("GOOL_INBOX_DIR", str(RUNTIME_ROOT / "raw" / "live")))
+    if not inbox.exists():
+        return 0
+    files = [path for path in inbox.glob("*.jsonl") if path.is_file() and path.stat().st_size > 0]
+    if not files:
+        return 0
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_dir = RUNTIME_ROOT / "raw" / "archive" / stamp
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for path in files:
+        target = archive_dir / path.name
+        suffix = 1
+        while target.exists():
+            target = archive_dir / f"{path.stem}-{suffix}{path.suffix}"
+            suffix += 1
+        path.replace(target)
+        moved += 1
+    print(f"GOOL_BOOT rotated_live_snapshots={moved} archive={archive_dir}", flush=True)
+    return moved
+
+
 def main() -> None:
     load_env(ENV_FILE)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
@@ -78,6 +109,8 @@ def main() -> None:
     if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or not os.getenv("TELEGRAM_CHAT_ID", "").strip():
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
+
+    rotate_live_inbox()
 
     env = os.environ.copy()
     collector = subprocess.Popen([sys.executable, "-m", "gool_bot2.live_collector", "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60")], env=env)

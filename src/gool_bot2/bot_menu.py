@@ -38,11 +38,6 @@ def _load_rows(path: Path) -> list[dict[str, Any]]:
 
 
 def _dedupe_signals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Collapse accidental replay duplicates while keeping legitimate re-entries.
-
-    A genuine later signal changes minute and/or score. Restarts used to replay
-    the exact same snapshot, so those rows share match/head/minute/score.
-    """
     latest: dict[tuple[str, str, int, int, int], dict[str, Any]] = {}
     for row in rows:
         score = row.get("score") or [0, 0]
@@ -59,6 +54,63 @@ def _dedupe_signals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
         latest[key] = row
     return list(latest.values())
+
+
+def _latest_live_states(analysis_path: Path | None) -> dict[str, dict[str, Any]]:
+    """Latest collector/model snapshot per match from the analysis stream."""
+    if analysis_path is None or not analysis_path.exists():
+        return {}
+    latest: dict[str, dict[str, Any]] = {}
+    try:
+        with analysis_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                match_id = str(row.get("match_id") or "")
+                if not match_id:
+                    continue
+                previous = latest.get(match_id)
+                if previous is None or str(row.get("captured_at") or "") >= str(previous.get("captured_at") or ""):
+                    latest[match_id] = row
+    except Exception:
+        return {}
+    return latest
+
+
+def _already_resolved_from_live(signal: dict[str, Any], live: dict[str, Any] | None) -> bool:
+    """Hide a pending journal row once current LIVE state has already settled it.
+
+    This makes the Telegram 'В игре' queue reflect the live match, even during the
+    short interval before the worker has persisted the settlement to the journal.
+    """
+    if not live:
+        return False
+    score = live.get("score") or [0, 0]
+    try:
+        home, away = int(score[0] or 0), int(score[1] or 0)
+        minute = int(live.get("minute") or 0)
+    except Exception:
+        return False
+    entry = signal.get("score") or [0, 0]
+    try:
+        entry_home, entry_away = int(entry[0] or 0), int(entry[1] or 0)
+    except Exception:
+        entry_home, entry_away = 0, 0
+    head = str(signal.get("head") or "")
+    current_total = home + away
+    entry_total = entry_home + entry_away
+
+    if head == "another_goal":
+        return current_total > entry_total or minute >= 90
+    if head == "goal_before_ht":
+        return current_total > entry_total or minute > 45
+    if head == "over_2_5":
+        return current_total >= 3 or minute >= 90
+    if head == "both_teams_to_score":
+        return (home > 0 and away > 0) or minute >= 90
+    return False
 
 
 def report_text(journal_path: Path) -> str:
@@ -89,32 +141,45 @@ def report_text(journal_path: Path) -> str:
     return "\n".join(lines)
 
 
-def in_game_text(journal_path: Path) -> str:
+def in_game_text(journal_path: Path, analysis_path: Path | None = None) -> str:
     rows = _dedupe_signals(_load_rows(journal_path))
-    pending = [
-        r for r in rows
-        if not bool(r.get("in_game"))
-        and str(r.get("result") or "pending").lower() == "pending"
-    ]
+    live_states = _latest_live_states(analysis_path)
+
+    pending: list[dict[str, Any]] = []
+    for row in rows:
+        if bool(row.get("in_game")):
+            continue
+        if str(row.get("result") or "pending").lower() != "pending":
+            continue
+        live = live_states.get(str(row.get("match_id") or ""))
+        if _already_resolved_from_live(row, live):
+            continue
+        pending.append(row)
+
     pending.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
 
     if not pending:
-        return "🟢 <b>В ИГРЕ</b>\n\nНеподтверждённых LIVE-сигналов сейчас нет."
+        return "🟢 <b>В ИГРЕ</b>\n\nНеподтверждённых и ещё не сыгравших LIVE-сигналов сейчас нет."
 
     lines = [
         "🟢 <b>В ИГРЕ — ЖДУТ ПОДТВЕРЖДЕНИЯ</b>",
         f"Неподтверждённых сигналов: <b>{len(pending)}</b>",
+        "Показываются только ещё не рассчитанные сигналы.",
         "Нажми 🎯 В игре под нужной карточкой сигнала.",
         "",
     ]
     for row in pending[:12]:
-        score = row.get("score") or [0, 0]
+        signal_score = row.get("score") or [0, 0]
+        live = live_states.get(str(row.get("match_id") or "")) or {}
+        live_score = live.get("score") or signal_score
+        live_minute = int(live.get("minute") or row.get("minute") or 0)
         league = str(row.get("league") or "").strip()
         league_line = f" · {league}" if league else ""
         lines.append(
             f"{HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}{league_line}\n"
-            f"{row.get('home','?')} — {row.get('away','?')} · {row.get('minute',0)}' · "
-            f"{score[0]}:{score[1]} · P <b>{float(row.get('probability') or 0)*100:.1f}%</b>"
+            f"{row.get('home','?')} — {row.get('away','?')} · сейчас {live_minute}' · "
+            f"{live_score[0]}:{live_score[1]} · P <b>{float(row.get('probability') or 0)*100:.1f}%</b>\n"
+            f"↳ сигнал был: {row.get('minute',0)}' · {signal_score[0]}:{signal_score[1]}"
         )
     if len(pending) > 12:
         lines += ["", f"Ещё сигналов: {len(pending) - 12}"]

@@ -36,7 +36,7 @@ def report_text(path):
  for head in ("another_goal","goal_before_ht","over_2_5","both_teams_to_score","two_more_goals"):
   sel=[r for r in rows if str(r.get("head"))==head];c=Counter(str(r.get("result") or "pending").lower() for r in sel);w,l,p=c["won"],c["lost"],c["pending"];tw+=w;tl+=l;tp+=p;s=""
   if not sel:
-   if head=="goal_before_ht":s=" · система активна: 0–25' при 0:0"
+   if head=="goal_before_ht":s=" · система активна: 0–25' при любом счёте + GOOL pressure"
    elif head=="over_2_5":s=" · обученная HT-модель"
    elif head=="both_teams_to_score":s=" · HT-модель + GOOL LIVE до 75'"
    elif head=="two_more_goals":s=" · GOOL LIVE при любом счёте до 75'"
@@ -55,7 +55,7 @@ def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:
  if len(pending)>12:lines += ["",f"Ещё активных: {len(pending)-12}"]
  return "\n\n".join(lines)
 def _short_block(reason):
- mp={"prefilter_rejected":"не прошёл предфильтр","prefilter_not_candidate_but_models_still_run":"предфильтр слабый, но модель считает","model_unavailable":"модель не загрузилась","model_output_missing":"нет выхода модели","halftime_model_only":"HT-модель ждёт перерыв","warmup_until_10":"до 10'","second_half_warmup_until_55":"до 55' во 2Т","first_half_signal_window_closed_25":"окно 1Т закрыто","halftime_model_requires_halftime":"только перерыв","first_half_zero_zero_only":"1Т только 0:0","over25_ht_1_0_or_0_1_only":"ТБ2.5 только HT 1:0/0:1","btts_already_won":"ОЗ уже сыграл","btts_live_requires_one_team_already_scored":"GOOL ОЗ ждёт счёт с одной незабившей командой","duplicate_pending_signal":"уже есть сигнал"}
+ mp={"prefilter_rejected":"не прошёл предфильтр","prefilter_not_candidate_but_models_still_run":"предфильтр слабый, но модель считает","model_unavailable":"модель не загрузилась","model_output_missing":"нет выхода модели","halftime_model_only":"HT-модель ждёт перерыв","warmup_until_10":"до 10'","second_half_warmup_until_55":"до 55' во 2Т","first_half_signal_window_closed_25":"окно 1Т закрыто","halftime_model_requires_halftime":"только перерыв","over25_ht_1_0_or_0_1_only":"ТБ2.5 только HT 1:0/0:1","btts_already_won":"ОЗ уже сыграл","btts_live_requires_one_team_already_scored":"GOOL ОЗ ждёт счёт с одной незабившей командой","duplicate_pending_signal":"уже есть сигнал"}
  if reason in mp:return mp[reason]
  if reason.startswith("score=") or reason.startswith("probability="):return "ниже порога "+reason
  if reason.startswith("gool_pressure="):return "GOOL давление ниже порога"

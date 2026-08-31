@@ -1,153 +1,419 @@
 from __future__ import annotations
-import json, os
+
+import base64
+import json
+import os
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
+
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+from .card_template_asset import PREMIUM_STADIUM_JPEG_B64
 from .match_context import provider_pair
 from .providers.common import UA
 from .providers.flashscore import FlashscoreProvider
 
-W=1080; TEXT=(248,250,252); MUTED=(157,174,192); DARK=(2,7,13); RED=(241,72,82); GOLD=(255,194,55)
-THEMES={
-"another_goal":{"accent":(55,224,79),"deep":(0,48,21),"label":"ЕЩЁ ГОЛ"},
-"over_2_5":{"accent":(39,151,255),"deep":(0,31,73),"label":"ТОТАЛ БОЛЬШЕ 2.5"},
-"both_teams_to_score":{"accent":(181,65,255),"deep":(57,5,82),"label":"ОБЕ ЗАБЬЮТ — ДА"},
-"goal_before_ht":{"accent":(255,132,26),"deep":(82,31,0),"label":"ГОЛ ДО ПЕРЕРЫВА"}}
-HEAD_LABELS={k:v["label"] for k,v in THEMES.items()}
+W = 1080
+TEXT = (248, 250, 252)
+MUTED = (162, 178, 196)
+DARK = (2, 7, 12)
+RED = (245, 68, 78)
+GOLD = (255, 200, 67)
+THEMES = {
+    "another_goal": {"accent": (77, 239, 43), "label": "ЕЩЁ ГОЛ"},
+    "over_2_5": {"accent": (55, 166, 255), "label": "ТОТАЛ БОЛЬШЕ 2.5"},
+    "both_teams_to_score": {"accent": (190, 83, 255), "label": "ОБЕ ЗАБЬЮТ — ДА"},
+    "goal_before_ht": {"accent": (255, 145, 37), "label": "ГОЛ ДО ПЕРЕРЫВА"},
+}
 
-def _font(n,b=False):
- for p in [("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if b else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf" if b else "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf")]:
-  try:return ImageFont.truetype(p,n)
-  except OSError:pass
- return ImageFont.load_default()
-def _fit(d,s,w,n=34,b=True):
- s=str(s or "")
- for z in range(n,11,-2):
-  f=_font(z,b)
-  if d.textbbox((0,0),s,font=f)[2]<=w:return f
- return _font(12,b)
-def _center(d,s,y,f,c):
- b=d.textbbox((0,0),str(s),font=f);d.text(((W-(b[2]-b[0]))/2,y),str(s),font=f,fill=c)
-def _save(im):
- o=BytesIO();im.convert("RGB").save(o,"PNG",optimize=True);return o.getvalue()
+
+def _font(size: int, bold: bool = False):
+    paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    ]
+    for path in paths:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _fit(draw, text, width, start=38, bold=True):
+    text = str(text or "")
+    for size in range(start, 11, -2):
+        f = _font(size, bold)
+        if draw.textbbox((0, 0), text, font=f)[2] <= width:
+            return f
+    return _font(12, bold)
+
+
+def _center(draw, text, y, font, fill):
+    box = draw.textbbox((0, 0), str(text), font=font)
+    draw.text(((W - (box[2] - box[0])) / 2, y), str(text), font=font, fill=fill)
+
+
+def _save(img):
+    out = BytesIO()
+    img.convert("RGB").save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def _pct(v):
- try:return f"{float(v)*100:.1f}%"
- except:return "—"
-def _pair(p,d=0,s=""):
- a,b=p
- if a is None or b is None:return "—"
- return f"{a:.{d}f}{s} : {b:.{d}f}{s}" if d else f"{int(round(a))}{s} : {int(round(b))}{s}"
-def _stats(r):return {"xg":_pair(provider_pair(r,"xg"),2),"shots":_pair(provider_pair(r,"shots")),"sot":_pair(provider_pair(r,"shots_on_target")),"corners":_pair(provider_pair(r,"corners")),"possession":_pair(provider_pair(r,"possession"),0,"%"),"big_chances":_pair(provider_pair(r,"big_chances"))}
-def stats_snapshot(r):return _stats(r)
-def flashscore_meta(r):return dict((((r.get("providers") or {}).get("flashscore") or {}).get("meta") or {}))
-def _asset_path():return Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"signal_card_assets.json"
-def _analysis_path():return Path(os.getenv("SIGNAL_ANALYSIS_PATH",os.getenv("RUNTIME_DATA_DIR","data")+"/live/gool_bot2_analysis.jsonl"))
+    try:
+        return f"{float(v) * 100:.1f}%"
+    except Exception:
+        return "—"
+
+
+def _fmt_pair(pair, digits=0, suffix=""):
+    a, b = pair
+    if a is None or b is None:
+        return "—"
+    if digits:
+        return f"{a:.{digits}f}{suffix} : {b:.{digits}f}{suffix}"
+    return f"{int(round(a))}{suffix} : {int(round(b))}{suffix}"
+
+
+def _stats_for_record(record):
+    return {
+        "xg": _fmt_pair(provider_pair(record, "xg"), 2),
+        "shots": _fmt_pair(provider_pair(record, "shots")),
+        "sot": _fmt_pair(provider_pair(record, "shots_on_target")),
+        "corners": _fmt_pair(provider_pair(record, "corners")),
+        "possession": _fmt_pair(provider_pair(record, "possession"), 0, "%"),
+        "big_chances": _fmt_pair(provider_pair(record, "big_chances")),
+    }
+
+
+def stats_snapshot(record):
+    return _stats_for_record(record)
+
+
+def flashscore_meta(record):
+    return dict((((record.get("providers") or {}).get("flashscore") or {}).get("meta") or {}))
+
+
+def _asset_path():
+    return Path(os.getenv("RUNTIME_DATA_DIR", "data")) / "live" / "signal_card_assets.json"
+
+
+def _analysis_path():
+    runtime = os.getenv("RUNTIME_DATA_DIR", "data")
+    return Path(os.getenv("SIGNAL_ANALYSIS_PATH", runtime + "/live/gool_bot2_analysis.jsonl"))
+
+
 def _read_assets():
- try:
-  p=_asset_path();x=json.loads(p.read_text("utf-8")) if p.exists() else {};return x if isinstance(x,dict) else {}
- except:return {}
-def _remember(mid,meta,stats):
- if not mid:return
- c=_read_assets();old=dict(c.get(mid) or {});old.update({"flashscore_meta":meta,"stats_snapshot":stats});c[mid]=old
- try:
-  p=_asset_path();p.parent.mkdir(parents=True,exist_ok=True);t=p.with_suffix(".tmp");t.write_text(json.dumps(c,ensure_ascii=False),"utf-8");t.replace(p)
- except:pass
-def _history(mid,head,limit=18):
- p=_analysis_path();out={}
- if not mid or not p.exists():return []
- try:
-  for line in p.read_text("utf-8",errors="ignore").splitlines()[-6000:]:
-   try:r=json.loads(line)
-   except:continue
-   if str(r.get("match_id") or "")!=mid or str(r.get("head") or "")!=head or r.get("probability") is None:continue
-   try:m=int(r.get("minute") or 0);v=float(r["probability"])
-   except:continue
-   if 0<=v<=1:out[m]=v
- except:return []
- return sorted(out.items())[-limit:]
+    try:
+        path = _asset_path()
+        data = json.loads(path.read_text("utf-8")) if path.exists() else {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _remember(match_id, meta, stats):
+    if not match_id:
+        return
+    cache = _read_assets()
+    old = dict(cache.get(match_id) or {})
+    old.update({"flashscore_meta": meta, "stats_snapshot": stats})
+    cache[match_id] = old
+    if len(cache) > 700:
+        cache = dict(list(cache.items())[-700:])
+    try:
+        path = _asset_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False), "utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def _probability_history(match_id, head, limit=18):
+    path = _analysis_path()
+    if not match_id or not path.exists():
+        return []
+    by_minute = {}
+    try:
+        for line in path.read_text("utf-8", errors="ignore").splitlines()[-6000:]:
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            if str(row.get("match_id") or "") != match_id or str(row.get("head") or "") != head:
+                continue
+            try:
+                minute = int(row.get("minute") or 0)
+                value = float(row.get("probability"))
+            except Exception:
+                continue
+            if 0 <= value <= 1:
+                by_minute[minute] = value
+    except Exception:
+        return []
+    return sorted(by_minute.items())[-limit:]
+
+
+@lru_cache(maxsize=1)
+def _stadium_template():
+    raw = base64.b64decode(PREMIUM_STADIUM_JPEG_B64.encode("ascii"))
+    img = Image.open(BytesIO(raw)).convert("RGB")
+    return img.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
+
+
+def _canvas(height, accent):
+    base = _stadium_template().copy()
+    if height != 1080:
+        base = base.resize((W, height), Image.Resampling.LANCZOS)
+    base = ImageEnhance.Contrast(base).enhance(1.08)
+    tint = Image.new("RGBA", (W, height), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tint)
+    td.rectangle((0, 0, W, height), fill=(0, 0, 0, 45))
+    td.rectangle((0, 0, W, 170), fill=(0, 0, 0, 150))
+    td.rectangle((0, 530, W, height), fill=(0, 0, 0, 175))
+    td.ellipse((260, 100, 820, 560), fill=accent + (30,))
+    tint = tint.filter(ImageFilter.GaussianBlur(18))
+    return Image.alpha_composite(base, tint)
+
+
+def _panel(draw, box, accent=None, alpha=220, radius=22, width=2):
+    outline = accent + (190,) if accent else (79, 96, 112, 180)
+    draw.rounded_rectangle(box, radius, fill=(2, 8, 14, alpha), outline=outline, width=width)
+
+
 @lru_cache(maxsize=2048)
 def _download(url):
- if not url:return None
- try:
-  q=Request(url,headers={"User-Agent":UA,"Referer":"https://www.flashscore.com/"});raw=urlopen(q,timeout=7).read(700000);im=Image.open(BytesIO(raw)).convert("RGBA");im.thumbnail((190,190),Image.Resampling.LANCZOS);return im.copy()
- except:return None
-def _logo(meta,side):
- fn=str(meta.get(f"{side}_logo_file") or "").strip()
- if fn:
-  im=_download(f"https://static.flashscore.com/res/image/data/{fn}")
-  if im:return im
- u=str(meta.get(f"{side}_logo_url") or "").strip()
- if u:
-  im=_download(u)
-  if im:return im
- u=FlashscoreProvider.team_logo_url(str(meta.get(f"{side}_team_slug") or ""),str(meta.get(f"{side}_team_id") or "")) or "";return _download(u) if u else None
+    if not url:
+        return None
+    try:
+        request = Request(url, headers={"User-Agent": UA, "Referer": "https://www.flashscore.com/"})
+        with urlopen(request, timeout=7) as response:
+            raw = response.read(700_000)
+        image = Image.open(BytesIO(raw)).convert("RGBA")
+        image.thumbnail((210, 210), Image.Resampling.LANCZOS)
+        return image.copy()
+    except Exception:
+        return None
 
-def _background(h,accent,deep):
- im=Image.new("RGBA",(W,h),DARK+(255,));ov=Image.new("RGBA",(W,h),(0,0,0,0));d=ImageDraw.Draw(ov)
- # cinematic stadium glow
- for r,a in [(560,30),(430,38),(300,45)]:d.ellipse((W//2-r,100-r//3,W//2+r,100+r//2),fill=accent+(a,))
- for x in range(-200,1300,80):d.line((540,360,x,650),fill=(70,110,130,30),width=1)
- d.arc((30,210,1050,620),190,350,fill=(110,160,180,45),width=3);d.arc((110,270,970,640),190,350,fill=(90,140,160,35),width=2)
- for x in range(70,1040,90):d.ellipse((x,305,x+5,310),fill=accent+(210,))
- ov=ov.filter(ImageFilter.GaussianBlur(5));im=Image.alpha_composite(im,ov)
- # top-to-bottom premium tint
- tint=Image.new("RGBA",(W,h),(0,0,0,0));td=ImageDraw.Draw(tint)
- td.rectangle((0,0,W,180),fill=deep+(105,));td.rectangle((0,500,W,h),fill=(1,6,12,115));return Image.alpha_composite(im,tint)
-def _panel(d,box,accent=None,alpha=230,r=22):d.rounded_rectangle(box,r,fill=(4,13,22,alpha),outline=(accent+(180,) if accent else (45,66,86,220)),width=2)
-def _header(d,theme,league,round_name,providers,result=False):
- a=theme["accent"];_panel(d,(24,20,1056,126),a,245,26)
- d.rounded_rectangle((43,38,184,105),18,fill=(8,24,31,255),outline=a,width=2);f=_fit(d,"GOOL",110,27);d.text((64,54),"GOOL",font=f,fill=TEXT);d.text((145,57),"2",font=_font(19,True),fill=a)
- d.text((215,35),theme["label"],font=_fit(d,theme["label"],560,37),fill=TEXT);d.text((218,82),"РЕЗУЛЬТАТ" if result else "LIVE PREDICTION",font=_font(14,True),fill=a)
- d.rounded_rectangle((894,42,1028,82),15,fill=a);txt="RESULT" if result else "LIVE";b=d.textbbox((0,0),txt,font=_font(17,True));d.text((961-(b[2]-b[0])/2,51),txt,font=_font(17,True),fill=DARK)
- d.text((908,91),f"DATA {providers}/3",font=_font(13,True),fill=MUTED)
- comp=league+(f"  •  {round_name}" if round_name else "");_center(d,comp,145,_fit(d,comp,920,19),TEXT)
-def _paste_logo(im,d,logo,name,cx,cy,a):
- d.ellipse((cx-83,cy-83,cx+83,cy+83),fill=(5,15,23,220),outline=a,width=2)
- if logo:
-  b=logo.getbbox();logo=logo.crop(b) if b else logo;s=min(140/max(1,logo.width),140/max(1,logo.height));logo=logo.resize((max(1,int(logo.width*s)),max(1,int(logo.height*s))),Image.Resampling.LANCZOS);im.alpha_composite(logo,(cx-logo.width//2,cy-logo.height//2));return
- ini="".join(x[:1] for x in str(name).replace("-"," ").split()[:3]).upper() or "?";f=_font(30,True);b=d.textbbox((0,0),ini,font=f);d.text((cx-(b[2]-b[0])/2,cy-20),ini,font=f,fill=TEXT)
-def _team(d,name,cx,y):
- f=_fit(d,name,330,30);b=d.textbbox((0,0),name,font=f);d.text((cx-(b[2]-b[0])/2,y),name,font=f,fill=TEXT)
-def _spark(d,hist,box,a,current):
- x1,y1,x2,y2=box
- for i in range(3):yy=y1+(y2-y1)*i//2;d.line((x1,yy,x2,yy),fill=(35,57,73),width=1)
- vals=hist or [(0,current)];vals=([(max(0,vals[0][0]-1),vals[0][1]),vals[0]] if len(vals)==1 else vals);ps=[v for _,v in vals];lo=max(0,min(ps)-.05);hi=min(1,max(ps)+.05)
- if hi-lo<.1:hi=min(1,lo+.1)
- pts=[]
- for i,(_,v) in enumerate(vals):pts.append((int(x1+(x2-x1)*i/max(1,len(vals)-1)),int(y2-(v-lo)/max(.001,hi-lo)*(y2-y1))))
- d.line(pts,fill=a,width=5)
- for p in pts:d.ellipse((p[0]-4,p[1]-4,p[0]+4,p[1]+4),fill=a)
- d.text((x1,y2+10),f"{vals[0][0]}'",font=_font(12,True),fill=MUTED);d.text((x2-34,y2+10),f"{vals[-1][0]}'",font=_font(12,True),fill=MUTED)
-def _models(d,head,p,m,a,hist):
- _panel(d,(30,590,1050,790),a,240,24);d.text((55,613),"MODEL CONFIDENCE",font=_font(13,True),fill=MUTED);d.text((55,641),f"{p*100:.1f}%",font=_font(54,True),fill=a)
- if head in {"over_2_5","both_teams_to_score"}:
-  vals=[("HT MODEL",_pct((m.get("football_data") or {}).get(head))),("MARKET","O 2.5" if head=="over_2_5" else "BTTS YES")]
- else:vals=[("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("Δ MODELS",_pct((m.get("disagreement") or {}).get(head)))]
- x=285
- for lab,val in vals:d.text((x,620),lab,font=_font(12,True),fill=MUTED);d.text((x,651),val,font=_font(25,True),fill=(GOLD if lab.startswith("Δ") else TEXT));x+=175
- d.text((760,613),"PROBABILITY TREND",font=_font(12,True),fill=MUTED);_spark(d,hist,(760,653,1015,716),a,p)
- d.rounded_rectangle((55,741,700,755),7,fill=(28,47,61));d.rounded_rectangle((55,741,55+int(645*max(0,min(1,p))),755),7,fill=a)
-def _stat_panel(d,stats,cards,providers,a):
- _panel(d,(30,815,1050,965),None,245,22);items=[("xG",stats.get("xg","—")),("УДАРЫ",stats.get("shots","—")),("В СТВОР",stats.get("sot","—")),("УГЛОВЫЕ",stats.get("corners","—")),("ВЛАДЕНИЕ",stats.get("possession","—")),("МОМЕНТЫ",stats.get("big_chances","—"))]
- for i,(lab,val) in enumerate(items):x=52+i*166;d.text((x,840),lab,font=_font(12,True),fill=MUTED);d.text((x,870),val,font=_fit(d,val,145,21),fill=TEXT)
- d.line((50,916,1030,916),fill=(31,51,67),width=1);hy,ay=cards.get("home_yellow"),cards.get("away_yellow");hr,ar=cards.get("home_red"),cards.get("away_red");ys="—" if hy is None or ay is None else f"{hy}:{ay}";rs="—" if hr is None or ar is None else f"{hr}:{ar}";d.text((52,930),f"КАРТОЧКИ   🟨 {ys}   🟥 {rs}",font=_font(14,True),fill=MUTED);d.text((900,930),f"{providers}/3",font=_font(15,True),fill=a)
 
-def render_signal_card(record,head,probability,model_result,cards):
- th=THEMES.get(head,THEMES["another_goal"]);a,deep=th["accent"],th["deep"];match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats)
- home=str(match.get("home") or "?");away=str(match.get("away") or "?");league=str(match.get("league") or "LIVE FOOTBALL");rnd=str(meta.get("round") or "");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {})
- im=_background(1060,a,deep);d=ImageDraw.Draw(im);d.rounded_rectangle((8,8,1072,1052),30,outline=a,width=3);_header(d,th,league,rnd,providers)
- # hero match stage
- _paste_logo(im,d,_logo(meta,"home"),home,190,335,a);_paste_logo(im,d,_logo(meta,"away"),away,890,335,a);_team(d,home,190,442);_team(d,away,890,442)
- d.rounded_rectangle((470,205,610,252),15,fill=a);_center(d,"HT" if match.get("is_halftime") else f"{minute}'",214,_font(23,True),DARK);_center(d,f"{hs}  :  {aws}",275,_font(86,True),TEXT);_center(d,"1-Й ТАЙМ" if minute<=45 else "2-Й ТАЙМ",385,_font(16,True),MUTED)
- d.line((370,455,710,455),fill=a,width=2);_center(d,th["label"],478,_font(19,True),a)
- _models(d,head,probability,model_result,a,_history(mid,head));_stat_panel(d,stats,cards,providers,a);d.rounded_rectangle((380,988,700,1038),16,fill=a);_center(d,"●  В ИГРЕ",998,_font(23,True),DARK);return _save(im)
+def _team_logo(meta, side):
+    filename = str(meta.get(f"{side}_logo_file") or "").strip()
+    if filename:
+        image = _download(f"https://static.flashscore.com/res/image/data/{filename}")
+        if image is not None:
+            return image
+    explicit = str(meta.get(f"{side}_logo_url") or "").strip()
+    if explicit:
+        image = _download(explicit)
+        if image is not None:
+            return image
+    url = FlashscoreProvider.team_logo_url(
+        str(meta.get(f"{side}_team_slug") or ""), str(meta.get(f"{side}_team_id") or "")
+    ) or ""
+    return _download(url) if url else None
 
-def render_result_card(row,result,minute,home_score,away_score):
- head=str(row.get("head") or "another_goal");th=THEMES.get(head,THEMES["another_goal"]);won=str(result).lower()=="won";a=th["accent"] if won else RED;deep=th["deep"] if won else (62,8,14);home=str(row.get("home") or "?");away=str(row.get("away") or "?");league=str(row.get("league") or "LIVE FOOTBALL");providers=int(row.get("provider_count") or 1);cache=_read_assets().get(str(row.get("match_id") or ""),{}) or {};meta=dict(row.get("flashscore_meta") or cache.get("flashscore_meta") or {});stats=dict(row.get("stats_snapshot") or cache.get("stats_snapshot") or {});entry=row.get("score") or [0,0];em=int(row.get("minute") or 0);p=float(row.get("probability") or 0)
- im=_background(960,a,deep);d=ImageDraw.Draw(im);d.rounded_rectangle((8,8,1072,952),30,outline=a,width=3);_header(d,{**th,"accent":a},league,str(meta.get("round") or ""),providers,True);_paste_logo(im,d,_logo(meta,"home"),home,190,330,a);_paste_logo(im,d,_logo(meta,"away"),away,890,330,a);_team(d,home,190,438);_team(d,away,890,438);_center(d,f"{home_score}  :  {away_score}",270,_font(82,True),TEXT);_center(d,f"{minute}'  •  FINAL STATUS",380,_font(16,True),MUTED)
- _panel(d,(85,500,995,675),a,245,28);_center(d,"✓  СИГНАЛ ЗАШЁЛ" if won else "✕  СИГНАЛ НЕ ЗАШЁЛ",530,_font(43,True),a);_center(d,f"{th['label']}  •  ВЕРОЯТНОСТЬ {p*100:.1f}%",594,_font(20,True),TEXT)
- _panel(d,(85,710,995,840),None,245,22);d.text((120,735),"ВХОД",font=_font(13,True),fill=MUTED);d.text((120,768),f"{em}'  •  {int(entry[0])}:{int(entry[1])}",font=_font(28,True),fill=TEXT);d.text((585,735),"РЕЗУЛЬТАТ",font=_font(13,True),fill=MUTED);d.text((585,768),f"{minute}'  •  {home_score}:{away_score}",font=_font(28,True),fill=a);line=f"Удары {stats.get('shots','—')}   •   В створ {stats.get('sot','—')}   •   Угловые {stats.get('corners','—')}";_center(d,line,815,_fit(d,line,800,15),MUTED)
- d.rounded_rectangle((260,870,820,925),17,fill=a);_center(d,"GOOL 2  •  VERIFIED RESULT",884,_font(21,True),DARK);return _save(im)
+
+def _paste_logo(img, draw, logo, name, cx, cy, accent):
+    glow = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse((cx - 95, cy - 95, cx + 95, cy + 95), fill=accent + (40,))
+    glow = glow.filter(ImageFilter.GaussianBlur(24))
+    img.alpha_composite(glow)
+    if logo is not None:
+        box = logo.getbbox()
+        logo = logo.crop(box) if box else logo
+        scale = min(165 / max(1, logo.width), 165 / max(1, logo.height))
+        logo = logo.resize((max(1, int(logo.width * scale)), max(1, int(logo.height * scale))), Image.Resampling.LANCZOS)
+        img.alpha_composite(logo, (cx - logo.width // 2, cy - logo.height // 2))
+        return
+    draw.ellipse((cx - 72, cy - 72, cx + 72, cy + 72), fill=(4, 13, 20, 230), outline=accent, width=3)
+    initials = "".join(p[:1] for p in str(name).replace("-", " ").split()[:3]).upper() or "?"
+    f = _font(31, True)
+    b = draw.textbbox((0, 0), initials, font=f)
+    draw.text((cx - (b[2] - b[0]) / 2, cy - 20), initials, font=f, fill=TEXT)
+
+
+def _team_name(draw, text, cx, y):
+    f = _fit(draw, text, 350, 31, True)
+    b = draw.textbbox((0, 0), text, font=f)
+    draw.text((cx - (b[2] - b[0]) / 2, y), text, font=f, fill=TEXT)
+
+
+def _sparkline(draw, history, box, accent, current):
+    x1, y1, x2, y2 = box
+    vals = history[:] if history else [(0, current)]
+    if len(vals) == 1:
+        vals = [(max(0, vals[0][0] - 1), vals[0][1]), vals[0]]
+    probs = [v for _, v in vals]
+    lo = max(0.0, min(probs) - 0.05)
+    hi = min(1.0, max(probs) + 0.05)
+    if hi - lo < 0.10:
+        hi = min(1.0, lo + 0.10)
+    for i in range(3):
+        yy = y1 + int((y2 - y1) * i / 2)
+        draw.line((x1, yy, x2, yy), fill=(42, 61, 74), width=1)
+    pts = []
+    for i, (_, p) in enumerate(vals):
+        x = x1 + (x2 - x1) * i / max(1, len(vals) - 1)
+        y = y2 - (p - lo) / max(0.001, hi - lo) * (y2 - y1)
+        pts.append((int(x), int(y)))
+    if len(pts) >= 2:
+        fill_poly = [(pts[0][0], y2)] + pts + [(pts[-1][0], y2)]
+        draw.polygon(fill_poly, fill=accent + (35,))
+        draw.line(pts, fill=accent, width=5)
+    for p in pts:
+        draw.ellipse((p[0] - 4, p[1] - 4, p[0] + 4, p[1] + 4), fill=accent)
+    draw.text((x1, y2 + 8), f"{vals[0][0]}'", font=_font(12, True), fill=MUTED)
+    draw.text((x2 - 38, y2 + 8), f"{vals[-1][0]}'", font=_font(12, True), fill=MUTED)
+
+
+def _header(draw, theme, league, round_name, providers, result=False):
+    accent = theme["accent"]
+    draw.text((42, 28), "GOOL", font=_font(43, True), fill=TEXT)
+    draw.text((170, 39), "2", font=_font(24, True), fill=accent)
+    draw.text((42, 78), "AI FOOTBALL ANALYTICS", font=_font(12, True), fill=accent)
+    label = theme["label"]
+    _center(draw, label, 30, _fit(draw, label, 560, 45, True), TEXT)
+    _center(draw, "РЕЗУЛЬТАТ" if result else "• LIVE-СИГНАЛ •", 84, _font(15, True), accent)
+    draw.rounded_rectangle((877, 30, 1037, 95), 15, fill=(2, 8, 14, 220), outline=accent, width=2)
+    draw.text((914, 42), "RESULT" if result else "LIVE", font=_font(16, True), fill=accent)
+    draw.text((914, 68), f"DATA {providers}/3", font=_font(12, True), fill=MUTED)
+    competition = league + (f"  •  {round_name}" if round_name else "")
+    _center(draw, competition, 132, _fit(draw, competition, 900, 18, True), TEXT)
+
+
+def _model_values(head, model_result):
+    if head in {"over_2_5", "both_teams_to_score"}:
+        value = _pct((model_result.get("football_data") or {}).get(head))
+        return [("HT MODEL", value)]
+    return [
+        ("DIRECT", _pct((model_result.get("direct") or {}).get(head))),
+        ("HAZARD", _pct((model_result.get("hazard") or {}).get(head))),
+        ("Δ MODELS", _pct((model_result.get("disagreement") or {}).get(head))),
+    ]
+
+
+def render_signal_card(record, head, probability, model_result, cards):
+    theme = THEMES.get(head, THEMES["another_goal"])
+    accent = theme["accent"]
+    match = record.get("match") or {}
+    meta = flashscore_meta(record)
+    stats = _stats_for_record(record)
+    match_id = str(match.get("flashscore_event_id") or "")
+    _remember(match_id, meta, stats)
+    home = str(match.get("home") or "?")
+    away = str(match.get("away") or "?")
+    league = str(match.get("league") or "LIVE FOOTBALL")
+    rnd = str(meta.get("round") or "")
+    minute = int(match.get("minute") or 0)
+    hs = int(match.get("home_score") or 0)
+    aws = int(match.get("away_score") or 0)
+    providers = len(record.get("providers") or {})
+
+    img = _canvas(1080, accent)
+    draw = ImageDraw.Draw(img, "RGBA")
+    draw.rounded_rectangle((10, 10, 1070, 1070), 28, outline=accent + (210,), width=3)
+    _header(draw, theme, league, rnd, providers, False)
+
+    _paste_logo(img, draw, _team_logo(meta, "home"), home, 200, 350, accent)
+    _paste_logo(img, draw, _team_logo(meta, "away"), away, 880, 350, accent)
+    _team_name(draw, home, 200, 465)
+    _team_name(draw, away, 880, 465)
+    draw.rounded_rectangle((472, 205, 608, 252), 14, fill=accent)
+    _center(draw, "HT" if match.get("is_halftime") else f"{minute}'", 214, _font(23, True), DARK)
+    _center(draw, f"{hs} : {aws}", 278, _font(88, True), TEXT)
+    _center(draw, "1-Й ТАЙМ" if minute <= 45 else "2-Й ТАЙМ", 395, _font(15, True), accent)
+
+    _panel(draw, (28, 545, 352, 805), accent, 225)
+    draw.text((55, 570), "ВЕРОЯТНОСТЬ", font=_font(14, True), fill=MUTED)
+    draw.text((55, 610), f"{probability * 100:.1f}%", font=_font(58, True), fill=accent)
+    draw.text((57, 685), theme["label"], font=_fit(draw, theme["label"], 270, 22, True), fill=TEXT)
+    draw.rounded_rectangle((55, 742, 323, 755), 6, fill=(35, 49, 60, 220))
+    draw.rounded_rectangle((55, 742, 55 + int(268 * max(0, min(1, probability))), 755), 6, fill=accent)
+
+    _panel(draw, (368, 545, 690, 805), accent, 225)
+    draw.text((392, 570), "МОДЕЛИ", font=_font(14, True), fill=MUTED)
+    y = 612
+    for label, value in _model_values(head, model_result):
+        draw.text((394, y), label, font=_font(13, True), fill=MUTED)
+        draw.text((548, y - 6), value, font=_font(25, True), fill=GOLD if label.startswith("Δ") else TEXT)
+        y += 62
+
+    _panel(draw, (706, 545, 1052, 805), accent, 225)
+    draw.text((730, 570), "ДИНАМИКА ВЕРОЯТНОСТИ", font=_font(13, True), fill=MUTED)
+    _sparkline(draw, _probability_history(match_id, head), (730, 620, 1018, 730), accent, probability)
+    draw.text((904, 752), f"{probability * 100:.1f}%", font=_font(22, True), fill=accent)
+
+    _panel(draw, (28, 825, 1052, 966), accent, 220)
+    items = [
+        ("xG", stats.get("xg", "—")),
+        ("УДАРЫ", stats.get("shots", "—")),
+        ("В СТВОР", stats.get("sot", "—")),
+        ("УГЛОВЫЕ", stats.get("corners", "—")),
+        ("ВЛАДЕНИЕ", stats.get("possession", "—")),
+        ("МОМЕНТЫ", stats.get("big_chances", "—")),
+    ]
+    for i, (label, value) in enumerate(items):
+        x = 50 + i * 166
+        draw.text((x, 852), label, font=_font(12, True), fill=MUTED)
+        draw.text((x, 886), value, font=_fit(draw, value, 140, 20, True), fill=TEXT)
+    draw.line((48, 928, 1032, 928), fill=(64, 82, 96, 180), width=1)
+    draw.text((50, 941), f"ВХОД  {minute}' • {hs}:{aws}", font=_font(14, True), fill=TEXT)
+    draw.text((815, 941), f"DATA {providers}/3", font=_font(14, True), fill=accent)
+
+    draw.rounded_rectangle((360, 990, 720, 1046), 16, fill=accent)
+    _center(draw, "●  В ИГРЕ", 1002, _font(24, True), DARK)
+    return _save(img)
+
+
+def render_result_card(row, result, minute, home_score, away_score):
+    head = str(row.get("head") or "another_goal")
+    theme = THEMES.get(head, THEMES["another_goal"])
+    won = str(result).lower() == "won"
+    accent = theme["accent"] if won else RED
+    home = str(row.get("home") or "?")
+    away = str(row.get("away") or "?")
+    league = str(row.get("league") or "LIVE FOOTBALL")
+    providers = int(row.get("provider_count") or 1)
+    cache = _read_assets().get(str(row.get("match_id") or ""), {}) or {}
+    meta = dict(row.get("flashscore_meta") or cache.get("flashscore_meta") or {})
+    stats = dict(row.get("stats_snapshot") or cache.get("stats_snapshot") or {})
+    entry = row.get("score") or [0, 0]
+    entry_minute = int(row.get("minute") or 0)
+    probability = float(row.get("probability") or 0)
+
+    img = _canvas(1080, accent)
+    draw = ImageDraw.Draw(img, "RGBA")
+    draw.rounded_rectangle((10, 10, 1070, 1070), 28, outline=accent + (210,), width=3)
+    result_theme = dict(theme)
+    result_theme["accent"] = accent
+    _header(draw, result_theme, league, str(meta.get("round") or ""), providers, True)
+
+    _paste_logo(img, draw, _team_logo(meta, "home"), home, 205, 350, accent)
+    _paste_logo(img, draw, _team_logo(meta, "away"), away, 875, 350, accent)
+    _team_name(draw, home, 205, 465)
+    _team_name(draw, away, 875, 465)
+    _center(draw, f"{home_score} : {away_score}", 282, _font(88, True), TEXT)
+    _center(draw, f"{minute}' • РЕЗУЛЬТАТ", 398, _font(16, True), MUTED)
+
+    _panel(draw, (65, 555, 1015, 735), accent, 230, 28, 3)
+    _center(draw, "✓  СИГНАЛ ЗАШЁЛ!" if won else "✕  СИГНАЛ НЕ ЗАШЁЛ", 588, _font(44, True), accent)
+    _center(draw, f"{theme['label']} • ВЕРОЯТНОСТЬ {probability * 100:.1f}%", 655, _font(20, True), TEXT)
+
+    _panel(draw, (65, 765, 1015, 930), accent, 220)
+    draw.text((105, 792), "ВХОД В СИГНАЛ", font=_font(13, True), fill=MUTED)
+    draw.text((105, 828), f"{entry_minute}' • {int(entry[0])}:{int(entry[1])}", font=_font(28, True), fill=TEXT)
+    draw.text((600, 792), "РЕЗУЛЬТАТ МАТЧА", font=_font(13, True), fill=MUTED)
+    draw.text((600, 828), f"{minute}' • {home_score}:{away_score}", font=_font(28, True), fill=accent)
+    statline = f"Удары {stats.get('shots','—')}  •  В створ {stats.get('sot','—')}  •  Угловые {stats.get('corners','—')}"
+    _center(draw, statline, 888, _fit(draw, statline, 820, 15, True), MUTED)
+
+    draw.rounded_rectangle((270, 970, 810, 1038), 18, fill=accent)
+    _center(draw, "GOOL 2 • VERIFIED RESULT", 987, _font(21, True), DARK)
+    return _save(img)

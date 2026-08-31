@@ -31,27 +31,40 @@ def _latest_live_states(path):
    if mid and (mid not in latest or str(r.get("captured_at") or "")>=str(latest[mid].get("captured_at") or "")):latest[mid]=r
  except Exception:return {}
  return latest
-def _another_goal_period_stats(rows):
+def _half(minute):
+ try:return "1Т" if int(minute or 0)<=45 else "2Т"
+ except Exception:return "?"
+def _another_goal_breakdown(rows):
+ out={"1Т→1Т":0,"1Т→2Т":0,"1Т→MISS":0,"2Т→2Т":0,"2Т→MISS":0}
  closed=[r for r in rows if str(r.get("head"))=="another_goal" and str(r.get("result") or "pending").lower() in {"won","lost"}]
- buckets={"1Т":[0,0],"2Т":[0,0]}
  for r in closed:
-  minute=int(r.get("minute") or 0);key="1Т" if minute<=45 else "2Т";result=str(r.get("result") or "").lower();buckets[key][0 if result=="won" else 1]+=1
- return buckets
+  entry=_half(r.get("minute"));result=str(r.get("result") or "").lower()
+  if result=="lost":out[f"{entry}→MISS"]+=1;continue
+  goal=_half(r.get("settled_minute") or r.get("minute"))
+  key=f"{entry}→{goal}"
+  if key in out:out[key]+=1
+ return out
 def report_text(path):
  rows=_dedupe_signals(_load_rows(path));lines=["📊 <b>ОТЧЁТ GOOL Bot 2</b>",""];tw=tl=tp=0
  for head in ACTIVE_HEADS:
   sel=[r for r in rows if str(r.get("head"))==head];c=Counter(str(r.get("result") or "pending").lower() for r in sel);w,l,p=c["won"],c["lost"],c["pending"];tw+=w;tl+=l;tp+=p
   lines.append(f"{HEAD_LABELS[head]}: ✅ {w} · ❌ {l} · ⏳ {p} · <b>{_pct(w,l)}</b>")
   if head=="another_goal":
-   periods=_another_goal_period_stats(rows)
-   w1,l1=periods["1Т"];w2,l2=periods["2Т"]
-   lines.append(f"   ↳ вход в 1Т: ✅ {w1} · ❌ {l1} · <b>{_pct(w1,l1)}</b>")
-   lines.append(f"   ↳ вход во 2Т: ✅ {w2} · ❌ {l2} · <b>{_pct(w2,l2)}</b>")
+   b=_another_goal_breakdown(rows);e1w=b["1Т→1Т"]+b["1Т→2Т"];e1l=b["1Т→MISS"];e2w=b["2Т→2Т"];e2l=b["2Т→MISS"]
+   lines += [
+    f"   ↳ вход 1Т → гол 1Т: <b>{b['1Т→1Т']}</b>",
+    f"   ↳ вход 1Т → гол 2Т: <b>{b['1Т→2Т']}</b>",
+    f"   ↳ вход 1Т → без гола: <b>{b['1Т→MISS']}</b>",
+    f"   ↳ всего входов 1Т: ✅ {e1w} · ❌ {e1l} · <b>{_pct(e1w,e1l)}</b>",
+    f"   ↳ вход 2Т → гол 2Т: <b>{b['2Т→2Т']}</b>",
+    f"   ↳ вход 2Т → без гола: <b>{b['2Т→MISS']}</b>",
+    f"   ↳ всего входов 2Т: ✅ {e2w} · ❌ {e2l} · <b>{_pct(e2w,e2l)}</b>",
+   ]
  lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>Работают только две стратегии: Ещё гол и Ещё +2 гола.</i>","<i>На один матч максимум два сигнала.</i>"]
  return "\n".join(lines)
 def _in_game_row(r,states):
- ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL";v=float(r.get("gool_signal_strength") or r.get("probability") or 0);metric=f"шанс <b>{v*100:.0f}/100</b>" if src=="GOOL" else f"P <b>{v*100:.1f}%</b>";period="1Т" if int(r.get("minute") or 0)<=45 else "2Т"
- return f"{r.get('home','?')} — {r.get('away','?')}{ll}\nсейчас {lm}' · {ls[0]}:{ls[1]} · {src} {metric}\n↳ вход: {r.get('minute',0)}' ({period}) · {ss[0]}:{ss[1]}"
+ ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL";v=float(r.get("gool_signal_strength") or r.get("probability") or 0);metric=f"шанс <b>{v*100:.0f}/100</b>" if src=="GOOL" else f"P <b>{v*100:.1f}%</b>";period=_half(r.get("minute"));current_half=_half(lm)
+ return f"{r.get('home','?')} — {r.get('away','?')}{ll}\nсейчас {lm}' ({current_half}) · {ls[0]}:{ls[1]} · {src} {metric}\n↳ вход: {r.get('minute',0)}' ({period}) · {ss[0]}:{ss[1]}"
 def in_game_sections(journal_path:Path,analysis_path:Path|None=None)->list[str]:
  rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path);pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending" and str(r.get("head") or "") in ACTIVE_HEADS];pending.sort(key=lambda r:str(r.get("created_at") or ""),reverse=True)
  if not pending:return ["🟢 <b>В ИГРЕ</b>\n\nАктивных сигналов Ещё гол / Ещё +2 гола сейчас нет."]
@@ -95,6 +108,6 @@ def analysis_text(path):
  if top:
   lines += ["","<b>Ближайшие входы:</b>"]
   for r in top:
-   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";v=float(r.get("probability") or r.get("gool_confidence") or 0);is_gool=bool(r.get("gool_live_analysis"));value=f"{v*100:.0f}/100" if is_gool else f"{v*100:.1f}%";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "готово"
-   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' · {s[0]}:{s[1]} · <b>{value}</b>\n↳ {bt}")
+   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";v=float(r.get("probability") or r.get("gool_confidence") or 0);is_gool=bool(r.get("gool_live_analysis"));value=f"{v*100:.0f}/100" if is_gool else f"{v*100:.1f}%";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "готово";period=_half(r.get("minute"))
+   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' ({period}) · {s[0]}:{s[1]} · <b>{value}</b>\n↳ {bt}")
  return "\n\n".join(lines)

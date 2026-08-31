@@ -101,9 +101,25 @@ def _spark(d,hist,box,accent,current):
 def _model_values(head,m):
  if head in {"over_2_5","both_teams_to_score"}:return [("HT MODEL",_pct((m.get("football_data") or {}).get(head)))]
  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("РАЗНИЦА",_pct((m.get("disagreement") or {}).get(head)))]
+def _goal_timing_split(match,probability,model_result):
+ """Relative timing estimate for an another-goal signal.
+
+ Uses the trained goal-before-HT head as the first-half component and the
+ remaining another-goal mass as the second-half component. The percentages
+ are a timing distribution conditional on the another-goal signal, not two
+ independently calibrated event probabilities.
+ """
+ minute=int(match.get("minute") or 0);is_ht=bool(match.get("is_halftime"))
+ if is_ht or minute>=46:return 0.0,100.0
+ if minute<=0:return None,None
+ try:p_any=max(0.01,min(0.99,float(probability)));p_ht=float((model_result.get("trained_probability") or {}).get("goal_before_ht"))
+ except:return None,None
+ p_ht=max(0.0,min(p_any,p_ht));p_second=max(0.0,p_any-p_ht);total=p_ht+p_second
+ if total<=0:return None,None
+ first=100.0*p_ht/total;return first,100.0-first
 
 def render_signal_card(record,head,probability,model_result,cards):
- accent,label=THEMES.get(head,THEMES["another_goal"]);match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats);home=str(match.get("home") or "?");away=str(match.get("away") or "?");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {});H=1280
+ accent,label=THEMES.get(head,THEMES["another_goal"]);match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats);home=str(match.get("home") or "?");away=str(match.get("away") or "?");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {});timing=head=="another_goal";H=1425 if timing else 1280
  img=Image.new("RGBA",(W,H),BG+(255,));d=ImageDraw.Draw(img);d.rounded_rectangle((24,20,1056,112),24,fill=PANEL,outline=accent,width=2);d.text((52,36),"GOOL 2",font=_font(36,True),fill=accent);d.text((52,78),"LIVE FOOTBALL • MULTI-SOURCE ANALYSIS",font=_font(15,True),fill=TEXT);d.rounded_rectangle((830,38,1028,93),16,outline=accent,width=2);d.text((888,53),"LIVE",font=_font(20,True),fill=accent)
  _center(d,label,142,_fit(d,label,850,38,True),accent);league=str(match.get("league") or "LIVE FOOTBALL");_center(d,league,194,_fit(d,league,900,19,False),MUTED);_badge(img,d,180,335,_logo(meta,"home"),home,accent);_badge(img,d,900,335,_logo(meta,"away"),away,accent);d.rounded_rectangle((390,255,690,418),28,fill=(9,19,31),outline=accent,width=3);_center(d,f"{hs} : {aws}",294,_font(66,True),TEXT);_center(d,"ПЕРЕРЫВ" if match.get("is_halftime") else f"{minute}'",370,_font(25,True),accent)
  for x,n in ((180,home),(900,away)):
@@ -113,9 +129,17 @@ def render_signal_card(record,head,probability,model_result,cards):
  for i,(k,v) in enumerate(vals):_box(d,(55+i*245,690,285+i*245,795),k,v,accent=(GOLD if k=="РАЗНИЦА" else TEXT))
  _box(d,(790,690,1025,795),"ИСТОЧНИКИ",f"{providers}/3",accent=accent)
  d.rounded_rectangle((55,825,1025,960),22,fill=PANEL,outline=LINE,width=2);d.text((82,846),"ДИНАМИКА ВЕРОЯТНОСТИ",font=_font(16,True),fill=MUTED);_spark(d,_history(mid,head),(350,850,990,930),accent,probability);d.text((82,890),f"{probability*100:.1f}%",font=_font(31,True),fill=accent)
+ yoff=0
+ if timing:
+  first,second=_goal_timing_split(match,probability,model_result);d.rounded_rectangle((55,985,1025,1115),22,fill=PANEL2,outline=accent,width=2);d.text((82,1005),"КОГДА ЖДЁМ СЛЕДУЮЩИЙ ГОЛ",font=_font(16,True),fill=MUTED)
+  if first is None:
+   _center(d,"РАСПРЕДЕЛЕНИЕ ЕЩЁ НЕДОСТУПНО",1048,_font(22,True),TEXT)
+  else:
+   d.text((105,1048),f"1-Й ТАЙМ  {first:.0f}%",font=_font(27,True),fill=accent);d.text((615,1048),f"2-Й ТАЙМ  {second:.0f}%",font=_font(27,True),fill=GOLD);barx1,bary1,barx2,bary2=105,1090,975,1103;d.rounded_rectangle((barx1,bary1,barx2,bary2),6,fill=LINE);split=barx1+int((barx2-barx1)*first/100.0);d.rounded_rectangle((barx1,bary1,max(barx1+2,split),bary2),6,fill=accent)
+  yoff=145
  items=[("xG",stats["xg"]),("УДАРЫ",stats["shots"]),("В СТВОР",stats["sot"]),("УГЛОВЫЕ",stats["corners"])]
- for i,(k,v) in enumerate(items):_box(d,(55+i*245,990,285+i*245,1095),k,v)
- hy,ay=cards.get("home_yellow"),cards.get("away_yellow");hr,ar=cards.get("home_red"),cards.get("away_red");cardline=f"КАРТОЧКИ  🟨 {'—' if hy is None or ay is None else f'{hy}:{ay}'}   🟥 {'—' if hr is None or ar is None else f'{hr}:{ar}'}";_center(d,cardline,1128,_font(16,True),MUTED);d.rounded_rectangle((360,1170,720,1235),18,fill=accent);_center(d,"●  В ИГРЕ",1187,_font(24,True),BG);return _save(img)
+ for i,(k,v) in enumerate(items):_box(d,(55+i*245,990+yoff,285+i*245,1095+yoff),k,v)
+ hy,ay=cards.get("home_yellow"),cards.get("away_yellow");hr,ar=cards.get("home_red"),cards.get("away_red");cardline=f"КАРТОЧКИ  🟨 {'—' if hy is None or ay is None else f'{hy}:{ay}'}   🟥 {'—' if hr is None or ar is None else f'{hr}:{ar}'}";_center(d,cardline,1128+yoff,_font(16,True),MUTED);d.rounded_rectangle((360,1170+yoff,720,1235+yoff),18,fill=accent);_center(d,"●  В ИГРЕ",1187+yoff,_font(24,True),BG);return _save(img)
 
 def render_result_card(row,result,minute,home_score,away_score):
  head=str(row.get("head") or "another_goal");base,label=THEMES.get(head,THEMES["another_goal"]);won=str(result).lower()=="won";accent=base if won else RED;home=str(row.get("home") or "?");away=str(row.get("away") or "?");league=str(row.get("league") or "LIVE FOOTBALL");providers=int(row.get("provider_count") or 1);cache=_read_assets().get(str(row.get("match_id") or ""),{}) or {};meta=dict(row.get("flashscore_meta") or cache.get("flashscore_meta") or {});stats=dict(row.get("stats_snapshot") or cache.get("stats_snapshot") or {});entry=row.get("score") or [0,0];em=int(row.get("minute") or 0);p=float(row.get("probability") or 0);H=900

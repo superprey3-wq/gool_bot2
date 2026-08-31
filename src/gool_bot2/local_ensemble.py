@@ -72,12 +72,10 @@ def _pressure_overlay(values: dict[str, float | None], expectations: dict[str, t
 
 
 def _first_half_live_analysis(record: dict[str, Any]) -> dict[str, float | None]:
-    """Legacy GOOL-style live pressure overlay for the trained goal-before-HT head.
+    """Independent legacy-GOOL pressure analysis for a goal before halftime.
 
-    The old GOOL first-half engine gave most weight to live chance quality and
-    pressure, while team/history context only strengthened or vetoed borderline
-    cases. GOOL 2 keeps the trained direct/hazard models as the foundation and
-    uses the same live-pressure idea only as a bounded overlay.
+    The trained direct/hazard models are evaluated separately. This analyzer does
+    not change their probability anymore; it only confirms or rejects the setup.
     """
     match = record.get("match") or {}
     minute = float(match.get("minute") or 0.0)
@@ -116,11 +114,10 @@ def _first_half_live_analysis(record: dict[str, Any]) -> dict[str, float | None]
 
 
 def _second_half_two_goal_analysis(record: dict[str, Any]) -> dict[str, float | None]:
-    """GOOL-style support layer for the HT 1:0/0:1 -> FT over 2.5 setup.
+    """Independent GOOL confirmation for HT 1:0/0:1 -> two more goals.
 
-    This market intentionally needs two second-half goals. The trained Football-
-    Data O2.5 model remains primary; first-half live activity only adjusts it by
-    at most +/-8 percentage points.
+    The Football-Data O2.5 model produces its own probability. This analyzer only
+    checks whether first-half live pressure supports the two-goal second-half setup.
     """
     match = record.get("match") or {}
     hs = int(match.get("home_score") or 0)
@@ -154,7 +151,7 @@ def _second_half_two_goal_analysis(record: dict[str, Any]) -> dict[str, float | 
 
 
 def _btts_halftime_analysis(record: dict[str, Any]) -> dict[str, float | None]:
-    """Small GOOL live overlay for BTTS when exactly one side has not scored at HT."""
+    """Diagnostic GOOL threat view for BTTS; it is not a signal gate."""
     match = record.get("match") or {}
     hs = int(match.get("home_score") or 0)
     aws = int(match.get("away_score") or 0)
@@ -181,6 +178,30 @@ def _btts_halftime_analysis(record: dict[str, Any]) -> dict[str, float | None]:
     output["threat_score"] = threat
     output["probability_adjustment"] = adjustment
     return output
+
+
+def _analyzer_confirmation(head: str, first_half: dict[str, Any], second_half: dict[str, Any]) -> dict[str, Any]:
+    if head == "goal_before_ht":
+        pressure = first_half.get("pressure_score")
+        minimum = float(os.getenv("GOOL_FIRST_HALF_MIN_PRESSURE", "1.00"))
+        return {
+            "required": True,
+            "name": "first_half_goal",
+            "score": pressure,
+            "minimum": minimum,
+            "passed": pressure is not None and float(pressure) >= minimum,
+        }
+    if head == "over_2_5":
+        pressure = second_half.get("pressure_score")
+        minimum = float(os.getenv("GOOL_TWO_GOAL_MIN_PRESSURE", "1.00"))
+        return {
+            "required": True,
+            "name": "two_more_goals_second_half",
+            "score": pressure,
+            "minimum": minimum,
+            "passed": pressure is not None and float(pressure) >= minimum,
+        }
+    return {"required": False, "name": None, "score": None, "minimum": None, "passed": True}
 
 
 class LocalFootballEnsemble:
@@ -226,41 +247,53 @@ class LocalFootballEnsemble:
         second_half_analysis = _second_half_two_goal_analysis(record)
         btts_analysis = _btts_halftime_analysis(record)
 
+        analyzer = {
+            head: _analyzer_confirmation(head, first_half_analysis, second_half_analysis)
+            for head in LIVE_HEADS
+        }
+
+        # Important: trained-model probabilities are never numerically modified by
+        # the GOOL analyzer. For the two strategies the analyzer understands, both
+        # independent checks must pass before `blended` exposes a signal probability.
+        trained_probability: dict[str, float | None] = {}
         blended: dict[str, float | None] = {}
         disagreement: dict[str, float | None] = {}
+
         for head in ("another_goal", "goal_before_ht"):
             d = direct.get(head)
             h = hazard.get(head)
             if d is None or h is None:
+                trained_probability[head] = None
                 blended[head] = None
                 disagreement[head] = None
+                continue
+            base_probability = float((float(d) + float(h)) / 2.0)
+            trained_probability[head] = float(max(0.01, min(0.99, base_probability)))
+            disagreement[head] = abs(float(d) - float(h))
+            if analyzer[head]["required"] and not analyzer[head]["passed"]:
+                blended[head] = None
             else:
-                base_probability = float((float(d) + float(h)) / 2.0)
-                if head == "goal_before_ht":
-                    base_probability += float(first_half_analysis.get("probability_adjustment") or 0.0)
-                blended[head] = float(max(0.01, min(0.99, base_probability)))
-                disagreement[head] = abs(float(d) - float(h))
+                blended[head] = trained_probability[head]
 
         over25 = football_data.get("over_2_5")
-        if over25 is None:
+        trained_probability["over_2_5"] = None if over25 is None else float(max(0.01, min(0.99, float(over25))))
+        disagreement["over_2_5"] = None if over25 is None else 0.0
+        if over25 is None or not analyzer["over_2_5"]["passed"]:
             blended["over_2_5"] = None
-            disagreement["over_2_5"] = None
         else:
-            blended["over_2_5"] = float(max(0.01, min(0.99, float(over25) + float(second_half_analysis.get("probability_adjustment") or 0.0))))
-            disagreement["over_2_5"] = 0.0
+            blended["over_2_5"] = trained_probability["over_2_5"]
 
         btts = football_data.get("both_teams_to_score")
-        if btts is None:
-            blended["both_teams_to_score"] = None
-            disagreement["both_teams_to_score"] = None
-        else:
-            blended["both_teams_to_score"] = float(max(0.01, min(0.99, float(btts) + float(btts_analysis.get("probability_adjustment") or 0.0))))
-            disagreement["both_teams_to_score"] = 0.0
+        trained_probability["both_teams_to_score"] = None if btts is None else float(max(0.01, min(0.99, float(btts))))
+        blended["both_teams_to_score"] = trained_probability["both_teams_to_score"]
+        disagreement["both_teams_to_score"] = None if btts is None else 0.0
 
         return {
             "direct": direct,
             "hazard": hazard,
             "football_data": football_data,
+            "trained_probability": trained_probability,
+            "gool_analyzer": analyzer,
             "first_half_analysis": first_half_analysis,
             "second_half_analysis": second_half_analysis,
             "btts_analysis": btts_analysis,

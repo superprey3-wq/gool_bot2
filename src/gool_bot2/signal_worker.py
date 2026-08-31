@@ -11,7 +11,7 @@ from typing import Any
 from .journal import append_analysis, entry_rows, load_signal_journal, save_signal_journal
 from .local_ensemble import LocalFootballEnsemble
 from .match_context import card_context
-from .signal_cards import render_result_card, render_signal_card
+from .signal_cards import flashscore_meta, render_result_card, render_signal_card, stats_snapshot
 from .signal_policy import combine_gates, exposure_gate, market_state_gate, model_threshold_gate, post_goal_gate, time_gate
 from .telegram import broadcast, broadcast_photo, poll_telegram_updates, send_startup_status, signal_keyboard
 
@@ -84,9 +84,7 @@ def _send_result_cards(rows: list[dict[str, Any]]) -> None:
         away_score = int(settled_score[1] or 0)
         try:
             png = render_result_card(row, result, minute, home_score, away_score)
-            caption = (
-                "✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>"
-            ) + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
+            caption = ("✅ <b>ЗАШЁЛ</b>" if result == "won" else "❌ <b>НЕ ЗАШЁЛ</b>") + f" · {HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
             sent = broadcast_photo(png, caption=caption)
             print(f"result_card={result} deliveries={sent} match={row.get('match_id')}", flush=True)
         except Exception as exc:
@@ -259,6 +257,8 @@ class SignalWorker:
             if not allowed:
                 continue
 
+            fs_meta = flashscore_meta(record)
+            stat_snap = stats_snapshot(record)
             try:
                 png = render_signal_card(record, head, float(probability), model_result, cards)
                 sent = broadcast_photo(
@@ -270,10 +270,7 @@ class SignalWorker:
                 print(f"signal_card_error={type(exc).__name__}:{exc}", flush=True)
                 sent = 0
             if sent == 0:
-                sent = broadcast(
-                    _message(record, head, float(probability), model_result, cards),
-                    reply_markup=signal_keyboard(match_id, head),
-                )
+                sent = broadcast(_message(record, head, float(probability), model_result, cards), reply_markup=signal_keyboard(match_id, head))
 
             journal.append({
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -293,6 +290,8 @@ class SignalWorker:
                 "cards": cards,
                 "prefilter": record.get("prefilter") or {},
                 "provider_count": len(record.get("providers") or {}),
+                "flashscore_meta": fs_meta,
+                "stats_snapshot": stat_snap,
                 "telegram_deliveries": sent,
                 "in_game": False,
                 "result": "pending",

@@ -20,8 +20,9 @@ class LiveSnapshotCollector:
     """Append-only football snapshot collector designed for a small server.
 
     The Flashscore master feed discovers every live match. Detailed Flashscore
-    stats are fetched only inside useful GOOL windows. FotMob/365 enrichment is
-    fetched only for deterministic candidates, keeping request volume bounded.
+    stats are collected from the very start of the match so first-half models
+    have the full 1T history before their signal window opens. FotMob/365
+    enrichment remains candidate-only to keep request volume bounded.
     """
 
     def __init__(
@@ -43,7 +44,9 @@ class LiveSnapshotCollector:
     def _eligible_for_detail(minute: int, is_halftime: bool) -> bool:
         if is_halftime:
             return True
-        return 10 <= minute <= 80
+        # First-half analysis must see the match from kickoff, not only after 10'.
+        # Keep late-match detail bounded because GOOL entry windows are already closed.
+        return 1 <= minute <= 80
 
     def _secondary_due(self, match_id: str, minute: int) -> bool:
         previous = self._last_secondary_minute.get(match_id)

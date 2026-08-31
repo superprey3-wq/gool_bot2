@@ -140,7 +140,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
             subscribe(chat_id)
             if text=="/start": reply=START_TEXT
             elif text in {"📊 отчёт","📊 отчет"}: reply=report_text(journal_path)
-            elif text=="🟢 в игре": reply=in_game_text(journal_path)
+            elif text=="🟢 в игре": reply=in_game_text(journal_path,_analysis_path(journal_path))
             else: reply=analysis_text(_analysis_path(journal_path))
             if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
             continue

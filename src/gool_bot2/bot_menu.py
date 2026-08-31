@@ -43,17 +43,31 @@ def report_text(path):
   lines.append(f"{HEAD_LABELS[head]}: ✅ {w} · ❌ {l} · ⏳ {p} · {_pct(w,l)}{s}")
  lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>На один матч максимум два сигнала.</i>"]
  return "\n".join(lines)
-def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:
- rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path)
- pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending"]
+def _in_game_row(r,states):
+ ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL";v=float(r.get("gool_signal_strength") or r.get("probability") or 0);metric=f"сила <b>{v*100:.0f}/100</b>" if src=="GOOL" else f"P <b>{v*100:.1f}%</b>"
+ return f"{r.get('home','?')} — {r.get('away','?')}{ll}\nсейчас {lm}' · {ls[0]}:{ls[1]} · {src} {metric}\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}"
+def in_game_sections(journal_path:Path,analysis_path:Path|None=None)->list[str]:
+ rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path);pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending"]
  pending.sort(key=lambda r:str(r.get("created_at") or ""),reverse=True)
- if not pending:return "🟢 <b>В ИГРЕ</b>\n\nАктивных и ещё не рассчитанных LIVE-сигналов сейчас нет."
- lines=["🟢 <b>В ИГРЕ</b>",f"Активных сигналов: <b>{len(pending)}</b>","Сигнал остаётся здесь до официального результата.",""]
- for r in pending[:12]:
-  ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL"
-  lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))}{ll}\n{r.get('home','?')} — {r.get('away','?')} · сейчас {lm}' · {ls[0]}:{ls[1]} · {src} <b>{float(r.get('probability') or 0)*100:.1f}%</b>\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}")
- if len(pending)>12:lines += ["",f"Ещё активных: {len(pending)-12}"]
- return "\n\n".join(lines)
+ if not pending:return ["🟢 <b>В ИГРЕ</b>\n\nАктивных и ещё не рассчитанных LIVE-сигналов сейчас нет."]
+ groups=(("another_goal","⚽ <b>ЕЩЁ ГОЛ</b>"),("goal_before_ht","⏱ <b>ГОЛ В 1-М ТАЙМЕ</b>"),("both_teams_to_score","🤝 <b>ОБЕ ЗАБЬЮТ</b>"),("two_more_goals","🔥 <b>ЕЩЁ +2 ГОЛА</b>"),("over_2_5","📈 <b>ТБ 2.5</b>"))
+ messages=[f"🟢 <b>В ИГРЕ</b>\nАктивных сигналов: <b>{len(pending)}</b>\nНиже полный список по стратегиям. Каждый раздел приходит отдельным сообщением — чат можно листать."]
+ for head,title in groups:
+  sel=[r for r in pending if str(r.get("head") or "")==head]
+  if not sel:continue
+  parts=[f"{title} · <b>{len(sel)}</b>"]
+  for i,r in enumerate(sel,1):parts.append(f"<b>{i}.</b> {_in_game_row(r,states)}")
+  # Telegram message text limit is 4096; split long strategy sections safely.
+  chunk=parts[0]
+  for part in parts[1:]:
+   candidate=chunk+"\n\n"+part
+   if len(candidate)>3800:
+    messages.append(chunk);chunk=title+" · продолжение\n\n"+part
+   else:chunk=candidate
+  messages.append(chunk)
+ return messages
+def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:
+ return in_game_sections(journal_path,analysis_path)[0]
 def _short_block(reason):
  mp={"prefilter_rejected":"не прошёл предфильтр","prefilter_not_candidate_but_models_still_run":"предфильтр слабый, но модель считает","model_unavailable":"модель не загрузилась","model_output_missing":"нет выхода модели","halftime_model_only":"HT-модель ждёт перерыв","warmup_until_10":"до 10'","second_half_warmup_until_55":"до 55' во 2Т","first_half_signal_window_closed_25":"окно 1Т закрыто","halftime_model_requires_halftime":"только перерыв","over25_ht_1_0_or_0_1_only":"ТБ2.5 только HT 1:0/0:1","btts_already_won":"ОЗ уже сыграл","btts_live_requires_one_team_already_scored":"GOOL ОЗ ждёт счёт с одной незабившей командой","duplicate_pending_signal":"уже есть сигнал"}
  if reason in mp:return mp[reason]

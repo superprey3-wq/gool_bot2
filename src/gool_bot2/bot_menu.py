@@ -44,7 +44,7 @@ def report_text(path):
  lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>На один матч максимум два сигнала.</i>"]
  return "\n".join(lines)
 def _in_game_row(r,states):
- ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL";v=float(r.get("gool_signal_strength") or r.get("probability") or 0);metric=f"сила <b>{v*100:.0f}/100</b>" if src=="GOOL" else f"P <b>{v*100:.1f}%</b>"
+ ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL";v=float(r.get("gool_signal_strength") or r.get("probability") or 0);metric=f"шанс <b>{v*100:.0f}/100</b>" if src=="GOOL" else f"P <b>{v*100:.1f}%</b>"
  return f"{r.get('home','?')} — {r.get('away','?')}{ll}\nсейчас {lm}' · {ls[0]}:{ls[1]} · {src} {metric}\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}"
 def in_game_sections(journal_path:Path,analysis_path:Path|None=None)->list[str]:
  rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path);pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending"]
@@ -57,7 +57,6 @@ def in_game_sections(journal_path:Path,analysis_path:Path|None=None)->list[str]:
   if not sel:continue
   parts=[f"{title} · <b>{len(sel)}</b>"]
   for i,r in enumerate(sel,1):parts.append(f"<b>{i}.</b> {_in_game_row(r,states)}")
-  # Telegram message text limit is 4096; split long strategy sections safely.
   chunk=parts[0]
   for part in parts[1:]:
    candidate=chunk+"\n\n"+part
@@ -98,6 +97,6 @@ def analysis_text(path):
  if top:
   lines += ["","<b>Самые близкие к входу:</b>"]
   for r in top:
-   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "нет блоков";v=float(r.get("probability") or r.get("gool_confidence") or 0);tag="GOOL" if r.get("gool_live_analysis") else "P"
-   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' · {s[0]}:{s[1]} · {tag} <b>{v*100:.1f}%</b>\n↳ {bt}")
+   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "нет блоков";v=float(r.get("probability") or r.get("gool_confidence") or 0);is_gool=bool(r.get("gool_live_analysis"));tag="ШАНС" if is_gool else "P";value=f"{v*100:.0f}/100" if is_gool else f"{v*100:.1f}%"
+   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' · {s[0]}:{s[1]} · {tag} <b>{value}</b>\n↳ {bt}")
  return "\n\n".join(lines)

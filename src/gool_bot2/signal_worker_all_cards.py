@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from . import signal_worker_all as base
-from .gool_live_cards import render_two_more_result_card, render_two_more_signal_card
+from .gool_live_cards import render_gool_live_result_card, render_gool_live_signal_card
 from .journal import append_analysis, save_signal_journal
-from .signal_cards import flashscore_meta, render_signal_card, stats_snapshot
+from .signal_cards import flashscore_meta, stats_snapshot
 from .signal_policy import exposure_gate, post_goal_gate
 from .telegram import broadcast, broadcast_photo, signal_keyboard
 
@@ -20,7 +20,7 @@ def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
         caption = f"{icon} <b>{'ЗАШЁЛ' if result == 'won' else 'НЕ ЗАШЁЛ'}</b> · ЕЩЁ +2 ГОЛА"
         sent = 0
         try:
-            png = render_two_more_result_card(row, result)
+            png = render_gool_live_result_card(row, result)
             sent = broadcast_photo(png, caption=caption)
         except Exception as exc:
             print(f"gool_two_more_result_card_error={type(exc).__name__}:{exc}", flush=True)
@@ -101,10 +101,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         sent = 0
 
         try:
-            if head == "two_more_goals":
-                png = render_two_more_signal_card(record, confidence, pressure, cards)
-            else:
-                png = render_signal_card(record, head, confidence, model_result, cards)
+            png = render_gool_live_signal_card(record, head, confidence, pressure, cards)
             sent = broadcast_photo(
                 png,
                 caption=f"🔥 <b>{label}</b> · GOOL LIVE pressure {pressure:.2f}",
@@ -148,7 +145,8 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         return int(sent > 0)
 
 
-# Patch the module globals used by the inherited _process() and main().
+# The trained systems already use the standard signal/result image cards.
+# Patch the two independent GOOL LIVE systems so all active strategies use photos.
 base.AllMatchSignalWorker = CardAllMatchSignalWorker
 base._send_two_more_results = _send_two_more_results
 

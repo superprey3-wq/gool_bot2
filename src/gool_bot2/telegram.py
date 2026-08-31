@@ -4,6 +4,7 @@ import json
 import os
 import re
 import uuid
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable
@@ -12,7 +13,8 @@ from urllib.request import Request, urlopen
 from PIL import Image
 
 from .bot_menu import MENU_KEYBOARD, analysis_text, in_game_sections, report_text
-from .journal import mark_in_game
+from .journal import load_signal_journal, mark_in_game, save_signal_journal
+from .providers.flashscore import FlashscoreProvider
 
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
@@ -129,6 +131,52 @@ def answer_callback_query(callback_query_id:str,text:str="")->bool:
  r=_api_call("answerCallbackQuery",payload);return bool(r and r.get("ok"))
 def _analysis_path(journal_path:Path)->Path:
  explicit=os.getenv("SIGNAL_ANALYSIS_PATH","").strip();return Path(explicit) if explicit else journal_path.with_name("gool_bot2_analysis.jsonl")
+
+def _settle_minute_from_timeline(timeline:list[dict[str,Any]],entry_total:int,target_total:int)->int|None:
+ for goal in sorted(timeline,key=lambda g:int(g.get("minute") or 0)):
+  score=goal.get("score") or []
+  try:total=int(score[0] or 0)+int(score[1] or 0)
+  except Exception:continue
+  if total>=target_total and total>entry_total:
+   try:return int(goal.get("minute") or 0)
+   except Exception:return None
+ return None
+
+def _force_reconcile_pending(journal_path:Path)->int:
+ """On menu refresh, ask Flashscore directly about every active pending match."""
+ rows=load_signal_journal(journal_path)
+ pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending" and str(r.get("head") or "") in {"another_goal","two_more_goals"}]
+ ids={str(r.get("match_id") or "") for r in pending if str(r.get("match_id") or "")}
+ if not ids:return 0
+ try:
+  provider=FlashscoreProvider();states=provider.event_states(ids)
+ except Exception as exc:
+  print(f"force_reconcile_state_error={type(exc).__name__}:{exc}",flush=True);return 0
+ changed=0;timelines:dict[str,list[dict[str,Any]]]={}
+ now=datetime.now(timezone.utc).isoformat()
+ for row in pending:
+  mid=str(row.get("match_id") or "");state=states.get(mid) or {}
+  if not bool(state.get("is_finished")):continue
+  final_home=int(state.get("home_score") or 0);final_away=int(state.get("away_score") or 0);final_total=final_home+final_away
+  entry=row.get("score") or [0,0]
+  try:entry_total=int(entry[0] or 0)+int(entry[1] or 0)
+  except Exception:entry_total=0
+  head=str(row.get("head") or "")
+  target=entry_total+1 if head=="another_goal" else entry_total+2
+  won=final_total>=target
+  if won:
+   if mid not in timelines:
+    try:timelines[mid]=provider.fetch_goal_timeline(mid)
+    except Exception:timelines[mid]=[]
+   settled_minute=_settle_minute_from_timeline(timelines[mid],entry_total,target) or 90
+  else:settled_minute=90
+  row.update({"result":"won" if won else "lost","settled_at":now,"settled_minute":settled_minute,"settled_score":[final_home,final_away],"settled_via":"telegram_force_reconcile"})
+  row.pop("terminal_seen_score",None);row.pop("terminal_seen_count",None);changed+=1
+ if changed:
+  save_signal_journal(journal_path,rows)
+  print(f"force_reconcile_pending closed={changed} checked={len(ids)}",flush=True)
+ return changed
+
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
  result=_api_call("getUpdates",{"offset":offset,"timeout":timeout,"allowed_updates":["message","callback_query"]},timeout=max(5,timeout+5))
  if not result or not result.get("ok"):return offset,0
@@ -144,9 +192,9 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    if text=="/start":
     replies=[START_TEXT]
    elif text in {"📊 отчёт","📊 отчет"}:
-    replies=[report_text(journal_path)]
+    _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
-    replies=in_game_sections(journal_path,_analysis_path(journal_path))
+    _force_reconcile_pending(journal_path);replies=in_game_sections(journal_path,_analysis_path(journal_path))
    else:
     replies=[analysis_text(_analysis_path(journal_path))]
    for reply in replies:

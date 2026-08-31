@@ -19,10 +19,9 @@ from .providers.scores365 import Scores365Provider
 class LiveSnapshotCollector:
     """Append-only football snapshot collector designed for a small server.
 
-    The Flashscore master feed discovers every live match. Detailed Flashscore
-    stats are collected from the very start of the match so first-half models
-    have the full 1T history before their signal window opens. FotMob/365
-    enrichment remains candidate-only to keep request volume bounded.
+    Flashscore discovers every live match. Detailed Flashscore stats and the goal
+    timeline are kept through 90' so settlement can reconcile a late goal even
+    when the coarse master score is one update behind.
     """
 
     def __init__(
@@ -44,9 +43,9 @@ class LiveSnapshotCollector:
     def _eligible_for_detail(minute: int, is_halftime: bool) -> bool:
         if is_halftime:
             return True
-        # First-half analysis must see the match from kickoff, not only after 10'.
-        # Keep late-match detail bounded because GOOL entry windows are already closed.
-        return 1 <= minute <= 80
+        # First-half analysis needs data from kickoff. Full-time settlement also
+        # needs the goal timeline through 90' to catch late score updates.
+        return 1 <= minute <= 90
 
     def _secondary_due(self, match_id: str, minute: int) -> bool:
         previous = self._last_secondary_minute.get(match_id)
@@ -126,9 +125,6 @@ class LiveSnapshotCollector:
                         "reasons": list(pref.reasons),
                     }
 
-                    # Signal cards use the real team crests from Flashscore. The
-                    # lookup is cached per team, so after the first occurrence it
-                    # adds no extra page request for that club in this process.
                     if pref.candidate or match.is_halftime:
                         self._attach_flashscore_assets(record, match.meta)
 

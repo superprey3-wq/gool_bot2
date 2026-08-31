@@ -8,18 +8,26 @@ from PIL import Image, ImageDraw
 from . import signal_cards as sc
 
 
+LIVE_THEMES = {
+    "two_more_goals": ((255, 184, 48), "ЕЩЁ +2 ГОЛА", "Ещё минимум два гола"),
+    "both_teams_to_score": ((190, 83, 255), "ОБЕ ЗАБЬЮТ — ДА", "Незабившая команда забьёт"),
+}
+
+
 def _save(img: Image.Image) -> bytes:
     out = BytesIO()
     img.convert("RGB").save(out, "PNG", optimize=True)
     return out.getvalue()
 
 
-def render_two_more_signal_card(
+def render_gool_live_signal_card(
     record: dict[str, Any],
+    head: str,
     confidence: float,
     pressure: float,
     cards: dict[str, Any],
 ) -> bytes:
+    accent, label, subtitle = LIVE_THEMES.get(head, LIVE_THEMES["two_more_goals"])
     match = record.get("match") or {}
     meta = sc.flashscore_meta(record)
     stats = sc.stats_snapshot(record)
@@ -35,9 +43,7 @@ def render_two_more_signal_card(
     providers = len(record.get("providers") or {})
     momentum = record.get("live_momentum") or {}
 
-    accent = (255, 184, 48)
-    width, height = 1080, 1180
-    img = Image.new("RGBA", (width, height), sc.BG + (255,))
+    img = Image.new("RGBA", (1080, 1180), sc.BG + (255,))
     draw = ImageDraw.Draw(img)
 
     draw.rounded_rectangle((24, 20, 1056, 112), 24, fill=sc.PANEL, outline=accent, width=2)
@@ -46,7 +52,7 @@ def render_two_more_signal_card(
     draw.rounded_rectangle((830, 38, 1028, 93), 16, outline=accent, width=2)
     draw.text((876, 53), "LIVE", font=sc._font(20, True), fill=accent)
 
-    sc._center(draw, "ЕЩЁ +2 ГОЛА", 142, sc._font(38, True), accent)
+    sc._center(draw, label, 142, sc._fit(draw, label, 850, 38, True), accent)
     sc._center(draw, league, 194, sc._fit(draw, league, 900, 19, False), sc.MUTED)
 
     sc._badge(img, draw, 180, 330, sc._logo(meta, "home"), home, accent)
@@ -62,7 +68,7 @@ def render_two_more_signal_card(
 
     draw.rounded_rectangle((55, 500, 1025, 655), 25, fill=sc.PANEL2, outline=accent, width=2)
     draw.text((85, 525), "НЕЗАВИСИМЫЙ GOOL LIVE АНАЛИЗ", font=sc._font(18, True), fill=sc.MUTED)
-    draw.text((85, 565), "Ещё минимум два гола", font=sc._font(29, True), fill=sc.TEXT)
+    draw.text((85, 565), subtitle, font=sc._fit(draw, subtitle, 610, 29, True), fill=sc.TEXT)
     draw.text((780, 520), "CONFIDENCE", font=sc._font(13, True), fill=sc.MUTED)
     draw.text((792, 555), f"{confidence * 100:.0f}%", font=sc._font(40, True), fill=accent)
 
@@ -90,7 +96,13 @@ def render_two_more_signal_card(
     return _save(img)
 
 
-def render_two_more_result_card(row: dict[str, Any], result: str) -> bytes:
+def render_two_more_signal_card(record: dict[str, Any], confidence: float, pressure: float, cards: dict[str, Any]) -> bytes:
+    return render_gool_live_signal_card(record, "two_more_goals", confidence, pressure, cards)
+
+
+def render_gool_live_result_card(row: dict[str, Any], result: str) -> bytes:
+    head = str(row.get("head") or "two_more_goals")
+    _, label, _ = LIVE_THEMES.get(head, LIVE_THEMES["two_more_goals"])
     won = str(result).lower() == "won"
     accent = (82, 220, 118) if won else sc.RED
     score = row.get("settled_score") or [0, 0]
@@ -104,11 +116,15 @@ def render_two_more_result_card(row: dict[str, Any], result: str) -> bytes:
     draw.rounded_rectangle((24, 20, 1056, 112), 24, fill=sc.PANEL, outline=accent, width=2)
     draw.text((52, 36), "GOOL 2", font=sc._font(36, True), fill=accent)
     draw.text((52, 78), "GOOL LIVE RESULT", font=sc._font(15, True), fill=sc.TEXT)
-    sc._center(draw, "ЕЩЁ +2 ГОЛА", 150, sc._font(38, True), accent)
+    sc._center(draw, label, 150, sc._fit(draw, label, 850, 38, True), accent)
     sc._center(draw, f"{home} — {away}", 220, sc._fit(draw, f"{home} — {away}", 900, 30, True), sc.TEXT)
     sc._center(draw, f"{int(score[0] or 0)} : {int(score[1] or 0)}", 300, sc._font(68, True), sc.TEXT)
     sc._center(draw, f"{minute}'", 385, sc._font(28, True), accent)
     draw.rounded_rectangle((80, 455, 1000, 620), 28, fill=sc.PANEL2, outline=accent, width=3)
     sc._center(draw, "✓ СИГНАЛ ЗАШЁЛ" if won else "✕ СИГНАЛ НЕ ЗАШЁЛ", 495, sc._font(40, True), accent)
-    sc._center(draw, f"ЕЩЁ +2 ГОЛА • confidence {confidence * 100:.0f}%", 555, sc._font(22, True), sc.TEXT)
+    sc._center(draw, f"{label} • confidence {confidence * 100:.0f}%", 555, sc._fit(draw, f"{label} • confidence {confidence * 100:.0f}%", 850, 22, True), sc.TEXT)
     return _save(img)
+
+
+def render_two_more_result_card(row: dict[str, Any], result: str) -> bytes:
+    return render_gool_live_result_card(row, result)

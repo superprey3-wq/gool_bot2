@@ -41,10 +41,10 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
         if minute > limit:
             reasons.append(f"entry_window_closed_{limit}")
     elif head == "goal_before_ht":
+        # GOOL first-half strategy: analyse from kickoff and allow a 0:0 signal
+        # anywhere from 0' through 25'. Live data is collected from the start.
         if is_halftime or minute > 25:
             reasons.append("first_half_signal_window_closed_25")
-        elif minute < 15:
-            reasons.append("collecting_until_15")
     elif head in {"over_2_5", "both_teams_to_score"}:
         if not is_halftime:
             reasons.append("halftime_model_requires_halftime")
@@ -54,16 +54,17 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
 
 
 def market_state_gate(head: str, home_score: int, away_score: int) -> GateResult:
-    """Reject only markets that are already won or outside their intended live state."""
+    """Apply the intended score state for each market."""
     home_score = int(home_score or 0)
     away_score = int(away_score or 0)
-    total = home_score + away_score
     reasons: list[str] = []
 
     if head == "goal_before_ht" and (home_score != 0 or away_score != 0):
         reasons.append("first_half_zero_zero_only")
-    elif head == "over_2_5" and total >= 3:
-        reasons.append("over25_already_won")
+    elif head == "over_2_5" and (home_score, away_score) not in {(1, 0), (0, 1)}:
+        # O2.5 is intentionally only a HT 1:0 / 0:1 setup: the prediction
+        # requires two more goals after the break instead of a low-price one-goal continuation.
+        reasons.append("over25_ht_1_0_or_0_1_only")
     elif head == "both_teams_to_score" and home_score > 0 and away_score > 0:
         reasons.append("btts_already_won")
 

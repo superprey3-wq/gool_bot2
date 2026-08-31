@@ -17,14 +17,13 @@ from .journal import mark_in_game
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
-    "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные системы:\n"
-    "⚽ Ещё гол — при любом текущем счёте\n"
-    "⏱ Гол до перерыва — 0–25' при любом счёте + GOOL pressure\n"
-    "📈 ТБ 2.5 — обученная HT-модель\n"
-    "🤝 Обе забьют — HT-модель + GOOL LIVE до 75'\n"
-    "🔥 Ещё +2 гола — GOOL LIVE при любом счёте до 75'\n\n"
-    "Модели: 3/3 загружены.\nLIVE-сигналы приходят автоматически."
+    "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"
+    "⚽ Ещё гол — обученная модель до 75'\n"
+    "🔥 Ещё +2 гола — GOOL LIVE до 75'\n\n"
+    "LIVE-сигналы приходят автоматически.\n"
+    "Чтобы отключить сигналы: /stop"
 )
+STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 2.\nЧтобы включить их снова: /start"
 
 def _token()->str:
  token=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
@@ -47,14 +46,25 @@ def _read_saved()->set[str]:
  except Exception:return set()
 def _write_saved(chat_ids:Iterable[str])->None:
  p=subscribers_file();p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(sorted(set(map(str,chat_ids))),ensure_ascii=False,indent=2),"utf-8")
+def _stopped_file()->Path:
+ p=subscribers_file();return p.with_name(p.stem+"_stopped.json")
+def _read_stopped()->set[str]:
+ p=_stopped_file()
+ if not p.exists():return set()
+ try:
+  rows=json.loads(p.read_text("utf-8"));return {str(x).strip() for x in rows if str(x).strip()} if isinstance(rows,list) else set()
+ except Exception:return set()
+def _write_stopped(chat_ids:Iterable[str])->None:
+ p=_stopped_file();p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(sorted(set(map(str,chat_ids))),ensure_ascii=False,indent=2),"utf-8")
 def get_subscribers()->list[str]:
  rows=_read_saved()|_extra_chat_ids();owner=_owner_chat_id()
  if owner:rows.add(owner)
+ rows-=_read_stopped()
  return sorted(rows)
 def subscribe(chat_id:str|int)->bool:
- chat_id=str(chat_id).strip();rows=_read_saved();before=len(rows);rows.add(chat_id);_write_saved(rows);return len(rows)>before
+ chat_id=str(chat_id).strip();rows=_read_saved();before=len(rows);rows.add(chat_id);_write_saved(rows);stopped=_read_stopped();was_stopped=chat_id in stopped;stopped.discard(chat_id);_write_stopped(stopped);return len(rows)>before or was_stopped
 def unsubscribe(chat_id:str|int)->bool:
- chat_id=str(chat_id).strip();rows=_read_saved();existed=chat_id in rows;rows.discard(chat_id);_write_saved(rows);return existed
+ chat_id=str(chat_id).strip();rows=_read_saved();existed=chat_id in rows;rows.discard(chat_id);_write_saved(rows);stopped=_read_stopped();already=chat_id in stopped;stopped.add(chat_id);_write_stopped(stopped);return existed or not already
 def _api_call(method:str,payload:dict[str,Any],timeout:int=15)->dict[str,Any]|None:
  token=_token()
  if not token:return None
@@ -110,7 +120,7 @@ def broadcast_photo(png:bytes,caption:str="",reply_markup:dict[str,Any]|None=Non
  if sent==0 and caption.startswith(("✅ <b>ЗАШЁЛ","❌ <b>НЕ ЗАШЁЛ")):
   return broadcast(caption)
  return sent
-def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nМодели: 3/3 ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅",reply_markup=MENU_KEYBOARD)
+def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nАктивные стратегии: Ещё гол + Ещё +2 гола ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅",reply_markup=MENU_KEYBOARD)
 def edit_message_reply_markup(chat_id:str|int,message_id:int,reply_markup:dict[str,Any])->bool:
  r=_api_call("editMessageReplyMarkup",{"chat_id":str(chat_id),"message_id":int(message_id),"reply_markup":reply_markup});return bool(r and r.get("ok"))
 def answer_callback_query(callback_query_id:str,text:str="")->bool:
@@ -125,8 +135,12 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
  changed=0;next_offset=offset
  for update in result.get("result") or []:
   next_offset=max(next_offset,int(update.get("update_id") or 0)+1);message=update.get("message") or {};raw_text=str(message.get("text") or "").strip();text=raw_text.split("@",1)[0].lower();chat_id=(message.get("chat") or {}).get("id")
+  if chat_id is not None and text=="/stop":
+   unsubscribe(chat_id)
+   if send_message(chat_id,STOP_TEXT):changed+=1
+   continue
   if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ"}:
-   subscribe(chat_id)
+   if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
    elif text in {"📊 отчёт","📊 отчет"}:

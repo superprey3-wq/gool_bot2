@@ -105,12 +105,6 @@ class FlashscoreProvider:
     @staticmethod
     @lru_cache(maxsize=1024)
     def team_logo_url(team_slug: str, team_id: str) -> str | None:
-        """Best-effort lookup of the real Flashscore crest URL for one team.
-
-        JA/JB from the master feed are the participant ids and WU/WV are slugs.
-        Flashscore team pages embed the CDN image path. We cache the lookup so a
-        team crest is normally fetched only once per process.
-        """
         slug = str(team_slug or "").strip().strip("/")
         team_id = str(team_id or "").strip()
         if not slug or not team_id:
@@ -158,34 +152,30 @@ class FlashscoreProvider:
             if not home or not away:
                 continue
             minute, is_ht = _minute(f, now)
-            home_id = (f.get("JA") or "").strip()
-            away_id = (f.get("JB") or "").strip()
-            home_slug = (f.get("WU") or "").strip()
-            away_slug = (f.get("WV") or "").strip()
             meta = {
                 "status_code": f.get("AC", ""),
-                "home_team_id": home_id,
-                "away_team_id": away_id,
-                "home_team_slug": home_slug,
-                "away_team_slug": away_slug,
+                "home_team_id": (f.get("JA") or "").strip(),
+                "away_team_id": (f.get("JB") or "").strip(),
+                "home_team_slug": (f.get("WU") or "").strip(),
+                "away_team_slug": (f.get("WV") or "").strip(),
                 "home_short": (f.get("WM") or "").strip(),
                 "away_short": (f.get("WN") or "").strip(),
                 "round": (f.get("ER") or "").strip(),
+                "home_logo_file": (f.get("OA") or "").strip(),
+                "away_logo_file": (f.get("OB") or "").strip(),
             }
-            matches.append(
-                ProviderMatch(
-                    provider=self.name,
-                    provider_match_id=event_id,
-                    home=home,
-                    away=away,
-                    minute=minute,
-                    home_score=_as_int(f.get("AG"), _as_int(f.get("AT"))),
-                    away_score=_as_int(f.get("AH"), _as_int(f.get("AU"))),
-                    league=league,
-                    is_halftime=is_ht,
-                    meta=meta,
-                )
-            )
+            matches.append(ProviderMatch(
+                provider=self.name,
+                provider_match_id=event_id,
+                home=home,
+                away=away,
+                minute=minute,
+                home_score=_as_int(f.get("AG"), _as_int(f.get("AT"))),
+                away_score=_as_int(f.get("AH"), _as_int(f.get("AU"))),
+                league=league,
+                is_halftime=is_ht,
+                meta=meta,
+            ))
         return list({m.provider_match_id: m for m in matches}.values())
 
     def live_matches(self) -> list[ProviderMatch]:

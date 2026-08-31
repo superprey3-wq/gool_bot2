@@ -69,8 +69,8 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             )
 
         # GOOL LIVE confidence is a heuristic signal-strength score, not a calibrated
-        # probability. Only strong situations are allowed to reach Telegram.
-        min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.75"))
+        # probability. Only sufficiently strong situations are allowed to Telegram.
+        min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.70"))
         if confidence < min_strength:
             reasons.append(f"gool_strength={confidence:.3f}<{min_strength:.3f}")
 

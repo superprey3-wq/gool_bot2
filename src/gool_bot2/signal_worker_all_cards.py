@@ -13,6 +13,60 @@ from .signal_policy import exposure_gate, post_goal_gate
 from .telegram import broadcast, broadcast_photo, signal_keyboard
 
 
+_LAST_TWO_MORE: dict[str, dict[str, Any]] = {}
+_LAST_BTTS_LIVE: dict[str, dict[str, Any]] = {}
+_ORIG_TWO_MORE = base.analyze_two_more_goals
+_ORIG_BTTS_LIVE = base.analyze_live_btts
+
+
+def _match_id(record: dict[str, Any]) -> str:
+    return str(((record.get("match") or {}).get("flashscore_event_id") or ""))
+
+
+def _capture_two_more(record: dict[str, Any]) -> dict[str, Any]:
+    result = _ORIG_TWO_MORE(record)
+    mid = _match_id(record)
+    if mid:
+        _LAST_TWO_MORE[mid] = dict(result or {})
+    return result
+
+
+def _capture_btts_live(record: dict[str, Any]) -> dict[str, Any]:
+    result = _ORIG_BTTS_LIVE(record)
+    mid = _match_id(record)
+    if mid:
+        _LAST_BTTS_LIVE[mid] = dict(result or {})
+    return result
+
+
+def _pct(value: Any) -> str:
+    try:
+        return f"{float(value) * 100:.1f}%"
+    except Exception:
+        return "n/a"
+
+
+def _live_status(analyzer: dict[str, Any] | None, min_strength: float) -> str:
+    analyzer = analyzer or {}
+    pressure = analyzer.get("pressure_score")
+    strength = analyzer.get("confidence_score")
+    passed = bool(analyzer.get("passed"))
+    if strength is None:
+        return "WAIT"
+    try:
+        strength_f = float(strength)
+    except Exception:
+        return "WAIT"
+    pressure_text = "n/a" if pressure is None else f"{float(pressure):.2f}"
+    if not passed:
+        state = "BLOCK_PRESSURE"
+    elif strength_f < min_strength:
+        state = f"BLOCK_STRENGTH<{min_strength * 100:.0f}"
+    else:
+        state = "READY"
+    return f"{state} pressure={pressure_text} strength={strength_f * 100:.0f}/100"
+
+
 def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
     for row in rows:
         result = str(row.get("result") or "lost")
@@ -34,7 +88,74 @@ def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
 
 
 class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
-    """Same all-match engine, with photo cards for every GOOL LIVE signal."""
+    """All-match engine with cards and readable status for every active strategy."""
+
+    def __init__(self, journal_path: Path, max_disagreement: float = 0.20, analysis_path: Path | None = None) -> None:
+        super().__init__(journal_path, max_disagreement=max_disagreement, analysis_path=analysis_path)
+        self._diag_model_result: dict[str, Any] = {}
+        self._diag_predict_wrapped = False
+
+    def _ensure_model(self) -> bool:
+        ok = super()._ensure_model()
+        if not ok or self.model is None or self._diag_predict_wrapped:
+            return ok
+        original_predict = self.model.predict
+
+        def predict_with_capture(record: dict[str, Any]) -> dict[str, Any]:
+            result = original_predict(record)
+            self._diag_model_result = dict(result or {})
+            return result
+
+        self.model.predict = predict_with_capture
+        self._diag_predict_wrapped = True
+        return ok
+
+    def _print_system_status(self, record: dict[str, Any]) -> None:
+        match = record.get("match") or {}
+        mid = _match_id(record)
+        minute = int(match.get("minute") or 0)
+        is_ht = bool(match.get("is_halftime"))
+        score = f"{int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)}"
+        trained = (self._diag_model_result.get("trained_probability") or {})
+        blended = (self._diag_model_result.get("blended") or {})
+
+        another = blended.get("another_goal")
+        if another is None:
+            another = trained.get("another_goal")
+        goal1t = blended.get("goal_before_ht")
+        if goal1t is None:
+            goal1t = trained.get("goal_before_ht")
+        over25 = trained.get("over_2_5")
+        btts_ht = trained.get("both_teams_to_score")
+
+        if 0 < minute <= 25 and score == "0:0":
+            goal1t_state = f"ACTIVE {_pct(goal1t)}" if goal1t is not None else "ACTIVE n/a"
+        else:
+            goal1t_state = "WAIT_WINDOW"
+        over25_state = f"ACTIVE {_pct(over25)}" if is_ht and over25 is not None else ("HT_WAIT" if not is_ht else "ACTIVE n/a")
+        btts_ht_state = f"ACTIVE {_pct(btts_ht)}" if is_ht and btts_ht is not None else ("HT_WAIT" if not is_ht else "ACTIVE n/a")
+
+        min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.70"))
+        two_more_state = _live_status(_LAST_TWO_MORE.get(mid), min_strength)
+        btts_live_state = _live_status(_LAST_BTTS_LIVE.get(mid), min_strength)
+
+        print(
+            f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} "
+            f"stage={'HT' if is_ht else minute} score={score} | "
+            f"ANOTHER_GOAL={'ACTIVE ' + _pct(another) if another is not None else 'WAIT'} | "
+            f"GOAL_1T={goal1t_state} | OVER2.5_HT={over25_state} | BTTS_HT={btts_ht_state} | "
+            f"BTTS_LIVE={btts_live_state} | PLUS2_LIVE={two_more_state}",
+            flush=True,
+        )
+
+    def _process(self, record: dict[str, Any]) -> int:
+        self._diag_model_result = {}
+        emitted = super()._process(record)
+        match = record.get("match") or {}
+        minute = int(match.get("minute") or 0)
+        if not bool(match.get("is_finished")) and (bool(match.get("is_halftime")) or 0 < minute <= 75):
+            self._print_system_status(record)
+        return emitted
 
     def _emit_gool_live_signal(
         self,
@@ -68,8 +189,6 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
                 f"{float(analyzer.get('minimum') or 0):.2f}"
             )
 
-        # GOOL LIVE confidence is a heuristic signal-strength score, not a calibrated
-        # probability. Only sufficiently strong situations are allowed to Telegram.
         min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.70"))
         if confidence < min_strength:
             reasons.append(f"gool_strength={confidence:.3f}<{min_strength:.3f}")
@@ -155,8 +274,10 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         return int(sent > 0)
 
 
-# The trained systems already use the standard signal/result image cards.
-# Patch the two independent GOOL LIVE systems so all active strategies use photos.
+# Capture independent GOOL analyzers so the console can show their actual status.
+base.analyze_two_more_goals = _capture_two_more
+base.analyze_live_btts = _capture_btts_live
+# The trained systems already use standard signal/result cards.
 base.AllMatchSignalWorker = CardAllMatchSignalWorker
 base._send_two_more_results = _send_two_more_results
 

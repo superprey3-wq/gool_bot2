@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .journal import append_analysis, entry_rows, load_signal_journal, save_signal_journal
+from .journal import append_analysis, load_signal_journal, save_signal_journal
 from .match_context import card_context
 from .signal_cards import flashscore_meta, render_signal_card, stats_snapshot
 from .signal_policy import combine_gates, exposure_gate, market_state_gate, model_threshold_gate, post_goal_gate, time_gate
@@ -92,7 +92,6 @@ class AllMatchSignalWorker(SignalWorker):
         model_result = self.model.predict(record)
         cards = card_context(record)
         emitted = 0
-        entered = entry_rows(journal)
         home_score, away_score = _reconciled_score(record)
 
         for head in HEAD_LABELS:
@@ -131,14 +130,14 @@ class AllMatchSignalWorker(SignalWorker):
             probability = float(trained_probability if probability is None else probability)
             cooldown = int(os.getenv("LIVE_COOLDOWN_MINUTES", "12")) if head == "another_goal" else (0 if head in {"over_2_5", "both_teams_to_score"} else 5)
 
-            # Hard portfolio rule requested by the owner: at most TWO entries total
-            # for one match, irrespective of strategy. Two simultaneous pending
-            # signals are allowed; a third entry can never be created.
+            # Hard portfolio rule: at most TWO emitted signals total for one match,
+            # irrespective of strategy or whether the user pressed "В игре".
+            # Two simultaneous pending signals are allowed; a third is impossible.
             gates = combine_gates(
                 time_gate(head, minute, is_halftime=is_halftime, is_reentry=False),
                 market_state_gate(head, home_score, away_score),
                 post_goal_gate(minute, _last_goal_minute(record), cooldown_minutes=cooldown),
-                exposure_gate(match_id, entered, max_entries=2, max_open=2),
+                exposure_gate(match_id, journal, max_entries=2, max_open=2),
                 model_threshold_gate(head, probability, probability * 100.0),
             )
             reasons = list(gates.reasons)
@@ -207,7 +206,6 @@ class AllMatchSignalWorker(SignalWorker):
                 "in_game": False,
             })
             save_signal_journal(self.journal_path, journal)
-            entered = entry_rows(journal)
             emitted += int(sent > 0)
 
         return emitted

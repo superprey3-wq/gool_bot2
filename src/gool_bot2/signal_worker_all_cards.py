@@ -16,6 +16,7 @@ from .telegram import broadcast, broadcast_photo, signal_keyboard
 
 _LAST_TWO_MORE: dict[str, dict[str, Any]] = {}
 _ORIG_TWO_MORE = base.analyze_two_more_goals
+_ORIG_SETTLE_PENDING = base._settle_pending
 
 
 def _match_id(record: dict[str, Any]) -> str:
@@ -32,6 +33,49 @@ def _capture_two_more(record: dict[str, Any]) -> dict[str, Any]:
 
 def _disabled_btts(record: dict[str, Any]) -> dict[str, Any]:
     return {"passed": False, "pressure_score": None, "minimum": None, "confidence_score": None, "disabled": True}
+
+
+def _settle_pending_finished(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Settle stale pending model signals as soon as Flashscore marks a match FINISHED.
+
+    The legacy 90' two-snapshot fallback can leave rows pending because its
+    intermediate terminal counter is not persisted unless a settlement happens.
+    FINISHED is authoritative, so use it to close any remaining model signal.
+    """
+    settled = _ORIG_SETTLE_PENDING(record, journal)
+    match = record.get("match") or {}
+    if not bool(match.get("is_finished")):
+        return settled
+    match_id = str(match.get("flashscore_event_id") or "")
+    if not match_id:
+        return settled
+    minute = int(match.get("minute") or 90)
+    home_score, away_score = base._reconciled_score(record)
+    already = {(str(r.get("match_id") or ""), str(r.get("head") or ""), int(r.get("minute") or 0)) for r in settled}
+    for row in journal:
+        if str(row.get("match_id") or "") != match_id:
+            continue
+        if str(row.get("result") or "pending").lower() != "pending":
+            continue
+        head = str(row.get("head") or "")
+        if head == "two_more_goals":
+            continue
+        signal_score = row.get("score") or [0, 0]
+        result = "won" if base._is_won(head, signal_score, minute, home_score, away_score) else "lost"
+        row.update({
+            "result": result,
+            "settled_at": datetime.now(timezone.utc).isoformat(),
+            "settled_minute": minute,
+            "settled_score": [home_score, away_score],
+            "settlement_source": "flashscore_finished_reconcile",
+        })
+        row.pop("terminal_seen_score", None)
+        row.pop("terminal_seen_count", None)
+        key = (match_id, head, int(row.get("minute") or 0))
+        if key not in already:
+            settled.append(dict(row))
+            already.add(key)
+    return settled
 
 
 def _pct(value: Any) -> str:
@@ -82,8 +126,6 @@ def _minute_aware_goal_timing(match: dict[str, Any], probability: float, model_r
     except Exception:
         return None, None
 
-    # Remaining-time factor is deliberately explicit. At 10' it is 35/45;
-    # at 40' it is only 5/45, so late first-half signals shift strongly to 2T.
     remaining_1t = max(0.0, 45.0 - float(minute))
     time_factor = remaining_1t / 45.0
     first_mass = max(0.0, min(p_any, p_ht)) * time_factor
@@ -108,11 +150,7 @@ def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
         except Exception as exc:
             print(f"gool_two_more_result_card_error={type(exc).__name__}:{exc}", flush=True)
         if sent == 0:
-            broadcast(
-                caption
-                + f"\n{row.get('home','?')} — {row.get('away','?')} · "
-                + f"{int(row.get('settled_minute') or 0)}' · {int(score[0] or 0)}:{int(score[1] or 0)}"
-            )
+            broadcast(caption + f"\n{row.get('home','?')} — {row.get('away','?')} · {int(row.get('settled_minute') or 0)}' · {int(score[0] or 0)}:{int(score[1] or 0)}")
 
 
 class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
@@ -178,7 +216,6 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         model_result: dict[str, Any],
         cards: dict[str, Any],
     ) -> int:
-        # Only +2 is an enabled GOOL LIVE output now.
         if head != "two_more_goals":
             return 0
         match = record.get("match") or {}
@@ -192,10 +229,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         if minute > 75:
             reasons.append("entry_window_closed_75")
         if not bool(analyzer.get("passed")):
-            reasons.append(
-                f"gool_pressure={float(analyzer.get('pressure_score') or 0):.2f}<"
-                f"{float(analyzer.get('minimum') or 0):.2f}"
-            )
+            reasons.append(f"gool_pressure={float(analyzer.get('pressure_score') or 0):.2f}<{float(analyzer.get('minimum') or 0):.2f}")
         min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.70"))
         if confidence < min_strength:
             reasons.append(f"gool_strength={confidence:.3f}<{min_strength:.3f}")
@@ -203,12 +237,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         reasons.extend(exposure.reasons)
         cooldown = post_goal_gate(minute, base._last_goal_minute(record), cooldown_minutes=5)
         reasons.extend(cooldown.reasons)
-        duplicate = any(
-            str(row.get("match_id")) == match_id
-            and str(row.get("head")) == head
-            and str(row.get("result") or "pending").lower() == "pending"
-            for row in journal
-        )
+        duplicate = any(str(row.get("match_id")) == match_id and str(row.get("head")) == head and str(row.get("result") or "pending").lower() == "pending" for row in journal)
         if duplicate:
             reasons.append("duplicate_pending_signal")
         allowed = not reasons
@@ -234,20 +263,11 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         sent = 0
         try:
             png = render_gool_live_signal_card(record, head, confidence, pressure, cards)
-            sent = broadcast_photo(
-                png,
-                caption=f"🔥 <b>{label}</b> · шанс события {confidence*100:.0f}/100 · pressure {pressure:.2f}",
-                reply_markup=signal_keyboard(match_id, head),
-            )
+            sent = broadcast_photo(png, caption=f"🔥 <b>{label}</b> · шанс события {confidence*100:.0f}/100 · pressure {pressure:.2f}", reply_markup=signal_keyboard(match_id, head))
         except Exception as exc:
             print(f"gool_live_card_error={type(exc).__name__}:{exc}", flush=True)
         if sent == 0:
-            sent = broadcast(
-                f"🔥 <b>{label}</b>\n{match.get('home','?')} — {match.get('away','?')}\n"
-                f"{minute}' · {home_score}:{away_score}\n"
-                f"Шанс события: <b>{confidence*100:.0f}/100</b> · GOOL pressure {pressure:.2f}",
-                reply_markup=signal_keyboard(match_id, head),
-            )
+            sent = broadcast(f"🔥 <b>{label}</b>\n{match.get('home','?')} — {match.get('away','?')}\n{minute}' · {home_score}:{away_score}\nШанс события: <b>{confidence*100:.0f}/100</b> · GOOL pressure {pressure:.2f}", reply_markup=signal_keyboard(match_id, head))
         journal.append({
             "created_at": datetime.now(timezone.utc).isoformat(),
             "match_id": match_id,
@@ -269,19 +289,14 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             "in_game": False,
         })
         save_signal_journal(self.journal_path, journal)
-        print(
-            f"GOOL_LIVE_SIGNAL head={head} match={match_id} minute={minute} "
-            f"pressure={pressure:.2f} chance={confidence:.2f} card={int(sent > 0)}",
-            flush=True,
-        )
+        print(f"GOOL_LIVE_SIGNAL head={head} match={match_id} minute={minute} pressure={pressure:.2f} chance={confidence:.2f} card={int(sent > 0)}", flush=True)
         return int(sent > 0)
 
 
-# Runtime policy: only two output strategies remain enabled.
 base.TRAINED_HEADS = ("another_goal",)
 base.analyze_two_more_goals = _capture_two_more
 base.analyze_live_btts = _disabled_btts
-# Patch the card timing allocator so remaining first-half time is explicit.
+base._settle_pending = _settle_pending_finished
 trained_cards._goal_timing_split = _minute_aware_goal_timing
 base.AllMatchSignalWorker = CardAllMatchSignalWorker
 base._send_two_more_results = _send_two_more_results

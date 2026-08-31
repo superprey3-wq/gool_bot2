@@ -61,10 +61,10 @@ def _live_status(analyzer: dict[str, Any] | None, min_strength: float) -> str:
     if not passed:
         state = "BLOCK_PRESSURE"
     elif strength_f < min_strength:
-        state = f"BLOCK_STRENGTH<{min_strength * 100:.0f}"
+        state = f"BLOCK_CHANCE<{min_strength * 100:.0f}"
     else:
         state = "READY"
-    return f"{state} pressure={pressure_text} strength={strength_f * 100:.0f}/100"
+    return f"{state} pressure={pressure_text} chance={strength_f * 100:.0f}/100"
 
 
 def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
@@ -128,7 +128,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         over25 = trained.get("over_2_5")
         btts_ht = trained.get("both_teams_to_score")
 
-        if 0 < minute <= 25 and score == "0:0":
+        if 0 < minute <= 25:
             goal1t_state = f"ACTIVE {_pct(goal1t)}" if goal1t is not None else "ACTIVE n/a"
         else:
             goal1t_state = "WAIT_WINDOW"
@@ -213,6 +213,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             "probability": None,
             "gool_confidence": confidence,
             "gool_signal_strength": confidence,
+            "gool_event_chance": confidence,
             "gool_min_strength": min_strength,
             "gool_live_analysis": analyzer,
             "model_disagreement": None,
@@ -232,7 +233,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             png = render_gool_live_signal_card(record, head, confidence, pressure, cards)
             sent = broadcast_photo(
                 png,
-                caption=f"🔥 <b>{label}</b> · GOOL LIVE pressure {pressure:.2f} · сила {confidence*100:.0f}/100",
+                caption=f"🔥 <b>{label}</b> · шанс события {confidence*100:.0f}/100 · pressure {pressure:.2f}",
                 reply_markup=signal_keyboard(match_id, head),
             )
         except Exception as exc:
@@ -242,7 +243,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             sent = broadcast(
                 f"🔥 <b>{label}</b>\n{match.get('home','?')} — {match.get('away','?')}\n"
                 f"{minute}' · {home_score}:{away_score}\n"
-                f"GOOL LIVE pressure: <b>{pressure:.2f}</b> · сила сигнала {confidence*100:.0f}/100",
+                f"Шанс события: <b>{confidence*100:.0f}/100</b> · GOOL pressure {pressure:.2f}",
                 reply_markup=signal_keyboard(match_id, head),
             )
 
@@ -259,6 +260,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             "signal_source": "gool_live_analyzer",
             "gool_pressure": pressure,
             "gool_signal_strength": confidence,
+            "gool_event_chance": confidence,
             "provider_count": len(record.get("providers") or {}),
             "flashscore_meta": fs_meta,
             "stats_snapshot": stat_snap,
@@ -268,7 +270,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         save_signal_journal(self.journal_path, journal)
         print(
             f"GOOL_LIVE_SIGNAL head={head} match={match_id} minute={minute} "
-            f"pressure={pressure:.2f} strength={confidence:.2f} card={int(sent > 0)}",
+            f"pressure={pressure:.2f} chance={confidence:.2f} card={int(sent > 0)}",
             flush=True,
         )
         return int(sent > 0)

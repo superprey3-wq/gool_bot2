@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any
 
-HEAD_LABELS={"another_goal":"⚽ Ещё гол","goal_before_ht":"⏱ Гол до перерыва","over_2_5":"📈 ТБ 2.5","both_teams_to_score":"🤝 Обе забьют","prefilter":"🔎 Предфильтр","model":"🧠 Модель"}
+HEAD_LABELS={"another_goal":"⚽ Ещё гол","goal_before_ht":"⏱ Гол до перерыва","over_2_5":"📈 ТБ 2.5","both_teams_to_score":"🤝 Обе забьют","two_more_goals":"🔥 Ещё +2 гола","prefilter":"🔎 Предфильтр","model":"🧠 Модель"}
 MENU_KEYBOARD={"keyboard":[[{"text":"📊 Отчёт"},{"text":"🟢 В игре"}],[{"text":"🧠 Анализ"}]],"resize_keyboard":True,"is_persistent":True}
 def _pct(w,l):
  t=w+l;return "—" if not t else f"{w/t*100:.1f}%"
@@ -34,31 +33,32 @@ def _latest_live_states(path):
  return latest
 def report_text(path):
  rows=_dedupe_signals(_load_rows(path));lines=["📊 <b>ОТЧЁТ GOOL Bot 2</b>",""];tw=tl=tp=0
- for head in ("another_goal","goal_before_ht","over_2_5","both_teams_to_score"):
+ for head in ("another_goal","goal_before_ht","over_2_5","both_teams_to_score","two_more_goals"):
   sel=[r for r in rows if str(r.get("head"))==head];c=Counter(str(r.get("result") or "pending").lower() for r in sel);w,l,p=c["won"],c["lost"],c["pending"];tw+=w;tl+=l;tp+=p;s=""
   if not sel:
    if head=="goal_before_ht":s=" · система активна: 0–25' при 0:0"
-   elif head=="over_2_5":s=" · система активна: перерыв 1:0/0:1, нужны ещё 2 гола"
-   elif head=="both_teams_to_score":s=" · система активна: оценка на перерыве"
+   elif head=="over_2_5":s=" · обученная HT-модель"
+   elif head=="both_teams_to_score":s=" · HT-модель + GOOL LIVE до 75'"
+   elif head=="two_more_goals":s=" · GOOL LIVE при любом счёте до 75'"
   lines.append(f"{HEAD_LABELS[head]}: ✅ {w} · ❌ {l} · ⏳ {p} · {_pct(w,l)}{s}")
- lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>Повторы одного и того же сигнала после старых Restart в отчёте не считаются.</i>"]
+ lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>На один матч максимум два сигнала.</i>"]
  return "\n".join(lines)
 def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:
- """Journal is authoritative: show every pending signal until worker settles it."""
  rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path)
  pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending"]
  pending.sort(key=lambda r:str(r.get("created_at") or ""),reverse=True)
  if not pending:return "🟢 <b>В ИГРЕ</b>\n\nАктивных и ещё не рассчитанных LIVE-сигналов сейчас нет."
- lines=["🟢 <b>В ИГРЕ</b>",f"Активных сигналов: <b>{len(pending)}</b>","Сигнал остаётся здесь, пока worker официально не запишет результат.",""]
+ lines=["🟢 <b>В ИГРЕ</b>",f"Активных сигналов: <b>{len(pending)}</b>","Сигнал остаётся здесь до официального результата.",""]
  for r in pending[:12]:
-  ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено"
-  lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))}{ll}\n{r.get('home','?')} — {r.get('away','?')} · сейчас {lm}' · {ls[0]}:{ls[1]} · P <b>{float(r.get('probability') or 0)*100:.1f}%</b>\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}")
+  ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено";src="GOOL" if str(r.get("signal_source") or "")=="gool_live_analyzer" else "MODEL"
+  lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))}{ll}\n{r.get('home','?')} — {r.get('away','?')} · сейчас {lm}' · {ls[0]}:{ls[1]} · {src} <b>{float(r.get('probability') or 0)*100:.1f}%</b>\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}")
  if len(pending)>12:lines += ["",f"Ещё активных: {len(pending)-12}"]
  return "\n\n".join(lines)
 def _short_block(reason):
- mp={"prefilter_rejected":"не прошёл предфильтр","model_unavailable":"модель не загрузилась","model_output_missing":"нет выхода модели","warmup_until_10":"до 10'","second_half_warmup_until_55":"до 55' во 2Т","first_half_signal_window_closed_25":"окно 1Т закрыто","halftime_model_requires_halftime":"только перерыв","first_half_zero_zero_only":"1Т только 0:0","over25_ht_1_0_or_0_1_only":"ТБ2.5 только HT 1:0/0:1","btts_already_won":"ОЗ уже сыграл","duplicate_pending_signal":"уже есть сигнал"}
+ mp={"prefilter_rejected":"не прошёл предфильтр","prefilter_not_candidate_but_models_still_run":"предфильтр слабый, но модель считает","model_unavailable":"модель не загрузилась","model_output_missing":"нет выхода модели","halftime_model_only":"HT-модель ждёт перерыв","warmup_until_10":"до 10'","second_half_warmup_until_55":"до 55' во 2Т","first_half_signal_window_closed_25":"окно 1Т закрыто","halftime_model_requires_halftime":"только перерыв","first_half_zero_zero_only":"1Т только 0:0","over25_ht_1_0_or_0_1_only":"ТБ2.5 только HT 1:0/0:1","btts_already_won":"ОЗ уже сыграл","btts_live_requires_one_team_already_scored":"GOOL ОЗ ждёт счёт с одной незабившей командой","duplicate_pending_signal":"уже есть сигнал"}
  if reason in mp:return mp[reason]
  if reason.startswith("score=") or reason.startswith("probability="):return "ниже порога "+reason
+ if reason.startswith("gool_pressure="):return "GOOL давление ниже порога"
  if reason.startswith("model_disagreement="):return "модели расходятся"
  if reason.startswith("post_goal_cooldown_"):return "пауза после гола"
  if reason.startswith("entry_window_closed_"):return "окно входа закрыто"
@@ -76,13 +76,14 @@ def analysis_text(path):
  except Exception:return "🧠 <b>LIVE-АНАЛИЗ</b>\n\nНе удалось прочитать текущий анализ."
  rows=sorted(latest.values(),key=lambda r:str(r.get("captured_at") or ""),reverse=True)
  if not rows:return "🧠 <b>LIVE-АНАЛИЗ</b>\n\nПока нет LIVE-данных."
- funnel=[r for r in rows if str(r.get("head"))=="prefilter"];models=[r for r in rows if str(r.get("head")) in {"another_goal","goal_before_ht","over_2_5","both_teams_to_score"}];bc=Counter()
+ funnel=[r for r in rows if str(r.get("head"))=="prefilter"];models=[r for r in rows if str(r.get("head")) in {"another_goal","goal_before_ht","over_2_5","both_teams_to_score","two_more_goals"}];bc=Counter()
  for r in rows:
   for x in r.get("blocks") or []:bc[_short_block(str(x))]+=1
- top=sorted(models,key=lambda r:float(r.get("probability") or 0),reverse=True)[:8];lines=["🧠 <b>LIVE-АНАЛИЗ</b>",f"LIVE матчей в воронке: <b>{len({str(r.get('match_id')) for r in funnel})}</b>",f"Прошли предфильтр: <b>{sum(1 for r in funnel if r.get('decision')=='PASS')}</b>",f"Модельных оценок: <b>{len(models)}</b> · SIGNAL: <b>{sum(1 for r in models if r.get('decision')=='SIGNAL')}</b>"]
+ top=sorted(models,key=lambda r:float(r.get("probability") or r.get("gool_confidence") or 0),reverse=True)[:8];lines=["🧠 <b>LIVE-АНАЛИЗ</b>",f"Матчей под постоянным анализом: <b>{len({str(r.get('match_id')) for r in funnel})}</b>","Предфильтр больше не блокирует модели.",f"Оценок стратегий: <b>{len(models)}</b> · SIGNAL: <b>{sum(1 for r in models if r.get('decision')=='SIGNAL')}</b>"]
  if bc:lines += ["","<b>Что чаще всего блокирует:</b>"]+[f"• {x}: {n}" for x,n in bc.most_common(7)]
  if top:
   lines += ["","<b>Самые близкие к входу:</b>"]
   for r in top:
-   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "нет блоков";lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' · {s[0]}:{s[1]} · P <b>{float(r.get('probability') or 0)*100:.1f}%</b>\n↳ {bt}")
+   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "нет блоков";v=float(r.get("probability") or r.get("gool_confidence") or 0);tag="GOOL" if r.get("gool_live_analysis") else "P"
+   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' · {s[0]}:{s[1]} · {tag} <b>{v*100:.1f}%</b>\n↳ {bt}")
  return "\n\n".join(lines)

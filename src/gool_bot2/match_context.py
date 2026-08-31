@@ -54,11 +54,7 @@ def card_context(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def live_rich_features(record: dict[str, Any]) -> dict[str, float | None]:
-    """Map current provider stats onto archive/open-event feature names.
-
-    These are current cumulative values only. Recent 5m/10m deltas are left
-    missing until they are constructed from the append-only snapshot history.
-    """
+    """Map current provider stats plus real 5m/10m deltas onto model features."""
     mapping = {
         "shots": ("home_shots", "away_shots"),
         "shots_on_target": ("home_shots_on_target", "away_shots_on_target"),
@@ -73,17 +69,24 @@ def live_rich_features(record: dict[str, Any]) -> dict[str, float | None]:
         home, away = provider_pair(record, provider_key, mode=mode)
         out[home_key] = home
         out[away_key] = away
-    for key in (
-        "home_shots_last_5m",
-        "away_shots_last_5m",
-        "home_sot_last_5m",
-        "away_sot_last_5m",
-        "home_xg_last_5m",
-        "away_xg_last_5m",
-        "home_shots_last_10m",
-        "away_shots_last_10m",
-        "home_xg_last_10m",
-        "away_xg_last_10m",
-    ):
-        out[key] = None
+
+    momentum = record.get("live_momentum") or {}
+    aliases = {
+        "home_shots_last_5m": "home_shots_last_5m",
+        "away_shots_last_5m": "away_shots_last_5m",
+        "home_sot_last_5m": "home_sot_last_5m",
+        "away_sot_last_5m": "away_sot_last_5m",
+        "home_xg_last_5m": "home_xg_last_5m",
+        "away_xg_last_5m": "away_xg_last_5m",
+        "home_shots_last_10m": "home_shots_last_10m",
+        "away_shots_last_10m": "away_shots_last_10m",
+        "home_xg_last_10m": "home_xg_last_10m",
+        "away_xg_last_10m": "away_xg_last_10m",
+    }
+    for feature, key in aliases.items():
+        value = momentum.get(key)
+        try:
+            out[feature] = None if value is None else max(0.0, float(value))
+        except (TypeError, ValueError):
+            out[feature] = None
     return out

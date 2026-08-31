@@ -1,0 +1,3 @@
+from __future__ import annotations
+
+PREMIUM_STADIUM_JPEG_B64 = """/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0i

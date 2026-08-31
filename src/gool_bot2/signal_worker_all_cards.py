@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,12 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
                 f"{float(analyzer.get('minimum') or 0):.2f}"
             )
 
+        # GOOL LIVE confidence is a heuristic signal-strength score, not a calibrated
+        # probability. Only strong situations are allowed to reach Telegram.
+        min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.75"))
+        if confidence < min_strength:
+            reasons.append(f"gool_strength={confidence:.3f}<{min_strength:.3f}")
+
         exposure = exposure_gate(match_id, journal, max_entries=2, max_open=2)
         reasons.extend(exposure.reasons)
         cooldown = post_goal_gate(minute, base._last_goal_minute(record), cooldown_minutes=5)
@@ -86,6 +93,8 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             "head": head,
             "probability": None,
             "gool_confidence": confidence,
+            "gool_signal_strength": confidence,
+            "gool_min_strength": min_strength,
             "gool_live_analysis": analyzer,
             "model_disagreement": None,
             "decision": "SIGNAL" if allowed else "WAIT",
@@ -104,7 +113,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             png = render_gool_live_signal_card(record, head, confidence, pressure, cards)
             sent = broadcast_photo(
                 png,
-                caption=f"🔥 <b>{label}</b> · GOOL LIVE pressure {pressure:.2f}",
+                caption=f"🔥 <b>{label}</b> · GOOL LIVE pressure {pressure:.2f} · сила {confidence*100:.0f}/100",
                 reply_markup=signal_keyboard(match_id, head),
             )
         except Exception as exc:
@@ -114,7 +123,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             sent = broadcast(
                 f"🔥 <b>{label}</b>\n{match.get('home','?')} — {match.get('away','?')}\n"
                 f"{minute}' · {home_score}:{away_score}\n"
-                f"GOOL LIVE pressure: <b>{pressure:.2f}</b> · confidence {confidence*100:.0f}%",
+                f"GOOL LIVE pressure: <b>{pressure:.2f}</b> · сила сигнала {confidence*100:.0f}/100",
                 reply_markup=signal_keyboard(match_id, head),
             )
 
@@ -130,6 +139,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
             "probability": confidence,
             "signal_source": "gool_live_analyzer",
             "gool_pressure": pressure,
+            "gool_signal_strength": confidence,
             "provider_count": len(record.get("providers") or {}),
             "flashscore_meta": fs_meta,
             "stats_snapshot": stat_snap,
@@ -139,7 +149,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         save_signal_journal(self.journal_path, journal)
         print(
             f"GOOL_LIVE_SIGNAL head={head} match={match_id} minute={minute} "
-            f"pressure={pressure:.2f} card={int(sent > 0)}",
+            f"pressure={pressure:.2f} strength={confidence:.2f} card={int(sent > 0)}",
             flush=True,
         )
         return int(sent > 0)

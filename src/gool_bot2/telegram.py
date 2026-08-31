@@ -11,17 +11,18 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from PIL import Image
 
-from .bot_menu import MENU_KEYBOARD, analysis_text, in_game_text, report_text
+from .bot_menu import MENU_KEYBOARD, analysis_text, in_game_sections, report_text
 from .journal import mark_in_game
 
-HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS"}
+HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
     "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные системы:\n"
     "⚽ Ещё гол — при любом текущем счёте\n"
-    "⏱ Гол до перерыва — 0–25' при 0:0\n"
-    "📈 ТБ 2.5 — только перерыв 1:0/0:1, нужны ещё 2 гола\n"
-    "🤝 Обе забьют — оценка на перерыве, пока рынок не сыгран\n\n"
+    "⏱ Гол до перерыва — 0–25' при любом счёте + GOOL pressure\n"
+    "📈 ТБ 2.5 — обученная HT-модель\n"
+    "🤝 Обе забьют — HT-модель + GOOL LIVE до 75'\n"
+    "🔥 Ещё +2 гола — GOOL LIVE при любом счёте до 75'\n\n"
     "Модели: 3/3 загружены.\nLIVE-сигналы приходят автоматически."
 )
 
@@ -126,11 +127,16 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
   next_offset=max(next_offset,int(update.get("update_id") or 0)+1);message=update.get("message") or {};raw_text=str(message.get("text") or "").strip();text=raw_text.split("@",1)[0].lower();chat_id=(message.get("chat") or {}).get("id")
   if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ"}:
    subscribe(chat_id)
-   if text=="/start":reply=START_TEXT
-   elif text in {"📊 отчёт","📊 отчет"}:reply=report_text(journal_path)
-   elif text=="🟢 в игре":reply=in_game_text(journal_path,_analysis_path(journal_path))
-   else:reply=analysis_text(_analysis_path(journal_path))
-   if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
+   if text=="/start":
+    replies=[START_TEXT]
+   elif text in {"📊 отчёт","📊 отчет"}:
+    replies=[report_text(journal_path)]
+   elif text=="🟢 в игре":
+    replies=in_game_sections(journal_path,_analysis_path(journal_path))
+   else:
+    replies=[analysis_text(_analysis_path(journal_path))]
+   for reply in replies:
+    if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
    continue
   cb=update.get("callback_query") or {};data=str(cb.get("data") or "")
   if not data.startswith("ig:"):continue

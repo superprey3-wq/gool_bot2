@@ -204,6 +204,72 @@ def _analyzer_confirmation(head: str, first_half: dict[str, Any], second_half: d
     return {"required": False, "name": None, "score": None, "minimum": None, "passed": True}
 
 
+def _pct(value: Any) -> str:
+    try:
+        return f"{float(value) * 100.0:.1f}%"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _num(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _log_match_analysis(
+    record: dict[str, Any],
+    direct: dict[str, Any],
+    hazard: dict[str, Any],
+    football_data: dict[str, Any],
+    trained_probability: dict[str, Any],
+    analyzer: dict[str, Any],
+    first_half: dict[str, Any],
+    second_half: dict[str, Any],
+    btts: dict[str, Any],
+) -> None:
+    """Readable Monkey console trace, similar to the original GOOL bot."""
+    match = record.get("match") or {}
+    home = match.get("home") or "?"
+    away = match.get("away") or "?"
+    minute = int(match.get("minute") or 0)
+    hs = int(match.get("home_score") or 0)
+    aws = int(match.get("away_score") or 0)
+    stage = "HT" if bool(match.get("is_halftime")) else f"{minute}'"
+    print(f"GOOL_ANALYSIS match={home} - {away} stage={stage} score={hs}:{aws}", flush=True)
+    print(
+        "GOOL_MODELS "
+        f"another_goal={_pct(trained_probability.get('another_goal'))} "
+        f"goal_1T={_pct(trained_probability.get('goal_before_ht'))} "
+        f"over2.5={_pct(football_data.get('over_2_5'))} "
+        f"BTTS={_pct(football_data.get('both_teams_to_score'))} "
+        f"direct_1T={_pct(direct.get('goal_before_ht'))} "
+        f"hazard_1T={_pct(hazard.get('goal_before_ht'))}",
+        flush=True,
+    )
+    print(
+        "GOOL_STATS "
+        f"xG={_num(first_half.get('xg_total') if first_half.get('xg_total') is not None else second_half.get('xg_total'))} "
+        f"shots={_num(first_half.get('shots_total') if first_half.get('shots_total') is not None else second_half.get('shots_total'))} "
+        f"SOT={_num(first_half.get('sot_total') if first_half.get('sot_total') is not None else second_half.get('sot_total'))} "
+        f"big={_num(first_half.get('big_chances_total') if first_half.get('big_chances_total') is not None else second_half.get('big_chances_total'))} "
+        f"corners={_num(first_half.get('corners_total') if first_half.get('corners_total') is not None else second_half.get('corners_total'))}",
+        flush=True,
+    )
+    fh_gate = analyzer.get("goal_before_ht") or {}
+    o25_gate = analyzer.get("over_2_5") or {}
+    print(
+        "GOOL_CHECK "
+        f"first_half_pressure={_num(fh_gate.get('score'))}/{_num(fh_gate.get('minimum'))} "
+        f"first_half={'PASS' if fh_gate.get('passed') else 'WAIT'} | "
+        f"two_goal_pressure={_num(o25_gate.get('score'))}/{_num(o25_gate.get('minimum'))} "
+        f"over2.5={'PASS' if o25_gate.get('passed') else 'WAIT'} | "
+        f"BTTS_threat={_num(btts.get('threat_score'))}",
+        flush=True,
+    )
+
+
 class LocalFootballEnsemble:
     """Local, API-free GOOL model stack for the Monkey server."""
 
@@ -287,6 +353,18 @@ class LocalFootballEnsemble:
         trained_probability["both_teams_to_score"] = None if btts is None else float(max(0.01, min(0.99, float(btts))))
         blended["both_teams_to_score"] = trained_probability["both_teams_to_score"]
         disagreement["both_teams_to_score"] = None if btts is None else 0.0
+
+        _log_match_analysis(
+            record,
+            direct,
+            hazard,
+            football_data,
+            trained_probability,
+            analyzer,
+            first_half_analysis,
+            second_half_analysis,
+            btts_analysis,
+        )
 
         return {
             "direct": direct,

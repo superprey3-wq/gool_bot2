@@ -128,7 +128,7 @@ def main() -> None:
         "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60"),
     ], env=env)
     worker = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.signal_worker_all",
+        sys.executable, "-m", "gool_bot2.signal_worker_all_cards",
         "--raw-dir", str(raw_live),
         "--journal", str(journal),
         "--analysis", str(analysis),

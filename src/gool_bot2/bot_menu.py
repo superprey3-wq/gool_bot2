@@ -37,8 +37,32 @@ def _load_rows(path: Path) -> list[dict[str, Any]]:
     return rows if isinstance(rows, list) else []
 
 
+def _dedupe_signals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse accidental replay duplicates while keeping legitimate re-entries.
+
+    A genuine later signal changes minute and/or score. Restarts used to replay
+    the exact same snapshot, so those rows share match/head/minute/score.
+    """
+    latest: dict[tuple[str, str, int, int, int], dict[str, Any]] = {}
+    for row in rows:
+        score = row.get("score") or [0, 0]
+        try:
+            hs, aws = int(score[0] or 0), int(score[1] or 0)
+        except Exception:
+            hs, aws = 0, 0
+        key = (
+            str(row.get("match_id") or ""),
+            str(row.get("head") or ""),
+            int(row.get("minute") or 0),
+            hs,
+            aws,
+        )
+        latest[key] = row
+    return list(latest.values())
+
+
 def report_text(journal_path: Path) -> str:
-    rows = _load_rows(journal_path)
+    rows = _dedupe_signals(_load_rows(journal_path))
     lines = ["📊 <b>ОТЧЁТ GOOL Bot 2</b>", ""]
     total_won = total_lost = total_pending = 0
     for head in ("another_goal", "goal_before_ht", "over_2_5", "both_teams_to_score"):
@@ -49,19 +73,24 @@ def report_text(journal_path: Path) -> str:
         total_won += won
         total_lost += lost
         total_pending += pending
-        lines.append(f"{label}: ✅ {won} · ❌ {lost} · ⏳ {pending} · {_pct(won, lost)}")
+        suffix = ""
+        if not selected:
+            if head == "goal_before_ht":
+                suffix = " · система активна: 15–25' при 0:0"
+            elif head == "both_teams_to_score":
+                suffix = " · система активна: оценка на перерыве"
+        lines.append(f"{label}: ✅ {won} · ❌ {lost} · ⏳ {pending} · {_pct(won, lost)}{suffix}")
     lines += [
         "",
         f"Всего закрыто: <b>{total_won + total_lost}</b> · проход: <b>{_pct(total_won, total_lost)}</b>",
         f"Ожидают результата: <b>{total_pending}</b>",
+        "<i>Повторы одного и того же сигнала после старых Restart в отчёте не считаются.</i>",
     ]
     return "\n".join(lines)
 
 
 def in_game_text(journal_path: Path) -> str:
-    rows = _load_rows(journal_path)
-
-    # This menu is the queue of live signals the user has NOT confirmed yet.
+    rows = _dedupe_signals(_load_rows(journal_path))
     pending = [
         r for r in rows
         if not bool(r.get("in_game"))

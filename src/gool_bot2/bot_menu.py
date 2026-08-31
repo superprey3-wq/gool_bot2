@@ -32,17 +32,6 @@ def _latest_live_states(path):
    if mid and (mid not in latest or str(r.get("captured_at") or "")>=str(latest[mid].get("captured_at") or "")):latest[mid]=r
  except Exception:return {}
  return latest
-def _already_resolved_from_live(signal,live):
- if not live:return False
- try:
-  s=live.get("score") or [0,0];h,a=int(s[0] or 0),int(s[1] or 0);m=int(live.get("minute") or 0);e=signal.get("score") or [0,0];eh,ea=int(e[0] or 0),int(e[1] or 0)
- except Exception:return False
- head=str(signal.get("head") or "");total=h+a;et=eh+ea
- if head=="another_goal":return total>et or m>=90
- if head=="goal_before_ht":return total>et or m>45
- if head=="over_2_5":return total>=3 or m>=90
- if head=="both_teams_to_score":return (h>0 and a>0) or m>=90
- return False
 def report_text(path):
  rows=_dedupe_signals(_load_rows(path));lines=["📊 <b>ОТЧЁТ GOOL Bot 2</b>",""];tw=tl=tp=0
  for head in ("another_goal","goal_before_ht","over_2_5","both_teams_to_score"):
@@ -55,16 +44,12 @@ def report_text(path):
  lines += ["",f"Всего закрыто: <b>{tw+tl}</b> · проход: <b>{_pct(tw,tl)}</b>",f"Ожидают результата: <b>{tp}</b>","<i>Повторы одного и того же сигнала после старых Restart в отчёте не считаются.</i>"]
  return "\n".join(lines)
 def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:
- """Show every unresolved signal. `in_game` is user acknowledgement, not a hide flag."""
- rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path);pending=[]
- for row in rows:
-  if str(row.get("result") or "pending").lower()!="pending":continue
-  live=states.get(str(row.get("match_id") or ""))
-  if _already_resolved_from_live(row,live):continue
-  pending.append(row)
+ """Journal is authoritative: show every pending signal until worker settles it."""
+ rows=_dedupe_signals(_load_rows(journal_path));states=_latest_live_states(analysis_path)
+ pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending"]
  pending.sort(key=lambda r:str(r.get("created_at") or ""),reverse=True)
  if not pending:return "🟢 <b>В ИГРЕ</b>\n\nАктивных и ещё не рассчитанных LIVE-сигналов сейчас нет."
- lines=["🟢 <b>В ИГРЕ</b>",f"Активных сигналов: <b>{len(pending)}</b>","Здесь все выданные сигналы, которые ещё не рассчитаны.",""]
+ lines=["🟢 <b>В ИГРЕ</b>",f"Активных сигналов: <b>{len(pending)}</b>","Сигнал остаётся здесь, пока worker официально не запишет результат.",""]
  for r in pending[:12]:
   ss=r.get("score") or [0,0];live=states.get(str(r.get("match_id") or "")) or {};ls=live.get("score") or ss;lm=int(live.get("minute") or r.get("minute") or 0);league=str(r.get("league") or "").strip();ll=f" · {league}" if league else "";mark="✅ принято" if bool(r.get("in_game")) else "⏳ не подтверждено"
   lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))}{ll}\n{r.get('home','?')} — {r.get('away','?')} · сейчас {lm}' · {ls[0]}:{ls[1]} · P <b>{float(r.get('probability') or 0)*100:.1f}%</b>\n↳ сигнал: {r.get('minute',0)}' · {ss[0]}:{ss[1]} · {mark}")

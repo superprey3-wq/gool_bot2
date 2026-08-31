@@ -189,15 +189,20 @@ def _stadium(draw: ImageDraw.ImageDraw, accent: tuple[int, int, int]) -> None:
 
 
 def _header(draw: ImageDraw.ImageDraw, accent: tuple[int, int, int], label: str, league: str, round_name: str, providers: int, result: bool = False) -> None:
-    draw.rounded_rectangle((18, 16, 1062, 118), 24, fill=(5, 14, 23), outline=accent, width=3)
-    draw.rounded_rectangle((34, 31, 160, 101), 16, fill=(10, 28, 31), outline=accent, width=2)
-    draw.text((50, 48), "GOOL v2", font=_font(26, True), fill=TEXT)
-    draw.text((185, 29), label, font=_fit(draw, label, 455, 34, True), fill=TEXT)
-    draw.text((187, 72), "LIVE-СИГНАЛ" if not result else "РЕЗУЛЬТАТ", font=_font(17, True), fill=accent)
+    draw.rounded_rectangle((18, 16, 1062, 112), 24, fill=(5, 14, 23), outline=accent, width=3)
+    draw.rounded_rectangle((34, 31, 190, 98), 16, fill=(10, 28, 31), outline=accent, width=2)
+    gool_font = _fit(draw, "GOOL v2", 126, 25, True)
+    box = draw.textbbox((0, 0), "GOOL v2", font=gool_font)
+    draw.text((112 - (box[2]-box[0])/2, 49), "GOOL v2", font=gool_font, fill=TEXT)
+    draw.text((215, 28), label, font=_fit(draw, label, 500, 33, True), fill=TEXT)
+    draw.text((217, 70), "РЕЗУЛЬТАТ" if result else "LIVE-СИГНАЛ", font=_font(16, True), fill=accent)
+    draw.text((935, 43), "RESULT" if result else "LIVE", font=_font(18, True), fill=accent)
+    draw.text((850, 72), f"DATA {providers}/3", font=_font(14, True), fill=MUTED)
+
     competition = league + (f" · {round_name}" if round_name else "")
-    draw.text((645, 32), competition, font=_fit(draw, competition, 275, 19, True), fill=TEXT)
-    draw.text((645, 69), f"ИСТОЧНИКИ {providers}/3", font=_font(15, True), fill=MUTED)
-    draw.text((950, 43), "RESULT" if result else "LIVE", font=_font(18, True), fill=accent)
+    comp_font = _fit(draw, competition, 900, 18, True)
+    comp_box = draw.textbbox((0, 0), competition, font=comp_font)
+    draw.text(((W - (comp_box[2]-comp_box[0])) / 2, 126), competition, font=comp_font, fill=TEXT)
 
 
 def _paste_logo(img: Image.Image, draw: ImageDraw.ImageDraw, logo: Image.Image | None, name: str, cx: int, cy: int, accent: tuple[int, int, int]) -> None:

@@ -59,33 +59,104 @@ class LiveSnapshotCollector:
         fs["meta"] = meta; record["providers"]["flashscore"] = fs
 
     @staticmethod
+    def _row_timestamp(row: dict[str, Any]) -> float:
+        value = row.get("timestamp")
+        try:
+            raw = float(value)
+            return raw / 1000.0 if raw > 10_000_000_000 else raw
+        except (TypeError, ValueError):
+            pass
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return 0.0
+
+    @staticmethod
+    def _row_identity(row: dict[str, Any]) -> tuple[Any, ...]:
+        event_id = str(row.get("event_id") or "").strip()
+        if event_id:
+            return ("id", event_id)
+        return (
+            "row",
+            str(row.get("home") or "").casefold().strip(),
+            str(row.get("away") or "").casefold().strip(),
+            str(row.get("timestamp") or ""),
+        )
+
+    @staticmethod
     def _merge_history_contexts(contexts: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+        """Merge provider histories first, then choose the best/latest rows.
+
+        The old code sliced each list to `limit` while processing providers. If the
+        first provider returned ten malformed rows (for example ten apparent 0:0s),
+        valid FotMob/365 rows never had a chance to enter the prematch profile.
+        """
         keys = ("home_recent", "away_recent", "home_at_home", "away_away", "h2h")
-        merged: dict[str, Any] = {key: [] for key in keys}
+        pools: dict[str, list[dict[str, Any]]] = {key: [] for key in keys}
         sources: list[str] = []
         raw_counts: dict[str, int] = {}
+        source_quality: dict[str, dict[str, Any]] = {}
+
         for ctx in contexts:
             if not isinstance(ctx, dict):
                 continue
             source = str(ctx.get("source") or "unknown")
-            sources.append(source)
+            if source != "none":
+                sources.append(source)
             raw_counts[source] = max(raw_counts.get(source, 0), int(ctx.get("raw_matches") or 0))
             for key in keys:
-                seen = {
-                    (str(r.get("home") or "").casefold(), str(r.get("away") or "").casefold(), int(r.get("home_score") or 0), int(r.get("away_score") or 0), str(r.get("timestamp") or ""))
-                    for r in merged[key]
-                }
-                for row in ctx.get(key) or []:
-                    if not isinstance(row, dict):
-                        continue
-                    identity = (str(row.get("home") or "").casefold(), str(row.get("away") or "").casefold(), int(row.get("home_score") or 0), int(row.get("away_score") or 0), str(row.get("timestamp") or ""))
-                    if identity in seen:
-                        continue
-                    merged[key].append(dict(row)); seen.add(identity)
-                merged[key] = merged[key][:limit]
+                rows = [dict(r) for r in (ctx.get(key) or []) if isinstance(r, dict)]
+                if not rows:
+                    continue
+                for row in rows:
+                    row.setdefault("source", source)
+                    pools[key].append(row)
+                totals = [int(r.get("home_score") or 0) + int(r.get("away_score") or 0) for r in rows]
+                quality = source_quality.setdefault(source, {"rows": 0, "nonzero": 0, "zero_zero": 0})
+                quality["rows"] += len(rows)
+                quality["nonzero"] += sum(1 for x in totals if x > 0)
+                quality["zero_zero"] += sum(1 for x in totals if x == 0)
+
+        merged: dict[str, Any] = {}
+        source_rank = {"fotmob_team_history": 4, "flashscore_h2h": 3, "fotmob_embedded": 2, "365scores_embedded": 1}
+        suspicious_sources = {
+            source for source, q in source_quality.items()
+            if int(q.get("rows") or 0) >= 5 and int(q.get("nonzero") or 0) == 0
+        }
+
+        # Only suppress an all-0:0 source when some other provider has actual goals.
+        any_nonzero_source = any(int(q.get("nonzero") or 0) > 0 for q in source_quality.values())
+        if not any_nonzero_source:
+            suspicious_sources = set()
+
+        for key in keys:
+            selected: dict[tuple[Any, ...], dict[str, Any]] = {}
+            candidates = pools[key]
+            if suspicious_sources:
+                cleaned = [r for r in candidates if str(r.get("source") or "") not in suspicious_sources]
+                if cleaned:
+                    candidates = cleaned
+            for row in candidates:
+                ident = LiveSnapshotCollector._row_identity(row)
+                existing = selected.get(ident)
+                if existing is None:
+                    selected[ident] = row
+                    continue
+                old_total = int(existing.get("home_score") or 0) + int(existing.get("away_score") or 0)
+                new_total = int(row.get("home_score") or 0) + int(row.get("away_score") or 0)
+                old_rank = source_rank.get(str(existing.get("source") or ""), 0)
+                new_rank = source_rank.get(str(row.get("source") or ""), 0)
+                if (new_total > 0 and old_total == 0) or (new_total == old_total and new_rank > old_rank):
+                    selected[ident] = row
+            rows = list(selected.values())
+            rows.sort(key=lambda r: (LiveSnapshotCollector._row_timestamp(r), source_rank.get(str(r.get("source") or ""), 0)), reverse=True)
+            merged[key] = rows[:limit]
+
         merged["source"] = "+".join(dict.fromkeys(sources)) if sources else "none"
         merged["sources"] = list(dict.fromkeys(sources))
         merged["source_raw_matches"] = raw_counts
+        merged["source_quality"] = source_quality
+        merged["suppressed_sources"] = sorted(suspicious_sources)
         merged["raw_matches"] = sum(raw_counts.values())
         return merged
 
@@ -108,6 +179,13 @@ class LiveSnapshotCollector:
         self._prematch_last_attempt[mid] = now
 
         contexts: list[dict[str, Any]] = [cached] if cached else []
+        # Team-level FotMob history is the strongest fallback because it directly
+        # contains each side's recent fixtures. Flashscore remains a primary source,
+        # but no provider can monopolize the first `limit` rows anymore.
+        try:
+            contexts.append(fotmob_team_history(self.fotmob, str(match.home), str(match.away), limit=limit))
+        except Exception as exc:
+            print(f"prematch_fotmob_team_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
         try:
             contexts.append(self.flashscore.fetch_match_history(mid, str(match.home), str(match.away), limit=limit))
         except Exception as exc:
@@ -116,10 +194,6 @@ class LiveSnapshotCollector:
             contexts.append(self.fotmob.prematch_context(str(match.home), str(match.away), limit=limit))
         except Exception as exc:
             print(f"prematch_fotmob_embedded_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
-        try:
-            contexts.append(fotmob_team_history(self.fotmob, str(match.home), str(match.away), limit=limit))
-        except Exception as exc:
-            print(f"prematch_fotmob_team_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
         try:
             contexts.append(self.scores365.prematch_context(str(match.home), str(match.away), limit=limit))
         except Exception as exc:
@@ -131,7 +205,8 @@ class LiveSnapshotCollector:
         print(
             f"PREMATCH_DATA match={match.home} - {match.away} state={state} sources={','.join(ctx.get('sources') or []) or 'none'} "
             f"home={len(ctx.get('home_recent') or [])} away={len(ctx.get('away_recent') or [])} "
-            f"homeVenue={len(ctx.get('home_at_home') or [])} awayVenue={len(ctx.get('away_away') or [])} h2h={len(ctx.get('h2h') or [])} raw={ctx.get('source_raw_matches') or {}}",
+            f"homeVenue={len(ctx.get('home_at_home') or [])} awayVenue={len(ctx.get('away_away') or [])} h2h={len(ctx.get('h2h') or [])} "
+            f"suppressed={','.join(ctx.get('suppressed_sources') or []) or '-'} raw={ctx.get('source_raw_matches') or {}}",
             flush=True,
         )
         return ctx

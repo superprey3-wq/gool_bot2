@@ -142,8 +142,30 @@ def _settle_minute_from_timeline(timeline:list[dict[str,Any]],entry_total:int,ta
    except Exception:return None
  return None
 
+def _row_age_hours(row:dict[str,Any])->float:
+ raw=str(row.get("created_at") or "").strip()
+ if not raw:return 0.0
+ try:
+  dt=datetime.fromisoformat(raw.replace("Z","+00:00"))
+  if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+  return max(0.0,(datetime.now(timezone.utc)-dt.astimezone(timezone.utc)).total_seconds()/3600.0)
+ except Exception:return 0.0
+
+def _timeline_final_score(timeline:list[dict[str,Any]],entry:list[Any])->list[int]:
+ try:home=int(entry[0] or 0);away=int(entry[1] or 0)
+ except Exception:home=away=0
+ for goal in timeline:
+  score=goal.get("score") or []
+  try:
+   if len(score)>=2:
+    home=max(home,int(score[0] or 0));away=max(away,int(score[1] or 0))
+  except Exception:continue
+ return [home,away]
+
 def _force_reconcile_pending(journal_path:Path)->int:
- """On menu refresh, ask Flashscore directly about every active pending match."""
+ """Refresh pending matches directly. Finished rows close immediately; matches
+    that vanished from the master feed are rechecked by event timeline and, after
+    a conservative stale window, closed instead of hanging forever at 90'."""
  rows=load_signal_journal(journal_path)
  pending=[r for r in rows if str(r.get("result") or "pending").lower()=="pending" and str(r.get("head") or "") in {"another_goal","two_more_goals"}]
  ids={str(r.get("match_id") or "") for r in pending if str(r.get("match_id") or "")}
@@ -151,30 +173,38 @@ def _force_reconcile_pending(journal_path:Path)->int:
  try:
   provider=FlashscoreProvider();states=provider.event_states(ids)
  except Exception as exc:
-  print(f"force_reconcile_state_error={type(exc).__name__}:{exc}",flush=True);return 0
+  print(f"force_reconcile_state_error={type(exc).__name__}:{exc}",flush=True);states={};provider=FlashscoreProvider()
  changed=0;timelines:dict[str,list[dict[str,Any]]]={}
- now=datetime.now(timezone.utc).isoformat()
+ now=datetime.now(timezone.utc).isoformat();stale_hours=float(os.getenv("PENDING_FORCE_CLOSE_HOURS","4"))
  for row in pending:
-  mid=str(row.get("match_id") or "");state=states.get(mid) or {}
-  if not bool(state.get("is_finished")):continue
-  final_home=int(state.get("home_score") or 0);final_away=int(state.get("away_score") or 0);final_total=final_home+final_away
-  entry=row.get("score") or [0,0]
-  try:entry_total=int(entry[0] or 0)+int(entry[1] or 0)
-  except Exception:entry_total=0
-  head=str(row.get("head") or "")
-  target=entry_total+1 if head=="another_goal" else entry_total+2
-  won=final_total>=target
-  if won:
+  mid=str(row.get("match_id") or "");state=states.get(mid) or {};finished=bool(state.get("is_finished"));missing=mid not in states
+  # A finished event may disappear from the current master feed. For such stale
+  # rows fetch the event timeline directly before deciding anything.
+  if finished or (missing and _row_age_hours(row)>=stale_hours):
    if mid not in timelines:
     try:timelines[mid]=provider.fetch_goal_timeline(mid)
     except Exception:timelines[mid]=[]
-   settled_minute=_settle_minute_from_timeline(timelines[mid],entry_total,target) or 90
-  else:settled_minute=90
-  row.update({"result":"won" if won else "lost","settled_at":now,"settled_minute":settled_minute,"settled_score":[final_home,final_away],"settled_via":"telegram_force_reconcile"})
+  else:
+   continue
+  entry=row.get("score") or [0,0]
+  try:entry_total=int(entry[0] or 0)+int(entry[1] or 0)
+  except Exception:entry_total=0
+  head=str(row.get("head") or "");target=entry_total+1 if head=="another_goal" else entry_total+2
+  timeline=timelines.get(mid) or []
+  if finished:
+   final_home=int(state.get("home_score") or 0);final_away=int(state.get("away_score") or 0)
+   # Timeline can be fresher than a coarse master score around the final whistle.
+   tscore=_timeline_final_score(timeline,entry);final_home=max(final_home,tscore[0]);final_away=max(final_away,tscore[1])
+  else:
+   final_home,final_away=_timeline_final_score(timeline,entry)
+  final_total=final_home+final_away;won=final_total>=target
+  settled_minute=_settle_minute_from_timeline(timeline,entry_total,target) if won else None
+  if settled_minute is None:settled_minute=90
+  row.update({"result":"won" if won else "lost","settled_at":now,"settled_minute":settled_minute,"settled_score":[final_home,final_away],"settled_via":"telegram_force_reconcile_finished" if finished else "telegram_force_reconcile_stale"})
   row.pop("terminal_seen_score",None);row.pop("terminal_seen_count",None);changed+=1
  if changed:
   save_signal_journal(journal_path,rows)
-  print(f"force_reconcile_pending closed={changed} checked={len(ids)}",flush=True)
+  print(f"force_reconcile_pending closed={changed} checked={len(ids)} stale_hours={stale_hours:g}",flush=True)
  return changed
 
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:

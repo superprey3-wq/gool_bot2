@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'src/gool_bot2/providers/flashscore.py'
+      - 'src/gool_bot2/providers/fotmob.py'
+      - 'src/gool_bot2/providers/scores365.py'
+      - 'src/gool_bot2/team_history.py'
       - 'src/gool_bot2/live_collector.py'
       - 'src/gool_bot2/signal_worker_all_cards.py'
       - 'scripts/flashscore_prematch_smoke.py'
@@ -12,9 +15,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  flashscore-prematch:
+  prematch-multi-provider:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,9 +29,12 @@ jobs:
       - name: Compile critical modules
         run: |
           python -m py_compile src/gool_bot2/providers/flashscore.py
+          python -m py_compile src/gool_bot2/providers/fotmob.py
+          python -m py_compile src/gool_bot2/providers/scores365.py
+          python -m py_compile src/gool_bot2/team_history.py
           python -m py_compile src/gool_bot2/live_collector.py
           python -m py_compile src/gool_bot2/signal_worker_all_cards.py
-      - name: Live Flashscore prematch smoke
+      - name: Live multi-provider prematch smoke
         env:
           SMOKE_MATCHES: '10'
         run: python scripts/flashscore_prematch_smoke.py

@@ -9,6 +9,7 @@ from . import signal_worker_all as base
 from . import signal_cards as trained_cards
 from .gool_live_cards import render_gool_live_result_card, render_gool_live_signal_card
 from .journal import append_analysis, save_signal_journal
+from .match_context import provider_pair
 from .signal_cards import flashscore_meta, stats_snapshot
 from .signal_policy import exposure_gate, post_goal_gate
 from .telegram import broadcast, broadcast_photo, signal_keyboard
@@ -36,12 +37,7 @@ def _disabled_btts(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _settle_pending_finished(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Settle stale pending model signals as soon as Flashscore marks a match FINISHED.
-
-    The legacy 90' two-snapshot fallback can leave rows pending because its
-    intermediate terminal counter is not persisted unless a settlement happens.
-    FINISHED is authoritative, so use it to close any remaining model signal.
-    """
+    """Settle stale pending model signals as soon as Flashscore marks a match FINISHED."""
     settled = _ORIG_SETTLE_PENDING(record, journal)
     match = record.get("match") or {}
     if not bool(match.get("is_finished")):
@@ -106,35 +102,145 @@ def _live_status(analyzer: dict[str, Any] | None, min_strength: float) -> str:
     return f"{state} pressure={pressure_text} chance={strength_f * 100:.0f}/100"
 
 
-def _minute_aware_goal_timing(match: dict[str, Any], probability: float, model_result: dict[str, Any]):
-    """Conditional 1T/2T timing split for the next goal.
+def _pair_total(record: dict[str, Any], key: str) -> float | None:
+    try:
+        home, away = provider_pair(record, key)
+    except Exception:
+        return None
+    if home is None or away is None:
+        return None
+    return float(home + away)
 
-    The trained goal-before-HT output supplies the first-half propensity, while
-    the amount of first-half time still available explicitly scales that
-    propensity. Therefore the same model setup at 10' and 40' cannot produce
-    the same timing split: at 40' only a small first-half window remains.
-    This is a timing allocation, not two independently calibrated probabilities.
+
+def _weighted_ratio(values: dict[str, float | None], expectations: dict[str, tuple[float, float]]) -> tuple[float | None, int]:
+    parts: list[tuple[float, float]] = []
+    for key, (expected, weight) in expectations.items():
+        value = values.get(key)
+        if value is None or expected <= 0:
+            continue
+        ratio = max(0.0, min(2.5, float(value) / expected))
+        parts.append((ratio, weight))
+    if not parts:
+        return None, 0
+    total_weight = sum(weight for _, weight in parts)
+    return sum(ratio * weight for ratio, weight in parts) / total_weight, len(parts)
+
+
+def _another_goal_live_confirmation(record: dict[str, Any]) -> dict[str, Any]:
+    """Independent LIVE judge for another_goal.
+
+    The trained model estimates the historical chance of another goal. This
+    analyzer answers a different question: is the current match producing enough
+    sustained attacking evidence right now? It uses both cumulative match pressure
+    and real 5m/10m deltas collected from the first live snapshots.
     """
+    match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
-    if bool(match.get("is_halftime")) or minute >= 46:
-        return 0.0, 100.0
-    if minute <= 0:
-        return None, None
+    momentum = record.get("live_momentum") or {}
+
+    cumulative = {
+        "xg": _pair_total(record, "xg"),
+        "shots": _pair_total(record, "shots"),
+        "sot": _pair_total(record, "shots_on_target"),
+        "big": _pair_total(record, "big_chances"),
+        "danger": _pair_total(record, "dangerous_attacks"),
+        "corners": _pair_total(record, "corners"),
+    }
+    progress = max(0.03, min(1.0, float(minute) / 90.0))
+    cumulative_expectations = {
+        "xg": (2.30 * progress, 0.30),
+        "shots": (24.0 * progress, 0.14),
+        "sot": (8.0 * progress, 0.22),
+        "big": (3.2 * progress, 0.12),
+        "danger": (96.0 * progress, 0.12),
+        "corners": (10.0 * progress, 0.10),
+    }
+    cumulative_pressure, cumulative_evidence = _weighted_ratio(cumulative, cumulative_expectations)
+
+    recent5 = {
+        "xg": momentum.get("xg_total_last_5m"),
+        "shots": momentum.get("shots_total_last_5m"),
+        "sot": momentum.get("sot_total_last_5m"),
+        "big": momentum.get("big_total_last_5m"),
+        "danger": momentum.get("danger_total_last_5m"),
+    }
+    recent10 = {
+        "xg": momentum.get("xg_total_last_10m"),
+        "shots": momentum.get("shots_total_last_10m"),
+        "sot": momentum.get("sot_total_last_10m"),
+        "big": momentum.get("big_total_last_10m"),
+        "danger": momentum.get("danger_total_last_10m"),
+    }
+    five_expectations = {
+        "xg": (0.13, 0.34), "shots": (1.35, 0.16), "sot": (0.45, 0.24),
+        "big": (0.18, 0.14), "danger": (5.3, 0.12),
+    }
+    ten_expectations = {
+        "xg": (0.26, 0.34), "shots": (2.70, 0.16), "sot": (0.90, 0.24),
+        "big": (0.36, 0.14), "danger": (10.6, 0.12),
+    }
+    pressure5, evidence5 = _weighted_ratio(recent5, five_expectations)
+    pressure10, evidence10 = _weighted_ratio(recent10, ten_expectations)
+
+    min_cumulative = float(os.getenv("ANOTHER_GOAL_LIVE_MIN_CUMULATIVE", "0.90"))
+    min_5m = float(os.getenv("ANOTHER_GOAL_LIVE_MIN_5M", "1.05"))
+    min_10m = float(os.getenv("ANOTHER_GOAL_LIVE_MIN_10M", "1.00"))
+    min_evidence = int(os.getenv("ANOTHER_GOAL_LIVE_MIN_EVIDENCE", "3"))
+
+    enough_history = evidence5 >= min_evidence and evidence10 >= min_evidence
+    direct_threat = (
+        (recent5.get("xg") is not None and float(recent5.get("xg") or 0) >= 0.12)
+        or (recent5.get("sot") is not None and float(recent5.get("sot") or 0) >= 1.0)
+        or (recent5.get("big") is not None and float(recent5.get("big") or 0) >= 1.0)
+    )
+    passed = bool(
+        enough_history
+        and cumulative_pressure is not None and cumulative_pressure >= min_cumulative
+        and pressure5 is not None and pressure5 >= min_5m
+        and pressure10 is not None and pressure10 >= min_10m
+        and direct_threat
+    )
+    pressures = [x for x in (cumulative_pressure, pressure5, pressure10) if x is not None]
+    combined = sum(pressures) / len(pressures) if pressures else None
+    return {
+        "passed": passed,
+        "pressure_score": combined,
+        "combined_pressure": combined,
+        "cumulative_pressure": cumulative_pressure,
+        "pressure_5m": pressure5,
+        "pressure_10m": pressure10,
+        "minimum": min_5m,
+        "minimum_cumulative": min_cumulative,
+        "minimum_5m": min_5m,
+        "minimum_10m": min_10m,
+        "evidence_5m": evidence5,
+        "evidence_10m": evidence10,
+        "minimum_evidence": min_evidence,
+        "enough_history": enough_history,
+        "direct_threat": direct_threat,
+        "recent_5m": recent5,
+        "recent_10m": recent10,
+        "cumulative": cumulative,
+    }
+
+
+def _minute_aware_goal_timing(match: dict[str, Any], probability: float, model_result: dict[str, Any]):
+    """Return absolute probabilities: goal before HT and goal before FT."""
+    minute = int(match.get("minute") or 0)
     try:
         p_any = max(0.01, min(0.99, float(probability)))
-        p_ht = float((model_result.get("trained_probability") or {}).get("goal_before_ht"))
     except Exception:
         return None, None
-
-    remaining_1t = max(0.0, 45.0 - float(minute))
-    time_factor = remaining_1t / 45.0
-    first_mass = max(0.0, min(p_any, p_ht)) * time_factor
-    second_mass = max(0.0, p_any - first_mass)
-    total = first_mass + second_mass
-    if total <= 0:
-        return None, None
-    first = 100.0 * first_mass / total
-    return first, 100.0 - first
+    if bool(match.get("is_halftime")) or minute >= 46:
+        return None, 100.0 * p_any
+    if minute <= 0:
+        return None, 100.0 * p_any
+    try:
+        p_ht = float((model_result.get("trained_probability") or {}).get("goal_before_ht"))
+    except Exception:
+        return None, 100.0 * p_any
+    p_ht = max(0.0, min(p_any, p_ht))
+    return 100.0 * p_ht, 100.0 * p_any
 
 
 def _send_two_more_results(rows: list[dict[str, Any]]) -> None:
@@ -169,6 +275,19 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
 
         def predict_with_capture(record: dict[str, Any]) -> dict[str, Any]:
             result = original_predict(record)
+            live = _another_goal_live_confirmation(record)
+            result["another_goal_live"] = live
+            analyzer = result.setdefault("gool_analyzer", {})
+            analyzer["another_goal"] = {
+                "required": True,
+                "name": "another_goal_sustained_live_pressure",
+                "score": live.get("combined_pressure"),
+                "minimum": live.get("minimum_5m"),
+                "passed": bool(live.get("passed")),
+                "details": live,
+            }
+            if not live.get("passed"):
+                result.setdefault("blended", {})["another_goal"] = None
             self._diag_model_result = dict(result or {})
             return result
 
@@ -185,14 +304,18 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         trained = (self._diag_model_result.get("trained_probability") or {})
         blended = (self._diag_model_result.get("blended") or {})
         another = blended.get("another_goal")
-        if another is None:
-            another = trained.get("another_goal")
+        trained_another = trained.get("another_goal")
+        live = self._diag_model_result.get("another_goal_live") or {}
         min_strength = float(os.getenv("GOOL_LIVE_MIN_STRENGTH", "0.70"))
         two_more_state = _live_status(_LAST_TWO_MORE.get(mid), min_strength)
+        live_pressure = live.get("combined_pressure")
+        live_text = "WAIT" if live_pressure is None else f"{'PASS' if live.get('passed') else 'WAIT'} {float(live_pressure):.2f}x"
         print(
             f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} "
             f"stage={'HT' if is_ht else minute} score={score} | "
-            f"ANOTHER_GOAL={'ACTIVE ' + _pct(another) if another is not None else 'WAIT'} | "
+            f"ANOTHER_MODEL={_pct(trained_another) if trained_another is not None else 'WAIT'} "
+            f"ANOTHER_LIVE={live_text} "
+            f"ANOTHER_GOAL={'READY ' + _pct(another) if another is not None else 'WAIT'} | "
             f"PLUS2_LIVE={two_more_state} | DISABLED=GOAL_1T,OVER2.5,BTTS",
             flush=True,
         )

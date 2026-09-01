@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -99,8 +100,6 @@ def _prematch_confirmation(record):
     strong_profile=combined_avg>=strong_avg and min(home_avg,away_avg)>=1.45
     home_low=_float(hf.get("under15_rate"),1.0);away_low=_float(af.get("under15_rate"),1.0)
     low_scoring_ok=home_low<=max_low and away_low<=max_low
-    # A zero low-scoring rate is GOOD. The old `value or 1` expression turned 0.0
-    # into 1.0 and incorrectly blocked very high-scoring histories (o1.5=100%).
     goal_volume_pass=bool((avg_floor_ok or strong_profile) and low_scoring_ok)
     passed=bool(enough and goal_volume_pass and score is not None and score>=minimum)
     blocks=[]
@@ -147,13 +146,34 @@ def _send_two_more_results(rows):
 
 class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
     def __init__(self,journal_path:Path,max_disagreement:float=.20,analysis_path:Path|None=None):super().__init__(journal_path,max_disagreement=max_disagreement,analysis_path=analysis_path);self._diag_model_result={};self._diag_predict_wrapped=False;self._prematch_ready_cache={};self._tail_bootstrapped=False
+    def _warm_start_history(self,raw_dir:Path):
+        max_bytes=int(os.getenv("SIGNAL_WARM_START_BYTES",str(12*1024*1024)));by_match={};skipped=0;parsed=0
+        for path in sorted(raw_dir.glob("*.jsonl")):
+            try:
+                size=path.stat().st_size;self._offsets[str(path)]=size;skipped+=size
+                with path.open("rb") as fh:
+                    start=max(0,size-max_bytes);fh.seek(start)
+                    if start:fh.readline()
+                    for raw in fh:
+                        try:record=json.loads(raw.decode("utf-8"));parsed+=1
+                        except Exception:continue
+                        mid=_match_id(record);match=record.get("match") or {};minute=int(match.get("minute") or 0)
+                        if not mid or minute<=0 or bool(match.get("is_finished")):continue
+                        bucket=by_match.setdefault(mid,{})
+                        bucket[minute]=record
+                        ctx=record.get("prematch_context") or {}
+                        if _prematch_has_minimum(ctx):self._prematch_ready_cache[mid]=dict(ctx)
+            except FileNotFoundError:continue
+            except Exception as exc:print(f"SIGNAL_WARM_START_FILE_ERROR file={path.name} err={type(exc).__name__}:{exc}",flush=True)
+        warmed=0
+        for mid,minute_map in by_match.items():
+            for minute in sorted(minute_map)[-20:]:
+                try:self._attach_momentum(minute_map[minute],mid);warmed+=1
+                except Exception as exc:print(f"SIGNAL_WARM_START_MATCH_ERROR match={mid} minute={minute} err={type(exc).__name__}:{exc}",flush=True)
+        print(f"SIGNAL_TAIL_BOOTSTRAP files={len(self._offsets)} skipped_bytes={skipped} mode=warm_history parsed={parsed} matches={len(by_match)} warmed_minutes={warmed}",flush=True)
     def run_once(self,raw_dir:Path):
         if not self._tail_bootstrapped:
-            skipped=0
-            for path in sorted(raw_dir.glob("*.jsonl")):
-                try:size=path.stat().st_size;self._offsets[str(path)]=size;skipped+=size
-                except FileNotFoundError:continue
-            self._tail_bootstrapped=True;print(f"SIGNAL_TAIL_BOOTSTRAP files={len(self._offsets)} skipped_bytes={skipped} mode=fresh_only",flush=True);return 0
+            self._warm_start_history(raw_dir);self._tail_bootstrapped=True;return 0
         return super().run_once(raw_dir)
     def _ensure_model(self):
         ok=super()._ensure_model()

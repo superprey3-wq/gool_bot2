@@ -88,12 +88,16 @@ def _prematch_confirmation(record):
     for stats,weight in ((hf,.26),(af,.26),(hv,.18),(av,.18),(hh,.12)):
         if stats["matches"]<=0:continue
         avg=max(0.0,min(1.0,float(stats["avg_total"] or 0)/3.2));o15=float(stats["over15_rate"] or 0);o25=float(stats["over25_rate"] or 0);o35=float(stats["over35_rate"] or 0);low=float(stats["under15_rate"] or 0);zz=float(stats["zero_zero_rate"] or 0)
-        component=.38*avg+.30*o15+.22*o25+.10*o35-.20*low-.12*zz;components.append((max(0.0,min(1.0,component)),weight))
+        component=.42*avg+.28*o15+.20*o25+.10*o35-.14*low-.10*zz;components.append((max(0.0,min(1.0,component)),weight))
     score=sum(v*w for v,w in components)/sum(w for _,w in components) if components else None
-    minimum=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_SCORE","0.55"));min_avg=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_AVG_TOTAL","1.80"));min_goals=int(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_GOALS_10","18"));max_low=float(os.getenv("ANOTHER_GOAL_PREMATCH_MAX_LOW_SCORING_RATE","0.60"))
-    recent_n=max(1,min(hf["matches"],af["matches"]));goal_floor=max(1,round(min_goals*recent_n/10));home_goal_ok=hf["goals_total"]>=goal_floor and float(hf["avg_total"] or 0)>=min_avg;away_goal_ok=af["goals_total"]>=goal_floor and float(af["avg_total"] or 0)>=min_avg;low_scoring_ok=float(hf["under15_rate"] or 1)<=max_low and float(af["under15_rate"] or 1)<=max_low;goal_volume_pass=bool(home_goal_ok and away_goal_ok and low_scoring_ok)
+    minimum=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_SCORE","0.55"));min_avg=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_AVG_TOTAL","1.70"));strong_avg=float(os.getenv("ANOTHER_GOAL_PREMATCH_STRONG_AVG_TOTAL","2.20"));max_low=float(os.getenv("ANOTHER_GOAL_PREMATCH_MAX_LOW_SCORING_RATE","0.70"))
+    home_avg=float(hf["avg_total"] or 0);away_avg=float(af["avg_total"] or 0);combined_avg=(home_avg+away_avg)/2.0
+    avg_floor_ok=home_avg>=min_avg and away_avg>=min_avg
+    strong_profile=combined_avg>=strong_avg and min(home_avg,away_avg)>=1.45
+    low_scoring_ok=float(hf["under15_rate"] or 1)<=max_low and float(af["under15_rate"] or 1)<=max_low
+    goal_volume_pass=bool((avg_floor_ok or strong_profile) and low_scoring_ok)
     passed=bool(enough and goal_volume_pass and score is not None and score>=minimum)
-    return {"passed":passed,"score":score,"minimum":minimum,"enough_history":enough,"goal_volume_pass":goal_volume_pass,"goal_floor":goal_floor,"min_avg_total":min_avg,"max_low_scoring_rate":max_low,"home_form":hf,"away_form":af,"home_at_home":hv,"away_away":av,"h2h":hh,"source":ctx.get("source")}
+    return {"passed":passed,"score":score,"minimum":minimum,"enough_history":enough,"goal_volume_pass":goal_volume_pass,"min_avg_total":min_avg,"strong_avg_total":strong_avg,"combined_avg_total":combined_avg,"max_low_scoring_rate":max_low,"home_form":hf,"away_form":af,"home_at_home":hv,"away_away":av,"h2h":hh,"source":ctx.get("source")}
 
 def _another_goal_live_confirmation(record):
     match=record.get("match") or {};minute=int(match.get("minute") or 0);momentum=record.get("live_momentum") or {};xh,xa,xg_source,xg_evidence=xg_or_proxy_pair(record)
@@ -143,7 +147,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         self.model.predict=predict_with_capture;self._diag_predict_wrapped=True;return ok
     def _print_system_status(self,record):
         match=record.get("match") or {};mid=_match_id(record);minute=int(match.get("minute") or 0);trained=self._diag_model_result.get("trained_probability") or {};blended=self._diag_model_result.get("blended") or {};live=self._diag_model_result.get("another_goal_live") or {};pre=self._diag_model_result.get("prematch_analysis") or {};another=blended.get("another_goal");lp=live.get("combined_pressure");ps=pre.get("score");hf=pre.get("home_form") or {};af=pre.get("away_form") or {};ms=float(os.getenv("GOOL_LIVE_MIN_STRENGTH",".70"));two=_live_status(_LAST_TWO_MORE.get(mid),ms)
-        goals=f"goals10={hf.get('goals_total','?')}:{af.get('goals_total','?')} avg={float(hf.get('avg_total') or 0):.2f}:{float(af.get('avg_total') or 0):.2f} volume={'PASS' if pre.get('goal_volume_pass') else 'WAIT'}"
+        goals=f"avgGoals={float(hf.get('avg_total') or 0):.2f}:{float(af.get('avg_total') or 0):.2f} o1.5={float(hf.get('over15_rate') or 0)*100:.0f}%:{float(af.get('over15_rate') or 0)*100:.0f}% volume={'PASS' if pre.get('goal_volume_pass') else 'WAIT'}"
         print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | DATA={live.get('providers',provider_count(record))}/3 xG={live.get('xg_source','unavailable')} src={live.get('xg_sources',0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} {goals} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
     def _process(self,record):
         mid=_match_id(record);ctx=record.get("prematch_context") or {}

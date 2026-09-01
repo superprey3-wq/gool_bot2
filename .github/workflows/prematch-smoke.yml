@@ -1,0 +1,34 @@
+name: prematch-live-smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/gool_bot2/providers/flashscore.py'
+      - 'src/gool_bot2/live_collector.py'
+      - 'src/gool_bot2/signal_worker_all_cards.py'
+      - 'scripts/flashscore_prematch_smoke.py'
+      - '.github/workflows/prematch-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  flashscore-prematch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - name: Compile critical modules
+        run: |
+          python -m py_compile src/gool_bot2/providers/flashscore.py
+          python -m py_compile src/gool_bot2/live_collector.py
+          python -m py_compile src/gool_bot2/signal_worker_all_cards.py
+      - name: Live Flashscore prematch smoke
+        env:
+          SMOKE_MATCHES: '10'
+        run: python scripts/flashscore_prematch_smoke.py

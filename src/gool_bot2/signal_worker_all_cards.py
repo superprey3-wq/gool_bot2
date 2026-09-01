@@ -9,7 +9,7 @@ from . import signal_worker_all as base
 from . import signal_cards as trained_cards
 from .gool_live_cards import render_gool_live_result_card, render_gool_live_signal_card
 from .journal import append_analysis, save_signal_journal
-from .match_context import provider_pair
+from .match_context import provider_pair, provider_count
 from .signal_cards import flashscore_meta, stats_snapshot
 from .signal_policy import exposure_gate, post_goal_gate
 from .telegram import broadcast, broadcast_photo, signal_keyboard
@@ -67,37 +67,45 @@ def _weighted_ratio(values,expectations):
 def _form_stats(rows,team=None,venue=None):
     rows=list(rows or [])
     if not rows:return {"matches":0,"avg_total":None,"scored_rate":None,"conceded_rate":None,"over15_rate":None,"over25_rate":None}
-    totals=[];scored=[];conceded=[]
-    t=(team or "").casefold().strip()
+    totals=[];scored=[];conceded=[];t=(team or "").casefold().strip()
     for r in rows:
         hs=int(r.get("home_score") or 0);aws=int(r.get("away_score") or 0);totals.append(hs+aws)
         if t:
             is_home=str(r.get("home") or "").casefold().strip()==t;gf=hs if is_home else aws;ga=aws if is_home else hs;scored.append(gf>0);conceded.append(ga>0)
-    n=len(rows)
-    return {"matches":n,"avg_total":sum(totals)/n,"scored_rate":sum(scored)/n if scored else None,"conceded_rate":sum(conceded)/n if conceded else None,"over15_rate":sum(x>=2 for x in totals)/n,"over25_rate":sum(x>=3 for x in totals)/n}
+    n=len(rows);return {"matches":n,"avg_total":sum(totals)/n,"scored_rate":sum(scored)/n if scored else None,"conceded_rate":sum(conceded)/n if conceded else None,"over15_rate":sum(x>=2 for x in totals)/n,"over25_rate":sum(x>=3 for x in totals)/n}
 
 def _prematch_confirmation(record):
     ctx=record.get("prematch_context") or {};match=record.get("match") or {};home=str(match.get("home") or "");away=str(match.get("away") or "")
     hf=_form_stats(ctx.get("home_recent"),home);af=_form_stats(ctx.get("away_recent"),away);hv=_form_stats(ctx.get("home_at_home"),home);av=_form_stats(ctx.get("away_away"),away);hh=_form_stats(ctx.get("h2h"))
-    min_team=int(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_TEAM_MATCHES","5")); enough=hf["matches"]>=min_team and af["matches"]>=min_team
-    components=[]
+    min_team=int(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_TEAM_MATCHES","5")); enough=hf["matches"]>=min_team and af["matches"]>=min_team;components=[]
     for stats,weight in ((hf,.24),(af,.24),(hv,.16),(av,.16),(hh,.20)):
         if stats["matches"]<=0:continue
-        # Context quality: goals occur regularly, but this never creates a signal alone.
-        goal_rate=max(0.0,min(1.0,float(stats["avg_total"] or 0)/3.0)); over15=float(stats["over15_rate"] or 0);over25=float(stats["over25_rate"] or 0)
-        components.append(((.45*goal_rate+.35*over15+.20*over25),weight))
-    score=sum(v*w for v,w in components)/sum(w for _,w in components) if components else None
-    minimum=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_SCORE","0.55"));passed=bool(enough and score is not None and score>=minimum)
+        goal_rate=max(0.0,min(1.0,float(stats["avg_total"] or 0)/3.0));over15=float(stats["over15_rate"] or 0);over25=float(stats["over25_rate"] or 0);components.append(((.45*goal_rate+.35*over15+.20*over25),weight))
+    score=sum(v*w for v,w in components)/sum(w for _,w in components) if components else None;minimum=float(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_SCORE","0.55"));passed=bool(enough and score is not None and score>=minimum)
     return {"passed":passed,"score":score,"minimum":minimum,"enough_history":enough,"home_form":hf,"away_form":af,"home_at_home":hv,"away_away":av,"h2h":hh,"source":ctx.get("source")}
 
 def _another_goal_live_confirmation(record):
+    """LIVE gate using consensus plus shot quality from all available providers."""
     match=record.get("match") or {};minute=int(match.get("minute") or 0);momentum=record.get("live_momentum") or {}
-    cumulative={"xg":_pair_total(record,"xg"),"shots":_pair_total(record,"shots"),"sot":_pair_total(record,"shots_on_target"),"big":_pair_total(record,"big_chances"),"danger":_pair_total(record,"dangerous_attacks"),"corners":_pair_total(record,"corners")};progress=max(.03,min(1.0,float(minute)/90.0))
-    cp,ce=_weighted_ratio(cumulative,{"xg":(2.30*progress,.30),"shots":(24*progress,.14),"sot":(8*progress,.22),"big":(3.2*progress,.12),"danger":(96*progress,.12),"corners":(10*progress,.10)})
-    r5={"xg":momentum.get("xg_total_last_5m"),"shots":momentum.get("shots_total_last_5m"),"sot":momentum.get("sot_total_last_5m"),"big":momentum.get("big_total_last_5m"),"danger":momentum.get("danger_total_last_5m")};r10={"xg":momentum.get("xg_total_last_10m"),"shots":momentum.get("shots_total_last_10m"),"sot":momentum.get("sot_total_last_10m"),"big":momentum.get("big_total_last_10m"),"danger":momentum.get("danger_total_last_10m")}
+    cumulative={
+        "xg":_pair_total(record,"xg"),"xgot":_pair_total(record,"xgot"),"shots":_pair_total(record,"shots"),"sot":_pair_total(record,"shots_on_target"),
+        "inside":_pair_total(record,"shots_inside_box"),"big":_pair_total(record,"big_chances"),"high_xg":_pair_total(record,"high_xg_shots"),
+        "danger":_pair_total(record,"dangerous_attacks"),"touches":_pair_total(record,"touches_box"),"corners":_pair_total(record,"corners"),
+    }
+    progress=max(.03,min(1.0,float(minute)/90.0))
+    cp,ce=_weighted_ratio(cumulative,{
+        "xg":(2.30*progress,.22),"xgot":(1.65*progress,.13),"shots":(24*progress,.08),"sot":(8*progress,.13),
+        "inside":(14*progress,.12),"big":(3.2*progress,.10),"high_xg":(2.4*progress,.08),"danger":(96*progress,.06),"touches":(42*progress,.04),"corners":(10*progress,.04),
+    })
+    r5={"xg":momentum.get("xg_total_last_5m"),"shots":momentum.get("shots_total_last_5m"),"sot":momentum.get("sot_total_last_5m"),"big":momentum.get("big_total_last_5m"),"danger":momentum.get("danger_total_last_5m")}
+    r10={"xg":momentum.get("xg_total_last_10m"),"shots":momentum.get("shots_total_last_10m"),"sot":momentum.get("sot_total_last_10m"),"big":momentum.get("big_total_last_10m"),"danger":momentum.get("danger_total_last_10m")}
     p5,e5=_weighted_ratio(r5,{"xg":(.13,.34),"shots":(1.35,.16),"sot":(.45,.24),"big":(.18,.14),"danger":(5.3,.12)});p10,e10=_weighted_ratio(r10,{"xg":(.26,.34),"shots":(2.7,.16),"sot":(.9,.24),"big":(.36,.14),"danger":(10.6,.12)})
-    mc=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_CUMULATIVE","0.90"));m5=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_5M","1.05"));m10=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_10M","1.00"));me=int(os.getenv("ANOTHER_GOAL_LIVE_MIN_EVIDENCE","3"));enough=e5>=me and e10>=me;threat=(r5.get("xg") is not None and float(r5.get("xg") or 0)>=.12) or (r5.get("sot") is not None and float(r5.get("sot") or 0)>=1) or (r5.get("big") is not None and float(r5.get("big") or 0)>=1);passed=bool(enough and cp is not None and cp>=mc and p5 is not None and p5>=m5 and p10 is not None and p10>=m10 and threat);ps=[x for x in (cp,p5,p10) if x is not None];combined=sum(ps)/len(ps) if ps else None
-    return {"passed":passed,"pressure_score":combined,"combined_pressure":combined,"cumulative_pressure":cp,"pressure_5m":p5,"pressure_10m":p10,"minimum_5m":m5,"minimum_10m":m10,"minimum_cumulative":mc,"evidence_5m":e5,"evidence_10m":e10,"enough_history":enough,"direct_threat":threat,"recent_5m":r5,"recent_10m":r10,"cumulative":cumulative}
+    mc=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_CUMULATIVE","0.90"));m5=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_5M","1.05"));m10=float(os.getenv("ANOTHER_GOAL_LIVE_MIN_10M","1.00"));me=int(os.getenv("ANOTHER_GOAL_LIVE_MIN_EVIDENCE","3"));enough=e5>=me and e10>=me
+    recent_threat=(r5.get("xg") is not None and float(r5.get("xg") or 0)>=.12) or (r5.get("sot") is not None and float(r5.get("sot") or 0)>=1) or (r5.get("big") is not None and float(r5.get("big") or 0)>=1)
+    quality_threat=(cumulative.get("xgot") is not None and float(cumulative.get("xgot") or 0)>=.35) or (cumulative.get("inside") is not None and float(cumulative.get("inside") or 0)>=3) or (cumulative.get("big") is not None and float(cumulative.get("big") or 0)>=1) or (cumulative.get("high_xg") is not None and float(cumulative.get("high_xg") or 0)>=1)
+    passed=bool(enough and cp is not None and cp>=mc and p5 is not None and p5>=m5 and p10 is not None and p10>=m10 and recent_threat and quality_threat)
+    ps=[x for x in (cp,p5,p10) if x is not None];combined=sum(ps)/len(ps) if ps else None
+    return {"passed":passed,"pressure_score":combined,"combined_pressure":combined,"cumulative_pressure":cp,"pressure_5m":p5,"pressure_10m":p10,"minimum_5m":m5,"minimum_10m":m10,"minimum_cumulative":mc,"evidence_5m":e5,"evidence_10m":e10,"enough_history":enough,"direct_threat":recent_threat,"quality_threat":quality_threat,"recent_5m":r5,"recent_10m":r10,"cumulative":cumulative,"providers":provider_count(record),"xg_sources":provider_count(record,"xg"),"shot_sources":provider_count(record,"shots")}
 
 def _minute_aware_goal_timing(match,probability,model_result):
     minute=int(match.get("minute") or 0)
@@ -128,7 +136,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         self.model.predict=predict_with_capture;self._diag_predict_wrapped=True;return ok
     def _print_system_status(self,record):
         match=record.get("match") or {};mid=_match_id(record);minute=int(match.get("minute") or 0);trained=self._diag_model_result.get("trained_probability") or {};blended=self._diag_model_result.get("blended") or {};live=self._diag_model_result.get("another_goal_live") or {};pre=self._diag_model_result.get("prematch_analysis") or {};another=blended.get("another_goal");lp=live.get("combined_pressure");ps=pre.get("score");ms=float(os.getenv("GOOL_LIVE_MIN_STRENGTH",".70"));two=_live_status(_LAST_TWO_MORE.get(mid),ms)
-        print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
+        print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | DATA={live.get('providers',provider_count(record))}/3 xGsrc={live.get('xg_sources',0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
     def _process(self,record):
         self._diag_model_result={};emitted=super()._process(record);match=record.get("match") or {};minute=int(match.get("minute") or 0)
         if not bool(match.get("is_finished")) and (bool(match.get("is_halftime")) or 0<minute<=75):self._print_system_status(record)

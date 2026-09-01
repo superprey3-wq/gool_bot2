@@ -9,7 +9,7 @@ from . import signal_worker_all as base
 from . import signal_cards as trained_cards
 from .gool_live_cards import render_gool_live_result_card, render_gool_live_signal_card
 from .journal import append_analysis, save_signal_journal
-from .match_context import provider_pair, provider_count
+from .match_context import provider_pair, provider_count, xg_or_proxy_pair
 from .signal_cards import flashscore_meta, stats_snapshot
 from .signal_policy import exposure_gate, post_goal_gate
 from .telegram import broadcast, broadcast_photo, signal_keyboard
@@ -52,7 +52,11 @@ def _live_status(analyzer,min_strength):
     pressure_text="n/a" if pressure is None else f"{float(pressure):.2f}";state="BLOCK_PRESSURE" if not passed else (f"BLOCK_CHANCE<{min_strength*100:.0f}" if strength_f<min_strength else "READY")
     return f"{state} pressure={pressure_text} chance={strength_f*100:.0f}/100"
 def _pair_total(record,key):
-    try:home,away=provider_pair(record,key)
+    try:
+        if key=="xg":
+            home,away,_,_=xg_or_proxy_pair(record)
+        else:
+            home,away=provider_pair(record,key)
     except Exception:return None
     return None if home is None or away is None else float(home+away)
 def _weighted_ratio(values,expectations):
@@ -86,9 +90,9 @@ def _prematch_confirmation(record):
 
 def _another_goal_live_confirmation(record):
     """LIVE gate using consensus plus shot quality from all available providers."""
-    match=record.get("match") or {};minute=int(match.get("minute") or 0);momentum=record.get("live_momentum") or {}
+    match=record.get("match") or {};minute=int(match.get("minute") or 0);momentum=record.get("live_momentum") or {};xh,xa,xg_source,xg_evidence=xg_or_proxy_pair(record)
     cumulative={
-        "xg":_pair_total(record,"xg"),"xgot":_pair_total(record,"xgot"),"shots":_pair_total(record,"shots"),"sot":_pair_total(record,"shots_on_target"),
+        "xg":None if xh is None or xa is None else float(xh+xa),"xgot":_pair_total(record,"xgot"),"shots":_pair_total(record,"shots"),"sot":_pair_total(record,"shots_on_target"),
         "inside":_pair_total(record,"shots_inside_box"),"big":_pair_total(record,"big_chances"),"high_xg":_pair_total(record,"high_xg_shots"),
         "danger":_pair_total(record,"dangerous_attacks"),"touches":_pair_total(record,"touches_box"),"corners":_pair_total(record,"corners"),
     }
@@ -105,7 +109,7 @@ def _another_goal_live_confirmation(record):
     quality_threat=(cumulative.get("xgot") is not None and float(cumulative.get("xgot") or 0)>=.35) or (cumulative.get("inside") is not None and float(cumulative.get("inside") or 0)>=3) or (cumulative.get("big") is not None and float(cumulative.get("big") or 0)>=1) or (cumulative.get("high_xg") is not None and float(cumulative.get("high_xg") or 0)>=1)
     passed=bool(enough and cp is not None and cp>=mc and p5 is not None and p5>=m5 and p10 is not None and p10>=m10 and recent_threat and quality_threat)
     ps=[x for x in (cp,p5,p10) if x is not None];combined=sum(ps)/len(ps) if ps else None
-    return {"passed":passed,"pressure_score":combined,"combined_pressure":combined,"cumulative_pressure":cp,"pressure_5m":p5,"pressure_10m":p10,"minimum_5m":m5,"minimum_10m":m10,"minimum_cumulative":mc,"evidence_5m":e5,"evidence_10m":e10,"enough_history":enough,"direct_threat":recent_threat,"quality_threat":quality_threat,"recent_5m":r5,"recent_10m":r10,"cumulative":cumulative,"providers":provider_count(record),"xg_sources":provider_count(record,"xg"),"shot_sources":provider_count(record,"shots")}
+    return {"passed":passed,"pressure_score":combined,"combined_pressure":combined,"cumulative_pressure":cp,"pressure_5m":p5,"pressure_10m":p10,"minimum_5m":m5,"minimum_10m":m10,"minimum_cumulative":mc,"evidence_5m":e5,"evidence_10m":e10,"enough_history":enough,"direct_threat":recent_threat,"quality_threat":quality_threat,"recent_5m":r5,"recent_10m":r10,"cumulative":cumulative,"providers":provider_count(record),"xg_sources":provider_count(record,"xg"),"xg_source":xg_source,"xg_proxy_evidence":xg_evidence,"shot_sources":provider_count(record,"shots")}
 
 def _minute_aware_goal_timing(match,probability,model_result):
     minute=int(match.get("minute") or 0)
@@ -136,7 +140,7 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         self.model.predict=predict_with_capture;self._diag_predict_wrapped=True;return ok
     def _print_system_status(self,record):
         match=record.get("match") or {};mid=_match_id(record);minute=int(match.get("minute") or 0);trained=self._diag_model_result.get("trained_probability") or {};blended=self._diag_model_result.get("blended") or {};live=self._diag_model_result.get("another_goal_live") or {};pre=self._diag_model_result.get("prematch_analysis") or {};another=blended.get("another_goal");lp=live.get("combined_pressure");ps=pre.get("score");ms=float(os.getenv("GOOL_LIVE_MIN_STRENGTH",".70"));two=_live_status(_LAST_TWO_MORE.get(mid),ms)
-        print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | DATA={live.get('providers',provider_count(record))}/3 xGsrc={live.get('xg_sources',0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
+        print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | DATA={live.get('providers',provider_count(record))}/3 xG={live.get('xg_source','unavailable')} src={live.get('xg_sources',0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
     def _process(self,record):
         self._diag_model_result={};emitted=super()._process(record);match=record.get("match") or {};minute=int(match.get("minute") or 0)
         if not bool(match.get("is_finished")) and (bool(match.get("is_halftime")) or 0<minute<=75):self._print_system_status(record)

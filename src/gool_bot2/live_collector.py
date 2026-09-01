@@ -13,6 +13,7 @@ from .prefilter import football_prefilter
 from .providers.flashscore import FlashscoreProvider
 from .providers.fotmob import FotMobProvider
 from .providers.scores365 import Scores365Provider
+from .team_history import fotmob_team_history
 
 
 class LiveSnapshotCollector:
@@ -27,6 +28,7 @@ class LiveSnapshotCollector:
         self._secondary_cache: dict[str, dict[str, dict[str, Any]]] = {}
         self._tracked_matches: dict[str, dict[str, Any]] = {}
         self._prematch_context: dict[str, dict[str, Any]] = {}
+        self._prematch_last_attempt: dict[str, float] = {}
         self._stop = False
 
     @staticmethod
@@ -67,7 +69,7 @@ class LiveSnapshotCollector:
                 continue
             source = str(ctx.get("source") or "unknown")
             sources.append(source)
-            raw_counts[source] = int(ctx.get("raw_matches") or 0)
+            raw_counts[source] = max(raw_counts.get(source, 0), int(ctx.get("raw_matches") or 0))
             for key in keys:
                 seen = {
                     (str(r.get("home") or "").casefold(), str(r.get("away") or "").casefold(), int(r.get("home_score") or 0), int(r.get("away_score") or 0), str(r.get("timestamp") or ""))
@@ -87,12 +89,25 @@ class LiveSnapshotCollector:
         merged["raw_matches"] = sum(raw_counts.values())
         return merged
 
+    @staticmethod
+    def _history_ready(ctx: dict[str, Any], minimum: int) -> bool:
+        return len(ctx.get("home_recent") or []) >= minimum and len(ctx.get("away_recent") or []) >= minimum
+
     def _history_for(self, match: Any) -> dict[str, Any]:
         mid = str(match.provider_match_id)
-        if mid in self._prematch_context:
-            return self._prematch_context[mid]
         limit = int(os.getenv("PREMATCH_HISTORY_MATCHES", "10"))
-        contexts: list[dict[str, Any]] = []
+        minimum = int(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_TEAM_MATCHES", "5"))
+        retry_seconds = max(60, int(os.getenv("PREMATCH_HISTORY_RETRY_SECONDS", "180")))
+        cached = self._prematch_context.get(mid) or {}
+        if cached and self._history_ready(cached, minimum):
+            return cached
+        now = time.time()
+        previous_attempt = self._prematch_last_attempt.get(mid, 0.0)
+        if cached and now - previous_attempt < retry_seconds:
+            return cached
+        self._prematch_last_attempt[mid] = now
+
+        contexts: list[dict[str, Any]] = [cached] if cached else []
         try:
             contexts.append(self.flashscore.fetch_match_history(mid, str(match.home), str(match.away), limit=limit))
         except Exception as exc:
@@ -100,16 +115,23 @@ class LiveSnapshotCollector:
         try:
             contexts.append(self.fotmob.prematch_context(str(match.home), str(match.away), limit=limit))
         except Exception as exc:
-            print(f"prematch_fotmob_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
+            print(f"prematch_fotmob_embedded_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
+        try:
+            contexts.append(fotmob_team_history(self.fotmob, str(match.home), str(match.away), limit=limit))
+        except Exception as exc:
+            print(f"prematch_fotmob_team_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
         try:
             contexts.append(self.scores365.prematch_context(str(match.home), str(match.away), limit=limit))
         except Exception as exc:
             print(f"prematch_365scores_error match={mid} error={type(exc).__name__}:{exc}", flush=True)
+
         self._prematch_context[mid] = self._merge_history_contexts(contexts, limit)
         ctx = self._prematch_context[mid]
+        state = "READY" if self._history_ready(ctx, minimum) else "RETRY"
         print(
-            f"PREMATCH_DATA match={match.home} - {match.away} sources={','.join(ctx.get('sources') or []) or 'none'} "
-            f"home={len(ctx.get('home_recent') or [])} away={len(ctx.get('away_recent') or [])} h2h={len(ctx.get('h2h') or [])}",
+            f"PREMATCH_DATA match={match.home} - {match.away} state={state} sources={','.join(ctx.get('sources') or []) or 'none'} "
+            f"home={len(ctx.get('home_recent') or [])} away={len(ctx.get('away_recent') or [])} "
+            f"homeVenue={len(ctx.get('home_at_home') or [])} awayVenue={len(ctx.get('away_away') or [])} h2h={len(ctx.get('h2h') or [])} raw={ctx.get('source_raw_matches') or {}}",
             flush=True,
         )
         return ctx
@@ -171,7 +193,7 @@ class LiveSnapshotCollector:
                     state=states.get(mid)
                     if not state or not bool(state.get("is_finished")):continue
                     final_record=self._final_record(mid,self._tracked_matches[mid],state,now);self._append(final_record,now);self._append({**final_record,"captured_at":datetime.now(timezone.utc).isoformat()},now);counters["final"]+=1
-                    self._tracked_matches.pop(mid,None);self._last_secondary_minute.pop(mid,None);self._secondary_cache.pop(mid,None);self._prematch_context.pop(mid,None)
+                    self._tracked_matches.pop(mid,None);self._last_secondary_minute.pop(mid,None);self._secondary_cache.pop(mid,None);self._prematch_context.pop(mid,None);self._prematch_last_attempt.pop(mid,None)
             except Exception as exc:counters["errors"]+=1;print(f"final_state_error={type(exc).__name__}:{exc}",flush=True)
         return counters
 

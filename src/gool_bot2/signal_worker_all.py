@@ -91,6 +91,7 @@ class AllMatchSignalWorker(SignalWorker):
     def __init__(self, journal_path: Path, max_disagreement: float = 0.20, analysis_path: Path | None = None) -> None:
         super().__init__(journal_path, max_disagreement=max_disagreement, analysis_path=analysis_path)
         self._live_history: dict[str, list[dict[str, Any]]] = {}
+        self._live_epoch_start: dict[str, int] = {}
 
     def _attach_momentum(self, record: dict[str, Any], match_id: str) -> None:
         match = record.get("match") or {}
@@ -98,7 +99,20 @@ class AllMatchSignalWorker(SignalWorker):
         if minute <= 0:
             return
 
-        current: dict[str, Any] = {"minute": minute}
+        last_goal = _last_goal_minute(record)
+        half_start = 46 if minute >= 46 else 1
+        epoch_start = max(half_start, int(last_goal or 0))
+        previous_epoch = self._live_epoch_start.get(match_id)
+        if previous_epoch != epoch_start:
+            self._live_epoch_start[match_id] = epoch_start
+            self._live_history[match_id] = []
+            print(
+                f"LIVE_EPOCH_RESET match={match_id} minute={minute} start={epoch_start} "
+                f"reason={'goal' if last_goal and int(last_goal) >= half_start else ('second_half' if half_start == 46 else 'match_start')}",
+                flush=True,
+            )
+
+        current: dict[str, Any] = {"minute": minute, "epoch_start": epoch_start}
         for key, alias in (
             ("shots", "shots"),
             ("shots_on_target", "sot"),
@@ -111,19 +125,30 @@ class AllMatchSignalWorker(SignalWorker):
             current[f"away_{alias}"] = away
 
         history = self._live_history.setdefault(match_id, [])
-        # Replace a duplicate snapshot for the same displayed minute.
-        history = [row for row in history if int(row.get("minute") or -1) != minute]
+        history = [
+            row for row in history
+            if int(row.get("minute") or -1) != minute
+            and int(row.get("minute") or 0) >= epoch_start
+        ]
         history.append(current)
         history.sort(key=lambda row: int(row.get("minute") or 0))
         history = history[-24:]
         self._live_history[match_id] = history
 
-        momentum: dict[str, float | None] = {}
+        momentum: dict[str, float | None] = {
+            "epoch_start_minute": float(epoch_start),
+            "minutes_in_epoch": float(max(0, minute - epoch_start)),
+        }
         for window in (5, 10):
             target = minute - window
+            if target < epoch_start:
+                continue
             previous = None
             for row in reversed(history[:-1]):
-                if int(row.get("minute") or 0) <= target:
+                row_minute = int(row.get("minute") or 0)
+                if row_minute < epoch_start:
+                    break
+                if row_minute <= target:
                     previous = row
                     break
             if previous is None:
@@ -305,8 +330,6 @@ class AllMatchSignalWorker(SignalWorker):
         emitted = 0
         home_score, away_score = _reconciled_score(record)
 
-        # Existing trained heads keep their validated semantics. Every match still
-        # reaches the stack; HT-only heads simply return no trained output outside HT.
         for head in TRAINED_HEADS:
             trained_probability = model_result.get("trained_probability", {}).get(head)
             probability = model_result.get("blended", {}).get(head)
@@ -414,8 +437,6 @@ class AllMatchSignalWorker(SignalWorker):
             save_signal_journal(self.journal_path, journal)
             emitted += int(sent > 0)
 
-        # Independent GOOL LIVE layer: any score for +2 goals; BTTS when exactly
-        # one side has not scored. It uses recent 5m/10m acceleration through 75'.
         two_more = analyze_two_more_goals(record)
         btts_live = analyze_live_btts(record)
         print(
@@ -431,8 +452,6 @@ class AllMatchSignalWorker(SignalWorker):
             )
             journal = load_signal_journal(self.journal_path)
 
-        # At halftime the validated BTTS model keeps priority. Outside halftime,
-        # GOOL LIVE is allowed to create the BTTS signal from current pressure.
         if not is_halftime and btts_live.get("confidence_score") is not None:
             emitted += self._emit_gool_live_signal(
                 record, journal, "both_teams_to_score", float(btts_live["confidence_score"]), btts_live, model_result, cards

@@ -100,16 +100,20 @@ def _spark(d,hist,box,accent,current):
  for p in pts:d.ellipse((p[0]-4,p[1]-4,p[0]+4,p[1]+4),fill=accent)
 def _model_values(head,m):
  if head in {"over_2_5","both_teams_to_score"}:return [("HT MODEL",_pct((m.get("football_data") or {}).get(head)))]
+ if head=="another_goal":
+  live=m.get("another_goal_live") or {};pressure=live.get("combined_pressure")
+  live_value="—" if pressure is None else f"{float(pressure):.2f}x"
+  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("LIVE PRESSURE",live_value)]
  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("РАЗНИЦА",_pct((m.get("disagreement") or {}).get(head)))]
 def _goal_timing_split(match,probability,model_result):
  minute=int(match.get("minute") or 0);is_ht=bool(match.get("is_halftime"))
- if is_ht or minute>=46:return 0.0,100.0
- if minute<=0:return None,None
- try:p_any=max(0.01,min(0.99,float(probability)));p_ht=float((model_result.get("trained_probability") or {}).get("goal_before_ht"))
+ try:p_any=max(0.01,min(0.99,float(probability)))
  except:return None,None
- p_ht=max(0.0,min(p_any,p_ht));p_second=max(0.0,p_any-p_ht);total=p_ht+p_second
- if total<=0:return None,None
- first=100.0*p_ht/total;return first,100.0-first
+ if is_ht or minute>=46:return None,100.0*p_any
+ if minute<=0:return None,100.0*p_any
+ try:p_ht=float((model_result.get("trained_probability") or {}).get("goal_before_ht"))
+ except:return None,100.0*p_any
+ p_ht=max(0.0,min(p_any,p_ht));return 100.0*p_ht,100.0*p_any
 
 def render_signal_card(record,head,probability,model_result,cards):
  accent,label=THEMES.get(head,THEMES["another_goal"]);match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats);home=str(match.get("home") or "?");away=str(match.get("away") or "?");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {});timing=head=="another_goal";second_half=bool(match.get("is_halftime")) or minute>=46;H=1425 if timing else 1280
@@ -117,21 +121,22 @@ def render_signal_card(record,head,probability,model_result,cards):
  _center(d,label,142,_fit(d,label,850,38,True),accent);league=str(match.get("league") or "LIVE FOOTBALL");_center(d,league,194,_fit(d,league,900,19,False),MUTED);_badge(img,d,180,335,_logo(meta,"home"),home,accent);_badge(img,d,900,335,_logo(meta,"away"),away,accent);d.rounded_rectangle((390,255,690,418),28,fill=(9,19,31),outline=accent,width=3);_center(d,f"{hs} : {aws}",294,_font(66,True),TEXT);_center(d,"ПЕРЕРЫВ" if match.get("is_halftime") else f"{minute}'",370,_font(25,True),accent)
  for x,n in ((180,home),(900,away)):
   f=_fit(d,n,330,29);b=d.textbbox((0,0),n,font=f);d.text((x-(b[2]-b[0])/2,445),n,font=f,fill=TEXT)
- d.rounded_rectangle((55,505,1025,660),25,fill=PANEL2,outline=accent,width=2);d.text((85,530),"МОДЕЛЬНЫЙ СИГНАЛ",font=_font(18,True),fill=MUTED);d.text((85,568),label,font=_fit(d,label,600,29,True),fill=TEXT);d.text((810,523),"ВЕРОЯТНОСТЬ",font=_font(13,True),fill=MUTED);d.text((800,555),f"{probability*100:.1f}%",font=_font(40,True),fill=accent)
+ d.rounded_rectangle((55,505,1025,660),25,fill=PANEL2,outline=accent,width=2);d.text((85,530),"МОДЕЛЬНЫЙ СИГНАЛ",font=_font(18,True),fill=MUTED);d.text((85,568),label,font=_fit(d,label,600,29,True),fill=TEXT);d.text((810,523),"ГОЛ ДО КОНЦА",font=_font(13,True),fill=MUTED);d.text((800,555),f"{probability*100:.1f}%",font=_font(40,True),fill=accent)
  vals=_model_values(head,model_result)
- for i,(k,v) in enumerate(vals):_box(d,(55+i*245,690,285+i*245,795),k,v,accent=(GOLD if k=="РАЗНИЦА" else TEXT))
+ for i,(k,v) in enumerate(vals):_box(d,(55+i*245,690,285+i*245,795),k,v,accent=(GOLD if k in {"РАЗНИЦА","LIVE PRESSURE"} else TEXT))
  _box(d,(790,690,1025,795),"ИСТОЧНИКИ",f"{providers}/3",accent=accent)
  d.rounded_rectangle((55,825,1025,960),22,fill=PANEL,outline=LINE,width=2);d.text((82,846),"ДИНАМИКА ВЕРОЯТНОСТИ",font=_font(16,True),fill=MUTED);_spark(d,_history(mid,head),(350,850,990,930),accent,probability);d.text((82,890),f"{probability*100:.1f}%",font=_font(31,True),fill=accent)
  yoff=0
  if timing:
   d.rounded_rectangle((55,985,1025,1115),22,fill=PANEL2,outline=accent,width=2)
+  d.text((82,1005),"РЕАЛЬНАЯ ВЕРОЯТНОСТЬ ГОЛА",font=_font(16,True),fill=MUTED)
+  first,full=_goal_timing_split(match,probability,model_result)
   if second_half:
-   d.text((82,1005),"КОГДА ЖДЁМ СЛЕДУЮЩИЙ ГОЛ",font=_font(16,True),fill=MUTED);_center(d,"2-Й ТАЙМ",1048,_font(32,True),GOLD);d.rounded_rectangle((105,1090,975,1103),6,fill=GOLD)
+   _center(d,f"ГОЛ ДО КОНЦА МАТЧА  {full:.0f}%" if full is not None else "ОЦЕНКА НЕДОСТУПНА",1048,_font(30,True),GOLD)
+  elif first is None:
+   _center(d,f"ГОЛ ДО КОНЦА  {full:.0f}%" if full is not None else "ОЦЕНКА НЕДОСТУПНА",1048,_font(27,True),TEXT)
   else:
-   first,second=_goal_timing_split(match,probability,model_result);d.text((82,1005),"КОГДА ЖДЁМ СЛЕДУЮЩИЙ ГОЛ",font=_font(16,True),fill=MUTED)
-   if first is None:_center(d,"РАСПРЕДЕЛЕНИЕ ЕЩЁ НЕДОСТУПНО",1048,_font(22,True),TEXT)
-   else:
-    d.text((105,1048),f"1-Й ТАЙМ  {first:.0f}%",font=_font(27,True),fill=accent);d.text((615,1048),f"2-Й ТАЙМ  {second:.0f}%",font=_font(27,True),fill=GOLD);barx1,bary1,barx2,bary2=105,1090,975,1103;d.rounded_rectangle((barx1,bary1,barx2,bary2),6,fill=LINE);split=barx1+int((barx2-barx1)*first/100.0);d.rounded_rectangle((barx1,bary1,max(barx1+2,split),bary2),6,fill=accent)
+   d.text((95,1048),f"ГОЛ В 1-М ТАЙМЕ  {first:.0f}%",font=_font(25,True),fill=accent);d.text((575,1048),f"ДО КОНЦА  {full:.0f}%",font=_font(25,True),fill=GOLD)
   yoff=145
  items=[("xG",stats["xg"]),("УДАРЫ",stats["shots"]),("В СТВОР",stats["sot"]),("УГЛОВЫЕ",stats["corners"])]
  for i,(k,v) in enumerate(items):_box(d,(55+i*245,990+yoff,285+i*245,1095+yoff),k,v)

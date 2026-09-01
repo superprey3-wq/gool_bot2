@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Any
 from urllib.parse import quote
 
-from .common import ProviderMatch, UA, http_text
+from .common import ProviderMatch, UA, http_text, pair_score
 
 FSIGN = os.getenv("FLASHSCORE_FSIGN", "SW9D1eZo")
 FEED_HOSTS = ("global", "2", "46")
@@ -203,17 +203,42 @@ class FlashscoreProvider:
             if len(rows) >= limit: break
         return rows
 
+    @staticmethod
+    def _same_team(name: str, target: str) -> bool:
+        """Match Flashscore long/short/localized team labels robustly.
+
+        H2H often uses a shorter label than the live master feed, e.g.
+        'Fakel' vs 'Fakel Voronezh'. Exact casefold matching therefore loses
+        perfectly valid recent-form rows. pair_score already normalizes common
+        club prefixes/suffixes and handles these aliases conservatively.
+        """
+        name = str(name or "").strip(); target = str(target or "").strip()
+        if not name or not target: return False
+        if name.casefold() == target.casefold(): return True
+        return pair_score(target, target, name, name) >= 0.62
+
     def fetch_match_history(self, event_id: str, home: str, away: str, limit: int = 10) -> dict[str, Any]:
         body = self._h2h_feed(event_id)
         matches = self._parse_h2h_matches(body, event_id, limit=max(30, limit * 4))
-        home_l = home.casefold().strip(); away_l = away.casefold().strip()
         def has_team(row: dict[str, Any], team: str) -> bool:
-            return team in {str(row.get("home") or "").casefold().strip(), str(row.get("away") or "").casefold().strip()}
+            return self._same_team(str(row.get("home") or ""), team) or self._same_team(str(row.get("away") or ""), team)
         def latest(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             return sorted(rows, key=lambda x: int(x.get("timestamp") or 0), reverse=True)[:limit]
-        home_recent = latest([r for r in matches if has_team(r, home_l)])
-        away_recent = latest([r for r in matches if has_team(r, away_l)])
-        h2h = latest([r for r in matches if has_team(r, home_l) and has_team(r, away_l)])
-        home_at_home = latest([r for r in home_recent if str(r.get("home") or "").casefold().strip() == home_l])
-        away_away = latest([r for r in away_recent if str(r.get("away") or "").casefold().strip() == away_l])
-        return {"source": "flashscore_h2h", "event_id": event_id, "home_recent": home_recent, "away_recent": away_recent, "home_at_home": home_at_home, "away_away": away_away, "h2h": h2h, "raw_matches": len(matches)}
+        home_recent = latest([r for r in matches if has_team(r, home)])
+        away_recent = latest([r for r in matches if has_team(r, away)])
+        h2h = latest([r for r in matches if has_team(r, home) and has_team(r, away)])
+        home_at_home = latest([r for r in home_recent if self._same_team(str(r.get("home") or ""), home)])
+        away_away = latest([r for r in away_recent if self._same_team(str(r.get("away") or ""), away)])
+        return {
+            "source": "flashscore_h2h",
+            "event_id": event_id,
+            "home_recent": home_recent,
+            "away_recent": away_recent,
+            "home_at_home": home_at_home,
+            "away_away": away_away,
+            "h2h": h2h,
+            "raw_matches": len(matches),
+            "feed_present": bool(body),
+            "matched_home": len(home_recent),
+            "matched_away": len(away_recent),
+        }

@@ -76,19 +76,11 @@ class FlashscoreProvider:
         return ""
 
     def _h2h_feed(self, event_id: str) -> str:
-        """Flashscore H2H requests need match-page context headers on some hosts."""
         landing = f"https://www.flashscore.com/match/{event_id}/#/h2h/overall"
         headers = {
-            "User-Agent": UA,
-            "x-fsign": FSIGN,
-            "Origin": "https://www.flashscore.com",
-            "Referer": "https://www.flashscore.com/",
-            "Accept": "*/*",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "x-requested-with": "XMLHttpRequest",
-            "x-referer": landing,
-            "x-geoip": "1",
+            "User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com",
+            "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache",
+            "Pragma": "no-cache", "x-requested-with": "XMLHttpRequest", "x-referer": landing, "x-geoip": "1",
         }
         path = f"df_hh_1_{event_id}"
         for host in FEED_HOSTS:
@@ -179,15 +171,15 @@ class FlashscoreProvider:
         return goals
 
     @staticmethod
-    def _parse_h2h_matches(body: str, current_event_id: str, limit: int = 40) -> list[dict[str, Any]]:
+    def _parse_h2h_matches(body: str, current_event_id: str, limit: int = 60) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         section = "unknown"
         for chunk in (body or "").split("~"):
             if not chunk: continue
             if chunk.startswith("ZA÷") or chunk.startswith("ZB÷"):
                 label = " ".join(_fields(chunk).values()).lower()
-                if "head" in label or "h2h" in label: section = "h2h"
-                elif "home" in label: section = "home_form"
+                if "head" in label or "h2h" in label or "mutual" in label: section = "h2h"
+                elif "home" in label or "last games" in label or "recent" in label: section = "home_form"
                 elif "away" in label: section = "away_form"
                 continue
             if not chunk.startswith("AA÷"): continue
@@ -205,13 +197,6 @@ class FlashscoreProvider:
 
     @staticmethod
     def _same_team(name: str, target: str) -> bool:
-        """Match Flashscore long/short/localized team labels robustly.
-
-        H2H often uses a shorter label than the live master feed, e.g.
-        'Fakel' vs 'Fakel Voronezh'. Exact casefold matching therefore loses
-        perfectly valid recent-form rows. pair_score already normalizes common
-        club prefixes/suffixes and handles these aliases conservatively.
-        """
         name = str(name or "").strip(); target = str(target or "").strip()
         if not name or not target: return False
         if name.casefold() == target.casefold(): return True
@@ -219,26 +204,44 @@ class FlashscoreProvider:
 
     def fetch_match_history(self, event_id: str, home: str, away: str, limit: int = 10) -> dict[str, Any]:
         body = self._h2h_feed(event_id)
-        matches = self._parse_h2h_matches(body, event_id, limit=max(30, limit * 4))
+        matches = self._parse_h2h_matches(body, event_id, limit=max(60, limit * 6))
         def has_team(row: dict[str, Any], team: str) -> bool:
             return self._same_team(str(row.get("home") or ""), team) or self._same_team(str(row.get("away") or ""), team)
         def latest(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-            return sorted(rows, key=lambda x: int(x.get("timestamp") or 0), reverse=True)[:limit]
-        home_recent = latest([r for r in matches if has_team(r, home)])
-        away_recent = latest([r for r in matches if has_team(r, away)])
-        h2h = latest([r for r in matches if has_team(r, home) and has_team(r, away)])
+            seen: set[str] = set(); out: list[dict[str, Any]] = []
+            for row in sorted(rows, key=lambda x: int(x.get("timestamp") or 0), reverse=True):
+                key = str(row.get("event_id") or "")
+                if key and key in seen: continue
+                if key: seen.add(key)
+                out.append(row)
+                if len(out) >= limit: break
+            return out
+
+        by_home_section = [r for r in matches if str(r.get("section")) == "home_form"]
+        by_away_section = [r for r in matches if str(r.get("section")) == "away_form"]
+        by_h2h_section = [r for r in matches if str(r.get("section")) == "h2h"]
+
+        matched_home = [r for r in matches if has_team(r, home)]
+        matched_away = [r for r in matches if has_team(r, away)]
+
+        home_recent = latest(by_home_section or matched_home)
+        away_recent = latest(by_away_section or matched_away)
+        h2h = latest(by_h2h_section or [r for r in matches if has_team(r, home) and has_team(r, away)])
+
+        # If Flashscore labels only the first recent-form block, recover the second
+        # from team matching instead of returning an empty away side.
+        if len(home_recent) < min(5, limit): home_recent = latest(matched_home)
+        if len(away_recent) < min(5, limit): away_recent = latest(matched_away)
+
         home_at_home = latest([r for r in home_recent if self._same_team(str(r.get("home") or ""), home)])
         away_away = latest([r for r in away_recent if self._same_team(str(r.get("away") or ""), away)])
+
+        sections = {name: sum(1 for r in matches if str(r.get("section")) == name) for name in ("home_form", "away_form", "h2h", "unknown")}
         return {
-            "source": "flashscore_h2h",
-            "event_id": event_id,
-            "home_recent": home_recent,
-            "away_recent": away_recent,
-            "home_at_home": home_at_home,
-            "away_away": away_away,
-            "h2h": h2h,
-            "raw_matches": len(matches),
-            "feed_present": bool(body),
-            "matched_home": len(home_recent),
-            "matched_away": len(away_recent),
+            "source": "flashscore_h2h", "event_id": event_id,
+            "home_recent": home_recent, "away_recent": away_recent,
+            "home_at_home": home_at_home, "away_away": away_away, "h2h": h2h,
+            "raw_matches": len(matches), "feed_present": bool(body),
+            "matched_home": len(home_recent), "matched_away": len(away_recent),
+            "section_counts": sections,
         }

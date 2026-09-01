@@ -6,6 +6,9 @@ import sys
 from typing import Any
 
 from gool_bot2.providers.flashscore import FlashscoreProvider
+from gool_bot2.providers.fotmob import FotMobProvider
+from gool_bot2.providers.scores365 import Scores365Provider
+from gool_bot2.team_history import fotmob_team_history
 
 
 def _score_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -24,61 +27,123 @@ def _score_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "score": [r.get("home_score"), r.get("away_score")],
                 "section": r.get("section"),
                 "timestamp": r.get("timestamp"),
+                "source": r.get("source"),
             }
             for r in rows[:5]
         ],
     }
 
 
+def _ctx_summary(ctx: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": ctx.get("source"),
+        "raw_matches": int(ctx.get("raw_matches") or 0),
+        "match_score": ctx.get("match_score"),
+        "feed_present": ctx.get("feed_present"),
+        "matched_home": ctx.get("matched_home"),
+        "matched_away": ctx.get("matched_away"),
+        "sections": ctx.get("section_counts"),
+        "home": _score_summary(list(ctx.get("home_recent") or [])),
+        "away": _score_summary(list(ctx.get("away_recent") or [])),
+        "home_venue": _score_summary(list(ctx.get("home_at_home") or [])),
+        "away_venue": _score_summary(list(ctx.get("away_away") or [])),
+        "h2h": _score_summary(list(ctx.get("h2h") or [])),
+    }
+
+
+def _usable(summary: dict[str, Any], minimum: int = 3) -> bool:
+    return int((summary.get("home") or {}).get("n") or 0) >= minimum and int((summary.get("away") or {}).get("n") or 0) >= minimum
+
+
+def _false_zero(summary: dict[str, Any]) -> bool:
+    home = summary.get("home") or {}
+    away = summary.get("away") or {}
+    return (int(home.get("n") or 0) >= 5 and bool(home.get("all_zero"))) or (int(away.get("n") or 0) >= 5 and bool(away.get("all_zero")))
+
+
 def main() -> int:
-    provider = FlashscoreProvider()
-    live = [m for m in provider.live_matches() if 15 <= int(m.minute or 0) <= 80]
+    flashscore = FlashscoreProvider()
+    fotmob = FotMobProvider()
+    scores365 = Scores365Provider()
+
+    live = [m for m in flashscore.live_matches() if 15 <= int(m.minute or 0) <= 80]
     limit_matches = int(os.getenv("SMOKE_MATCHES", "8"))
     checked = 0
+    provider_success = {"flashscore": 0, "fotmob": 0, "365scores": 0}
     failures: list[str] = []
 
-    print(json.dumps({"live_candidates": len(live), "sample_limit": limit_matches}, ensure_ascii=False))
+    print(json.dumps({"live_candidates": len(live), "sample_limit": limit_matches, "providers": list(provider_success)}, ensure_ascii=False))
+
     for match in live[:limit_matches]:
+        contexts: dict[str, dict[str, Any]] = {}
+        errors: dict[str, str] = {}
+
         try:
-            ctx = provider.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10)
+            contexts["flashscore"] = flashscore.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10)
         except Exception as exc:
-            failures.append(f"{match.home} - {match.away}: exception {type(exc).__name__}: {exc}")
-            continue
+            errors["flashscore"] = f"{type(exc).__name__}: {exc}"
+
+        try:
+            embedded = fotmob.prematch_context(match.home, match.away, limit=10)
+            team = fotmob_team_history(fotmob, match.home, match.away, limit=10)
+            # Team endpoint is the stronger FotMob history source; embedded is kept as fallback/diagnostic.
+            if len(team.get("home_recent") or []) + len(team.get("away_recent") or []) >= len(embedded.get("home_recent") or []) + len(embedded.get("away_recent") or []):
+                contexts["fotmob"] = team
+                contexts["fotmob_embedded"] = embedded
+            else:
+                contexts["fotmob"] = embedded
+                contexts["fotmob_team"] = team
+        except Exception as exc:
+            errors["fotmob"] = f"{type(exc).__name__}: {exc}"
+
+        try:
+            contexts["365scores"] = scores365.prematch_context(match.home, match.away, limit=10)
+        except Exception as exc:
+            errors["365scores"] = f"{type(exc).__name__}: {exc}"
+
+        summaries = {name: _ctx_summary(ctx) for name, ctx in contexts.items()}
+        primary = {name: summaries.get(name) for name in ("flashscore", "fotmob", "365scores") if summaries.get(name) is not None}
+        usable = {name: _usable(summary) for name, summary in primary.items()}
+        for name, ok in usable.items():
+            if ok:
+                provider_success[name] += 1
+
         checked += 1
-        home = _score_summary(list(ctx.get("home_recent") or []))
-        away = _score_summary(list(ctx.get("away_recent") or []))
-        payload = {
+        print("PREMATCH_MULTI_SMOKE " + json.dumps({
             "match": f"{match.home} - {match.away}",
             "id": match.provider_match_id,
             "minute": match.minute,
-            "feed_present": ctx.get("feed_present"),
-            "raw_matches": ctx.get("raw_matches"),
-            "matched_home": ctx.get("matched_home"),
-            "matched_away": ctx.get("matched_away"),
-            "sections": ctx.get("section_counts"),
-            "home": home,
-            "away": away,
-        }
-        print("PREMATCH_SMOKE " + json.dumps(payload, ensure_ascii=False))
+            "providers": summaries,
+            "usable": usable,
+            "errors": errors,
+        }, ensure_ascii=False))
 
-        raw = int(ctx.get("raw_matches") or 0)
-        if ctx.get("feed_present") and raw >= 8:
-            if home["n"] < 3 or away["n"] < 3:
-                failures.append(f"{match.home} - {match.away}: feed has {raw} rows but matched home={home['n']} away={away['n']}")
-            if home["n"] >= 5 and home["all_zero"]:
-                failures.append(f"{match.home} - {match.away}: home recent parsed as all 0:0")
-            if away["n"] >= 5 and away["all_zero"]:
-                failures.append(f"{match.home} - {match.away}: away recent parsed as all 0:0")
+        # Fail only when every provider fails to provide usable recent history.
+        # One provider being unavailable must not block the bot if another source has the data.
+        if not any(usable.values()):
+            failures.append(f"{match.home} - {match.away}: no provider returned >=3 recent matches for both teams; errors={errors}")
+
+        # Explicitly catch the corruption that caused fake 0:0 averages.
+        for name, summary in primary.items():
+            if _false_zero(summary):
+                alternatives = [other for other, ok in usable.items() if other != name and ok and not _false_zero(primary[other])]
+                if alternatives:
+                    print(f"PROVIDER_SUPPRESS_CANDIDATE match={match.home} - {match.away} bad={name} alternatives={','.join(alternatives)}")
+                else:
+                    failures.append(f"{match.home} - {match.away}: {name} parsed 5+ recent matches as all 0:0 and no clean provider fallback exists")
 
     if checked == 0:
-        print("No suitable live matches were available; smoke test is inconclusive.")
+        print("No suitable live matches were available; multi-provider smoke test is inconclusive.")
         return 0
+
+    print("PROVIDER_COVERAGE " + json.dumps(provider_success, ensure_ascii=False))
     if failures:
-        print("PREMATCH_SMOKE_FAILURES")
+        print("PREMATCH_MULTI_SMOKE_FAILURES")
         for failure in failures:
             print("- " + failure)
         return 1
-    print(f"PREMATCH_SMOKE_OK checked={checked}")
+
+    print(f"PREMATCH_MULTI_SMOKE_OK checked={checked} coverage={provider_success}")
     return 0
 
 

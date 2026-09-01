@@ -75,6 +75,28 @@ class FlashscoreProvider:
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 
+    def _h2h_feed(self, event_id: str) -> str:
+        """Flashscore H2H requests need match-page context headers on some hosts."""
+        landing = f"https://www.flashscore.com/match/{event_id}/#/h2h/overall"
+        headers = {
+            "User-Agent": UA,
+            "x-fsign": FSIGN,
+            "Origin": "https://www.flashscore.com",
+            "Referer": "https://www.flashscore.com/",
+            "Accept": "*/*",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "x-requested-with": "XMLHttpRequest",
+            "x-referer": landing,
+            "x-geoip": "1",
+        }
+        path = f"df_hh_1_{event_id}"
+        for host in FEED_HOSTS:
+            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=15)
+            if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"):
+                return body
+        return ""
+
     @staticmethod
     @lru_cache(maxsize=1024)
     def team_logo_url(team_slug: str, team_id: str) -> str | None:
@@ -158,7 +180,6 @@ class FlashscoreProvider:
 
     @staticmethod
     def _parse_h2h_matches(body: str, current_event_id: str, limit: int = 40) -> list[dict[str, Any]]:
-        """Parse finished matches returned by Flashscore's match H2H/form feed."""
         rows: list[dict[str, Any]] = []
         section = "unknown"
         for chunk in (body or "").split("~"):
@@ -178,18 +199,12 @@ class FlashscoreProvider:
             if not home or not away: continue
             hs = _as_int(f.get("AG"), _as_int(f.get("AT"), -1)); aws = _as_int(f.get("AH"), _as_int(f.get("AU"), -1))
             if hs < 0 or aws < 0: continue
-            rows.append({"event_id": event_id, "home": home, "away": away, "home_score": hs, "away_score": aws, "timestamp": _as_int(f.get("AD")), "section": section})
+            rows.append({"event_id": event_id, "home": home, "away": away, "home_score": hs, "away_score": aws, "timestamp": _as_int(f.get("AD")), "section": section, "source": "flashscore"})
             if len(rows) >= limit: break
         return rows
 
     def fetch_match_history(self, event_id: str, home: str, away: str, limit: int = 10) -> dict[str, Any]:
-        """Fetch recent-team form and H2H from Flashscore for the current event.
-
-        Flashscore exposes the same data used by the match-page H2H/form tab through
-        df_hh_1_<event>. We deliberately use it only as pre-match context: history
-        can confirm/penalize a setup but never create a signal by itself.
-        """
-        body = self._feed(f"df_hh_1_{event_id}")
+        body = self._h2h_feed(event_id)
         matches = self._parse_h2h_matches(body, event_id, limit=max(30, limit * 4))
         home_l = home.casefold().strip(); away_l = away.casefold().strip()
         def has_team(row: dict[str, Any], team: str) -> bool:

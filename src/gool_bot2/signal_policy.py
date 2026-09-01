@@ -41,9 +41,6 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
         if minute > limit:
             reasons.append(f"entry_window_closed_{limit}")
     elif head == "goal_before_ht":
-        # First-half model + GOOL pressure confirmation. Score state no longer
-        # restricts this strategy: it can look for one more goal at 0:0, 1:0,
-        # 0:1, 2:0, 0:3, etc., while the first-half entry window is open.
         if is_halftime or minute > 25:
             reasons.append("first_half_signal_window_closed_25")
     elif head in {"over_2_5", "both_teams_to_score"}:
@@ -55,20 +52,13 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
 
 
 def market_state_gate(head: str, home_score: int, away_score: int) -> GateResult:
-    """Apply only score-state restrictions that are intrinsic to a market."""
     home_score = int(home_score or 0)
     away_score = int(away_score or 0)
     reasons: list[str] = []
-
-    # goal_before_ht intentionally has no score restriction. It means one MORE
-    # first-half goal from the current state, not specifically a goal from 0:0.
     if head == "over_2_5" and (home_score, away_score) not in {(1, 0), (0, 1)}:
-        # O2.5 is intentionally only a HT 1:0 / 0:1 setup: the prediction
-        # requires two more goals after the break instead of a low-price one-goal continuation.
         reasons.append("over25_ht_1_0_or_0_1_only")
     elif head == "both_teams_to_score" and home_score > 0 and away_score > 0:
         reasons.append("btts_already_won")
-
     return GateResult(not reasons, tuple(reasons))
 
 
@@ -84,7 +74,10 @@ def post_goal_gate(minute: int, last_goal_minute: int | None, cooldown_minutes: 
 def model_threshold_gate(head: str, probability: float, score: float) -> GateResult:
     probability_pct = float(probability) * 100.0 if float(probability) <= 1.0 else float(probability)
     if head == "another_goal":
-        min_score = float(os.getenv("ANOTHER_GOAL_MIN_SCORE", "75"))
+        # PREMATCH + sustained LIVE are now mandatory, so 75% here was needlessly
+        # rejecting otherwise fully-confirmed matches. 72% keeps the model selective
+        # while allowing the two independent gates to do their job.
+        min_score = float(os.getenv("ANOTHER_GOAL_MIN_SCORE", "72"))
         min_probability = 0.0
     elif head == "over_2_5":
         min_score = float(os.getenv("OVER25_MIN_SCORE", "70"))

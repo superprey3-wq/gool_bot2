@@ -78,6 +78,10 @@ def _form_stats(rows,team=None,venue=None):
             is_home=str(r.get("home") or "").casefold().strip()==t;gf=hs if is_home else aws;ga=aws if is_home else hs;scored.append(gf>0);conceded.append(ga>0)
     n=len(rows);return {"matches":n,"avg_total":sum(totals)/n,"scored_rate":sum(scored)/n if scored else None,"conceded_rate":sum(conceded)/n if conceded else None,"over15_rate":sum(x>=2 for x in totals)/n,"over25_rate":sum(x>=3 for x in totals)/n}
 
+def _prematch_has_minimum(ctx):
+    minimum=int(os.getenv("ANOTHER_GOAL_PREMATCH_MIN_TEAM_MATCHES","5"))
+    return bool(isinstance(ctx,dict) and len(ctx.get("home_recent") or [])>=minimum and len(ctx.get("away_recent") or [])>=minimum)
+
 def _prematch_confirmation(record):
     ctx=record.get("prematch_context") or {};match=record.get("match") or {};home=str(match.get("home") or "");away=str(match.get("away") or "")
     hf=_form_stats(ctx.get("home_recent"),home);af=_form_stats(ctx.get("away_recent"),away);hv=_form_stats(ctx.get("home_at_home"),home);av=_form_stats(ctx.get("away_away"),away);hh=_form_stats(ctx.get("h2h"))
@@ -128,7 +132,19 @@ def _send_two_more_results(rows):
         if sent==0:broadcast(caption+f"\n{row.get('home','?')} — {row.get('away','?')} · {int(row.get('settled_minute') or 0)}' · {int(score[0] or 0)}:{int(score[1] or 0)}")
 
 class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
-    def __init__(self,journal_path:Path,max_disagreement:float=.20,analysis_path:Path|None=None):super().__init__(journal_path,max_disagreement=max_disagreement,analysis_path=analysis_path);self._diag_model_result={};self._diag_predict_wrapped=False
+    def __init__(self,journal_path:Path,max_disagreement:float=.20,analysis_path:Path|None=None):
+        super().__init__(journal_path,max_disagreement=max_disagreement,analysis_path=analysis_path);self._diag_model_result={};self._diag_predict_wrapped=False;self._prematch_ready_cache={};self._tail_bootstrapped=False
+    def run_once(self,raw_dir:Path):
+        if not self._tail_bootstrapped:
+            skipped=0
+            for path in sorted(raw_dir.glob("*.jsonl")):
+                try:
+                    size=path.stat().st_size;self._offsets[str(path)]=size;skipped+=size
+                except FileNotFoundError:continue
+            self._tail_bootstrapped=True
+            print(f"SIGNAL_TAIL_BOOTSTRAP files={len(self._offsets)} skipped_bytes={skipped} mode=fresh_only",flush=True)
+            return 0
+        return super().run_once(raw_dir)
     def _ensure_model(self):
         ok=super()._ensure_model()
         if not ok or self.model is None or self._diag_predict_wrapped:return ok
@@ -142,8 +158,16 @@ class CardAllMatchSignalWorker(base.AllMatchSignalWorker):
         match=record.get("match") or {};mid=_match_id(record);minute=int(match.get("minute") or 0);trained=self._diag_model_result.get("trained_probability") or {};blended=self._diag_model_result.get("blended") or {};live=self._diag_model_result.get("another_goal_live") or {};pre=self._diag_model_result.get("prematch_analysis") or {};another=blended.get("another_goal");lp=live.get("combined_pressure");ps=pre.get("score");ms=float(os.getenv("GOOL_LIVE_MIN_STRENGTH",".70"));two=_live_status(_LAST_TWO_MORE.get(mid),ms)
         print(f"GOOL_SYSTEMS match={match.get('home','?')} - {match.get('away','?')} stage={'HT' if match.get('is_halftime') else minute} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} | DATA={live.get('providers',provider_count(record))}/3 xG={live.get('xg_source','unavailable')} src={live.get('xg_sources',0)} | PREMATCH={'PASS' if pre.get('passed') else 'WAIT'} {'n/a' if ps is None else f'{float(ps)*100:.0f}/100'} | MODEL={_pct(trained.get('another_goal'))} | LIVE={'PASS' if live.get('passed') else 'WAIT'} {'n/a' if lp is None else f'{float(lp):.2f}x'} | ANOTHER_GOAL={'READY '+_pct(another) if another is not None else 'WAIT'} | PLUS2={two}",flush=True)
     def _process(self,record):
+        mid=_match_id(record);ctx=record.get("prematch_context") or {}
+        if mid and _prematch_has_minimum(ctx):
+            self._prematch_ready_cache[mid]=dict(ctx)
+        elif mid and mid in self._prematch_ready_cache:
+            record["prematch_context"]=dict(self._prematch_ready_cache[mid])
+            cached=record["prematch_context"]
+            print(f"PREMATCH_CACHE_RESTORE match={mid} home={len(cached.get('home_recent') or [])} away={len(cached.get('away_recent') or [])}",flush=True)
         self._diag_model_result={};emitted=super()._process(record);match=record.get("match") or {};minute=int(match.get("minute") or 0)
         if not bool(match.get("is_finished")) and (bool(match.get("is_halftime")) or 0<minute<=75):self._print_system_status(record)
+        if bool(match.get("is_finished")) and mid:self._prematch_ready_cache.pop(mid,None)
         return emitted
     def _emit_gool_live_signal(self,record,journal,head,confidence,analyzer,model_result,cards):
         if head!="two_more_goals":return 0

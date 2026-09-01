@@ -35,7 +35,13 @@ def _pair(r,k,digits=0,suffix=""):
  if a is None or b is None:return "—"
  if digits:return f"{a:.{digits}f}{suffix} : {b:.{digits}f}{suffix}"
  return f"{int(round(a))}{suffix} : {int(round(b))}{suffix}"
-def _stats(r):return {"xg":_pair(r,"xg",2),"shots":_pair(r,"shots"),"sot":_pair(r,"shots_on_target"),"corners":_pair(r,"corners"),"possession":_pair(r,"possession",0,"%"),"big_chances":_pair(r,"big_chances")}
+def _stats(r):
+ return {
+  "xg":_pair(r,"xg",2),"xgot":_pair(r,"xgot",2),"shots":_pair(r,"shots"),
+  "sot":_pair(r,"shots_on_target"),"inside":_pair(r,"shots_inside_box"),
+  "big_chances":_pair(r,"big_chances"),"corners":_pair(r,"corners"),
+  "touches_box":_pair(r,"touches_box"),"dangerous_attacks":_pair(r,"dangerous_attacks"),
+ }
 def stats_snapshot(r):return _stats(r)
 def flashscore_meta(r):return dict((((r.get("providers") or {}).get("flashscore") or {}).get("meta") or {}))
 def _asset_path():return Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"signal_card_assets.json"
@@ -80,11 +86,20 @@ def _logo(meta,side):
   if im:return im
  u=FlashscoreProvider.team_logo_url(str(meta.get(f"{side}_team_slug") or ""),str(meta.get(f"{side}_team_id") or "")) or "";return _download(u) if u else None
 def _badge(img,d,x,y,logo,name,accent):
- r=72;d.ellipse((x-r-9,y-r-9,x+r+9,y+r+9),outline=accent,width=3);d.ellipse((x-r,y-r,x+r,y+r),fill=PANEL2,outline=LINE,width=2)
+ r=64;d.ellipse((x-r-8,y-r-8,x+r+8,y+r+8),outline=accent,width=3);d.ellipse((x-r,y-r,x+r,y+r),fill=PANEL2,outline=LINE,width=2)
  if logo:
-  bb=logo.getbbox();logo=logo.crop(bb) if bb else logo;s=min(122/max(1,logo.width),122/max(1,logo.height));logo=logo.resize((max(1,int(logo.width*s)),max(1,int(logo.height*s))),Image.Resampling.LANCZOS);img.alpha_composite(logo,(x-logo.width//2,y-logo.height//2))
+  bb=logo.getbbox();logo=logo.crop(bb) if bb else logo;s=min(108/max(1,logo.width),108/max(1,logo.height));logo=logo.resize((max(1,int(logo.width*s)),max(1,int(logo.height*s))),Image.Resampling.LANCZOS);img.alpha_composite(logo,(x-logo.width//2,y-logo.height//2))
  else:
-  ini="".join(z[:1] for z in str(name).split()[:3]).upper() or "?";f=_font(28,True);b=d.textbbox((0,0),ini,font=f);d.text((x-(b[2]-b[0])/2,y-18),ini,font=f,fill=TEXT)
+  ini="".join(z[:1] for z in str(name).split()[:3]).upper() or "?";f=_font(26,True);b=d.textbbox((0,0),ini,font=f);d.text((x-(b[2]-b[0])/2,y-16),ini,font=f,fill=TEXT)
+def _red_card_badge(d,x,y,count):
+ try:n=int(count or 0)
+ except:n=0
+ if n<=0:return
+ w=126 if n==1 else 154
+ d.rounded_rectangle((x-w//2,y,x+w//2,y+42),12,fill=(77,10,18),outline=RED,width=2)
+ d.rounded_rectangle((x-w//2+12,y+9,x-w//2+28,y+33),3,fill=RED)
+ txt="УДАЛЕНИЕ" if n==1 else f"УДАЛЕНИЕ ×{n}"
+ d.text((x-w//2+37,y+9),txt,font=_font(13,True),fill=RED)
 def _box(d,xy,title,value,sub="",accent=TEXT):
  d.rounded_rectangle(xy,18,fill=PANEL,outline=LINE,width=2);x1,y1,x2,y2=xy;d.text((x1+18,y1+13),title,font=_font(14,True),fill=MUTED);d.text((x1+18,y1+42),value,font=_fit(d,value,x2-x1-36,24,True),fill=accent)
  if sub:d.text((x1+18,y2-23),sub,font=_fit(d,sub,x2-x1-36,12,False),fill=MUTED)
@@ -103,7 +118,7 @@ def _model_values(head,m):
  if head=="another_goal":
   live=m.get("another_goal_live") or {};pressure=live.get("combined_pressure")
   live_value="—" if pressure is None else f"{float(pressure):.2f}x"
-  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("LIVE PRESSURE",live_value)]
+  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("LIVE",live_value)]
  return [("DIRECT",_pct((m.get("direct") or {}).get(head))),("HAZARD",_pct((m.get("hazard") or {}).get(head))),("РАЗНИЦА",_pct((m.get("disagreement") or {}).get(head)))]
 def _goal_timing_split(match,probability,model_result):
  minute=int(match.get("minute") or 0);is_ht=bool(match.get("is_halftime"))
@@ -116,31 +131,29 @@ def _goal_timing_split(match,probability,model_result):
  p_ht=max(0.0,min(p_any,p_ht));return 100.0*p_ht,100.0*p_any
 
 def render_signal_card(record,head,probability,model_result,cards):
- accent,label=THEMES.get(head,THEMES["another_goal"]);match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats);home=str(match.get("home") or "?");away=str(match.get("away") or "?");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {});timing=head=="another_goal";second_half=bool(match.get("is_halftime")) or minute>=46;H=1425 if timing else 1280
- img=Image.new("RGBA",(W,H),BG+(255,));d=ImageDraw.Draw(img);d.rounded_rectangle((24,20,1056,112),24,fill=PANEL,outline=accent,width=2);d.text((52,36),"GOOL 2",font=_font(36,True),fill=accent);d.text((52,78),"LIVE FOOTBALL • MULTI-SOURCE ANALYSIS",font=_font(15,True),fill=TEXT);d.rounded_rectangle((830,38,1028,93),16,outline=accent,width=2);d.text((888,53),"LIVE",font=_font(20,True),fill=accent)
- _center(d,label,142,_fit(d,label,850,38,True),accent);league=str(match.get("league") or "LIVE FOOTBALL");_center(d,league,194,_fit(d,league,900,19,False),MUTED);_badge(img,d,180,335,_logo(meta,"home"),home,accent);_badge(img,d,900,335,_logo(meta,"away"),away,accent);d.rounded_rectangle((390,255,690,418),28,fill=(9,19,31),outline=accent,width=3);_center(d,f"{hs} : {aws}",294,_font(66,True),TEXT);_center(d,"ПЕРЕРЫВ" if match.get("is_halftime") else f"{minute}'",370,_font(25,True),accent)
- for x,n in ((180,home),(900,away)):
-  f=_fit(d,n,330,29);b=d.textbbox((0,0),n,font=f);d.text((x-(b[2]-b[0])/2,445),n,font=f,fill=TEXT)
- d.rounded_rectangle((55,505,1025,660),25,fill=PANEL2,outline=accent,width=2);d.text((85,530),"МОДЕЛЬНЫЙ СИГНАЛ",font=_font(18,True),fill=MUTED);d.text((85,568),label,font=_fit(d,label,600,29,True),fill=TEXT);d.text((810,523),"ГОЛ ДО КОНЦА",font=_font(13,True),fill=MUTED);d.text((800,555),f"{probability*100:.1f}%",font=_font(40,True),fill=accent)
- vals=_model_values(head,model_result)
- for i,(k,v) in enumerate(vals):_box(d,(55+i*245,690,285+i*245,795),k,v,accent=(GOLD if k in {"РАЗНИЦА","LIVE PRESSURE"} else TEXT))
- _box(d,(790,690,1025,795),"ИСТОЧНИКИ",f"{providers}/3",accent=accent)
- d.rounded_rectangle((55,825,1025,960),22,fill=PANEL,outline=LINE,width=2);d.text((82,846),"ДИНАМИКА ВЕРОЯТНОСТИ",font=_font(16,True),fill=MUTED);_spark(d,_history(mid,head),(350,850,990,930),accent,probability);d.text((82,890),f"{probability*100:.1f}%",font=_font(31,True),fill=accent)
- yoff=0
+ accent,label=THEMES.get(head,THEMES["another_goal"]);match=record.get("match") or {};meta=flashscore_meta(record);stats=_stats(record);mid=str(match.get("flashscore_event_id") or "");_remember(mid,meta,stats);home=str(match.get("home") or "?");away=str(match.get("away") or "?");minute=int(match.get("minute") or 0);hs=int(match.get("home_score") or 0);aws=int(match.get("away_score") or 0);providers=len(record.get("providers") or {});timing=head=="another_goal";second_half=bool(match.get("is_halftime")) or minute>=46;H=1180
+ img=Image.new("RGBA",(W,H),BG+(255,));d=ImageDraw.Draw(img)
+ league=str(match.get("league") or "LIVE FOOTBALL")
+ d.rounded_rectangle((24,20,1056,92),22,fill=PANEL,outline=accent,width=2);d.text((50,37),league,font=_fit(d,league,760,24,True),fill=TEXT);d.rounded_rectangle((890,31,1028,80),14,fill=(8,35,24),outline=accent,width=2);d.text((925,44),f"{minute}'",font=_font(20,True),fill=accent)
+ _badge(img,d,175,215,_logo(meta,"home"),home,accent);_badge(img,d,905,215,_logo(meta,"away"),away,accent)
+ d.rounded_rectangle((397,145,683,285),25,fill=(9,19,31),outline=accent,width=3);_center(d,f"{hs} : {aws}",169,_font(58,True),TEXT);_center(d,"ПЕРЕРЫВ" if match.get("is_halftime") else ("2-Й ТАЙМ" if second_half else "1-Й ТАЙМ"),239,_font(19,True),accent)
+ for x,n in ((175,home),(905,away)):
+  f=_fit(d,n,330,25);b=d.textbbox((0,0),n,font=f);d.text((x-(b[2]-b[0])/2,302),n,font=f,fill=TEXT)
+ _red_card_badge(d,175,345,cards.get("home_red"));_red_card_badge(d,905,345,cards.get("away_red"))
+ d.rounded_rectangle((45,405,1035,550),24,fill=PANEL2,outline=accent,width=2);d.text((72,430),label,font=_font(30,True),fill=accent);d.text((72,475),"СИГНАЛ",font=_font(15,True),fill=MUTED);d.text((760,425),"ГОЛ ДО КОНЦА",font=_font(14,True),fill=MUTED);d.text((760,458),f"{probability*100:.1f}%",font=_font(42,True),fill=accent)
  if timing:
-  d.rounded_rectangle((55,985,1025,1115),22,fill=PANEL2,outline=accent,width=2)
-  d.text((82,1005),"РЕАЛЬНАЯ ВЕРОЯТНОСТЬ ГОЛА",font=_font(16,True),fill=MUTED)
   first,full=_goal_timing_split(match,probability,model_result)
-  if second_half:
-   _center(d,f"ГОЛ ДО КОНЦА МАТЧА  {full:.0f}%" if full is not None else "ОЦЕНКА НЕДОСТУПНА",1048,_font(30,True),GOLD)
-  elif first is None:
-   _center(d,f"ГОЛ ДО КОНЦА  {full:.0f}%" if full is not None else "ОЦЕНКА НЕДОСТУПНА",1048,_font(27,True),TEXT)
-  else:
-   d.text((95,1048),f"ГОЛ В 1-М ТАЙМЕ  {first:.0f}%",font=_font(25,True),fill=accent);d.text((575,1048),f"ДО КОНЦА  {full:.0f}%",font=_font(25,True),fill=GOLD)
-  yoff=145
- items=[("xG",stats["xg"]),("УДАРЫ",stats["shots"]),("В СТВОР",stats["sot"]),("УГЛОВЫЕ",stats["corners"])]
- for i,(k,v) in enumerate(items):_box(d,(55+i*245,990+yoff,285+i*245,1095+yoff),k,v)
- hy,ay=cards.get("home_yellow"),cards.get("away_yellow");hr,ar=cards.get("home_red"),cards.get("away_red");cardline=f"КАРТОЧКИ  🟨 {'—' if hy is None or ay is None else f'{hy}:{ay}'}   🟥 {'—' if hr is None or ar is None else f'{hr}:{ar}'}";_center(d,cardline,1128+yoff,_font(16,True),MUTED);d.rounded_rectangle((360,1170+yoff,720,1235+yoff),18,fill=accent);_center(d,"●  В ИГРЕ",1187+yoff,_font(24,True),BG);return _save(img)
+  if second_half:_center(d,f"ДО КОНЦА МАТЧА {full:.0f}%" if full is not None else "ОЦЕНКА НЕДОСТУПНА",570,_font(25,True),GOLD)
+  elif first is not None:d.text((95,570),f"ГОЛ В 1Т {first:.0f}%",font=_font(24,True),fill=accent);d.text((600,570),f"ДО КОНЦА {full:.0f}%",font=_font(24,True),fill=GOLD)
+ vals=_model_values(head,model_result)
+ for i,(k,v) in enumerate(vals):_box(d,(45+i*250,625,280+i*250,730),k,v,accent=(GOLD if k=="LIVE" else TEXT))
+ _box(d,(795,625,1035,730),"ИСТОЧНИКИ",f"{providers}/3",accent=accent)
+ d.rounded_rectangle((45,760,1035,1045),24,fill=PANEL,outline=LINE,width=2);d.text((70,780),"КЛЮЧЕВАЯ LIVE СТАТИСТИКА",font=_font(16,True),fill=MUTED)
+ items=[("xG",stats["xg"]),("xGOT",stats["xgot"]),("УДАРЫ",stats["shots"]),("В СТВОР",stats["sot"]),("ИЗ ШТРАФНОЙ",stats["inside"]),("МОМЕНТЫ",stats["big_chances"])]
+ for i,(k,v) in enumerate(items):
+  row=i//3;col=i%3;x1=70+col*320;y1=820+row*98
+  d.text((x1,y1),k,font=_font(14,True),fill=MUTED);d.text((x1,y1+30),v,font=_fit(d,v,270,23,True),fill=TEXT)
+ d.rounded_rectangle((330,1080,750,1145),18,fill=accent);_center(d,"●  В ИГРЕ",1097,_font(24,True),BG);return _save(img)
 
 def render_result_card(row,result,minute,home_score,away_score):
  head=str(row.get("head") or "another_goal");base,label=THEMES.get(head,THEMES["another_goal"]);won=str(result).lower()=="won";accent=base if won else RED;home=str(row.get("home") or "?");away=str(row.get("away") or "?");league=str(row.get("league") or "LIVE FOOTBALL");providers=int(row.get("provider_count") or 1);cache=_read_assets().get(str(row.get("match_id") or ""),{}) or {};meta=dict(row.get("flashscore_meta") or cache.get("flashscore_meta") or {});stats=dict(row.get("stats_snapshot") or cache.get("stats_snapshot") or {});entry=row.get("score") or [0,0];em=int(row.get("minute") or 0);p=float(row.get("probability") or 0);H=900

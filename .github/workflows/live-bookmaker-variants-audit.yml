@@ -1,5 +1,6 @@
 name: live-bookmaker-variants-audit
 
+# rerun-requested: 2026-09-02-kambi-all-live
 on:
   workflow_dispatch:
     inputs:

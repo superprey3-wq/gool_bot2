@@ -1,0 +1,3273 @@
+{
+  "events": [
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Delfines Del Este (Dom)",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "WnnGkbGG",
+          "home": "Broki (Sur)",
+          "home_score": 0,
+          "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+          "live": true,
+          "minute": 9,
+          "snapshot": 1
+        },
+        {
+          "away": "Delfines Del Este (Dom)",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "WnnGkbGG",
+          "home": "Broki (Sur)",
+          "home_score": 0,
+          "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+          "live": true,
+          "minute": 9,
+          "snapshot": 2
+        },
+        {
+          "away": "Delfines Del Este (Dom)",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "WnnGkbGG",
+          "home": "Broki (Sur)",
+          "home_score": 0,
+          "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+          "live": true,
+          "minute": 10,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Delfines  del Este",
+              "book_event_id": "SportingEvent:77eb7875-0942-4d36-9838-55765ac30d24",
+              "book_home": "SV Broki",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.7591,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=47",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines  del Este",
+              "book_event_id": "SportingEvent:77eb7875-0942-4d36-9838-55765ac30d24",
+              "book_home": "SV Broki",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.7591,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=47",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines  del Este",
+              "book_event_id": "SportingEvent:77eb7875-0942-4d36-9838-55765ac30d24",
+              "book_home": "SV Broki",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.7591,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=47",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "1635414254",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=241",
+                "[0].prices[1].price=-111",
+                "[0].prices[2].price=241",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-287",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=189",
+                "[11].prices[0].points=2.25",
+                "[11].prices[0].price=-187",
+                "[11].prices[1].points=2.25",
+                "[11].prices[1].price=130",
+                "[12].prices[0].points=2.5",
+                "[12].prices[0].price=-137",
+                "[12].prices[1].points=2.5",
+                "[12].prices[1].price=100",
+                "[13].prices[0].points=3",
+                "[13].prices[0].price=123",
+                "[13].prices[1].points=3"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "1635414254",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=241",
+                "[0].prices[1].price=-111",
+                "[0].prices[2].price=241",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-287",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=189",
+                "[11].prices[0].points=2.25",
+                "[11].prices[0].price=-187",
+                "[11].prices[1].points=2.25",
+                "[11].prices[1].price=130",
+                "[12].prices[0].points=2.5",
+                "[12].prices[0].price=-137",
+                "[12].prices[1].points=2.5",
+                "[12].prices[1].price=100",
+                "[13].prices[0].points=3",
+                "[13].prices[0].price=123",
+                "[13].prices[1].points=3"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "1635414254",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=241",
+                "[0].prices[1].price=-111",
+                "[0].prices[2].price=241",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-287",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=189",
+                "[11].prices[0].points=2.25",
+                "[11].prices[0].price=-187",
+                "[11].prices[1].points=2.25",
+                "[11].prices[1].price=130",
+                "[12].prices[0].points=2.5",
+                "[12].prices[0].price=-137",
+                "[12].prices[1].points=2.5",
+                "[12].prices[1].price=100",
+                "[13].prices[0].points=3",
+                "[13].prices[0].price=123",
+                "[13].prices[1].points=3"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Delfines Del Este (Dom)",
+        "country": "NORTH & CENTRAL AMERICA",
+        "home": "Broki (Sur)",
+        "key": "WnnGkbGG",
+        "league": "CONCACAF Caribbean Cup"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "EC Sao Jose",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "pxNBDZmm",
+          "home": "Goiatuba",
+          "home_score": 0,
+          "league": "BRAZIL: Serie D - Promotion - Play Offs",
+          "live": true,
+          "minute": 13,
+          "snapshot": 1
+        },
+        {
+          "away": "EC Sao Jose",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "pxNBDZmm",
+          "home": "Goiatuba",
+          "home_score": 0,
+          "league": "BRAZIL: Serie D - Promotion - Play Offs",
+          "live": true,
+          "minute": 14,
+          "snapshot": 2
+        },
+        {
+          "away": "EC Sao Jose",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "pxNBDZmm",
+          "home": "Goiatuba",
+          "home_score": 0,
+          "league": "BRAZIL: Serie D - Promotion - Play Offs",
+          "live": true,
+          "minute": 15,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=2160",
+                "betOffers[0].outcomes[0].oddsAmerican=116",
+                "betOffers[0].outcomes[1].odds=2650",
+                "betOffers[0].outcomes[1].oddsAmerican=165",
+                "betOffers[0].outcomes[2].odds=3750",
+                "betOffers[0].outcomes[2].oddsAmerican=275"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=2080",
+                "betOffers[0].outcomes[0].oddsAmerican=108",
+                "betOffers[0].outcomes[1].odds=2700",
+                "betOffers[0].outcomes[1].oddsAmerican=170",
+                "betOffers[0].outcomes[2].odds=3850",
+                "betOffers[0].outcomes[2].oddsAmerican=285"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "São José-RS",
+              "book_event_id": "",
+              "book_home": "Goiatuba-GO",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.7507,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2020",
+                "betOffers[0].oddsStats.startingOddsAmerican=102",
+                "betOffers[0].outcomes[0].odds=2080",
+                "betOffers[0].outcomes[0].oddsAmerican=108",
+                "betOffers[0].outcomes[1].odds=2700",
+                "betOffers[0].outcomes[1].oddsAmerican=170",
+                "betOffers[0].outcomes[2].odds=3850",
+                "betOffers[0].outcomes[2].oddsAmerican=285"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "São José-RS",
+              "book_event_id": "",
+              "book_home": "Goiatuba-GO",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.7507,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2020",
+                "betOffers[0].oddsStats.startingOddsAmerican=102",
+                "betOffers[0].outcomes[0].odds=2170",
+                "betOffers[0].outcomes[0].oddsAmerican=117",
+                "betOffers[0].outcomes[1].odds=2650",
+                "betOffers[0].outcomes[1].oddsAmerican=165",
+                "betOffers[0].outcomes[2].odds=3750",
+                "betOffers[0].outcomes[2].oddsAmerican=275"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "São José-RS",
+              "book_event_id": "",
+              "book_home": "Goiatuba-GO",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.7507,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2020",
+                "betOffers[0].oddsStats.startingOddsAmerican=102",
+                "betOffers[0].outcomes[0].odds=2160",
+                "betOffers[0].outcomes[0].oddsAmerican=116",
+                "betOffers[0].outcomes[1].odds=2650",
+                "betOffers[0].outcomes[1].oddsAmerican=165",
+                "betOffers[0].outcomes[2].odds=3750",
+                "betOffers[0].outcomes[2].oddsAmerican=275"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Sao Jose RS",
+              "book_event_id": "1635361064",
+              "book_home": "Goiatuba",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.8636,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=119",
+                "[0].prices[1].price=271",
+                "[0].prices[2].price=174",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-101",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-125",
+                "[11].prices[0].price=-405",
+                "[11].prices[1].price=266",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-206",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=150",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-137",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=105",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Sao Jose RS",
+              "book_event_id": "1635361064",
+              "book_home": "Goiatuba",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.8636,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=119",
+                "[0].prices[1].price=271",
+                "[0].prices[2].price=174",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-101",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-125",
+                "[11].prices[0].price=-405",
+                "[11].prices[1].price=266",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-206",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=150",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-137",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=105",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Sao Jose RS",
+              "book_event_id": "1635361064",
+              "book_home": "Goiatuba",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.8636,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=119",
+                "[0].prices[1].price=271",
+                "[0].prices[2].price=174",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-101",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-125",
+                "[11].prices[0].price=-405",
+                "[11].prices[1].price=266",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-206",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=150",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-137",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=105",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "EC Sao Jose",
+        "country": "BRAZIL",
+        "home": "Goiatuba",
+        "key": "pxNBDZmm",
+        "league": "Serie D - Promotion - Play Offs"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "U. De Concepcion",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "hURr4uXQ",
+          "home": "Coquimbo",
+          "home_score": 0,
+          "league": "CHILE: Liga de Primera",
+          "live": true,
+          "minute": 13,
+          "snapshot": 1
+        },
+        {
+          "away": "U. De Concepcion",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "hURr4uXQ",
+          "home": "Coquimbo",
+          "home_score": 0,
+          "league": "CHILE: Liga de Primera",
+          "live": true,
+          "minute": 14,
+          "snapshot": 2
+        },
+        {
+          "away": "U. De Concepcion",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "hURr4uXQ",
+          "home": "Coquimbo",
+          "home_score": 0,
+          "league": "CHILE: Liga de Primera",
+          "live": true,
+          "minute": 15,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=67",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=17"
+              ],
+              "removed": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "CD Universidad de Concepcion",
+              "book_event_id": "SportingEvent:78f6f888-c6c3-4b3c-ad2b-2745b938b09b",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.8138,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Universidad de Concepcion",
+              "book_event_id": "SportingEvent:78f6f888-c6c3-4b3c-ad2b-2745b938b09b",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.8138,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Universidad de Concepcion",
+              "book_event_id": "SportingEvent:78f6f888-c6c3-4b3c-ad2b-2745b938b09b",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.8138,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=67",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=17"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=1630",
+                "betOffers[0].outcomes[0].oddsAmerican=-159",
+                "betOffers[0].outcomes[1].odds=3300",
+                "betOffers[0].outcomes[1].oddsAmerican=230",
+                "betOffers[0].outcomes[2].odds=5400",
+                "betOffers[0].outcomes[2].oddsAmerican=440"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=1650",
+                "betOffers[0].outcomes[0].oddsAmerican=-155",
+                "betOffers[0].outcomes[1].odds=3250",
+                "betOffers[0].outcomes[1].oddsAmerican=225",
+                "betOffers[0].outcomes[2].odds=5300",
+                "betOffers[0].outcomes[2].oddsAmerican=430"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Universidad de Concepción",
+              "book_event_id": "",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.815,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1610",
+                "betOffers[0].oddsStats.startingOddsAmerican=-165",
+                "betOffers[0].outcomes[0].odds=1650",
+                "betOffers[0].outcomes[0].oddsAmerican=-155",
+                "betOffers[0].outcomes[1].odds=3250",
+                "betOffers[0].outcomes[1].oddsAmerican=225",
+                "betOffers[0].outcomes[2].odds=5300",
+                "betOffers[0].outcomes[2].oddsAmerican=430"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepción",
+              "book_event_id": "",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.815,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1610",
+                "betOffers[0].oddsStats.startingOddsAmerican=-165",
+                "betOffers[0].outcomes[0].odds=1630",
+                "betOffers[0].outcomes[0].oddsAmerican=-159",
+                "betOffers[0].outcomes[1].odds=3300",
+                "betOffers[0].outcomes[1].oddsAmerican=230",
+                "betOffers[0].outcomes[2].odds=5400",
+                "betOffers[0].outcomes[2].oddsAmerican=440"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepción",
+              "book_event_id": "",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.815,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1610",
+                "betOffers[0].oddsStats.startingOddsAmerican=-165",
+                "betOffers[0].outcomes[0].odds=1630",
+                "betOffers[0].outcomes[0].oddsAmerican=-159",
+                "betOffers[0].outcomes[1].odds=3300",
+                "betOffers[0].outcomes[1].oddsAmerican=230",
+                "betOffers[0].outcomes[2].odds=5400",
+                "betOffers[0].outcomes[2].oddsAmerican=440"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "1635365834",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.84,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-145",
+                "[0].prices[1].price=446",
+                "[0].prices[2].price=274",
+                "[10].prices[0].price=-145",
+                "[10].prices[1].price=127",
+                "[11].prices[0].price=-212",
+                "[11].prices[1].price=180",
+                "[12].prices[0].price=-389",
+                "[12].prices[1].price=309",
+                "[13].prices[0].price=-482",
+                "[13].prices[1].price=374",
+                "[14].prices[0].points=2.25",
+                "[14].prices[0].price=-119",
+                "[14].prices[1].points=2.25",
+                "[14].prices[1].price=104",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=639",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "1635365834",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.84,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-145",
+                "[0].prices[1].price=446",
+                "[0].prices[2].price=274",
+                "[10].prices[0].price=-145",
+                "[10].prices[1].price=127",
+                "[11].prices[0].price=-212",
+                "[11].prices[1].price=180",
+                "[12].prices[0].price=-389",
+                "[12].prices[1].price=309",
+                "[13].prices[0].price=-482",
+                "[13].prices[1].price=374",
+                "[14].prices[0].points=2.25",
+                "[14].prices[0].price=-119",
+                "[14].prices[1].points=2.25",
+                "[14].prices[1].price=104",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=639",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "1635365834",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.84,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-145",
+                "[0].prices[1].price=446",
+                "[0].prices[2].price=274",
+                "[10].prices[0].price=-145",
+                "[10].prices[1].price=127",
+                "[11].prices[0].price=-212",
+                "[11].prices[1].price=180",
+                "[12].prices[0].price=-389",
+                "[12].prices[1].price=309",
+                "[13].prices[0].price=-482",
+                "[13].prices[1].price=374",
+                "[14].prices[0].points=2.25",
+                "[14].prices[0].price=-119",
+                "[14].prices[1].points=2.25",
+                "[14].prices[1].price=104",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=639",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "U. De Concepcion",
+        "country": "CHILE",
+        "home": "Coquimbo",
+        "key": "hURr4uXQ",
+        "league": "Liga de Primera"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Brasil de Farroupilha",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "SUyuHKHG",
+          "home": "Gaucho",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 14,
+          "snapshot": 1
+        },
+        {
+          "away": "Brasil de Farroupilha",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "SUyuHKHG",
+          "home": "Gaucho",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 15,
+          "snapshot": 2
+        },
+        {
+          "away": "Brasil de Farroupilha",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "SUyuHKHG",
+          "home": "Gaucho",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 16,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "SERC Brasil de Farroupilha RS",
+              "book_event_id": "SportingEvent:35418c31-a866-4953-84e2-247c744719e0",
+              "book_home": "SC Gaucho RS",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=12"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "SERC Brasil de Farroupilha RS",
+              "book_event_id": "SportingEvent:35418c31-a866-4953-84e2-247c744719e0",
+              "book_home": "SC Gaucho RS",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=12"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "SERC Brasil de Farroupilha RS",
+              "book_event_id": "SportingEvent:35418c31-a866-4953-84e2-247c744719e0",
+              "book_home": "SC Gaucho RS",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=21",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=12"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "1635414739",
+              "book_home": "Gaucho",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=-114",
+                "[0].prices[1].price=283",
+                "[0].prices[2].price=214",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-128",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=-103",
+                "[11].prices[0].points=1.25",
+                "[11].prices[0].price=-370",
+                "[11].prices[1].points=1.25",
+                "[11].prices[1].price=232",
+                "[12].prices[0].points=1.5",
+                "[12].prices[0].price=-232",
+                "[12].prices[1].points=1.5",
+                "[12].prices[1].price=158",
+                "[13].prices[0].points=1.75",
+                "[13].prices[0].price=-178",
+                "[13].prices[1].points=1.75"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "1635414739",
+              "book_home": "Gaucho",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=-114",
+                "[0].prices[1].price=283",
+                "[0].prices[2].price=214",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-128",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=-103",
+                "[11].prices[0].points=1.25",
+                "[11].prices[0].price=-370",
+                "[11].prices[1].points=1.25",
+                "[11].prices[1].price=232",
+                "[12].prices[0].points=1.5",
+                "[12].prices[0].price=-232",
+                "[12].prices[1].points=1.5",
+                "[12].prices[1].price=158",
+                "[13].prices[0].points=1.75",
+                "[13].prices[0].price=-178",
+                "[13].prices[1].points=1.75"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "1635414739",
+              "book_home": "Gaucho",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=-114",
+                "[0].prices[1].price=283",
+                "[0].prices[2].price=214",
+                "[10].prices[0].points=2",
+                "[10].prices[0].price=-128",
+                "[10].prices[1].points=2",
+                "[10].prices[1].price=-103",
+                "[11].prices[0].points=1.25",
+                "[11].prices[0].price=-370",
+                "[11].prices[1].points=1.25",
+                "[11].prices[1].price=232",
+                "[12].prices[0].points=1.5",
+                "[12].prices[0].price=-232",
+                "[12].prices[1].points=1.5",
+                "[12].prices[1].price=158",
+                "[13].prices[0].points=1.75",
+                "[13].prices[0].price=-178",
+                "[13].prices[1].points=1.75"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Brasil de Farroupilha",
+        "country": "BRAZIL",
+        "home": "Gaucho",
+        "key": "SUyuHKHG",
+        "league": "Gaucho 2"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Pelotas",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "4ULCVJW9",
+          "home": "Santa Cruz RS",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 14,
+          "snapshot": 1
+        },
+        {
+          "away": "Pelotas",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "4ULCVJW9",
+          "home": "Santa Cruz RS",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 15,
+          "snapshot": 2
+        },
+        {
+          "away": "Pelotas",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "4ULCVJW9",
+          "home": "Santa Cruz RS",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 15,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7"
+              ],
+              "removed": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=29"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "EC Pelotas RS",
+              "book_event_id": "SportingEvent:377f53ca-8a92-42ab-a944-ff69c8e6705e",
+              "book_home": "FC Santa Cruz do Sul RS",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.8589,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=29",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=23"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Pelotas RS",
+              "book_event_id": "SportingEvent:377f53ca-8a92-42ab-a944-ff69c8e6705e",
+              "book_home": "FC Santa Cruz do Sul RS",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.8589,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=20",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=29",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=23"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Pelotas RS",
+              "book_event_id": "SportingEvent:377f53ca-8a92-42ab-a944-ff69c8e6705e",
+              "book_home": "FC Santa Cruz do Sul RS",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.8589,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=23"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Pelotas",
+              "book_event_id": "1635414738",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=137",
+                "[0].prices[1].price=245",
+                "[0].prices[2].price=150",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-116",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-114",
+                "[11].prices[0].price=-462",
+                "[11].prices[1].price=275",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-239",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=161",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-159",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=115",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Pelotas",
+              "book_event_id": "1635414738",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=137",
+                "[0].prices[1].price=245",
+                "[0].prices[2].price=150",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-116",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-114",
+                "[11].prices[0].price=-462",
+                "[11].prices[1].price=275",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-239",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=161",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-159",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=115",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Pelotas",
+              "book_event_id": "1635414738",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=137",
+                "[0].prices[1].price=245",
+                "[0].prices[2].price=150",
+                "[10].prices[0].points=1.75",
+                "[10].prices[0].price=-116",
+                "[10].prices[1].points=1.75",
+                "[10].prices[1].price=-114",
+                "[11].prices[0].price=-462",
+                "[11].prices[1].price=275",
+                "[12].prices[0].points=1.25",
+                "[12].prices[0].price=-239",
+                "[12].prices[1].points=1.25",
+                "[12].prices[1].price=161",
+                "[13].prices[0].points=1.5",
+                "[13].prices[0].price=-159",
+                "[13].prices[1].points=1.5",
+                "[13].prices[1].price=115",
+                "[14].prices[0].points=2"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Pelotas",
+        "country": "BRAZIL",
+        "home": "Santa Cruz RS",
+        "key": "4ULCVJW9",
+        "league": "Gaucho 2"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Instituto 2",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "CrkJfI84",
+          "home": "Talleres Cordoba 2",
+          "home_score": 0,
+          "league": "ARGENTINA: Reserve League - Clausura",
+          "live": true,
+          "minute": 16,
+          "snapshot": 1
+        },
+        {
+          "away": "Instituto 2",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "CrkJfI84",
+          "home": "Talleres Cordoba 2",
+          "home_score": 0,
+          "league": "ARGENTINA: Reserve League - Clausura",
+          "live": true,
+          "minute": 16,
+          "snapshot": 2
+        },
+        {
+          "away": "Instituto 2",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "CrkJfI84",
+          "home": "Talleres Cordoba 2",
+          "home_score": 0,
+          "league": "ARGENTINA: Reserve League - Clausura",
+          "live": true,
+          "minute": 17,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Instituto",
+              "book_event_id": "1635354411",
+              "book_home": "Talleres de Cordoba",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.8974,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=116",
+                "[0].prices[1].price=279",
+                "[0].prices[2].price=182",
+                "[10].prices[0].points=2.25",
+                "[10].prices[0].price=139",
+                "[10].prices[1].points=2.25",
+                "[10].prices[1].price=-184",
+                "[11].prices[0].points=2.5",
+                "[11].prices[0].price=166",
+                "[11].prices[1].points=2.5",
+                "[11].prices[1].price=-239",
+                "[12].prices[0].price=214",
+                "[12].prices[1].price=391",
+                "[12].prices[2].price=-134",
+                "[13].prices[0].price=142",
+                "[13].prices[1].price=-192",
+                "[14].prices[0].price=226",
+                "[14].prices[1].price=-327"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Instituto",
+              "book_event_id": "1635354411",
+              "book_home": "Talleres de Cordoba",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.8974,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=116",
+                "[0].prices[1].price=279",
+                "[0].prices[2].price=182",
+                "[10].prices[0].points=2.25",
+                "[10].prices[0].price=139",
+                "[10].prices[1].points=2.25",
+                "[10].prices[1].price=-184",
+                "[11].prices[0].points=2.5",
+                "[11].prices[0].price=166",
+                "[11].prices[1].points=2.5",
+                "[11].prices[1].price=-239",
+                "[12].prices[0].price=214",
+                "[12].prices[1].price=391",
+                "[12].prices[2].price=-134",
+                "[13].prices[0].price=142",
+                "[13].prices[1].price=-192",
+                "[14].prices[0].price=226",
+                "[14].prices[1].price=-327"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Instituto",
+              "book_event_id": "1635354411",
+              "book_home": "Talleres de Cordoba",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.8974,
+              "quote_count": 60,
+              "quote_sample": [
+                "[0].prices[0].price=116",
+                "[0].prices[1].price=279",
+                "[0].prices[2].price=182",
+                "[10].prices[0].points=2.25",
+                "[10].prices[0].price=139",
+                "[10].prices[1].points=2.25",
+                "[10].prices[1].price=-184",
+                "[11].prices[0].points=2.5",
+                "[11].prices[0].price=166",
+                "[11].prices[1].points=2.5",
+                "[11].prices[1].price=-239",
+                "[12].prices[0].price=214",
+                "[12].prices[1].price=391",
+                "[12].prices[2].price=-134",
+                "[13].prices[0].price=142",
+                "[13].prices[1].price=-192",
+                "[14].prices[0].price=226",
+                "[14].prices[1].price=-327"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Instituto 2",
+        "country": "ARGENTINA",
+        "home": "Talleres Cordoba 2",
+        "key": "CrkJfI84",
+        "league": "Reserve League - Clausura"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 44,
+          "snapshot": 1
+        },
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=6",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=29"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=6",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=29"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=13",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=6",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=29"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=2050",
+                "betOffers[0].outcomes[0].oddsAmerican=105",
+                "betOffers[0].outcomes[1].odds=2430",
+                "betOffers[0].outcomes[1].oddsAmerican=143",
+                "betOffers[0].outcomes[2].odds=4900",
+                "betOffers[0].outcomes[2].oddsAmerican=390"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=1980",
+                "betOffers[0].outcomes[0].oddsAmerican=-103",
+                "betOffers[0].outcomes[1].odds=2600",
+                "betOffers[0].outcomes[1].oddsAmerican=160",
+                "betOffers[0].outcomes[2].odds=4800",
+                "betOffers[0].outcomes[2].oddsAmerican=380"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=1980",
+                "betOffers[0].outcomes[0].oddsAmerican=-103",
+                "betOffers[0].outcomes[1].odds=2600",
+                "betOffers[0].outcomes[1].oddsAmerican=160",
+                "betOffers[0].outcomes[2].odds=4800",
+                "betOffers[0].outcomes[2].oddsAmerican=380"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=2020",
+                "betOffers[0].outcomes[0].oddsAmerican=102",
+                "betOffers[0].outcomes[1].odds=2480",
+                "betOffers[0].outcomes[1].oddsAmerican=148",
+                "betOffers[0].outcomes[2].odds=4900",
+                "betOffers[0].outcomes[2].oddsAmerican=390"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=2050",
+                "betOffers[0].outcomes[0].oddsAmerican=105",
+                "betOffers[0].outcomes[1].odds=2430",
+                "betOffers[0].outcomes[1].oddsAmerican=143",
+                "betOffers[0].outcomes[2].odds=4900",
+                "betOffers[0].outcomes[2].oddsAmerican=390"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635350792",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635350792",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635350792",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Guayaquil City",
+        "country": "ECUADOR",
+        "home": "Dep. Cuenca",
+        "key": "EDEMFL7r",
+        "league": "Liga Pro"
+      }
+    },
+    {
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Guarani",
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away": "Guarani",
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away": "Guarani",
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=3",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=83"
+              ],
+              "removed": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=16",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=4"
+              ]
+            }
+          ],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=16",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=4"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=16",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=4"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 5,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=3",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=83"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=3850",
+                "betOffers[0].outcomes[0].oddsAmerican=285"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=3900",
+                "betOffers[0].outcomes[0].oddsAmerican=290"
+              ]
+            }
+          ],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=3900",
+                "betOffers[0].outcomes[0].oddsAmerican=290",
+                "betOffers[0].outcomes[1].odds=2850",
+                "betOffers[0].outcomes[1].oddsAmerican=185",
+                "betOffers[0].outcomes[2].odds=2020",
+                "betOffers[0].outcomes[2].oddsAmerican=102"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=3850",
+                "betOffers[0].outcomes[0].oddsAmerican=285",
+                "betOffers[0].outcomes[1].odds=2850",
+                "betOffers[0].outcomes[1].oddsAmerican=185",
+                "betOffers[0].outcomes[2].odds=2020",
+                "betOffers[0].outcomes[2].oddsAmerican=102"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=3850",
+                "betOffers[0].outcomes[0].oddsAmerican=285",
+                "betOffers[0].outcomes[1].odds=2850",
+                "betOffers[0].outcomes[1].oddsAmerican=185",
+                "betOffers[0].outcomes[2].odds=2020",
+                "betOffers[0].outcomes[2].oddsAmerican=102"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=4.25",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=1.95",
+                "fixedOddsMarkets[0].outcomes[0].price=4.25",
+                "fixedOddsMarkets[0].outcomes[2].price=1.95"
+              ],
+              "removed": [
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=4",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=2",
+                "fixedOddsMarkets[0].outcomes[0].price=4",
+                "fixedOddsMarkets[0].outcomes[2].price=2"
+              ]
+            }
+          ],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=4",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=2",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=4",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=2"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=4",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=2",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=4",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=2"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=4.25",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=1.95",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=4.25",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=1.95"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
+        }
+      },
+      "target": {
+        "away": "Guarani",
+        "country": "PARAGUAY",
+        "home": "Olimpia Asuncion",
+        "key": "Yy0UwEFD",
+        "league": "Copa de Primera - Clausura"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:14:18+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 58,
+          "snapshot": 1
+        },
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:17+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 59,
+          "snapshot": 2
+        },
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:15:51+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 59,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=11"
+              ],
+              "removed": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 5,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=33",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 5,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=33",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 5,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=33",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=7"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=1410",
+                "betOffers[0].outcomes[0].oddsAmerican=-245",
+                "betOffers[0].outcomes[1].odds=3500",
+                "betOffers[0].outcomes[1].oddsAmerican=250",
+                "betOffers[0].outcomes[2].odds=8000",
+                "betOffers[0].outcomes[2].oddsAmerican=700"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=1450",
+                "betOffers[0].outcomes[0].oddsAmerican=-225",
+                "betOffers[0].outcomes[1].odds=3450",
+                "betOffers[0].outcomes[1].oddsAmerican=245",
+                "betOffers[0].outcomes[2].odds=6750",
+                "betOffers[0].outcomes[2].oddsAmerican=575"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1450",
+                "betOffers[0].outcomes[0].oddsAmerican=-225",
+                "betOffers[0].outcomes[1].odds=3450",
+                "betOffers[0].outcomes[1].oddsAmerican=245",
+                "betOffers[0].outcomes[2].odds=6750",
+                "betOffers[0].outcomes[2].oddsAmerican=575"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1420",
+                "betOffers[0].outcomes[0].oddsAmerican=-240",
+                "betOffers[0].outcomes[1].odds=3550",
+                "betOffers[0].outcomes[1].oddsAmerican=255",
+                "betOffers[0].outcomes[2].odds=7000",
+                "betOffers[0].outcomes[2].oddsAmerican=600"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1410",
+                "betOffers[0].outcomes[0].oddsAmerican=-245",
+                "betOffers[0].outcomes[1].odds=3500",
+                "betOffers[0].outcomes[1].oddsAmerican=250",
+                "betOffers[0].outcomes[2].odds=8000",
+                "betOffers[0].outcomes[2].oddsAmerican=700"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:14:18+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:17+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:15:51+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      },
+      "target": {
+        "away": "Ferretti",
+        "country": "NICARAGUA",
+        "home": "Sport Sebaco",
+        "key": "rHGR0ItR",
+        "league": "Liga Primera - Apertura"
+      }
+    }
+  ],
+  "generated_at": "2026-09-02T22:16:07+00:00",
+  "initial_flashscore_live_matches": 9,
+  "kept_sources": [
+    "kambi_unibet",
+    "entain_ladbrokes",
+    "pointsbet",
+    "pinnacle_arcadia"
+  ],
+  "snapshot_count": 3,
+  "source_coverage": {
+    "entain_ladbrokes": {
+      "coverage_pct": 77.8,
+      "proven": 3,
+      "quote_events": 7,
+      "total_events": 9,
+      "verdicts": {
+        "FOUND_NO_CHANGE": 3,
+        "NOT_FOUND": 2,
+        "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+        "PROVEN": 3
+      }
+    },
+    "kambi_unibet": {
+      "coverage_pct": 55.6,
+      "proven": 4,
+      "quote_events": 5,
+      "total_events": 9,
+      "verdicts": {
+        "NOT_FOUND": 4,
+        "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+        "PROVEN": 4
+      }
+    },
+    "pinnacle_arcadia": {
+      "coverage_pct": 88.9,
+      "proven": 0,
+      "quote_events": 8,
+      "total_events": 9,
+      "verdicts": {
+        "FOUND_NO_CHANGE": 8,
+        "NOT_FOUND": 1
+      }
+    },
+    "pointsbet": {
+      "coverage_pct": 11.1,
+      "proven": 0,
+      "quote_events": 1,
+      "total_events": 9,
+      "verdicts": {
+        "NOT_FOUND": 8,
+        "ODDS_CHANGED_NO_FS_PROGRESS": 1
+      }
+    }
+  },
+  "source_summary": {
+    "entain_ladbrokes": {
+      "FOUND_NO_CHANGE": 3,
+      "NOT_FOUND": 2,
+      "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+      "PROVEN": 3
+    },
+    "kambi_unibet": {
+      "NOT_FOUND": 4,
+      "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+      "PROVEN": 4
+    },
+    "pinnacle_arcadia": {
+      "FOUND_NO_CHANGE": 8,
+      "NOT_FOUND": 1
+    },
+    "pointsbet": {
+      "NOT_FOUND": 8,
+      "ODDS_CHANGED_NO_FS_PROGRESS": 1
+    }
+  },
+  "strict_rule": "PROVEN requires >=2 quote-bearing snapshots, Flashscore minute/score progress, and a changed bookmaker quote fingerprint for the same matched event.",
+  "targets": 9
+}

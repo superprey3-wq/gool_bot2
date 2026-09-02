@@ -12,6 +12,7 @@ on:
     paths:
       - ".github/workflows/fresh-odds-projects-smoke.yml"
       - "scripts/fresh_odds_projects_smoke.py"
+      - "scripts/fresh_realine_all_bookmakers.py"
 
 permissions:
   contents: read
@@ -50,14 +51,21 @@ jobs:
       - name: Install realine0 dependencies including missing HTTP2 extra
         run: |
           pip install -r fresh_sources/realine/requirements.txt
-          # The project creates httpx.AsyncClient(http2=True) but its requirements
-          # currently omit h2. Install the runtime extra without modifying the repo.
           pip install 'httpx[http2]'
 
-      - name: Probe realine0 LSApp odds on current live matches
+      - name: Probe realine0 bet365 baseline
         continue-on-error: true
         run: |
           python scripts/fresh_odds_projects_smoke.py realine \
+            --matches fresh_odds_results/online_matches.json \
+            --source-dir fresh_sources/realine \
+            --output fresh_odds_results/realine_bet365.json \
+            --limit "$FRESH_ODDS_MAX_MATCHES"
+
+      - name: Probe realine0 with every bookmaker supported by fresh project
+        continue-on-error: true
+        run: |
+          python scripts/fresh_realine_all_bookmakers.py \
             --matches fresh_odds_results/online_matches.json \
             --source-dir fresh_sources/realine \
             --output fresh_odds_results/realine.json \

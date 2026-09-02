@@ -1,0 +1,133 @@
+name: fresh-odds-projects-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_matches:
+        description: "How many current Flashscore live matches to probe"
+        required: false
+        default: "6"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fresh-odds-projects-smoke.yml"
+      - "scripts/fresh_odds_projects_smoke.py"
+
+permissions:
+  contents: read
+
+jobs:
+  live-odds-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FRESH_ODDS_MAX_MATCHES: ${{ inputs.max_matches || '6' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL discovery runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          mkdir -p fresh_odds_results fresh_sources
+
+      - name: Get current online matches from GOOL Flashscore
+        run: |
+          python scripts/fresh_odds_projects_smoke.py discover \
+            --output fresh_odds_results/online_matches.json \
+            --limit "$FRESH_ODDS_MAX_MATCHES"
+
+      # FRESH PROJECT #1 — direct 2026 Flashscore/LSApp implementation.
+      # This is intentionally isolated from every legacy GOOL odds module.
+      - name: Clone fresh realine0 Flashscore odds project
+        run: git clone --depth 1 https://github.com/realine0/flashscore-football-odds-scraper.git fresh_sources/realine
+
+      - name: Install realine0 dependencies
+        run: pip install -r fresh_sources/realine/requirements.txt
+
+      - name: Probe realine0 LSApp odds on current live matches
+        continue-on-error: true
+        run: |
+          python scripts/fresh_odds_projects_smoke.py realine \
+            --matches fresh_odds_results/online_matches.json \
+            --source-dir fresh_sources/realine \
+            --output fresh_odds_results/realine.json \
+            --limit "$FRESH_ODDS_MAX_MATCHES"
+
+      # FRESH PROJECT #2 — M3MONs 2026 scraper, using its lightweight curl engine.
+      - name: Clone fresh M3MONs FlashscoreScraper
+        run: git clone --depth 1 https://github.com/M3MONs/FlashscoreScraper.git fresh_sources/m3mons
+
+      - name: Install uv for Python 3.13 project
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Probe M3MONs odds on current live matches
+        continue-on-error: true
+        run: |
+          uv run --project fresh_sources/m3mons --python 3.13 \
+            python "$GITHUB_WORKSPACE/scripts/fresh_odds_projects_smoke.py" m3mons \
+            --matches "$GITHUB_WORKSPACE/fresh_odds_results/online_matches.json" \
+            --source-dir "$GITHUB_WORKSPACE/fresh_sources/m3mons" \
+            --output "$GITHUB_WORKSPACE/fresh_odds_results/m3mons.json" \
+            --limit "$FRESH_ODDS_MAX_MATCHES"
+
+      # FRESH PROJECT #3 — Pinnacle 2026 Playwright/API-intercept scraper.
+      # It is slower, so only the first 3 live matches are tested.
+      - name: Clone fresh Pinnacle odds project
+        run: git clone --depth 1 https://github.com/ACHBIDHAN/Pinnacle_Football_Odds_Scraper.git fresh_sources/pinnacle
+
+      - name: Install Pinnacle dependencies and Chromium
+        run: |
+          pip install -r fresh_sources/pinnacle/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Probe Pinnacle on current Flashscore live matches
+        continue-on-error: true
+        run: |
+          python scripts/fresh_odds_projects_smoke.py pinnacle \
+            --matches fresh_odds_results/online_matches.json \
+            --source-dir fresh_sources/pinnacle \
+            --output fresh_odds_results/pinnacle.json \
+            --limit 3
+
+      - name: Record exact fresh project revisions
+        if: always()
+        run: |
+          {
+            echo '{'
+            echo '  "realine0": "'$(git -C fresh_sources/realine rev-parse HEAD 2>/dev/null || echo unavailable)'",'
+            echo '  "m3mons": "'$(git -C fresh_sources/m3mons rev-parse HEAD 2>/dev/null || echo unavailable)'",'
+            echo '  "pinnacle": "'$(git -C fresh_sources/pinnacle rev-parse HEAD 2>/dev/null || echo unavailable)'"'
+            echo '}'
+          } > fresh_odds_results/source_revisions.json
+
+      - name: Build coverage summary
+        if: always()
+        run: |
+          python scripts/fresh_odds_projects_smoke.py summary \
+            --output fresh_odds_results/summary.json \
+            --inputs fresh_odds_results/realine.json fresh_odds_results/m3mons.json fresh_odds_results/pinnacle.json
+
+          echo '## Fresh odds projects smoke' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Current Flashscore live matches were tested only through the three fresh 2026 projects. Legacy GOOL odds code was not imported or modified.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat fresh_odds_results/summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full odds smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-live-odds-smoke
+          path: fresh_odds_results/
+          if-no-files-found: warn
+          retention-days: 7

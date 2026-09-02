@@ -81,7 +81,7 @@ def in_game_sections(journal_path:Path,analysis_path:Path|None=None)->list[str]:
  return messages
 def in_game_text(journal_path:Path,analysis_path:Path|None=None)->str:return in_game_sections(journal_path,analysis_path)[0]
 def _short_block(reason):
- if reason.startswith("probability="):return "ниже порога"
+ if reason.startswith("probability="):return "ниже порога модели"
  if reason.startswith("gool_pressure="):return "GOOL давление ниже порога"
  if reason.startswith("gool_strength="):return "шанс +2 ниже порога"
  if reason.startswith("model_disagreement="):return "модели расходятся"
@@ -89,7 +89,33 @@ def _short_block(reason):
  if reason.startswith("entry_window_closed_"):return "окно входа закрыто"
  if reason.startswith("max_open=") or reason.startswith("max_entries="):return "лимит входов"
  if reason=="duplicate_pending_signal":return "уже есть сигнал"
+ if reason=="history":return "PREMATCH: мало истории"
+ if reason=="avg_goals":return "PREMATCH: низкий средний тотал"
+ if reason=="too_many_0_1_goal_games":return "PREMATCH: много матчей 0–1 гол"
+ if reason=="prematch_score":return "PREMATCH: общий балл ниже порога"
+ if reason.startswith("evidence="):return "LIVE: мало доступных показателей"
+ if reason.startswith("cum="):return "LIVE: общее давление ниже порога"
+ if reason.startswith("5m="):return "LIVE: слабые последние 5 минут"
+ if reason.startswith("10m="):return "LIVE: слабые последние 10 минут"
+ if reason=="no_recent_threat":return "LIVE: нет свежей угрозы"
+ if reason=="no_quality_threat":return "LIVE: нет качественной угрозы"
  return reason
+def _another_goal_detail_blocks(r):
+ if str(r.get("head") or "")!="another_goal":return []
+ analyzer=r.get("gool_analyzer") or {};details=analyzer.get("details") or {};pre=details.get("prematch") or {};live=details.get("live") or {}
+ raw=[]
+ for x in pre.get("blocks") or []:raw.append(str(x))
+ for x in live.get("blocks") or []:raw.append(str(x))
+ seen=set();out=[]
+ for x in raw:
+  label=_short_block(x)
+  if label not in seen:seen.add(label);out.append(label)
+ return out
+def _row_blocks(r):
+ base=[_short_block(str(x)) for x in r.get("blocks") or []]
+ details=_another_goal_detail_blocks(r)
+ if "gool_analyzer_rejected" in base and details:base=[x for x in base if x!="gool_analyzer_rejected"]+details
+ return base
 def analysis_text(path):
  if not path.exists():return "🧠 <b>АНАЛИЗ</b>\n\nДанные ещё не накоплены."
  latest={}
@@ -100,14 +126,18 @@ def analysis_text(path):
    k=(str(r.get("match_id") or ""),str(r.get("head") or ""))
    if k[0] and k[1] and k[1] in ACTIVE_HEADS:latest[k]=r
  except Exception:return "🧠 <b>АНАЛИЗ</b>\n\nНе удалось прочитать текущий анализ."
- rows=sorted(latest.values(),key=lambda r:str(r.get("captured_at") or ""),reverse=True);bc=Counter()
+ rows=sorted(latest.values(),key=lambda r:str(r.get("captured_at") or ""),reverse=True);bc=Counter();agc=Counter()
  for r in rows:
-  for x in r.get("blocks") or []:bc[_short_block(str(x))]+=1
+  blocks=_row_blocks(r)
+  for x in blocks:bc[x]+=1
+  if str(r.get("head") or "")=="another_goal":
+   for x in _another_goal_detail_blocks(r):agc[x]+=1
  top=sorted(rows,key=lambda r:float(r.get("probability") or r.get("gool_confidence") or 0),reverse=True)[:10];lines=["🧠 <b>АНАЛИЗ ДВУХ СТРАТЕГИЙ</b>","⚽ Ещё гол — MODEL\n🔥 Ещё +2 гола — GOOL LIVE",f"Текущих оценок: <b>{len(rows)}</b> · готовых SIGNAL: <b>{sum(1 for r in rows if r.get('decision')=='SIGNAL')}</b>"]
- if bc:lines += ["","<b>Основные блокировки:</b>"]+[f"• {x}: {n}" for x,n in bc.most_common(6)]
+ if bc:lines += ["","<b>Основные блокировки:</b>"]+[f"• {x}: {n}" for x,n in bc.most_common(8)]
+ if agc:lines += ["","<b>Почему блокируется ⚽ Ещё гол:</b>"]+[f"• {x}: {n}" for x,n in agc.most_common(8)]
  if top:
   lines += ["","<b>Ближайшие входы:</b>"]
   for r in top:
-   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";v=float(r.get("probability") or r.get("gool_confidence") or 0);is_gool=bool(r.get("gool_live_analysis"));value=f"{v*100:.0f}/100" if is_gool else f"{v*100:.1f}%";bl=[_short_block(str(x)) for x in r.get("blocks") or []];bt=", ".join(bl[:2]) if bl else "готово";period=_half(r.get("minute"))
+   s=r.get("score") or [0,0];dec="🔥 SIGNAL" if r.get("decision")=="SIGNAL" else "⏳ WAIT";v=float(r.get("probability") or r.get("gool_confidence") or 0);is_gool=bool(r.get("gool_live_analysis"));value=f"{v*100:.0f}/100" if is_gool else f"{v*100:.1f}%";bl=_row_blocks(r);bt=", ".join(bl[:3]) if bl else "готово";period=_half(r.get("minute"))
    lines.append(f"{HEAD_LABELS.get(str(r.get('head')),str(r.get('head')))} · {dec}\n{r.get('home','?')} — {r.get('away','?')} · {r.get('minute',0)}' ({period}) · {s[0]}:{s[1]} · <b>{value}</b>\n↳ {bt}")
  return "\n\n".join(lines)

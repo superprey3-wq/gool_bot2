@@ -1,0 +1,1899 @@
+{
+  "events": [
+    {
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:57:46+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:58:27+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:59:02+00:00",
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "betfair_web": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "dabble": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "CD Walter Ferretti",
+              "book_event_id": "SportingEvent:0d2718ca-7897-43c9-aea8-9b759baee4f5",
+              "book_home": "Club Sport Sebaco",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=25",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=14",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=11"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "fanduel": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1460",
+                "betOffers[0].outcomes[0].oddsAmerican=-220",
+                "betOffers[0].outcomes[1].odds=3600",
+                "betOffers[0].outcomes[1].oddsAmerican=260",
+                "betOffers[0].outcomes[2].odds=6100",
+                "betOffers[0].outcomes[2].oddsAmerican=510"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1460",
+                "betOffers[0].outcomes[0].oddsAmerican=-220",
+                "betOffers[0].outcomes[1].odds=3600",
+                "betOffers[0].outcomes[1].oddsAmerican=260",
+                "betOffers[0].outcomes[2].odds=6100",
+                "betOffers[0].outcomes[2].oddsAmerican=510"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Deportivo Walter Ferreti",
+              "book_event_id": "",
+              "book_home": "Sebaco FC",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.7832,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=2180",
+                "betOffers[0].oddsStats.startingOddsAmerican=118",
+                "betOffers[0].outcomes[0].odds=1460",
+                "betOffers[0].outcomes[0].oddsAmerican=-220",
+                "betOffers[0].outcomes[1].odds=3600",
+                "betOffers[0].outcomes[1].oddsAmerican=260",
+                "betOffers[0].outcomes[2].odds=6100",
+                "betOffers[0].outcomes[2].oddsAmerican=510"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "sportsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "tab": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        }
+      },
+      "target": {
+        "away": "Ferretti",
+        "country": "Nicaragua",
+        "home": "Sport Sebaco",
+        "key": "sport_sebaco_ferretti",
+        "league": "Liga Primera Apertura"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Guarani",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:57:46+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 28,
+          "snapshot": 1
+        },
+        {
+          "away": "Guarani",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:58:27+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 29,
+          "snapshot": 2
+        },
+        {
+          "away": "Guarani",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:59:02+00:00",
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 29,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "betfair_web": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "dabble": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7"
+              ],
+              "removed": [
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=9"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=9",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=333"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=333"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani Asuncion",
+              "book_event_id": "SportingEvent:cf229a8d-48b3-4d7b-bc66-d3113e4f4928",
+              "book_home": "Club Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=4",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=7",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=100",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=333"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "fanduel": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=1820",
+                "betOffers[0].outcomes[0].oddsAmerican=-122",
+                "betOffers[0].outcomes[1].odds=2880",
+                "betOffers[0].outcomes[1].oddsAmerican=188",
+                "betOffers[0].outcomes[2].odds=4800",
+                "betOffers[0].outcomes[2].oddsAmerican=380"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=1780",
+                "betOffers[0].outcomes[0].oddsAmerican=-129",
+                "betOffers[0].outcomes[1].odds=3000",
+                "betOffers[0].outcomes[1].oddsAmerican=200",
+                "betOffers[0].outcomes[2].odds=4750",
+                "betOffers[0].outcomes[2].oddsAmerican=375"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=1780",
+                "betOffers[0].outcomes[0].oddsAmerican=-129",
+                "betOffers[0].outcomes[1].odds=3000",
+                "betOffers[0].outcomes[1].oddsAmerican=200",
+                "betOffers[0].outcomes[2].odds=4750",
+                "betOffers[0].outcomes[2].oddsAmerican=375"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=1820",
+                "betOffers[0].outcomes[0].oddsAmerican=-122",
+                "betOffers[0].outcomes[1].odds=2880",
+                "betOffers[0].outcomes[1].oddsAmerican=188",
+                "betOffers[0].outcomes[2].odds=4800",
+                "betOffers[0].outcomes[2].oddsAmerican=380"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1640",
+                "betOffers[0].oddsStats.startingOddsAmerican=-157",
+                "betOffers[0].outcomes[0].odds=1820",
+                "betOffers[0].outcomes[0].oddsAmerican=-122",
+                "betOffers[0].outcomes[1].odds=2880",
+                "betOffers[0].outcomes[1].oddsAmerican=188",
+                "betOffers[0].outcomes[2].odds=4800",
+                "betOffers[0].outcomes[2].oddsAmerican=380"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "1635351538",
+              "book_home": "Olimpia Asuncion",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 1.0,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-140",
+                "[0].prices[1].price=423",
+                "[0].prices[2].price=258",
+                "[10].prices[0].price=-140",
+                "[10].prices[1].price=118",
+                "[11].prices[0].price=-206",
+                "[11].prices[1].price=168",
+                "[12].prices[0].price=-380",
+                "[12].prices[1].price=289",
+                "[13].prices[0].price=-479",
+                "[13].prices[1].price=353",
+                "[14].prices[0].points=2.5",
+                "[14].prices[0].price=-102",
+                "[14].prices[1].points=2.5",
+                "[14].prices[1].price=-116",
+                "[15].prices[0].points=4.5",
+                "[15].prices[0].price=553",
+                "[15].prices[1].points=4.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=1.85",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=4.75",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=1.85",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=4.75"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=1.85",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=4.75",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=1.85",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=4.75"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guaraní",
+              "book_event_id": "",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.93,
+              "quote_count": 16,
+              "quote_sample": [
+                "featuredInPlayFixedOddsMarkets[0].competitionKey=29625",
+                "featuredInPlayFixedOddsMarkets[0].eventClassId=358",
+                "featuredInPlayFixedOddsMarkets[0].eventTypeId=100",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[0].price=1.85",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].key=2",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[1].price=2.9",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].key=3",
+                "featuredInPlayFixedOddsMarkets[0].outcomes[2].price=4.75",
+                "fixedOddsMarkets[0].competitionKey=29625",
+                "fixedOddsMarkets[0].eventClassId=358",
+                "fixedOddsMarkets[0].eventTypeId=100",
+                "fixedOddsMarkets[0].outcomes[0].price=1.85",
+                "fixedOddsMarkets[0].outcomes[1].key=2",
+                "fixedOddsMarkets[0].outcomes[1].price=2.9",
+                "fixedOddsMarkets[0].outcomes[2].key=3",
+                "fixedOddsMarkets[0].outcomes[2].price=4.75"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "sportsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "tab": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        }
+      },
+      "target": {
+        "away": "Guarani",
+        "country": "Paraguay",
+        "home": "Olimpia Asuncion",
+        "key": "olimpia_guarani",
+        "league": "Copa de Primera Clausura"
+      }
+    },
+    {
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:57:46+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 27,
+          "snapshot": 1
+        },
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:58:27+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 28,
+          "snapshot": 2
+        },
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "captured_at": "2026-09-02T21:59:02+00:00",
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 28,
+          "snapshot": 3
+        }
+      ],
+      "sources": {
+        "betfair_web": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'betfair_navigation': betfair blocked the request (HTTP 403) — likely bot detection or geo-block. Body starts: <!DOCTYPE html> <html lang=\"en-US\"> <head>     <meta charset=\"UTF-8\">     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">     <title>Betfair</title>     <meta name=\"theme-color\"",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "dabble": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "entain_ladbrokes": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=3",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=13"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=3",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=13"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "SportingEvent:3dd2c290-70c0-4e7e-a030-fdfcedfd6131",
+              "book_home": "CD Cuenca",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.9211,
+              "quote_count": 6,
+              "quote_sample": [
+                "markets.nodes[0].entrants.nodes[0].price.odds.denominator=10",
+                "markets.nodes[0].entrants.nodes[0].price.odds.numerator=11",
+                "markets.nodes[0].entrants.nodes[1].price.odds.denominator=2",
+                "markets.nodes[0].entrants.nodes[1].price.odds.numerator=3",
+                "markets.nodes[0].entrants.nodes[2].price.odds.denominator=5",
+                "markets.nodes[0].entrants.nodes[2].price.odds.numerator=13"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "fanduel": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'fanduel_sb_call': fanduel returned HTTP 404. Body starts: {\"error\":true}",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "changed_quote_tokens": [
+            {
+              "added": [
+                "betOffers[0].outcomes[0].odds=1980",
+                "betOffers[0].outcomes[0].oddsAmerican=-103",
+                "betOffers[0].outcomes[1].odds=2700",
+                "betOffers[0].outcomes[1].oddsAmerican=170",
+                "betOffers[0].outcomes[2].odds=4250",
+                "betOffers[0].outcomes[2].oddsAmerican=325"
+              ],
+              "removed": [
+                "betOffers[0].outcomes[0].odds=1960",
+                "betOffers[0].outcomes[0].oddsAmerican=-105",
+                "betOffers[0].outcomes[1].odds=2750",
+                "betOffers[0].outcomes[1].oddsAmerican=175",
+                "betOffers[0].outcomes[2].odds=4300",
+                "betOffers[0].outcomes[2].oddsAmerican=330"
+              ]
+            }
+          ],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=1960",
+                "betOffers[0].outcomes[0].oddsAmerican=-105",
+                "betOffers[0].outcomes[1].odds=2750",
+                "betOffers[0].outcomes[1].oddsAmerican=175",
+                "betOffers[0].outcomes[2].odds=4300",
+                "betOffers[0].outcomes[2].oddsAmerican=330"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=1980",
+                "betOffers[0].outcomes[0].oddsAmerican=-103",
+                "betOffers[0].outcomes[1].odds=2750",
+                "betOffers[0].outcomes[1].oddsAmerican=175",
+                "betOffers[0].outcomes[2].odds=4250",
+                "betOffers[0].outcomes[2].oddsAmerican=325"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City FC",
+              "book_event_id": "",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 8,
+              "quote_sample": [
+                "betOffers[0].oddsStats.startingOdds=1710",
+                "betOffers[0].oddsStats.startingOddsAmerican=-141",
+                "betOffers[0].outcomes[0].odds=1980",
+                "betOffers[0].outcomes[0].oddsAmerican=-103",
+                "betOffers[0].outcomes[1].odds=2700",
+                "betOffers[0].outcomes[1].oddsAmerican=170",
+                "betOffers[0].outcomes[2].odds=4250",
+                "betOffers[0].outcomes[2].oddsAmerican=325"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "PROVEN"
+        },
+        "pinnacle_arcadia": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635350792",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635350792",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "1635351448",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": 0.965,
+              "quote_count": 61,
+              "quote_sample": [
+                "[0].prices[0].price=-129",
+                "[0].prices[1].price=433",
+                "[0].prices[2].price=231",
+                "[10].prices[0].price=-193",
+                "[10].prices[1].price=158",
+                "[11].prices[0].price=-374",
+                "[11].prices[1].price=285",
+                "[12].prices[0].price=-484",
+                "[12].prices[1].price=356",
+                "[13].prices[0].points=2.25",
+                "[13].prices[0].price=106",
+                "[13].prices[1].points=2.25",
+                "[13].prices[1].price=-126",
+                "[14].prices[0].points=3.5",
+                "[14].prices[0].price=334",
+                "[14].prices[1].points=3.5",
+                "[14].prices[1].price=-469",
+                "[15].prices[0].points=2.75"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        },
+        "pointsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": null,
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "source_states": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "sportsbet": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_blocked"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'sportsbet_bet_live': sportsbet needs an API key: set SPORTSBET_REFRESH_TOKEN in your environment and restart. (HTTP 403.) Upstream said: <!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta content=\"width=device-width, initial-scale=.999, maximum-scale=1.0, user-scalable=no\" name=\"vi",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_blocked"
+            }
+          ],
+          "source_states": [
+            "blocked",
+            "blocked",
+            "blocked"
+          ],
+          "verdict": "BLOCKED_GEO"
+        },
+        "tab": {
+          "changed_quote_tokens": [],
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:57:46+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:58:27+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T21:59:02+00:00",
+              "error": "ToolError: Error calling tool 'tab_live_events_summary': tab returned non-JSON (text/html; HTTP 200). Often a bot-challenge page. Body starts: <!DOCTYPE html> <html lang=\"en\">  <head>     <meta charset=\"utf-8\">     <title>TAB.com.au</title>     <style>         body {             font-family: Helvetica, Arial, sans-serif;             font-wei",
+              "mapping_score": null,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "source_states": [
+            "error",
+            "error",
+            "error"
+          ],
+          "verdict": "SOURCE_ERROR"
+        }
+      },
+      "target": {
+        "away": "Guayaquil City",
+        "country": "Ecuador",
+        "home": "Deportivo Cuenca",
+        "key": "deportivo_cuenca_guayaquil_city",
+        "league": "Liga Pro"
+      }
+    }
+  ],
+  "generated_at": "2026-09-02T21:59:11+00:00",
+  "snapshot_count": 3,
+  "source_summary": {
+    "betfair_web": {
+      "BLOCKED_GEO": 3
+    },
+    "dabble": {
+      "NOT_FOUND": 3
+    },
+    "entain_ladbrokes": {
+      "FOUND_NO_CHANGE": 2,
+      "PROVEN": 1
+    },
+    "fanduel": {
+      "SOURCE_ERROR": 3
+    },
+    "kambi_unibet": {
+      "FOUND_NO_CHANGE": 1,
+      "PROVEN": 2
+    },
+    "pinnacle_arcadia": {
+      "FOUND_NO_CHANGE": 2,
+      "NOT_FOUND": 1
+    },
+    "pointsbet": {
+      "FOUND_NO_CHANGE": 1,
+      "NOT_FOUND": 2
+    },
+    "sportsbet": {
+      "BLOCKED_GEO": 3
+    },
+    "tab": {
+      "SOURCE_ERROR": 3
+    }
+  },
+  "strict_rule": "PROVEN requires >=2 quote-bearing snapshots, Flashscore minute/score progress, and a changed bookmaker quote fingerprint for the same matched event.",
+  "targets": 3
+}

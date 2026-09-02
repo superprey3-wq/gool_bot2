@@ -1,0 +1,132 @@
+name: fresh-odds-all-live
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fresh-odds-all-live.yml"
+      - "scripts/fresh_sofascore_all_live.mjs"
+      - "scripts/fresh_bet365_all_live.py"
+      - "scripts/fresh_all_live_summary.py"
+      - "scripts/fresh_realine_all_bookmakers.py"
+      - "scripts/fresh_odds_projects_smoke.py"
+
+permissions:
+  contents: read
+
+jobs:
+  all-live-odds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: "package-lock.json"
+        continue-on-error: true
+
+      - name: Install GOOL discovery runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          mkdir -p fresh_odds_results fresh_sources
+
+      - name: Discover ALL current Flashscore live matches
+        run: |
+          python scripts/fresh_odds_projects_smoke.py discover \
+            --output fresh_odds_results/online_matches.json \
+            --limit 1000
+
+      # Proven fresh 2026 Flashscore/LSApp project: use every bookmaker it supports.
+      - name: Clone realine0 Flashscore odds project
+        run: git clone --depth 1 https://github.com/realine0/flashscore-football-odds-scraper.git fresh_sources/realine
+
+      - name: Install realine0 dependencies
+        run: |
+          pip install -r fresh_sources/realine/requirements.txt
+          pip install 'httpx[http2]'
+
+      - name: Probe realine0 on ALL current Flashscore live matches
+        continue-on-error: true
+        run: |
+          python scripts/fresh_realine_all_bookmakers.py \
+            --matches fresh_odds_results/online_matches.json \
+            --source-dir fresh_sources/realine \
+            --output fresh_odds_results/realine.json \
+            --limit 1000
+
+      # Independent SofaScore project, fresh in 2026. Match its live feed to every
+      # Flashscore live match and count only raw markets explicitly marked isLive=true.
+      - name: Clone DevNeonix SofaScore project
+        run: git clone --depth 1 https://github.com/DevNeonix/sofascore-api.git fresh_sources/sofascore
+
+      - name: Build DevNeonix SofaScore project
+        run: |
+          npm ci --prefix fresh_sources/sofascore
+          npm run build --prefix fresh_sources/sofascore
+
+      - name: Probe SofaScore LIVE odds on ALL Flashscore live matches
+        continue-on-error: true
+        run: |
+          node scripts/fresh_sofascore_all_live.mjs \
+            fresh_odds_results/online_matches.json \
+            fresh_sources/sofascore \
+            fresh_odds_results/sofascore.json
+
+      # Freshly maintained Bet365 WebSocket project. Its documented public remote
+      # sample feed is probed first; if it is offline/blocked, the result records
+      # that explicitly instead of pretending coverage exists.
+      - name: Clone joe-bring Bet365 live project
+        run: git clone --depth 1 https://github.com/joe-bring/bet365-scraper.git fresh_sources/bet365
+
+      - name: Probe Bet365 project feed on ALL Flashscore live matches
+        continue-on-error: true
+        run: |
+          python scripts/fresh_bet365_all_live.py \
+            --matches fresh_odds_results/online_matches.json \
+            --output fresh_odds_results/bet365.json
+
+      - name: Record exact external project revisions
+        if: always()
+        run: |
+          {
+            echo '{'
+            echo '  "realine0": "'$(git -C fresh_sources/realine rev-parse HEAD 2>/dev/null || echo unavailable)'",'
+            echo '  "sofascore": "'$(git -C fresh_sources/sofascore rev-parse HEAD 2>/dev/null || echo unavailable)'",'
+            echo '  "bet365": "'$(git -C fresh_sources/bet365 rev-parse HEAD 2>/dev/null || echo unavailable)'"'
+            echo '}'
+          } > fresh_odds_results/source_revisions.json
+
+      - name: Build ALL-LIVE coverage summary
+        if: always()
+        run: |
+          python scripts/fresh_all_live_summary.py \
+            --matches fresh_odds_results/online_matches.json \
+            --inputs fresh_odds_results/realine.json fresh_odds_results/sofascore.json fresh_odds_results/bet365.json \
+            --output fresh_odds_results/summary.json
+
+          echo '## ALL current Flashscore live matches — free odds projects' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No legacy GOOL odds modules are imported or modified.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat fresh_odds_results/summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full all-live odds results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-all-live-odds
+          path: fresh_odds_results/
+          if-no-files-found: warn
+          retention-days: 7

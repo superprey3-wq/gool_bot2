@@ -31,6 +31,12 @@ def _h(value) -> str:
     return html.escape(str(value or ""), quote=False)
 
 
+def _team_text(value, fallback="?") -> str:
+    if isinstance(value, dict):
+        value = value.get("team") or value.get("name") or fallback
+    return str(value or fallback)
+
+
 def _pct(w, l):
     total = w + l
     return "—" if not total else f"{w / total * 100:.1f}%"
@@ -307,6 +313,14 @@ def _read_analysis(path, heads, now):
             mid = str(row.get("match_id") or "")
             if not mid or head not in heads or not _fresh(row, now):
                 continue
+            if head in EXPERIMENT_HEADS:
+                row = dict(row)
+                if isinstance(row.get("home"), dict):
+                    row.setdefault("market_home", row.get("home"))
+                    row["home"] = _team_text(row.get("home"))
+                if isinstance(row.get("away"), dict):
+                    row.setdefault("market_away", row.get("away"))
+                    row["away"] = _team_text(row.get("away"))
             key = (mid, head)
             if key not in latest or str(row.get("captured_at") or "") >= str(latest[key].get("captured_at") or ""):
                 latest[key] = row
@@ -365,7 +379,7 @@ def analysis_text(path: Path, experiment_path: Path | None = None):
         team = f" · {_h(row.get('team'))}" if head == "team_to_score" and row.get("team") else ""
         block = (
             f"{HEAD_LABELS.get(head, _h(head))} · {decision}{team}\n"
-            f"{_h(row.get('home','?'))} — {_h(row.get('away','?'))} · {row.get('minute',0)}' ({_half(row.get('minute'))}) · "
+            f"{_h(_team_text(row.get('home','?')))} — {_h(_team_text(row.get('away','?')))} · {row.get('minute',0)}' ({_half(row.get('minute'))}) · "
             f"{score[0]}:{score[1]} · <b>{value_text}</b>\n"
             f"↳ {block_text}"
         )

@@ -20,6 +20,7 @@ on:
     paths:
       - ".github/workflows/live-bookmaker-variants-audit.yml"
       - "scripts/live_bookmaker_variants_audit.py"
+      - "scripts/refine_live_bookmaker_variants_summary.py"
       - "src/gool_bot2/providers/flashscore.py"
 
 permissions:
@@ -54,10 +55,21 @@ jobs:
             --interval "$INTERVAL" \
             --limit "$MATCH_LIMIT"
 
+      - name: Enforce strict quote-evidence verdicts
+        if: always()
+        run: |
+          if [ -f live_bookmaker_audit/audit.json ]; then
+            python scripts/refine_live_bookmaker_variants_summary.py \
+              --audit live_bookmaker_audit/audit.json \
+              --output live_bookmaker_audit/summary.json
+          fi
+
       - name: Publish audit summary
         if: always()
         run: |
           echo '## GOOL Flashscore → Kambi/Unibet + Bet365 + Betano' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Strict rule: a bookmaker match without extracted quote values is NOT counted as live-odds coverage.' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           if [ -f live_bookmaker_audit/summary.json ]; then
             python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
@@ -88,13 +100,14 @@ jobs:
           import json
           from pathlib import Path
 
-          src = Path('live_bookmaker_audit/summary.json')
-          data = json.loads(src.read_text())
+          data = json.loads(Path('live_bookmaker_audit/summary.json').read_text())
           compact = {
               'generated_at': data.get('generated_at'),
+              'strict_quote_evidence': data.get('strict_quote_evidence'),
               'snapshot_count': data.get('snapshot_count'),
               'unique_flashscore_live_matches': data.get('unique_flashscore_live_matches'),
               'source_states': data.get('source_states'),
+              'source_diagnostics': data.get('source_diagnostics'),
               'source_summary': data.get('source_summary'),
               'verdict_counts': data.get('verdict_counts'),
               'events': [],
@@ -111,7 +124,8 @@ jobs:
                           'verdict': payload.get('verdict'),
                           'odds_changed': payload.get('odds_changed'),
                           'flashscore_progress': payload.get('flashscore_progress'),
-                          'matched_snapshots': sum(1 for row in payload.get('snapshots', []) if row.get('status') == 'matched'),
+                          'matched_quote_snapshots': payload.get('matched_quote_snapshots'),
+                          'matched_no_quote_snapshots': payload.get('matched_no_quote_snapshots'),
                       }
                       for source, payload in event.get('sources', {}).items()
                   },
@@ -124,7 +138,7 @@ jobs:
             git config user.email "gool-bot2-actions@users.noreply.github.com"
             git add reports/live_bookmaker_variants/latest-summary.json
             if ! git diff --cached --quiet; then
-              git commit -m "chore: update live bookmaker audit report"
+              git commit -m "chore: update strict live bookmaker audit report"
               git push
             fi
           fi

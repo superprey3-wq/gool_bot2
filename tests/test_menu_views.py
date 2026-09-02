@@ -70,7 +70,18 @@ def test_analysis_only_shows_fresh_online_rows_and_stays_under_telegram_limit(tm
     }
     _append_jsonl(main, fresh + [stale])
     _append_jsonl(exp, [
-        {"captured_at": now.isoformat(), "match_id": "btts", "head": "both_teams_to_score", "minute": 31, "home": "A", "away": "B", "score": [0, 0], "confidence_score": 0.81, "decision": "SIGNAL", "blocks": []},
+        {
+            "captured_at": now.isoformat(),
+            "match_id": "btts",
+            "head": "both_teams_to_score",
+            "minute": 31,
+            "home": {"side": "home", "team": "A", "pressure_score": 0.7},
+            "away": {"side": "away", "team": "B", "pressure_score": 0.8},
+            "score": [0, 0],
+            "confidence_score": 0.81,
+            "decision": "SIGNAL",
+            "blocks": [],
+        },
         {"captured_at": now.isoformat(), "match_id": "team", "head": "team_to_score", "minute": 34, "home": "C", "away": "D", "team": "C", "score": [0, 0], "confidence_score": 0.83, "decision": "SIGNAL", "blocks": []},
     ])
     text = analysis_text(main)
@@ -79,4 +90,6 @@ def test_analysis_only_shows_fresh_online_rows_and_stays_under_telegram_limit(tm
     assert "💜 Обе забьют — Да" in text
     assert "🔵 Команда забьёт" in text
     assert "Home &amp;" in text
+    assert "A — B" in text
+    assert "pressure_score" not in text
     assert len(text) < 4096

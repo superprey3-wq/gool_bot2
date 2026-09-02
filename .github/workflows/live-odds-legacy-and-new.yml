@@ -1,0 +1,143 @@
+name: live-odds-legacy-and-new
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/live-odds-legacy-and-new.yml"
+      - "scripts/legacy_live_odds_all.py"
+      - "scripts/oddsharvester_all_live_match.py"
+
+permissions:
+  contents: read
+
+jobs:
+  all-live-real-odds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install GOOL discovery runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          mkdir -p live_odds_results live_odds_sources
+
+      - name: Discover ALL current Flashscore live matches
+        run: |
+          python scripts/fresh_odds_projects_smoke.py discover \
+            --output live_odds_results/online_matches.json \
+            --limit 1000
+
+      # Re-test the old GOOL sources exactly as they were written. They are cloned
+      # into the Action workspace only; production GOOL Bot 2 code is not imported
+      # or changed by this experiment.
+      - name: Clone legacy GOOL odds implementation
+        run: git clone --depth 1 https://github.com/superprey3-wq/gool_bot.git live_odds_sources/legacy_gool
+
+      - name: Install legacy odds dependencies
+        run: pip install -r live_odds_sources/legacy_gool/gool_bot/requirements.txt
+
+      - name: Probe legacy Flashscore LIVE OLE2 and Kambi on ALL matches
+        continue-on-error: true
+        run: |
+          python scripts/legacy_live_odds_all.py \
+            --matches live_odds_results/online_matches.json \
+            --legacy-dir live_odds_sources/legacy_gool \
+            --output live_odds_results/legacy.json
+
+      # OddsHarvester is actively maintained and pushed on 2026-09-02. Its `live`
+      # command reads OddsPortal's actual in-play view and returns per-bookmaker odds
+      # together with live score/period/timestamp, so it is a strong independent test.
+      - name: Clone current OddsHarvester
+        run: git clone --depth 1 https://github.com/jordantete/OddsHarvester.git live_odds_sources/oddsharvester
+
+      - name: Install OddsHarvester and Chromium
+        continue-on-error: true
+        run: |
+          pip install -e live_odds_sources/oddsharvester
+          python -m playwright install --with-deps chromium
+
+      - name: Scrape ALL current OddsPortal football in-play markets
+        continue-on-error: true
+        run: |
+          oddsharvester live \
+            --sport football \
+            --market over_under,btts \
+            --headless \
+            --output live_odds_results/oddsharvester_live.json
+
+      - name: Match OddsHarvester LIVE rows to ALL Flashscore matches
+        if: always()
+        continue-on-error: true
+        run: |
+          python scripts/oddsharvester_all_live_match.py \
+            --matches live_odds_results/online_matches.json \
+            --odds live_odds_results/oddsharvester_live.json \
+            --output live_odds_results/oddsharvester.json
+
+      - name: Record source revisions
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          roots = {
+              "legacy_gool": Path("live_odds_sources/legacy_gool"),
+              "oddsharvester": Path("live_odds_sources/oddsharvester"),
+          }
+          out = {}
+          for name, root in roots.items():
+              try:
+                  out[name] = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+              except Exception:
+                  out[name] = "unavailable"
+          Path("live_odds_results/source_revisions.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
+          PY
+
+      - name: Build final coverage summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def read(path):
+              try:
+                  return json.loads(Path(path).read_text(encoding="utf-8"))
+              except Exception:
+                  return {}
+
+          matches = read("live_odds_results/online_matches.json")
+          legacy = read("live_odds_results/legacy.json").get("summary", {})
+          harvester = read("live_odds_results/oddsharvester.json").get("summary", {})
+          summary = {
+              "flashscore_live_matches": len(matches) if isinstance(matches, list) else 0,
+              "legacy_flashscore_live_ole2": legacy,
+              "new_oddsharvester": harvester,
+          }
+          Path("live_odds_results/summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(json.dumps(summary, ensure_ascii=False, indent=2))
+          PY
+
+          echo '## LIVE odds: legacy GOOL vs fresh OddsHarvester' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat live_odds_results/summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full LIVE odds results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-odds-legacy-and-new
+          path: live_odds_results/
+          if-no-files-found: warn
+          retention-days: 7

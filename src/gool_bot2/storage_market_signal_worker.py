@@ -11,6 +11,7 @@ from . import storage_signal_worker as storage
 from .market_card_overlay import append_xbet_market_block
 from .market_override_policy import can_override_another_goal, decorate_market_info
 from .signal_policy import GateResult
+from .value_bet_policy import attach_value
 from .xbet_market_pressure import evaluate_system, load_market_state
 
 _CURRENT: dict[str, Any] | None = None
@@ -23,6 +24,7 @@ _ORIG_SAVE = journal_mod.save_signal_journal
 _ORIG_PREMATCH_CONFIRM = cards._prematch_confirmation
 _ORIG_LIVE_CONFIRM = cards._another_goal_live_confirmation
 _ORIG_TWO_MORE = base.analyze_two_more_goals
+_ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
 
 
 def _required() -> bool:
@@ -49,6 +51,13 @@ def _market_strength(info: dict[str, Any]) -> float:
     return min(0.94, 0.70 + max(0.0, delta - 6.0) * 0.025 + max(0, moves - 2) * 0.02)
 
 
+def _set_value(record: dict[str, Any], head: str, probability: Any, source: str) -> dict[str, Any]:
+    market = record.setdefault("xbet_market", {})
+    info = attach_value(dict(market.get(head) or {}), probability, probability_source=source)
+    market[head] = info
+    return info
+
+
 def _attach(record: dict[str, Any]) -> None:
     confirmations = record.setdefault("xbet_market", {})
     confirmations["another_goal"] = _eval(record, "another_goal")
@@ -69,7 +78,7 @@ def _process(self, record: dict[str, Any]):
 
 def _confirmation(head: str) -> dict[str, Any]:
     if not _CURRENT:
-        return {"available": False, "confirmed": False, "override": False, "level": "NO_DATA", "reason": "1xBet context unavailable"}
+        return {"available": False, "confirmed": False, "override": False, "value_bet": False, "value_override": False, "level": "NO_DATA", "reason": "1xBet context unavailable"}
     return dict(((_CURRENT.get("xbet_market") or {}).get(head) or {}))
 
 
@@ -99,22 +108,71 @@ def _live_confirmation(record: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _ensure_model(self):
+    ok = _ORIG_ENSURE_MODEL(self)
+    model = getattr(self, "model", None)
+    if not ok or model is None or getattr(model, "_xbet_value_predict_wrapped", False):
+        return ok
+    current_predict = model.predict
+
+    def predict_with_value(record):
+        result = current_predict(record)
+        trained = result.get("trained_probability") or {}
+        p = trained.get("another_goal")
+        if p is None:
+            p = (result.get("direct") or {}).get("another_goal")
+        info = _set_value(record, "another_goal", p, "trained_probability")
+        if info.get("value_override") and p is not None:
+            result.setdefault("blended", {})["another_goal"] = float(p)
+            prematch = dict(result.get("prematch_analysis") or {})
+            live = dict(result.get("another_goal_live") or {})
+            prematch["passed_without_value"] = bool(prematch.get("passed"))
+            live["passed_without_value"] = bool(live.get("passed"))
+            prematch["soft_blocks_overridden_by_value"] = list(prematch.get("blocks") or [])
+            live["soft_blocks_overridden_by_value"] = list(live.get("blocks") or [])
+            prematch["passed"] = True; live["passed"] = True
+            prematch["value_override"] = True; live["value_override"] = True
+            prematch["blocks"] = []; live["blocks"] = []
+            result["prematch_analysis"] = prematch
+            result["another_goal_live"] = live
+            analyzer = result.setdefault("gool_analyzer", {})
+            row = dict(analyzer.get("another_goal") or {})
+            row["passed_without_value"] = bool(row.get("passed"))
+            row["passed"] = True
+            row["value_override"] = True
+            row["value_override_reason"] = info.get("value_reason")
+            analyzer["another_goal"] = row
+        return result
+
+    model.predict = predict_with_value
+    model._xbet_value_predict_wrapped = True
+    return ok
+
+
 def _two_more(record: dict[str, Any]) -> dict[str, Any]:
     result = dict(_ORIG_TWO_MORE(record) or {})
-    info = ((record.get("xbet_market") or {}).get("two_more_goals") or {})
-    if info.get("override"):
+    confidence = result.get("confidence_score")
+    info = _set_value(record, "two_more_goals", confidence, "gool_live_confidence")
+    special_override = bool(info.get("override") or info.get("value_override"))
+    if special_override:
         result["passed_without_market"] = bool(result.get("passed"))
         result["passed"] = True
-        result["market_override"] = True
-        result["market_override_reason"] = info.get("reason")
         result["soft_blocks_overridden"] = list(result.get("blocks") or [])
         result["blocks"] = []
-        if result.get("confidence_score") is None:
+        if info.get("override"):
+            result["market_override"] = True
+            result["market_override_reason"] = info.get("reason")
+        if info.get("value_override"):
+            result["value_override"] = True
+            result["value_override_reason"] = info.get("value_reason")
+        if result.get("confidence_score") is None and info.get("override"):
             result["confidence_score"] = _market_strength(info)
             result["confidence_source"] = "xbet_market_strength_proxy"
         mid = str(((record.get("match") or {}).get("flashscore_event_id") or ""))
         if mid:
             cards._LAST_TWO_MORE[mid] = dict(result)
+    result["xbet_market"] = info
+    result["value_bet"] = bool(info.get("value_bet"))
     return result
 
 
@@ -122,23 +180,32 @@ def _model_gate(head: str, probability: float, score: float) -> GateResult:
     gate = _ORIG_MODEL_GATE(head, probability, score)
     if head != "another_goal":
         return gate
-    info = _confirmation(head)
+    if _CURRENT:
+        info = _set_value(_CURRENT, head, probability, "blended_probability")
+    else:
+        info = _confirmation(head)
     if info.get("override") and can_override_another_goal(info, probability):
+        return GateResult(True, ())
+    if info.get("value_override"):
         return GateResult(True, ())
     if not _required():
         return gate
-    if info.get("confirmed"):
+    if info.get("confirmed") or info.get("value_bet"):
         return gate
     return GateResult(False, tuple(gate.reasons) + (f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}",))
 
 
 def _trained_card(record, head, probability, model_result, card_ctx):
+    if head == "another_goal":
+        _set_value(record, head, probability, "blended_probability")
     png = _ORIG_TRAINED_CARD(record, head, probability, model_result, card_ctx)
     info = ((record.get("xbet_market") or {}).get(head) or {})
     return append_xbet_market_block(png, info)
 
 
 def _live_card(record, head, confidence, pressure, card_ctx):
+    if head == "two_more_goals":
+        _set_value(record, head, confidence, "gool_live_confidence")
     png = _ORIG_LIVE_CARD(record, head, confidence, pressure, card_ctx)
     info = ((record.get("xbet_market") or {}).get(head) or {})
     return append_xbet_market_block(png, info)
@@ -147,13 +214,19 @@ def _live_card(record, head, confidence, pressure, card_ctx):
 def _live_emit(self, record, journal, head, confidence, analyzer, model_result, card_ctx):
     if head != "two_more_goals":
         return _ORIG_LIVE_EMIT(self, record, journal, head, confidence, analyzer, model_result, card_ctx)
-    info = ((record.get("xbet_market") or {}).get(head) or {})
-    if info.get("override"):
+    info = _set_value(record, head, confidence, "gool_live_confidence")
+    if info.get("override") or info.get("value_override"):
         patched = dict(analyzer or {})
         patched["passed_without_market"] = bool(patched.get("passed"))
         patched["passed"] = True
-        patched["market_override"] = True
-        patched["market_override_reason"] = info.get("reason")
+        patched["soft_blocks_overridden"] = list(patched.get("blocks") or [])
+        patched["blocks"] = []
+        if info.get("override"):
+            patched["market_override"] = True
+            patched["market_override_reason"] = info.get("reason")
+        if info.get("value_override"):
+            patched["value_override"] = True
+            patched["value_override_reason"] = info.get("value_reason")
         old = os.environ.get("GOOL_LIVE_MIN_STRENGTH")
         os.environ["GOOL_LIVE_MIN_STRENGTH"] = "0"
         try:
@@ -163,7 +236,7 @@ def _live_emit(self, record, journal, head, confidence, analyzer, model_result, 
                 os.environ.pop("GOOL_LIVE_MIN_STRENGTH", None)
             else:
                 os.environ["GOOL_LIVE_MIN_STRENGTH"] = old
-    if _required() and not info.get("confirmed"):
+    if _required() and not info.get("confirmed") and not info.get("value_bet"):
         base.append_analysis(self.analysis_path, {
             **self._base_analysis(record, str(((record.get('match') or {}).get('flashscore_event_id') or ''))),
             "head": head,
@@ -175,6 +248,18 @@ def _live_emit(self, record, journal, head, confidence, analyzer, model_result, 
     return _ORIG_LIVE_EMIT(self, record, journal, head, confidence, analyzer, model_result, card_ctx)
 
 
+def _source(info: dict[str, Any], fallback: str) -> str:
+    if info.get("override") and info.get("value_bet"):
+        return "xbet_market_value_combo"
+    if info.get("override"):
+        return "xbet_market_override"
+    if info.get("value_override"):
+        return "xbet_value_override"
+    if info.get("value_bet"):
+        return "xbet_value_bet"
+    return fallback
+
+
 def _save(path: Path, rows: list[dict[str, Any]]) -> None:
     if _CURRENT:
         match = _CURRENT.get("match") or {}; mid = str(match.get("flashscore_event_id") or "")
@@ -183,16 +268,22 @@ def _save(path: Path, rows: list[dict[str, Any]]) -> None:
             if str(row.get("match_id") or "") != mid:
                 continue
             head = str(row.get("head") or "")
-            if head in {"another_goal", "two_more_goals"} and not row.get("xbet_market"):
-                info = dict(market.get(head) or {})
+            if head in {"another_goal", "two_more_goals"}:
+                info = dict(market.get(head) or row.get("xbet_market") or {})
                 row["xbet_market"] = info
                 row["xbet_market_required"] = _required()
-                row["signal_source"] = "xbet_market_override" if info.get("override") else row.get("signal_source", "gool")
+                row["market_override"] = bool(info.get("override"))
+                row["value_bet"] = bool(info.get("value_bet"))
+                row["value_override"] = bool(info.get("value_override"))
+                row["value_edge_pp"] = info.get("value_edge_pp")
+                row["value_level"] = info.get("value_level")
+                row["signal_source"] = _source(info, str(row.get("signal_source") or "gool"))
                 break
     _ORIG_SAVE(path, rows)
 
 
 storage.StorageCardAllMatchSignalWorker._process = _process
+cards.CardAllMatchSignalWorker._ensure_model = _ensure_model
 base.model_threshold_gate = _model_gate
 base.render_signal_card = _trained_card
 base.analyze_two_more_goals = _two_more

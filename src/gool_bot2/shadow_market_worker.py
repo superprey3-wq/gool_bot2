@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from .journal import append_analysis, load_signal_journal, save_signal_journal
-from .shadow_market_cards import render_shadow_market_card
+from .shadow_market_cards import render_shadow_market_card, render_shadow_market_result_card
 from .shadow_markets import analyze_btts_shadow, analyze_team_goal_shadow
+from .telegram import broadcast, broadcast_photo
 
 
 def _match_id(record: dict[str, Any]) -> str:
@@ -27,20 +28,20 @@ def _base(record: dict[str, Any]) -> dict[str, Any]:
         "away": match.get("away"),
         "league": match.get("league"),
         "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
-        "shadow_only": True,
+        "experimental_market": True,
     }
 
 
-def _settle(record: dict[str, Any], rows: list[dict[str, Any]]) -> bool:
+def _settle(record: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     match = record.get("match") or {}
     mid = _match_id(record)
     if not mid:
-        return False
+        return []
     hs = int(match.get("home_score") or 0)
     aws = int(match.get("away_score") or 0)
     finished = bool(match.get("is_finished"))
     minute = int(match.get("minute") or 0)
-    changed = False
+    settled: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("match_id") or "") != mid or str(row.get("result") or "pending") != "pending":
             continue
@@ -59,25 +60,78 @@ def _settle(record: dict[str, Any], rows: list[dict[str, Any]]) -> bool:
                 "settled_minute": minute,
                 "settled_score": [hs, aws],
             })
-            changed = True
-    return changed
+            settled.append(row)
+    return settled
+
+
+def _notify_results(rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        if row.get("result_notified"):
+            continue
+        won = str(row.get("result") or "lost") == "won"
+        head = str(row.get("head") or "")
+        label = "ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ"
+        icon = "✅" if won else "❌"
+        try:
+            sent = broadcast_photo(
+                render_shadow_market_result_card(row),
+                caption=f"{icon} <b>{label}</b> · {'ЗАШЁЛ' if won else 'НЕ ЗАШЁЛ'}",
+            )
+        except Exception as exc:
+            print(f"EXPERIMENT_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+            sent = 0
+        if sent == 0:
+            score = row.get("settled_score") or row.get("score") or [0, 0]
+            broadcast(
+                f"{icon} <b>{label}</b> · {'ЗАШЁЛ' if won else 'НЕ ЗАШЁЛ'}\n"
+                f"{row.get('home','?')} — {row.get('away','?')} · {row.get('settled_minute',0)}' · {score[0]}:{score[1]}"
+            )
+        row["result_notified"] = True
 
 
 def _already_recorded(rows: list[dict[str, Any]], mid: str, head: str) -> bool:
     return any(str(r.get("match_id") or "") == mid and str(r.get("head") or "") == head for r in rows)
 
 
-def _save_card(card_dir: Path, record: dict[str, Any], analysis: dict[str, Any]) -> str | None:
+def _save_card(card_dir: Path, record: dict[str, Any], analysis: dict[str, Any]) -> tuple[str | None, bytes | None]:
     try:
         mid = _match_id(record)
         minute = int(((record.get("match") or {}).get("minute") or 0))
+        png = render_shadow_market_card(record, analysis)
         path = card_dir / f"{analysis.get('head')}_{mid}_{minute}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(render_shadow_market_card(record, analysis))
-        return str(path)
+        path.write_bytes(png)
+        return str(path), png
     except Exception as exc:
-        print(f"SHADOW_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
-        return None
+        print(f"EXPERIMENT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return None, None
+
+
+def _send_signal(record: dict[str, Any], result: dict[str, Any], png: bytes | None) -> int:
+    match = record.get("match") or {}
+    head = str(result.get("head") or "")
+    confidence = result.get("confidence_score")
+    strength = "—" if confidence is None else f"{float(confidence) * 100:.0f}/100"
+    if head == "both_teams_to_score":
+        label = "💜 ОБЕ ЗАБЬЮТ — ДА"
+        detail = "Обе команды должны забить"
+    else:
+        label = "🔵 КОМАНДА ЗАБЬЁТ"
+        detail = str(result.get("team") or "Команда")
+    caption = f"{label} · сила {strength}\n<b>{detail}</b>"
+    sent = 0
+    if png is not None:
+        try:
+            sent = broadcast_photo(png, caption=caption)
+        except Exception as exc:
+            print(f"EXPERIMENT_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+    if sent == 0:
+        sent = broadcast(
+            f"{label}\n{match.get('home','?')} — {match.get('away','?')}\n"
+            f"{int(match.get('minute') or 0)}' · {int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)}\n"
+            f"<b>{detail}</b> · сила {strength}"
+        )
+    return int(sent > 0)
 
 
 def process_record(record: dict[str, Any], journal_path: Path, analysis_path: Path, card_dir: Path) -> int:
@@ -85,39 +139,44 @@ def process_record(record: dict[str, Any], journal_path: Path, analysis_path: Pa
     if not mid:
         return 0
     rows = load_signal_journal(journal_path)
-    if _settle(record, rows):
+    settled = _settle(record, rows)
+    if settled:
+        _notify_results(settled)
         save_signal_journal(journal_path, rows)
 
     created = 0
     for analyzer in (analyze_btts_shadow, analyze_team_goal_shadow):
         result = analyzer(record)
         head = str(result.get("head") or "")
-        append_analysis(analysis_path, {**_base(record), **result, "decision": "CANDIDATE" if result.get("passed") else "WAIT"})
+        append_analysis(analysis_path, {**_base(record), **result, "decision": "SIGNAL" if result.get("passed") else "WAIT"})
         if not result.get("passed") or _already_recorded(rows, mid, head):
             continue
-        card_path = _save_card(card_dir, record, result)
+        card_path, png = _save_card(card_dir, record, result)
+        sent = _send_signal(record, result, png)
         row = {
             **_base(record),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "head": head,
             "result": "pending",
             "confidence_score": result.get("confidence_score"),
+            "probability": result.get("confidence_score"),
             "pressure_score": result.get("pressure_score"),
             "selected_side": result.get("selected_side") or result.get("target_side"),
             "team": result.get("team"),
             "analysis": result,
             "card_path": card_path,
-            "shadow_only": True,
+            "telegram_sent": bool(sent),
+            "experimental_market": True,
         }
         rows.append(row)
         save_signal_journal(journal_path, rows)
         created += 1
-        print(f"SHADOW_CANDIDATE head={head} match={mid} minute={row['minute']} team={row.get('team')} strength={row.get('confidence_score')}", flush=True)
+        print(f"EXPERIMENT_SIGNAL head={head} match={mid} minute={row['minute']} team={row.get('team')} strength={row.get('confidence_score')} sent={sent}", flush=True)
     return created
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Shadow-test BTTS and team-to-score markets without Telegram emission")
+    parser = argparse.ArgumentParser(description="Active BTTS and team-to-score experimental markets")
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
     parser.add_argument("--raw-dir", default=os.getenv("RAW_LIVE_DIR", str(runtime / "raw" / "live")))
     parser.add_argument("--journal", default=os.getenv("SHADOW_MARKET_JOURNAL", str(runtime / "live" / "gool_bot2_shadow_markets.json")))
@@ -130,7 +189,7 @@ def main() -> None:
     analysis = Path(args.analysis)
     card_dir = Path(args.cards)
     offsets: dict[str, int] = {}
-    print(f"SHADOW_MARKETS started raw={raw_dir} journal={journal} analysis={analysis}", flush=True)
+    print(f"EXPERIMENT_MARKETS started raw={raw_dir} journal={journal} analysis={analysis}", flush=True)
     while True:
         for path in sorted(raw_dir.glob("*.jsonl")):
             key = str(path)

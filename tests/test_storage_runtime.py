@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import time
 from pathlib import Path
 
 from gool_bot2.journal import append_analysis
@@ -34,10 +32,10 @@ def test_prematch_store_round_trip_and_hydrate(tmp_path: Path, monkeypatch):
 
 def test_trim_file_tail_keeps_complete_lines(tmp_path: Path):
     path = tmp_path / "rows.jsonl"
-    lines = [json.dumps({"n": i}) for i in range(100)]
+    lines = [json.dumps({"n": i, "pad": "x" * 120}) for i in range(100)]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     before = path.stat().st_size
-    freed = trim_file_tail(path, 256)
+    freed = trim_file_tail(path, 4096)
     assert freed > 0
     assert path.stat().st_size < before
     parsed = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]

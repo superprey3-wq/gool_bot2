@@ -1,0 +1,81 @@
+name: xbet-specific-markets-live-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/xbet-specific-markets-live-audit.yml"
+      - "scripts/xbet_specific_markets_live_audit.py"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run exact 1xBet market audit against all current Flashscore LIVE
+        run: |
+          python scripts/xbet_specific_markets_live_audit.py \
+            --output-dir xbet_specific_markets_audit \
+            --snapshots 2 \
+            --interval 20
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo '## 1xBet exact LIVE football markets' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f xbet_specific_markets_audit/summary.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          d=json.loads(Path('xbet_specific_markets_audit/summary.json').read_text())
+          print(f"Flashscore LIVE: **{d.get('initial_flashscore_live_matches',0)}**")
+          print(f"1xBet matched: **{d.get('xbet_matched_events',0)}**")
+          for k,v in d.get('market_coverage',{}).items():
+              print(f"- {k}: {v.get('events')}/{v.get('total')} ({v.get('coverage_pct')}%)")
+          PY
+          fi
+
+      - name: Persist latest report
+        if: always()
+        run: |
+          if [ -f xbet_specific_markets_audit/summary.json ]; then
+            cp xbet_specific_markets_audit/summary.json /tmp/xbet-specific-markets-summary.json
+            git config user.name "gool-bot2-actions"
+            git config user.email "gool-bot2-actions@users.noreply.github.com"
+            for attempt in 1 2 3; do
+              git fetch origin main
+              git reset --hard origin/main
+              mkdir -p reports/xbet_specific_markets
+              cp /tmp/xbet-specific-markets-summary.json reports/xbet_specific_markets/latest-summary.json
+              git add reports/xbet_specific_markets/latest-summary.json
+              if git diff --cached --quiet; then break; fi
+              git commit -m "chore: update 1xBet specific market audit"
+              if git push origin HEAD:main; then break; fi
+              sleep $((attempt * 3))
+            done
+          fi
+
+      - name: Upload full audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbet-specific-markets-live-audit
+          path: xbet_specific_markets_audit/
+          if-no-files-found: warn
+          retention-days: 7

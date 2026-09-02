@@ -1,0 +1,2008 @@
+{
+  "events": [
+    {
+      "away": "Mirassol",
+      "event_id": "QeX6IHJ8",
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Mirassol",
+          "away_score": 0,
+          "event_id": "QeX6IHJ8",
+          "home": "Flamengo RJ",
+          "home_score": 0,
+          "league": "BRAZIL: Serie A Betano",
+          "live": true,
+          "minute": 16
+        },
+        {
+          "away": "Mirassol",
+          "away_score": 0,
+          "event_id": "QeX6IHJ8",
+          "home": "Flamengo RJ",
+          "home_score": 0,
+          "league": "BRAZIL: Serie A Betano",
+          "live": true,
+          "minute": 17
+        }
+      ],
+      "home": "Flamengo RJ",
+      "latest": {
+        "book_away": "Mirassol",
+        "book_event_id": "749466936",
+        "book_home": "Flamengo",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":1.86,\"over_g\":6,\"under\":1.94,\"under_g\":6},{\"line\":1.0,\"over\":1.23,\"over_g\":6,\"under\":4.16,\"under_g\":6},{\"line\":1.5,\"over\":1.12,\"over_g\":6,\"under\":6.2,\"under_g\":6},{\"line\":2.5,\"over\":1.016,\"over_g\":6,\"under\":22.0,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[17]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[17]/E[0][0]\"}},\"home\":[{\"line\":1.5,\"over\":6.85,\"over_g\":5,\"under\":1.104,\"under_g\":5},{\"line\":2.0,\"over\":4.78,\"over_g\":5,\"under\":1.184,\"under_g\":5},{\"line\":2.5,\"over\":2.432,\"over_g\":5,\"under\":1.56,\"under_g\":5},{\"line\":3.0,\"over\":1.784,\"over_g\":5,\"under\":2.03,\"under_g\":5},{\"line\":3.5,\"over\":1.47,\"over_g\":5,\"under\":2.68,\"under_g\":5},{\"line\":4.0,\"over\":1.184,\"over_g\":5,\"under\":4.8,\"under_g\":5},{\"line\":4.5,\"over\":1.14,\"over_g\":5,\"under\":5.73,\"under_g\":5},{\"line\":5.5,\"over\":1.025,\"over_g\":5,\"under\":13.0,\"under_g\":5}],\"match\":[{\"line\":1.5,\"over\":1.04,\"over_g\":4,\"under\":11.7,\"under_g\":4},{\"line\":2.0,\"over\":1.055,\"over_g\":4,\"under\":9.77,\"under_g\":4},{\"line\":2.5,\"over\":1.285,\"over_g\":4,\"under\":3.72,\"under_g\":4},{\"line\":3.0,\"over\":1.435,\"over_g\":4,\"under\":2.848,\"under_g\":4},{\"line\":3.5,\"over\":1.86,\"over_g\":4,\"under\":2.025,\"under_g\":4},{\"line\":4.0,\"over\":2.555,\"over_g\":4,\"under\":1.525,\"under_g\":4},{\"line\":4.5,\"over\":3.175,\"over_g\":4,\"under\":1.365,\"under_g\":4},{\"line\":5.0,\"over\":5.54,\"over_g\":4,\"under\":1.144,\"under_g\":4},{\"line\":5.5,\"over\":6.42,\"over_g\":4,\"under\":1.12,\"under_g\":4},{\"line\":6.5,\"over\":11.0,\"over_g\":4,\"under\":1.048,\"under_g\":4}]}",
+        "mapping_score": 0.965,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 1.86,
+            "over_g": 6,
+            "under": 1.94,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.86,
+              "over_g": 6,
+              "under": 1.94,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.23,
+              "over_g": 6,
+              "under": 4.16,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.12,
+              "over_g": 6,
+              "under": 6.2,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.016,
+              "over_g": 6,
+              "under": 22.0,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[17]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[17]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 1.5,
+            "over": 6.85,
+            "over_g": 5,
+            "under": 1.104,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 1.5,
+              "over": 6.85,
+              "over_g": 5,
+              "under": 1.104,
+              "under_g": 5
+            },
+            {
+              "line": 2.0,
+              "over": 4.78,
+              "over_g": 5,
+              "under": 1.184,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 2.432,
+              "over_g": 5,
+              "under": 1.56,
+              "under_g": 5
+            },
+            {
+              "line": 3.0,
+              "over": 1.784,
+              "over_g": 5,
+              "under": 2.03,
+              "under_g": 5
+            },
+            {
+              "line": 3.5,
+              "over": 1.47,
+              "over_g": 5,
+              "under": 2.68,
+              "under_g": 5
+            },
+            {
+              "line": 4.0,
+              "over": 1.184,
+              "over_g": 5,
+              "under": 4.8,
+              "under_g": 5
+            },
+            {
+              "line": 4.5,
+              "over": 1.14,
+              "over_g": 5,
+              "under": 5.73,
+              "under_g": 5
+            },
+            {
+              "line": 5.5,
+              "over": 1.025,
+              "over_g": 5,
+              "under": 13.0,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 1.5,
+            "over": 1.04,
+            "over_g": 4,
+            "under": 11.7,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.04,
+              "over_g": 4,
+              "under": 11.7,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 1.055,
+              "over_g": 4,
+              "under": 9.77,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 1.285,
+              "over_g": 4,
+              "under": 3.72,
+              "under_g": 4
+            },
+            {
+              "line": 3.0,
+              "over": 1.435,
+              "over_g": 4,
+              "under": 2.848,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 1.86,
+              "over_g": 4,
+              "under": 2.025,
+              "under_g": 4
+            },
+            {
+              "line": 4.0,
+              "over": 2.555,
+              "over_g": 4,
+              "under": 1.525,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 3.175,
+              "over_g": 4,
+              "under": 1.365,
+              "under_g": 4
+            },
+            {
+              "line": 5.0,
+              "over": 5.54,
+              "over_g": 4,
+              "under": 1.144,
+              "under_g": 4
+            },
+            {
+              "line": 5.5,
+              "over": 6.42,
+              "over_g": 4,
+              "under": 1.12,
+              "under_g": 4
+            },
+            {
+              "line": 6.5,
+              "over": 11.0,
+              "over_g": 4,
+              "under": 1.048,
+              "under_g": 4
+            }
+          ],
+          "node_count": 251,
+          "type_counts": {
+            "10": 10,
+            "11": 8,
+            "12": 8,
+            "13": 4,
+            "14": 4,
+            "182": 1,
+            "183": 1,
+            "9": 10
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": true,
+      "matched_snapshots": 2
+    },
+    {
+      "away": "Llaneros",
+      "event_id": "pxH9oBfD",
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Llaneros",
+          "away_score": 0,
+          "event_id": "pxH9oBfD",
+          "home": "Quindio",
+          "home_score": 1,
+          "league": "COLOMBIA: Copa Colombia - Second stage",
+          "live": true,
+          "minute": 16
+        },
+        {
+          "away": "Llaneros",
+          "away_score": 0,
+          "event_id": "pxH9oBfD",
+          "home": "Quindio",
+          "home_score": 1,
+          "league": "COLOMBIA: Copa Colombia - Second stage",
+          "live": true,
+          "minute": 17
+        }
+      ],
+      "home": "Quindio",
+      "latest": {
+        "book_away": "Club Llaneros",
+        "book_event_id": "749468396",
+        "book_home": "Deportes Quindío",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":2.584,\"over_g\":6,\"under\":1.475,\"under_g\":6},{\"line\":1.0,\"over\":1.675,\"over_g\":6,\"under\":2.2,\"under_g\":6},{\"line\":1.5,\"over\":1.312,\"over_g\":6,\"under\":3.3,\"under_g\":6},{\"line\":2.0,\"over\":1.065,\"over_g\":6,\"under\":8.67,\"under_g\":6},{\"line\":2.5,\"over\":1.048,\"over_g\":6,\"under\":9.21,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[17]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[17]/E[0][0]\"}},\"home\":[{\"line\":1.5,\"over\":1.995,\"over_g\":5,\"under\":1.775,\"under_g\":5},{\"line\":2.0,\"over\":1.32,\"over_g\":5,\"under\":3.375,\"under_g\":5},{\"line\":2.5,\"over\":1.168,\"over_g\":5,\"under\":4.82,\"under_g\":5},{\"line\":3.5,\"over\":1.016,\"over_g\":5,\"under\":12.5,\"under_g\":5}],\"match\":[{\"line\":1.5,\"over\":1.16,\"over_g\":4,\"under\":4.79,\"under_g\":4},{\"line\":2.0,\"over\":1.256,\"over_g\":4,\"under\":3.67,\"under_g\":4},{\"line\":2.5,\"over\":1.784,\"over_g\":4,\"under\":2.03,\"under_g\":4},{\"line\":3.0,\"over\":2.485,\"over_g\":4,\"under\":1.5,\"under_g\":4},{\"line\":3.5,\"over\":3.14,\"over_g\":4,\"under\":1.33,\"under_g\":4},{\"line\":4.5,\"over\":6.45,\"over_g\":4,\"under\":1.095,\"under_g\":4},{\"line\":5.5,\"over\":10.6,\"over_g\":4,\"under\":1.025,\"under_g\":4}]}",
+        "mapping_score": 0.7609,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 2.584,
+            "over_g": 6,
+            "under": 1.475,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.584,
+              "over_g": 6,
+              "under": 1.475,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.675,
+              "over_g": 6,
+              "under": 2.2,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.312,
+              "over_g": 6,
+              "under": 3.3,
+              "under_g": 6
+            },
+            {
+              "line": 2.0,
+              "over": 1.065,
+              "over_g": 6,
+              "under": 8.67,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.048,
+              "over_g": 6,
+              "under": 9.21,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[17]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[17]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 1.5,
+            "over": 1.995,
+            "over_g": 5,
+            "under": 1.775,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.995,
+              "over_g": 5,
+              "under": 1.775,
+              "under_g": 5
+            },
+            {
+              "line": 2.0,
+              "over": 1.32,
+              "over_g": 5,
+              "under": 3.375,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.168,
+              "over_g": 5,
+              "under": 4.82,
+              "under_g": 5
+            },
+            {
+              "line": 3.5,
+              "over": 1.016,
+              "over_g": 5,
+              "under": 12.5,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 1.5,
+            "over": 1.16,
+            "over_g": 4,
+            "under": 4.79,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.16,
+              "over_g": 4,
+              "under": 4.79,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 1.256,
+              "over_g": 4,
+              "under": 3.67,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 1.784,
+              "over_g": 4,
+              "under": 2.03,
+              "under_g": 4
+            },
+            {
+              "line": 3.0,
+              "over": 2.485,
+              "over_g": 4,
+              "under": 1.5,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 3.14,
+              "over_g": 4,
+              "under": 1.33,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 6.45,
+              "over_g": 4,
+              "under": 1.095,
+              "under_g": 4
+            },
+            {
+              "line": 5.5,
+              "over": 10.6,
+              "over_g": 4,
+              "under": 1.025,
+              "under_g": 4
+            }
+          ],
+          "node_count": 260,
+          "type_counts": {
+            "10": 7,
+            "11": 4,
+            "12": 4,
+            "13": 5,
+            "14": 5,
+            "182": 1,
+            "183": 1,
+            "9": 7
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 2
+    },
+    {
+      "away": "America de Cali W",
+      "event_id": "pdRArmnI",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "America de Cali W",
+          "away_score": 0,
+          "event_id": "pdRArmnI",
+          "home": "Santa Fe W",
+          "home_score": 0,
+          "league": "COLOMBIA: Liga Women - Promotion Group",
+          "live": true,
+          "minute": 17
+        },
+        {
+          "away": "America de Cali W",
+          "away_score": 0,
+          "event_id": "pdRArmnI",
+          "home": "Santa Fe W",
+          "home_score": 0,
+          "league": "COLOMBIA: Liga Women - Promotion Group",
+          "live": true,
+          "minute": 17
+        }
+      ],
+      "home": "Santa Fe W",
+      "latest": {
+        "book_away": "America de Cali (Women)",
+        "book_event_id": "749468395",
+        "book_home": "Club Independiente Santa Fe (Women)",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":2.32,\"over_g\":6,\"under\":1.55,\"under_g\":6},{\"line\":1.0,\"over\":1.54,\"over_g\":6,\"under\":2.344,\"under_g\":6},{\"line\":1.5,\"over\":1.25,\"over_g\":6,\"under\":3.63,\"under_g\":6},{\"line\":2.5,\"over\":1.05,\"over_g\":6,\"under\":8.25,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.925,\"path\":\"/GE[13]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.816,\"path\":\"/GE[13]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":2.69,\"over_g\":5,\"under\":1.42,\"under_g\":5},{\"line\":1.0,\"over\":1.67,\"over_g\":5,\"under\":2.1,\"under_g\":5},{\"line\":1.5,\"over\":1.3,\"over_g\":5,\"under\":3.28,\"under_g\":5},{\"line\":2.5,\"over\":1.056,\"over_g\":5,\"under\":7.74,\"under_g\":5}],\"match\":[{\"line\":0.5,\"over\":1.12,\"over_g\":4,\"under\":5.26,\"under_g\":4},{\"line\":1.0,\"over\":1.165,\"over_g\":4,\"under\":4.53,\"under_g\":4},{\"line\":1.5,\"over\":1.54,\"over_g\":4,\"under\":2.315,\"under_g\":4},{\"line\":2.0,\"over\":2.056,\"over_g\":4,\"under\":1.715,\"under_g\":4},{\"line\":2.5,\"over\":2.595,\"over_g\":4,\"under\":1.435,\"under_g\":4},{\"line\":3.5,\"over\":4.95,\"over_g\":4,\"under\":1.136,\"under_g\":4},{\"line\":4.5,\"over\":8.64,\"over_g\":4,\"under\":1.035,\"under_g\":4}]}",
+        "mapping_score": 0.93,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 2.32,
+            "over_g": 6,
+            "under": 1.55,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.32,
+              "over_g": 6,
+              "under": 1.55,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.54,
+              "over_g": 6,
+              "under": 2.344,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.25,
+              "over_g": 6,
+              "under": 3.63,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.05,
+              "over_g": 6,
+              "under": 8.25,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.925,
+              "path": "/GE[13]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.816,
+              "path": "/GE[13]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 2.69,
+            "over_g": 5,
+            "under": 1.42,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.69,
+              "over_g": 5,
+              "under": 1.42,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.67,
+              "over_g": 5,
+              "under": 2.1,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.3,
+              "over_g": 5,
+              "under": 3.28,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.056,
+              "over_g": 5,
+              "under": 7.74,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 0.5,
+            "over": 1.12,
+            "over_g": 4,
+            "under": 5.26,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.12,
+              "over_g": 4,
+              "under": 5.26,
+              "under_g": 4
+            },
+            {
+              "line": 1.0,
+              "over": 1.165,
+              "over_g": 4,
+              "under": 4.53,
+              "under_g": 4
+            },
+            {
+              "line": 1.5,
+              "over": 1.54,
+              "over_g": 4,
+              "under": 2.315,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 2.056,
+              "over_g": 4,
+              "under": 1.715,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 2.595,
+              "over_g": 4,
+              "under": 1.435,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 4.95,
+              "over_g": 4,
+              "under": 1.136,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 8.64,
+              "over_g": 4,
+              "under": 1.035,
+              "under_g": 4
+            }
+          ],
+          "node_count": 300,
+          "type_counts": {
+            "10": 7,
+            "11": 4,
+            "12": 4,
+            "13": 4,
+            "14": 4,
+            "182": 1,
+            "183": 1,
+            "9": 7
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 1
+    },
+    {
+      "away": "Delfines Del Este (Dom)",
+      "event_id": "WnnGkbGG",
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Delfines Del Este (Dom)",
+          "away_score": 0,
+          "event_id": "WnnGkbGG",
+          "home": "Broki (Sur)",
+          "home_score": 0,
+          "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+          "live": true,
+          "minute": 40
+        },
+        {
+          "away": "Delfines Del Este (Dom)",
+          "away_score": 0,
+          "event_id": "WnnGkbGG",
+          "home": "Broki (Sur)",
+          "home_score": 0,
+          "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+          "live": true,
+          "minute": 41
+        }
+      ],
+      "home": "Broki (Sur)",
+      "latest": {
+        "book_away": "Delfines Del Este",
+        "book_event_id": "749463365",
+        "book_home": "Broki",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":2.22,\"over_g\":6,\"under\":1.63,\"under_g\":6},{\"line\":1.0,\"over\":1.47,\"over_g\":6,\"under\":2.69,\"under_g\":6},{\"line\":1.5,\"over\":1.255,\"over_g\":6,\"under\":3.76,\"under_g\":6},{\"line\":2.5,\"over\":1.056,\"over_g\":6,\"under\":8.62,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.925,\"path\":\"/GE[17]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.816,\"path\":\"/GE[17]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":1.936,\"over_g\":5,\"under\":1.825,\"under_g\":5},{\"line\":1.0,\"over\":1.305,\"over_g\":5,\"under\":3.475,\"under_g\":5},{\"line\":1.5,\"over\":1.184,\"over_g\":5,\"under\":4.57,\"under_g\":5},{\"line\":2.5,\"over\":1.032,\"over_g\":5,\"under\":10.4,\"under_g\":5}],\"match\":[{\"line\":0.5,\"over\":1.19,\"over_g\":4,\"under\":4.33,\"under_g\":4},{\"line\":1.0,\"over\":1.344,\"over_g\":4,\"under\":3.075,\"under_g\":4},{\"line\":1.5,\"over\":1.97,\"over_g\":4,\"under\":1.832,\"under_g\":4},{\"line\":2.0,\"over\":2.816,\"over_g\":4,\"under\":1.4,\"under_g\":4},{\"line\":2.5,\"over\":3.425,\"over_g\":4,\"under\":1.288,\"under_g\":4},{\"line\":3.5,\"over\":7.36,\"over_g\":4,\"under\":1.07,\"under_g\":4},{\"line\":4.5,\"over\":11.9,\"over_g\":4,\"under\":1.016,\"under_g\":4}]}",
+        "mapping_score": 0.93,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 2.22,
+            "over_g": 6,
+            "under": 1.63,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.22,
+              "over_g": 6,
+              "under": 1.63,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.47,
+              "over_g": 6,
+              "under": 2.69,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.255,
+              "over_g": 6,
+              "under": 3.76,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.056,
+              "over_g": 6,
+              "under": 8.62,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.925,
+              "path": "/GE[17]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.816,
+              "path": "/GE[17]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 1.936,
+            "over_g": 5,
+            "under": 1.825,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.936,
+              "over_g": 5,
+              "under": 1.825,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.305,
+              "over_g": 5,
+              "under": 3.475,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.184,
+              "over_g": 5,
+              "under": 4.57,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.032,
+              "over_g": 5,
+              "under": 10.4,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 0.5,
+            "over": 1.19,
+            "over_g": 4,
+            "under": 4.33,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.19,
+              "over_g": 4,
+              "under": 4.33,
+              "under_g": 4
+            },
+            {
+              "line": 1.0,
+              "over": 1.344,
+              "over_g": 4,
+              "under": 3.075,
+              "under_g": 4
+            },
+            {
+              "line": 1.5,
+              "over": 1.97,
+              "over_g": 4,
+              "under": 1.832,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 2.816,
+              "over_g": 4,
+              "under": 1.4,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 3.425,
+              "over_g": 4,
+              "under": 1.288,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 7.36,
+              "over_g": 4,
+              "under": 1.07,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 11.9,
+              "over_g": 4,
+              "under": 1.016,
+              "under_g": 4
+            }
+          ],
+          "node_count": 253,
+          "type_counts": {
+            "10": 7,
+            "11": 4,
+            "12": 4,
+            "13": 4,
+            "14": 4,
+            "182": 1,
+            "183": 1,
+            "9": 7
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": true,
+      "matched_snapshots": 2
+    },
+    {
+      "away": "Instituto 2",
+      "event_id": "CrkJfI84",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Instituto 2",
+          "away_score": 1,
+          "event_id": "CrkJfI84",
+          "home": "Talleres Cordoba 2",
+          "home_score": 0,
+          "league": "ARGENTINA: Reserve League - Clausura",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "Instituto 2",
+          "away_score": 1,
+          "event_id": "CrkJfI84",
+          "home": "Talleres Cordoba 2",
+          "home_score": 0,
+          "league": "ARGENTINA: Reserve League - Clausura",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Talleres Cordoba 2",
+      "latest": {
+        "mapping_score": 0.6037,
+        "status": "not_found"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 0
+    },
+    {
+      "away": "Brasil de Farroupilha",
+      "event_id": "SUyuHKHG",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Brasil de Farroupilha",
+          "away_score": 0,
+          "event_id": "SUyuHKHG",
+          "home": "Gaucho",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "Brasil de Farroupilha",
+          "away_score": 0,
+          "event_id": "SUyuHKHG",
+          "home": "Gaucho",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Gaucho",
+      "latest": {
+        "book_away": "Brasil de Farroupilha",
+        "book_event_id": "749463361",
+        "book_home": "Gaucho Passo Fundo",
+        "error": "non_json:JSONDecodeError; ct=; body=<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal",
+        "mapping_score": 0.965,
+        "status": "game_error"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 0
+    },
+    {
+      "away": "Pelotas",
+      "event_id": "4ULCVJW9",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Pelotas",
+          "away_score": 0,
+          "event_id": "4ULCVJW9",
+          "home": "Santa Cruz RS",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "Pelotas",
+          "away_score": 0,
+          "event_id": "4ULCVJW9",
+          "home": "Santa Cruz RS",
+          "home_score": 0,
+          "league": "BRAZIL: Gaucho 2",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Santa Cruz RS",
+      "latest": {
+        "book_away": "EC Pelotas",
+        "book_event_id": "749463360",
+        "book_home": "Santa Cruz RS",
+        "error": "non_json:JSONDecodeError; ct=; body=<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal",
+        "mapping_score": 0.965,
+        "status": "game_error"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 0
+    },
+    {
+      "away": "EC Sao Jose",
+      "event_id": "pxNBDZmm",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "EC Sao Jose",
+          "away_score": 1,
+          "event_id": "pxNBDZmm",
+          "home": "Goiatuba",
+          "home_score": 0,
+          "league": "BRAZIL: Serie D - Promotion - Play Offs",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "EC Sao Jose",
+          "away_score": 1,
+          "event_id": "pxNBDZmm",
+          "home": "Goiatuba",
+          "home_score": 0,
+          "league": "BRAZIL: Serie D - Promotion - Play Offs",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Goiatuba",
+      "latest": {
+        "book_away": "EC Sao Jose Porto Alegre",
+        "book_event_id": "749463362",
+        "book_home": "Goiatuba EC",
+        "fingerprint": "{\"away\":[{\"line\":1.5,\"over\":1.456,\"over_g\":6,\"under\":2.65,\"under_g\":6},{\"line\":2.0,\"over\":1.07,\"over_g\":6,\"under\":8.34,\"under_g\":6},{\"line\":2.5,\"over\":1.056,\"over_g\":6,\"under\":8.62,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.74,\"path\":\"/GE[18]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":2.02,\"path\":\"/GE[18]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":2.03,\"over_g\":5,\"under\":1.75,\"under_g\":5},{\"line\":1.0,\"over\":1.36,\"over_g\":5,\"under\":3.16,\"under_g\":5},{\"line\":1.5,\"over\":1.184,\"over_g\":5,\"under\":4.57,\"under_g\":5},{\"line\":2.5,\"over\":1.025,\"over_g\":5,\"under\":11.0,\"under_g\":5}],\"match\":[{\"line\":1.5,\"over\":1.36,\"over_g\":4,\"under\":3.0,\"under_g\":4},{\"line\":2.0,\"over\":1.83,\"over_g\":4,\"under\":1.975,\"under_g\":4},{\"line\":2.5,\"over\":2.816,\"over_g\":4,\"under\":1.4,\"under_g\":4},{\"line\":3.0,\"over\":5.46,\"over_g\":4,\"under\":1.15,\"under_g\":4},{\"line\":3.5,\"over\":5.9,\"over_g\":4,\"under\":1.11,\"under_g\":4},{\"line\":4.5,\"over\":11.9,\"over_g\":4,\"under\":1.016,\"under_g\":4}]}",
+        "mapping_score": 0.93,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 1.5,
+            "over": 1.456,
+            "over_g": 6,
+            "under": 2.65,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.456,
+              "over_g": 6,
+              "under": 2.65,
+              "under_g": 6
+            },
+            {
+              "line": 2.0,
+              "over": 1.07,
+              "over_g": 6,
+              "under": 8.34,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.056,
+              "over_g": 6,
+              "under": 8.62,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.74,
+              "path": "/GE[18]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 2.02,
+              "path": "/GE[18]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 2.03,
+            "over_g": 5,
+            "under": 1.75,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.03,
+              "over_g": 5,
+              "under": 1.75,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.36,
+              "over_g": 5,
+              "under": 3.16,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.184,
+              "over_g": 5,
+              "under": 4.57,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.025,
+              "over_g": 5,
+              "under": 11.0,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 1.5,
+            "over": 1.36,
+            "over_g": 4,
+            "under": 3.0,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.36,
+              "over_g": 4,
+              "under": 3.0,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 1.83,
+              "over_g": 4,
+              "under": 1.975,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 2.816,
+              "over_g": 4,
+              "under": 1.4,
+              "under_g": 4
+            },
+            {
+              "line": 3.0,
+              "over": 5.46,
+              "over_g": 4,
+              "under": 1.15,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 5.9,
+              "over_g": 4,
+              "under": 1.11,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 11.9,
+              "over_g": 4,
+              "under": 1.016,
+              "under_g": 4
+            }
+          ],
+          "node_count": 273,
+          "type_counts": {
+            "10": 6,
+            "11": 4,
+            "12": 4,
+            "13": 3,
+            "14": 3,
+            "182": 1,
+            "183": 1,
+            "9": 6
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 1
+    },
+    {
+      "away": "U. De Concepcion",
+      "event_id": "hURr4uXQ",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "U. De Concepcion",
+          "away_score": 0,
+          "event_id": "hURr4uXQ",
+          "home": "Coquimbo",
+          "home_score": 0,
+          "league": "CHILE: Liga de Primera",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "U. De Concepcion",
+          "away_score": 0,
+          "event_id": "hURr4uXQ",
+          "home": "Coquimbo",
+          "home_score": 0,
+          "league": "CHILE: Liga de Primera",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Coquimbo",
+      "latest": {
+        "book_away": "Universidad de Concepcion",
+        "book_event_id": "749462233",
+        "book_home": "Coquimbo Unido",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":1.55,\"over_g\":6,\"under\":2.39,\"under_g\":6},{\"line\":1.0,\"over\":1.1,\"over_g\":6,\"under\":6.55,\"under_g\":6},{\"line\":1.5,\"over\":1.04,\"over_g\":6,\"under\":9.75,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.925,\"path\":\"/GE[13]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.816,\"path\":\"/GE[13]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":2.76,\"over_g\":5,\"under\":1.425,\"under_g\":5},{\"line\":1.0,\"over\":1.73,\"over_g\":5,\"under\":2.056,\"under_g\":5},{\"line\":1.5,\"over\":1.32,\"over_g\":5,\"under\":3.265,\"under_g\":5},{\"line\":2.5,\"over\":1.05,\"over_g\":5,\"under\":9.12,\"under_g\":5}],\"match\":[{\"line\":0.5,\"over\":1.24,\"over_g\":4,\"under\":3.95,\"under_g\":4},{\"line\":1.0,\"over\":1.42,\"over_g\":4,\"under\":2.816,\"under_g\":4},{\"line\":1.5,\"over\":2.155,\"over_g\":4,\"under\":1.73,\"under_g\":4},{\"line\":2.0,\"over\":3.31,\"over_g\":4,\"under\":1.325,\"under_g\":4},{\"line\":2.5,\"over\":4.23,\"over_g\":4,\"under\":1.216,\"under_g\":4},{\"line\":3.5,\"over\":9.0,\"over_g\":4,\"under\":1.056,\"under_g\":4}]}",
+        "mapping_score": 0.84,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 1.55,
+            "over_g": 6,
+            "under": 2.39,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.55,
+              "over_g": 6,
+              "under": 2.39,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.1,
+              "over_g": 6,
+              "under": 6.55,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.04,
+              "over_g": 6,
+              "under": 9.75,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.925,
+              "path": "/GE[13]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.816,
+              "path": "/GE[13]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 2.76,
+            "over_g": 5,
+            "under": 1.425,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.76,
+              "over_g": 5,
+              "under": 1.425,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.73,
+              "over_g": 5,
+              "under": 2.056,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.32,
+              "over_g": 5,
+              "under": 3.265,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.05,
+              "over_g": 5,
+              "under": 9.12,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 0.5,
+            "over": 1.24,
+            "over_g": 4,
+            "under": 3.95,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.24,
+              "over_g": 4,
+              "under": 3.95,
+              "under_g": 4
+            },
+            {
+              "line": 1.0,
+              "over": 1.42,
+              "over_g": 4,
+              "under": 2.816,
+              "under_g": 4
+            },
+            {
+              "line": 1.5,
+              "over": 2.155,
+              "over_g": 4,
+              "under": 1.73,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 3.31,
+              "over_g": 4,
+              "under": 1.325,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 4.23,
+              "over_g": 4,
+              "under": 1.216,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 9.0,
+              "over_g": 4,
+              "under": 1.056,
+              "under_g": 4
+            }
+          ],
+          "node_count": 252,
+          "type_counts": {
+            "10": 6,
+            "11": 4,
+            "12": 4,
+            "13": 3,
+            "14": 3,
+            "182": 1,
+            "183": 1,
+            "9": 6
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": true,
+      "matched_snapshots": 2
+    },
+    {
+      "away": "Rancho Santana",
+      "event_id": "Ea7ced4l",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Rancho Santana",
+          "away_score": 0,
+          "event_id": "Ea7ced4l",
+          "home": "Jalapa",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 45
+        },
+        {
+          "away": "Rancho Santana",
+          "away_score": 0,
+          "event_id": "Ea7ced4l",
+          "home": "Jalapa",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 45
+        }
+      ],
+      "home": "Jalapa",
+      "latest": {
+        "book_away": "Rancho Santana",
+        "book_event_id": "749463363",
+        "book_home": "ART Municipal Jalapa",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":1.936,\"over_g\":6,\"under\":1.825,\"under_g\":6},{\"line\":1.0,\"over\":1.22,\"over_g\":6,\"under\":3.82,\"under_g\":6},{\"line\":1.5,\"over\":1.184,\"over_g\":6,\"under\":4.57,\"under_g\":6},{\"line\":2.5,\"over\":1.032,\"over_g\":6,\"under\":10.4,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[11]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.87,\"path\":\"/GE[11]/E[0][0]\"}},\"home\":[{\"line\":1.5,\"over\":2.784,\"over_g\":5,\"under\":1.42,\"under_g\":5},{\"line\":2.0,\"over\":1.915,\"over_g\":5,\"under\":1.79,\"under_g\":5},{\"line\":2.5,\"over\":1.42,\"over_g\":5,\"under\":2.784,\"under_g\":5},{\"line\":3.5,\"over\":1.1,\"over_g\":5,\"under\":6.49,\"under_g\":5},{\"line\":4.5,\"over\":1.02,\"over_g\":5,\"under\":11.7,\"under_g\":5}],\"match\":[{\"line\":1.5,\"over\":1.15,\"over_g\":4,\"under\":5.0,\"under_g\":4},{\"line\":2.0,\"over\":1.175,\"over_g\":4,\"under\":4.35,\"under_g\":4},{\"line\":2.5,\"over\":1.736,\"over_g\":4,\"under\":2.1,\"under_g\":4},{\"line\":3.0,\"over\":2.3,\"over_g\":4,\"under\":1.575,\"under_g\":4},{\"line\":3.5,\"over\":2.97,\"over_g\":4,\"under\":1.365,\"under_g\":4},{\"line\":4.5,\"over\":5.9,\"over_g\":4,\"under\":1.11,\"under_g\":4},{\"line\":5.5,\"over\":10.1,\"over_g\":4,\"under\":1.03,\"under_g\":4}]}",
+        "mapping_score": 0.965,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 1.936,
+            "over_g": 6,
+            "under": 1.825,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.936,
+              "over_g": 6,
+              "under": 1.825,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.22,
+              "over_g": 6,
+              "under": 3.82,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.184,
+              "over_g": 6,
+              "under": 4.57,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.032,
+              "over_g": 6,
+              "under": 10.4,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[11]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.87,
+              "path": "/GE[11]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 1.5,
+            "over": 2.784,
+            "over_g": 5,
+            "under": 1.42,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 1.5,
+              "over": 2.784,
+              "over_g": 5,
+              "under": 1.42,
+              "under_g": 5
+            },
+            {
+              "line": 2.0,
+              "over": 1.915,
+              "over_g": 5,
+              "under": 1.79,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.42,
+              "over_g": 5,
+              "under": 2.784,
+              "under_g": 5
+            },
+            {
+              "line": 3.5,
+              "over": 1.1,
+              "over_g": 5,
+              "under": 6.49,
+              "under_g": 5
+            },
+            {
+              "line": 4.5,
+              "over": 1.02,
+              "over_g": 5,
+              "under": 11.7,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 1.5,
+            "over": 1.15,
+            "over_g": 4,
+            "under": 5.0,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.15,
+              "over_g": 4,
+              "under": 5.0,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 1.175,
+              "over_g": 4,
+              "under": 4.35,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 1.736,
+              "over_g": 4,
+              "under": 2.1,
+              "under_g": 4
+            },
+            {
+              "line": 3.0,
+              "over": 2.3,
+              "over_g": 4,
+              "under": 1.575,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 2.97,
+              "over_g": 4,
+              "under": 1.365,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 5.9,
+              "over_g": 4,
+              "under": 1.11,
+              "under_g": 4
+            },
+            {
+              "line": 5.5,
+              "over": 10.1,
+              "over_g": 4,
+              "under": 1.03,
+              "under_g": 4
+            }
+          ],
+          "node_count": 171,
+          "type_counts": {
+            "10": 7,
+            "11": 5,
+            "12": 5,
+            "13": 4,
+            "14": 4,
+            "182": 1,
+            "183": 1,
+            "9": 7
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": true,
+      "matched_snapshots": 2
+    },
+    {
+      "away": "Guayaquil City",
+      "event_id": "EDEMFL7r",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 54
+        },
+        {
+          "away": "Guayaquil City",
+          "away_score": 0,
+          "event_id": "EDEMFL7r",
+          "home": "Dep. Cuenca",
+          "home_score": 0,
+          "league": "ECUADOR: Liga Pro",
+          "live": true,
+          "minute": 54
+        }
+      ],
+      "home": "Dep. Cuenca",
+      "latest": {
+        "book_away": "Guayaquil City",
+        "book_event_id": "749456912",
+        "book_home": "Deportivo Cuenca",
+        "fingerprint": "{\"away\":[{\"line\":0.5,\"over\":1.4,\"over_g\":6,\"under\":2.864,\"under_g\":6},{\"line\":1.0,\"over\":1.04,\"over_g\":6,\"under\":10.8,\"under_g\":6},{\"line\":1.5,\"over\":1.025,\"over_g\":6,\"under\":11.3,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":2.112,\"path\":\"/GE[17]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":1.675,\"path\":\"/GE[17]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":1.98,\"over_g\":5,\"under\":1.79,\"under_g\":5},{\"line\":1.0,\"over\":1.28,\"over_g\":5,\"under\":3.67,\"under_g\":5},{\"line\":1.5,\"over\":1.125,\"over_g\":5,\"under\":5.67,\"under_g\":5},{\"line\":2.5,\"over\":1.016,\"over_g\":5,\"under\":12.8,\"under_g\":5}],\"match\":[{\"line\":0.5,\"over\":1.408,\"over_g\":4,\"under\":2.792,\"under_g\":4},{\"line\":1.0,\"over\":2.03,\"over_g\":4,\"under\":1.784,\"under_g\":4},{\"line\":1.5,\"over\":2.952,\"over_g\":4,\"under\":1.37,\"under_g\":4},{\"line\":2.5,\"over\":6.95,\"over_g\":4,\"under\":1.08,\"under_g\":4},{\"line\":3.5,\"over\":11.6,\"over_g\":4,\"under\":1.016,\"under_g\":4}]}",
+        "mapping_score": 0.965,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 0.5,
+            "over": 1.4,
+            "over_g": 6,
+            "under": 2.864,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.4,
+              "over_g": 6,
+              "under": 2.864,
+              "under_g": 6
+            },
+            {
+              "line": 1.0,
+              "over": 1.04,
+              "over_g": 6,
+              "under": 10.8,
+              "under_g": 6
+            },
+            {
+              "line": 1.5,
+              "over": 1.025,
+              "over_g": 6,
+              "under": 11.3,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 2.112,
+              "path": "/GE[17]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 1.675,
+              "path": "/GE[17]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 1.98,
+            "over_g": 5,
+            "under": 1.79,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.98,
+              "over_g": 5,
+              "under": 1.79,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.28,
+              "over_g": 5,
+              "under": 3.67,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.125,
+              "over_g": 5,
+              "under": 5.67,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.016,
+              "over_g": 5,
+              "under": 12.8,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 0.5,
+            "over": 1.408,
+            "over_g": 4,
+            "under": 2.792,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 0.5,
+              "over": 1.408,
+              "over_g": 4,
+              "under": 2.792,
+              "under_g": 4
+            },
+            {
+              "line": 1.0,
+              "over": 2.03,
+              "over_g": 4,
+              "under": 1.784,
+              "under_g": 4
+            },
+            {
+              "line": 1.5,
+              "over": 2.952,
+              "over_g": 4,
+              "under": 1.37,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 6.95,
+              "over_g": 4,
+              "under": 1.08,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 11.6,
+              "over_g": 4,
+              "under": 1.016,
+              "under_g": 4
+            }
+          ],
+          "node_count": 248,
+          "type_counts": {
+            "10": 5,
+            "11": 4,
+            "12": 4,
+            "13": 3,
+            "14": 3,
+            "182": 1,
+            "183": 1,
+            "9": 5
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 1
+    },
+    {
+      "away": "Guarani",
+      "event_id": "Yy0UwEFD",
+      "flashscore_progress": true,
+      "flashscore_states": [
+        {
+          "away": "Guarani",
+          "away_score": 1,
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 58
+        },
+        {
+          "away": "Guarani",
+          "away_score": 1,
+          "event_id": "Yy0UwEFD",
+          "home": "Olimpia Asuncion",
+          "home_score": 0,
+          "league": "PARAGUAY: Copa de Primera - Clausura",
+          "live": true,
+          "minute": 59
+        }
+      ],
+      "home": "Olimpia Asuncion",
+      "latest": {
+        "book_away": "Club Guarani",
+        "book_event_id": "749456945",
+        "book_home": "Club Olimpia",
+        "fingerprint": "{\"away\":[{\"line\":1.5,\"over\":1.352,\"over_g\":6,\"under\":3.08,\"under_g\":6},{\"line\":2.5,\"over\":1.025,\"over_g\":6,\"under\":11.3,\"under_g\":6}],\"btts\":{\"no\":{\"G\":22,\"odd\":1.74,\"path\":\"/GE[17]/E[1][0]\"},\"yes\":{\"G\":22,\"odd\":2.02,\"path\":\"/GE[17]/E[0][0]\"}},\"home\":[{\"line\":0.5,\"over\":2.36,\"over_g\":5,\"under\":1.56,\"under_g\":5},{\"line\":1.0,\"over\":1.515,\"over_g\":5,\"under\":2.544,\"under_g\":5},{\"line\":1.5,\"over\":1.25,\"over_g\":5,\"under\":3.79,\"under_g\":5},{\"line\":2.5,\"over\":1.032,\"over_g\":5,\"under\":10.4,\"under_g\":5}],\"match\":[{\"line\":1.5,\"over\":1.315,\"over_g\":4,\"under\":3.225,\"under_g\":4},{\"line\":2.0,\"over\":1.685,\"over_g\":4,\"under\":2.175,\"under_g\":4},{\"line\":2.5,\"over\":2.48,\"over_g\":4,\"under\":1.5,\"under_g\":4},{\"line\":3.0,\"over\":5.09,\"over_g\":4,\"under\":1.17,\"under_g\":4},{\"line\":3.5,\"over\":5.52,\"over_g\":4,\"under\":1.125,\"under_g\":4},{\"line\":4.5,\"over\":9.95,\"over_g\":4,\"under\":1.03,\"under_g\":4}]}",
+        "mapping_score": 0.965,
+        "markets": {
+          "away_team_total_focus": {
+            "line": 1.5,
+            "over": 1.352,
+            "over_g": 6,
+            "under": 3.08,
+            "under_g": 6
+          },
+          "away_team_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.352,
+              "over_g": 6,
+              "under": 3.08,
+              "under_g": 6
+            },
+            {
+              "line": 2.5,
+              "over": 1.025,
+              "over_g": 6,
+              "under": 11.3,
+              "under_g": 6
+            }
+          ],
+          "btts": {
+            "no": {
+              "G": 22,
+              "odd": 1.74,
+              "path": "/GE[17]/E[1][0]"
+            },
+            "yes": {
+              "G": 22,
+              "odd": 2.02,
+              "path": "/GE[17]/E[0][0]"
+            }
+          },
+          "home_team_total_focus": {
+            "line": 0.5,
+            "over": 2.36,
+            "over_g": 5,
+            "under": 1.56,
+            "under_g": 5
+          },
+          "home_team_total_over": [
+            {
+              "line": 0.5,
+              "over": 2.36,
+              "over_g": 5,
+              "under": 1.56,
+              "under_g": 5
+            },
+            {
+              "line": 1.0,
+              "over": 1.515,
+              "over_g": 5,
+              "under": 2.544,
+              "under_g": 5
+            },
+            {
+              "line": 1.5,
+              "over": 1.25,
+              "over_g": 5,
+              "under": 3.79,
+              "under_g": 5
+            },
+            {
+              "line": 2.5,
+              "over": 1.032,
+              "over_g": 5,
+              "under": 10.4,
+              "under_g": 5
+            }
+          ],
+          "match_total_focus": {
+            "line": 1.5,
+            "over": 1.315,
+            "over_g": 4,
+            "under": 3.225,
+            "under_g": 4
+          },
+          "match_total_over": [
+            {
+              "line": 1.5,
+              "over": 1.315,
+              "over_g": 4,
+              "under": 3.225,
+              "under_g": 4
+            },
+            {
+              "line": 2.0,
+              "over": 1.685,
+              "over_g": 4,
+              "under": 2.175,
+              "under_g": 4
+            },
+            {
+              "line": 2.5,
+              "over": 2.48,
+              "over_g": 4,
+              "under": 1.5,
+              "under_g": 4
+            },
+            {
+              "line": 3.0,
+              "over": 5.09,
+              "over_g": 4,
+              "under": 1.17,
+              "under_g": 4
+            },
+            {
+              "line": 3.5,
+              "over": 5.52,
+              "over_g": 4,
+              "under": 1.125,
+              "under_g": 4
+            },
+            {
+              "line": 4.5,
+              "over": 9.95,
+              "over_g": 4,
+              "under": 1.03,
+              "under_g": 4
+            }
+          ],
+          "node_count": 252,
+          "type_counts": {
+            "10": 6,
+            "11": 4,
+            "12": 4,
+            "13": 2,
+            "14": 2,
+            "182": 1,
+            "183": 1,
+            "9": 6
+          }
+        },
+        "presence": {
+          "away_team_total_over": true,
+          "btts": true,
+          "home_team_total_over": true,
+          "match_total_over": true
+        },
+        "reversed": false,
+        "status": "matched"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 1
+    },
+    {
+      "away": "Ferretti",
+      "event_id": "rHGR0ItR",
+      "flashscore_progress": false,
+      "flashscore_states": [
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 90
+        },
+        {
+          "away": "Ferretti",
+          "away_score": 0,
+          "event_id": "rHGR0ItR",
+          "home": "Sport Sebaco",
+          "home_score": 1,
+          "league": "NICARAGUA: Liga Primera - Apertura",
+          "live": true,
+          "minute": 90
+        }
+      ],
+      "home": "Sport Sebaco",
+      "latest": {
+        "book_away": "Walter Ferretti",
+        "book_event_id": "749453514",
+        "book_home": "Sebaco",
+        "error": "non_json:JSONDecodeError; ct=; body=<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal",
+        "mapping_score": 0.93,
+        "status": "game_error"
+      },
+      "market_prices_changed": false,
+      "matched_snapshots": 0
+    }
+  ],
+  "generated_at": "2026-09-02T22:46:35+00:00",
+  "initial_flashscore_live_matches": 13,
+  "market_coverage": {
+    "away_team_total_over": {
+      "coverage_pct": 69.2,
+      "events": 9,
+      "total": 13
+    },
+    "btts": {
+      "coverage_pct": 69.2,
+      "events": 9,
+      "total": 13
+    },
+    "home_team_total_over": {
+      "coverage_pct": 69.2,
+      "events": 9,
+      "total": 13
+    },
+    "match_total_over": {
+      "coverage_pct": 69.2,
+      "events": 9,
+      "total": 13
+    }
+  },
+  "market_type_map": {
+    "away_team_total": {
+      "over": 14,
+      "under": 13
+    },
+    "btts": {
+      "no": 183,
+      "yes": 182
+    },
+    "home_team_total": {
+      "over": 12,
+      "under": 11
+    },
+    "match_total": {
+      "over": 9,
+      "under": 10
+    }
+  },
+  "snapshot_count": 2,
+  "xbet_coverage_pct": 69.2,
+  "xbet_matched_events": 9
+}

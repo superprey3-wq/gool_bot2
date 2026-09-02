@@ -1,0 +1,97 @@
+name: russian-books-live-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/russian-books-live-audit.yml"
+      - "scripts/russian_books_live_audit.py"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL probe deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install 'websockets>=13,<16'
+
+      - name: Run live audit
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p russian_books_audit
+          python scripts/russian_books_live_audit.py --output-dir russian_books_audit --snapshots 3 --interval 30 2>&1 | tee /tmp/russian-books-audit.log
+
+      - name: Ensure diagnostic report
+        if: always()
+        run: |
+          mkdir -p russian_books_audit
+          if [ ! -f russian_books_audit/summary.json ]; then
+            python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          p = Path('/tmp/russian-books-audit.log')
+          payload = {
+            'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'fatal': 'audit did not produce summary.json',
+            'log_tail': p.read_text(errors='replace')[-12000:] if p.exists() else None,
+          }
+          Path('russian_books_audit/summary.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n')
+          PY
+          fi
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo '## Flashscore LIVE → 1xBet + Russian bookmakers' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          d=json.loads(Path('russian_books_audit/summary.json').read_text())
+          if d.get('fatal'):
+              print('FATAL: '+d['fatal']); print('```'); print((d.get('log_tail') or '')[-5000:]); print('```')
+          else:
+              print(f"Flashscore LIVE: **{d.get('initial_flashscore_live_matches')}**")
+              print(f"Snapshots: **{d.get('snapshot_count')}**")
+              for s,x in d.get('source_coverage',{}).items():
+                  print(f"- **{s}**: quotes {x.get('quote_events')}/{x.get('total_events')} ({x.get('coverage_pct')}%), PROVEN={x.get('proven')}, verdicts={x.get('verdicts')}")
+          PY
+
+      - name: Persist report
+        if: always()
+        run: |
+          cp russian_books_audit/summary.json /tmp/russian-books-summary.json
+          git config user.name "gool-bot2-actions"
+          git config user.email "gool-bot2-actions@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p reports/russian_books_live
+          cp /tmp/russian-books-summary.json reports/russian_books_live/latest-summary.json
+          git add reports/russian_books_live/latest-summary.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update Russian bookmaker live audit"
+            git push origin HEAD:main
+          fi
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: russian-books-live-audit
+          path: russian_books_audit/
+          if-no-files-found: warn
+          retention-days: 7

@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/xbet-specific-markets-live-audit.yml"
       - "scripts/xbet_specific_markets_live_audit.py"
+      - "scripts/xbet_specific_markets_live_audit_v2.py"
 
 permissions:
   contents: write
@@ -30,7 +31,7 @@ jobs:
 
       - name: Run exact 1xBet market audit against all current Flashscore LIVE
         run: |
-          python scripts/xbet_specific_markets_live_audit.py \
+          python scripts/xbet_specific_markets_live_audit_v2.py \
             --output-dir xbet_specific_markets_audit \
             --snapshots 2 \
             --interval 20

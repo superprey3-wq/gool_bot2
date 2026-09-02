@@ -6,6 +6,7 @@ from . import shadow_market_worker as worker
 from . import storage_shadow_worker as storage
 from .market_card_overlay import append_xbet_market_block
 from .market_override_policy import decorate_market_info
+from .value_bet_policy import attach_value
 from .xbet_market_pressure import evaluate_system, load_market_state
 
 _ORIG_BTTS = worker.analyze_btts_shadow
@@ -39,25 +40,37 @@ def _market_strength(info) -> float:
     return min(0.94, 0.70 + max(0.0, delta - 6.0) * 0.025 + max(0, moves - 2) * 0.02)
 
 
+def _decorate_value(info, probability, source):
+    return attach_value(info, probability, probability_source=source)
+
+
 def _btts(record):
     result = _ORIG_BTTS(record)
     match = record.get("match") or {}; hs = int(match.get("home_score") or 0); aws = int(match.get("away_score") or 0)
     info = _eval(record, "both_teams_to_score", result.get("target_side"))
+    info = _decorate_value(info, result.get("confidence_score"), "gool_btts_confidence")
     result["xbet_market"] = info
-    override = bool(info.get("override") and _window_ok(record) and not (hs > 0 and aws > 0))
-    if override:
+    special_override = bool((info.get("override") or info.get("value_override")) and _window_ok(record) and not (hs > 0 and aws > 0))
+    if special_override:
         result["passed_without_market"] = bool(result.get("passed"))
         result["soft_blocks_overridden"] = list(result.get("blocks") or [])
         result["passed"] = True
         result["blocks"] = []
-        result["market_override"] = True
-        result["market_override_reason"] = info.get("reason")
-        if result.get("confidence_score") is None:
+        if info.get("override"):
+            result["market_override"] = True
+            result["market_override_reason"] = info.get("reason")
+        if info.get("value_override"):
+            result["value_override"] = True
+            result["value_override_reason"] = info.get("value_reason")
+        if result.get("confidence_score") is None and info.get("override"):
             result["confidence_score"] = _market_strength(info)
             result["confidence_source"] = "xbet_market_strength_proxy"
-    elif _required() and result.get("passed") and not info.get("confirmed"):
+    elif _required() and result.get("passed") and not info.get("confirmed") and not info.get("value_bet"):
         result["passed"] = False
         result.setdefault("blocks", []).append(f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}")
+    result["value_bet"] = bool(info.get("value_bet"))
+    result["value_edge_pp"] = info.get("value_edge_pp")
+    result["value_level"] = info.get("value_level")
     return result
 
 
@@ -66,30 +79,45 @@ def _team(record):
     match = record.get("match") or {}; home = str(match.get("home") or ""); away = str(match.get("away") or "")
     selected = result.get("selected_side")
     if selected in {"home", "away"}:
-        info = _eval(record, "team_to_score", selected)
+        info = _decorate_value(_eval(record, "team_to_score", selected), result.get("confidence_score"), "gool_team_goal_confidence")
     else:
-        home_info = _eval(record, "team_to_score", "home")
-        away_info = _eval(record, "team_to_score", "away")
+        home_info = _decorate_value(_eval(record, "team_to_score", "home"), result.get("confidence_score"), "gool_team_goal_confidence")
+        away_info = _decorate_value(_eval(record, "team_to_score", "away"), result.get("confidence_score"), "gool_team_goal_confidence")
         candidates = [("home", home_info), ("away", away_info)]
-        candidates.sort(key=lambda item: (int(bool(item[1].get("override"))), float(item[1].get("strongest_delta_pp") or 0.0)), reverse=True)
+        candidates.sort(
+            key=lambda item: (
+                int(bool(item[1].get("override"))),
+                int(bool(item[1].get("value_override"))),
+                float(item[1].get("value_edge_pp") or -999),
+                float(item[1].get("strongest_delta_pp") or 0.0),
+            ),
+            reverse=True,
+        )
         selected, info = candidates[0]
     result["xbet_market"] = info
-    override = bool(info.get("override") and _window_ok(record))
-    if override:
+    special_override = bool((info.get("override") or info.get("value_override")) and _window_ok(record))
+    if special_override:
         result["passed_without_market"] = bool(result.get("passed"))
         result["soft_blocks_overridden"] = list(result.get("blocks") or [])
         result["passed"] = True
         result["blocks"] = []
-        result["market_override"] = True
-        result["market_override_reason"] = info.get("reason")
+        if info.get("override"):
+            result["market_override"] = True
+            result["market_override_reason"] = info.get("reason")
+        if info.get("value_override"):
+            result["value_override"] = True
+            result["value_override_reason"] = info.get("value_reason")
         result["selected_side"] = selected
         result["team"] = home if selected == "home" else away
-        if result.get("confidence_score") is None:
+        if result.get("confidence_score") is None and info.get("override"):
             result["confidence_score"] = _market_strength(info)
             result["confidence_source"] = "xbet_market_strength_proxy"
-    elif _required() and result.get("passed") and not info.get("confirmed"):
+    elif _required() and result.get("passed") and not info.get("confirmed") and not info.get("value_bet"):
         result["passed"] = False
         result.setdefault("blocks", []).append(f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}")
+    result["value_bet"] = bool(info.get("value_bet"))
+    result["value_edge_pp"] = info.get("value_edge_pp")
+    result["value_level"] = info.get("value_level")
     return result
 
 

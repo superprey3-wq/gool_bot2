@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,9 +24,35 @@ def save_signal_journal(path: Path, rows: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
+def _trim_analysis_if_needed(path: Path) -> None:
+    """Keep diagnostic JSONL bounded; signal/result journals remain untouched."""
+    max_bytes = max(256 * 1024, int(os.getenv("ANALYSIS_MAX_BYTES", str(6 * 1024 * 1024))))
+    keep_bytes = max(128 * 1024, int(os.getenv("ANALYSIS_KEEP_BYTES", str(4 * 1024 * 1024))))
+    keep_bytes = min(keep_bytes, max_bytes)
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        return
+    if size <= max_bytes:
+        return
+    try:
+        start = max(0, size - keep_bytes)
+        with path.open("rb") as handle:
+            handle.seek(start)
+            data = handle.read()
+        if start and b"\n" in data:
+            data = data.split(b"\n", 1)[1]
+        with path.open("wb") as handle:
+            handle.write(data)
+        print(f"ANALYSIS_ROTATE file={path.name} before={size} after={len(data)}", flush=True)
+    except Exception as exc:
+        print(f"ANALYSIS_ROTATE_ERROR file={path.name} err={type(exc).__name__}:{exc}", flush=True)
+
+
 def append_analysis(path: Path, row: dict[str, Any]) -> None:
-    """Append every candidate/model decision for later audit and retraining."""
+    """Append current decisions for audit while bounding disposable diagnostics."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    _trim_analysis_if_needed(path)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 

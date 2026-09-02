@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path("/home/container")
@@ -53,29 +52,6 @@ def find_model(filename: str) -> Path:
     return matches[0]
 
 
-def rotate_live_inbox() -> int:
-    inbox = Path(os.environ.get("RAW_LIVE_DIR", os.environ.get("GOOL_INBOX_DIR", str(RUNTIME_ROOT / "raw" / "live"))))
-    if not inbox.exists():
-        return 0
-    files = [path for path in inbox.glob("*.jsonl") if path.is_file() and path.stat().st_size > 0]
-    if not files:
-        return 0
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archive_dir = RUNTIME_ROOT / "raw" / "archive" / stamp
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    moved = 0
-    for path in files:
-        target = archive_dir / path.name
-        suffix = 1
-        while target.exists():
-            target = archive_dir / f"{path.stem}-{suffix}{path.suffix}"
-            suffix += 1
-        path.replace(target)
-        moved += 1
-    print(f"GOOL_BOOT rotated_live_snapshots={moved} archive={archive_dir}", flush=True)
-    return moved
-
-
 def main() -> None:
     load_env(ENV_FILE)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
@@ -87,6 +63,7 @@ def main() -> None:
     shadow_journal = Path(os.environ.get("SHADOW_MARKET_JOURNAL", str(runtime / "live" / "gool_bot2_shadow_markets.json")))
     shadow_analysis = Path(os.environ.get("SHADOW_MARKET_ANALYSIS", str(runtime / "live" / "gool_bot2_shadow_analysis.jsonl")))
     shadow_cards = Path(os.environ.get("SHADOW_MARKET_CARDS", str(runtime / "live" / "shadow_cards")))
+    prematch_cache = Path(os.environ.get("PREMATCH_CACHE_DIR", str(runtime / "live" / "prematch_cache")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["RAW_LIVE_DIR"] = str(raw_live)
@@ -97,6 +74,7 @@ def main() -> None:
     os.environ["SHADOW_MARKET_JOURNAL"] = str(shadow_journal)
     os.environ["SHADOW_MARKET_ANALYSIS"] = str(shadow_analysis)
     os.environ["SHADOW_MARKET_CARDS"] = str(shadow_cards)
+    os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
 
     raw_live.mkdir(parents=True, exist_ok=True)
     journal.parent.mkdir(parents=True, exist_ok=True)
@@ -104,6 +82,7 @@ def main() -> None:
     shadow_journal.parent.mkdir(parents=True, exist_ok=True)
     shadow_analysis.parent.mkdir(parents=True, exist_ok=True)
     shadow_cards.mkdir(parents=True, exist_ok=True)
+    prematch_cache.mkdir(parents=True, exist_ok=True)
 
     ensure_deps()
 
@@ -126,23 +105,38 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
+    print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
 
-    rotate_live_inbox()
+    # Clean the old restart archives and bound legacy daily JSONL files before any
+    # worker opens them. Unlike the previous rotate_live_inbox(), this keeps the
+    # recent snapshots in place so LIVE momentum can warm-start after Restart.
+    cleanup_env = os.environ.copy()
+    cleanup = subprocess.run(
+        [sys.executable, "-m", "gool_bot2.storage_runtime", "--once"],
+        env=cleanup_env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if cleanup.stdout.strip():
+        print(cleanup.stdout.strip(), flush=True)
+    if cleanup.returncode != 0:
+        print(f"GOOL_BOOT storage_cleanup_failed rc={cleanup.returncode} err={cleanup.stderr.strip()}", flush=True)
 
     env = os.environ.copy()
     collector = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.live_collector",
+        sys.executable, "-m", "gool_bot2.storage_live_collector",
         "--data-dir", str(raw_live),
         "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60"),
     ], env=env)
     worker = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.signal_worker_all_cards",
+        sys.executable, "-m", "gool_bot2.storage_signal_worker",
         "--raw-dir", str(raw_live),
         "--journal", str(journal),
         "--analysis", str(analysis),
     ], env=env)
     shadow = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.shadow_market_worker",
+        sys.executable, "-m", "gool_bot2.storage_shadow_worker",
         "--raw-dir", str(raw_live),
         "--journal", str(shadow_journal),
         "--analysis", str(shadow_analysis),

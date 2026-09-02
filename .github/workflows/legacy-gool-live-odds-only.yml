@@ -66,3 +66,5 @@ jobs:
           name: legacy-gool-live-odds-only
           path: legacy_results/
           retention-days: 7
+
+# rerun marker: 2026-09-02T23:02+03:00

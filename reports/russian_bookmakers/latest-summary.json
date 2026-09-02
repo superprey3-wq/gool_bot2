@@ -1,0 +1,47 @@
+{
+  "snapshot_count": 3,
+  "initial_flashscore_live_matches": 10,
+  "sources": {
+    "1xbet": {
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      },
+      "proven": [],
+      "states": [
+        "error",
+        "error",
+        "error"
+      ],
+      "attempts": [
+        {
+          "url": "https://1xbetbd.com/LineFeed/Get1x2_VZip",
+          "state": "error",
+          "error": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+        },
+        {
+          "url": "https://1xbet.com/LineFeed/Get1x2_VZip",
+          "state": "error",
+          "error": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+        }
+      ]
+    },
+    "fonbet": {
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      },
+      "proven": [],
+      "states": [
+        "error",
+        "error",
+        "error"
+      ],
+      "attempts": [
+        {
+          "url": "https://line-lb51.bk6bba-resources.com/events/listBase",
+          "state": "error",
+          "error": "UnicodeDecodeError: 'utf-8' codec can't decode byte 0x8b in position 1: invalid start byte"
+        }
+      ]
+    }
+  }
+}

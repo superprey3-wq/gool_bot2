@@ -148,13 +148,23 @@ def process_record(record: dict[str, Any], journal_path: Path, analysis_path: Pa
     for analyzer in (analyze_btts_shadow, analyze_team_goal_shadow):
         result = analyzer(record)
         head = str(result.get("head") or "")
-        append_analysis(analysis_path, {**_base(record), **result, "decision": "SIGNAL" if result.get("passed") else "WAIT"})
+        base_row = _base(record)
+        append_analysis(
+            analysis_path,
+            {
+                **result,
+                **base_row,
+                "market_home": result.get("home"),
+                "market_away": result.get("away"),
+                "decision": "SIGNAL" if result.get("passed") else "WAIT",
+            },
+        )
         if not result.get("passed") or _already_recorded(rows, mid, head):
             continue
         card_path, png = _save_card(card_dir, record, result)
         sent = _send_signal(record, result, png)
         row = {
-            **_base(record),
+            **base_row,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "head": head,
             "result": "pending",

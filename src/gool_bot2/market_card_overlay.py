@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+from collections import Counter
 from io import BytesIO
 from typing import Any
 
@@ -38,10 +40,15 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
     level = str(info.get("level") or "NO_DATA")
     confirmed = bool(info.get("confirmed"))
     override = bool(info.get("override"))
-    if override:
-        state = "🚨 MARKET OVERRIDE · ПРИОРИТЕТ 1xBET"
+    result_state = str(info.get("result_state") or "").lower()
+    if result_state == "won":
+        state = "MARKET OVERRIDE · ПРОГРУЗ ЗАШЁЛ"
+    elif result_state == "lost":
+        state = "MARKET OVERRIDE · ПРОГРУЗ НЕ ЗАШЁЛ"
+    elif override:
+        state = "MARKET OVERRIDE · ПРИОРИТЕТ 1xBET"
     elif confirmed:
-        state = "ПОДТВЕРЖДАЕТ СИГНАЛ"
+        state = "1xBET ПОДТВЕРЖДАЕТ СИГНАЛ"
     else:
         state = "НЕТ ПРОГРУЗА" if level == "NEUTRAL" else level
     d.text((62, y0 + 20), "1xBET MARKET PRESSURE", font=sc._font(24, True), fill=sc.TEXT)
@@ -64,3 +71,202 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
     reason_font = sc._fit(d, reason, src.width - 124, 17, True)
     d.text((62, y0 + 218), reason, font=reason_font, fill=sc.MUTED)
     out = BytesIO(); img.convert("RGB").save(out, "PNG", optimize=True); return out.getvalue()
+
+
+def append_xbet_result_block(png: bytes, row: dict[str, Any]) -> bytes:
+    info = dict(row.get("xbet_market") or ((row.get("analysis") or {}).get("xbet_market") or {}))
+    info["override"] = True
+    info["result_state"] = str(row.get("result") or "lost").lower()
+    return append_xbet_market_block(png, info)
+
+
+def _is_override_row(row: dict[str, Any]) -> bool:
+    info = row.get("xbet_market") or ((row.get("analysis") or {}).get("xbet_market") or {})
+    return bool(
+        str(row.get("signal_source") or "") == "xbet_market_override"
+        or row.get("market_override")
+        or (row.get("analysis") or {}).get("market_override")
+        or (isinstance(info, dict) and info.get("override"))
+    )
+
+
+def _main_override_active() -> bool:
+    module = sys.modules.get("gool_bot2.storage_market_signal_worker")
+    record = getattr(module, "_CURRENT", None) if module is not None else None
+    if not isinstance(record, dict):
+        return False
+    market = record.get("xbet_market") or {}
+    return any(isinstance(v, dict) and v.get("override") for k, v in market.items() if k != "source")
+
+
+def _signal_like_text(text: Any) -> bool:
+    value = str(text or "")
+    return any(token in value for token in ("ЕЩЁ ГОЛ", "ЕЩЁ +2 ГОЛА", "ОБЕ ЗАБЬЮТ", "КОМАНДА ЗАБЬЁТ"))
+
+
+def _install_runtime_patches() -> None:
+    telegram = sys.modules.get("gool_bot2.telegram")
+    if telegram is None:
+        return
+
+    # Report: keep the four existing strategy rows and add a separate performance
+    # line for signals opened specifically by the 1xBet MARKET OVERRIDE path.
+    menu = sys.modules.get("gool_bot2.bot_menu")
+    if menu is not None and not getattr(menu, "_xbet_override_stats_patched", False):
+        original_stats = menu._stats
+
+        def stats_with_override(rows):
+            lines = list(original_stats(rows))
+            selected = [r for r in rows if _is_override_row(r)]
+            counts = Counter(str(r.get("result") or "pending").lower() for r in selected)
+            won, lost, pending = counts["won"], counts["lost"], counts["pending"]
+            total = won + lost
+            pct = "—" if not total else f"{won / total * 100:.1f}%"
+            market_line = f"🚨 Прогруз 1xBet: ✅ {won} · ❌ {lost} · ⏳ {pending} · <b>{pct}</b>"
+            strategy_count = len(getattr(menu, "ALL_HEADS", ()))
+            return lines[:strategy_count] + [market_line] + lines[strategy_count:]
+
+        menu._stats = stats_with_override
+        menu._xbet_override_stats_patched = True
+
+    # Main GOOL signal fallback: an override must remain a visual, auditable card.
+    # If Telegram rejects the image we log the failure instead of silently turning
+    # it into a plain-text bet.
+    for name in ("gool_bot2.signal_worker", "gool_bot2.signal_worker_all", "gool_bot2.signal_worker_all_cards"):
+        module = sys.modules.get(name)
+        if module is None or getattr(module, "_xbet_override_broadcast_patched", False) or not hasattr(module, "broadcast"):
+            continue
+        original_broadcast = module.broadcast
+
+        def guarded_broadcast(text, *args, _orig=original_broadcast, **kwargs):
+            if _main_override_active() and _signal_like_text(text):
+                print("XBET_OVERRIDE_CARD_REQUIRED text_fallback_suppressed=1", flush=True)
+                return 0
+            return _orig(text, *args, **kwargs)
+
+        module.broadcast = guarded_broadcast
+        module._xbet_override_broadcast_patched = True
+
+    # Main result cards: show a distinct 'прогруз зашёл / не зашёл' card and never
+    # downgrade it to plain text.
+    signal_worker = sys.modules.get("gool_bot2.signal_worker")
+    signal_all = sys.modules.get("gool_bot2.signal_worker_all")
+    if signal_worker is not None and signal_all is not None and not getattr(signal_all, "_xbet_override_result_patched", False):
+        original_result_sender = signal_all._send_result_cards
+
+        def send_result_cards(rows):
+            normal = []
+            for row in rows:
+                if not _is_override_row(row):
+                    normal.append(row)
+                    continue
+                result = str(row.get("result") or "lost").lower()
+                score = row.get("settled_score") or [0, 0]
+                minute = int(row.get("settled_minute") or 0)
+                try:
+                    png = signal_worker.render_result_card(row, result, minute, int(score[0] or 0), int(score[1] or 0))
+                    png = append_xbet_result_block(png, row)
+                    caption = ("✅ <b>ПРОГРУЗ ЗАШЁЛ</b>" if result == "won" else "❌ <b>ПРОГРУЗ НЕ ЗАШЁЛ</b>")
+                    caption += f" · {signal_worker.HEAD_LABELS.get(str(row.get('head')), str(row.get('head')))}"
+                    sent = telegram.broadcast_photo(png, caption=caption)
+                    print(f"XBET_OVERRIDE_RESULT_CARD result={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+                except Exception as exc:
+                    print(f"XBET_OVERRIDE_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+            if normal:
+                original_result_sender(normal)
+
+        signal_all._send_result_cards = send_result_cards
+        signal_all._xbet_override_result_patched = True
+
+    cards = sys.modules.get("gool_bot2.signal_worker_all_cards")
+    if signal_all is not None and cards is not None and not getattr(signal_all, "_xbet_override_plus2_result_patched", False):
+        original_plus2_sender = signal_all._send_two_more_results
+
+        def send_two_more_results(rows):
+            normal = []
+            for row in rows:
+                if not _is_override_row(row):
+                    normal.append(row)
+                    continue
+                result = str(row.get("result") or "lost").lower()
+                try:
+                    png = cards.render_gool_live_result_card(row, result)
+                    png = append_xbet_result_block(png, row)
+                    caption = "✅ <b>ПРОГРУЗ ЗАШЁЛ</b> · ЕЩЁ +2 ГОЛА" if result == "won" else "❌ <b>ПРОГРУЗ НЕ ЗАШЁЛ</b> · ЕЩЁ +2 ГОЛА"
+                    sent = telegram.broadcast_photo(png, caption=caption)
+                    print(f"XBET_OVERRIDE_PLUS2_RESULT_CARD result={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+                except Exception as exc:
+                    print(f"XBET_OVERRIDE_PLUS2_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+            if normal:
+                original_plus2_sender(normal)
+
+        signal_all._send_two_more_results = send_two_more_results
+        signal_all._xbet_override_plus2_result_patched = True
+
+    # Experimental BTTS/team-goal worker: annotate the journal with an explicit
+    # override source, force signal/result delivery through cards, and keep failed
+    # image deliveries retryable instead of replacing them with text.
+    shadow = sys.modules.get("gool_bot2.shadow_market_worker")
+    if shadow is not None and not getattr(shadow, "_xbet_override_delivery_patched", False):
+        original_shadow_save = shadow.save_signal_journal
+        original_shadow_send = shadow._send_signal
+        original_shadow_notify = shadow._notify_results
+
+        def shadow_save(path, rows):
+            for row in rows:
+                analysis = row.get("analysis") or {}
+                info = row.get("xbet_market") or analysis.get("xbet_market") or {}
+                override = bool(row.get("market_override") or analysis.get("market_override") or (isinstance(info, dict) and info.get("override")))
+                if override:
+                    row["signal_source"] = "xbet_market_override"
+                    row["market_override"] = True
+                    row["xbet_market"] = dict(info)
+            return original_shadow_save(path, rows)
+
+        def shadow_send(record, result, png):
+            info = result.get("xbet_market") or {}
+            if not (result.get("market_override") or (isinstance(info, dict) and info.get("override"))):
+                return original_shadow_send(record, result, png)
+            try:
+                card = png if png is not None else shadow.render_shadow_market_card(record, result)
+                card = append_xbet_market_block(card, info)
+                head = str(result.get("head") or "")
+                label = "ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ"
+                sent = telegram.broadcast_photo(card, caption=f"🚨 <b>MARKET OVERRIDE · 1xBet</b> · {label}")
+                print(f"XBET_OVERRIDE_SHADOW_CARD head={head} deliveries={sent}", flush=True)
+                return int(sent > 0)
+            except Exception as exc:
+                print(f"XBET_OVERRIDE_SHADOW_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+                return 0
+
+        def shadow_notify(rows):
+            normal = []
+            for row in rows:
+                if not _is_override_row(row):
+                    normal.append(row)
+                    continue
+                if row.get("result_notified"):
+                    continue
+                result = str(row.get("result") or "lost").lower()
+                try:
+                    card = shadow.render_shadow_market_result_card(row)
+                    card = append_xbet_result_block(card, row)
+                    head = str(row.get("head") or "")
+                    label = "ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ"
+                    caption = ("✅ <b>ПРОГРУЗ ЗАШЁЛ</b>" if result == "won" else "❌ <b>ПРОГРУЗ НЕ ЗАШЁЛ</b>") + f" · {label}"
+                    sent = telegram.broadcast_photo(card, caption=caption)
+                    if sent > 0:
+                        row["result_notified"] = True
+                    print(f"XBET_OVERRIDE_SHADOW_RESULT result={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+                except Exception as exc:
+                    print(f"XBET_OVERRIDE_SHADOW_RESULT_ERROR {type(exc).__name__}:{exc}", flush=True)
+            if normal:
+                original_shadow_notify(normal)
+
+        shadow.save_signal_journal = shadow_save
+        shadow._send_signal = shadow_send
+        shadow._notify_results = shadow_notify
+        shadow._xbet_override_delivery_patched = True
+
+
+_install_runtime_patches()

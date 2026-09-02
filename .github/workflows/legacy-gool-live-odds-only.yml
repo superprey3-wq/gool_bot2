@@ -1,0 +1,68 @@
+name: legacy-gool-live-odds-only
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/legacy-gool-live-odds-only.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  legacy-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install GOOL2 discovery
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          mkdir -p legacy_results legacy_source
+
+      - name: Discover ALL current Flashscore live matches
+        run: |
+          python scripts/fresh_odds_projects_smoke.py discover \
+            --output legacy_results/online_matches.json \
+            --limit 1000
+
+      - name: Clone old GOOL
+        run: git clone --depth 1 https://github.com/superprey3-wq/gool_bot.git legacy_source/gool_bot
+
+      - name: Install old GOOL dependencies
+        run: pip install -r legacy_source/gool_bot/gool_bot/requirements.txt
+
+      - name: Probe old LIVE OLE2 + Kambi against ALL live matches
+        run: |
+          python scripts/legacy_live_odds_all.py \
+            --matches legacy_results/online_matches.json \
+            --legacy-dir legacy_source/gool_bot \
+            --output legacy_results/legacy.json
+
+      - name: Summary
+        if: always()
+        run: |
+          echo '## Old GOOL real LIVE odds retest' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('legacy_results/legacy.json')
+          print(json.dumps(json.loads(p.read_text())['summary'], ensure_ascii=False, indent=2) if p.exists() else '{"error":"no result"}')
+          PY
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-gool-live-odds-only
+          path: legacy_results/
+          retention-days: 7

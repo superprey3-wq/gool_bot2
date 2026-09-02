@@ -1,0 +1,92 @@
+name: targeted-new-sources-live-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/targeted-new-sources-live-audit.yml"
+      - "scripts/targeted_new_sources_live_audit.py"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL and direct-feed probe library
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install 'git+https://github.com/DanielTomaro13/sportsdata-mcp.git@91b6b74bc0ab8d0dcbbcddddcf59b8f01a8992bf'
+
+      - name: Run three-target live audit
+        run: |
+          python scripts/targeted_new_sources_live_audit.py \
+            --output-dir targeted_new_sources_audit \
+            --snapshots 3 \
+            --interval 30
+
+      - name: Render result table
+        if: always()
+        run: |
+          echo '## Three live matches → new direct bookmaker feeds' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Strict PROVEN = same event has quote-bearing snapshots + Flashscore progress + bookmaker quote movement.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f targeted_new_sources_audit/summary.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          d = json.loads(Path('targeted_new_sources_audit/summary.json').read_text())
+          for event in d.get('events', []):
+              t = event['target']
+              print(f"### {t['home']} — {t['away']}")
+              fs = event.get('flashscore_states', [])
+              print('Flashscore: ' + ' → '.join(
+                  (f"{x.get('minute')}m {x.get('home_score')}:{x.get('away_score')}" if x.get('live') else 'not-live')
+                  for x in fs
+              ))
+              for source, payload in event.get('sources', {}).items():
+                  print(f"- **{source}**: {payload.get('verdict')} | quote snapshots={payload.get('matched_quote_snapshots')} | changed={payload.get('odds_changed')}")
+              print('')
+          PY
+          else
+            echo 'summary.json missing — inspect audit logs/artifact.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Persist latest report
+        if: always()
+        run: |
+          if [ -f targeted_new_sources_audit/summary.json ]; then
+            cp targeted_new_sources_audit/summary.json /tmp/targeted-new-sources-summary.json
+            git config user.name "gool-bot2-actions"
+            git config user.email "gool-bot2-actions@users.noreply.github.com"
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p reports/targeted_new_sources
+            cp /tmp/targeted-new-sources-summary.json reports/targeted_new_sources/latest-summary.json
+            git add reports/targeted_new_sources/latest-summary.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update targeted new-sources live audit"
+              git push origin HEAD:main
+            fi
+          fi
+
+      - name: Upload full audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: targeted-new-sources-live-audit
+          path: targeted_new_sources_audit/
+          if-no-files-found: warn
+          retention-days: 7

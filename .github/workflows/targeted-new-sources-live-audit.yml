@@ -1,3 +1,4 @@
+# rerun: 2026-09-02-sebaco-second-half
 name: targeted-new-sources-live-audit
 
 on:
@@ -41,7 +42,7 @@ jobs:
           python scripts/targeted_new_sources_live_audit.py \
             --output-dir targeted_new_sources_audit \
             --snapshots 3 \
-            --interval 30 2>&1 | tee /tmp/targeted-audit.log
+            --interval 25 2>&1 | tee /tmp/targeted-audit.log
 
       - name: Ensure diagnostic summary exists
         if: always()

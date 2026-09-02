@@ -1,0 +1,90 @@
+name: live-bookmaker-variants-audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshots:
+        description: Number of live snapshots
+        required: false
+        default: "3"
+      interval:
+        description: Seconds between snapshots
+        required: false
+        default: "45"
+      limit:
+        description: Maximum Flashscore live matches
+        required: false
+        default: "1000"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/live-bookmaker-variants-audit.yml"
+      - "scripts/live_bookmaker_variants_audit.py"
+      - "src/gool_bot2/providers/flashscore.py"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL bot
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run all-live bookmaker audit
+        env:
+          SNAPSHOTS: ${{ inputs.snapshots || '3' }}
+          INTERVAL: ${{ inputs.interval || '45' }}
+          MATCH_LIMIT: ${{ inputs.limit || '1000' }}
+        run: |
+          python scripts/live_bookmaker_variants_audit.py \
+            --output-dir live_bookmaker_audit \
+            --snapshots "$SNAPSHOTS" \
+            --interval "$INTERVAL" \
+            --limit "$MATCH_LIMIT"
+
+      - name: Publish audit summary
+        if: always()
+        run: |
+          echo '## GOOL Flashscore → Kambi/Unibet + Bet365 + Betano' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f live_bookmaker_audit/summary.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          data = json.loads(Path('live_bookmaker_audit/summary.json').read_text())
+          print(f"Flashscore live matches seen: **{data.get('unique_flashscore_live_matches', 0)}**")
+          print(f"Snapshots: **{data.get('snapshot_count', 0)}**")
+          print('')
+          print('### Source results')
+          for source, counts in data.get('source_summary', {}).items():
+              parts = ', '.join(f"{k}={v}" for k, v in sorted(counts.items())) or 'no matches'
+              print(f"- **{source}**: {parts}")
+          print('')
+          print('### Global verdicts')
+          for verdict, count in sorted(data.get('verdict_counts', {}).items()):
+              print(f"- **{verdict}**: {count}")
+          PY
+          else
+            echo 'summary.json was not produced' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload full audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-bookmaker-variants-audit
+          path: live_bookmaker_audit/
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,80 @@
+name: fresh-bookiescraper-all-live
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fresh-bookiescraper-all-live.yml"
+      - "scripts/bookiescraper_pinnacle_all_live.py"
+
+permissions:
+  contents: read
+
+jobs:
+  all-live-bookiescraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install GOOL discovery runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          mkdir -p bookiescraper_results bookiescraper_source
+
+      - name: Discover ALL current Flashscore live matches
+        run: |
+          python scripts/fresh_odds_projects_smoke.py discover \
+            --output bookiescraper_results/online_matches.json \
+            --limit 1000
+
+      - name: Clone fresh BookieScraper
+        run: git clone --depth 1 https://github.com/Geordie1071-spec/BookieScraper.git bookiescraper_source/repo
+
+      - name: Install fresh BookieScraper
+        run: pip install -e bookiescraper_source/repo
+
+      - name: Probe Pinnacle guest LIVE feed against ALL Flashscore matches
+        continue-on-error: true
+        run: |
+          python scripts/bookiescraper_pinnacle_all_live.py \
+            --matches bookiescraper_results/online_matches.json \
+            --source-dir bookiescraper_source/repo \
+            --output bookiescraper_results/pinnacle.json
+
+      - name: Record exact source revision
+        if: always()
+        run: git -C bookiescraper_source/repo rev-parse HEAD > bookiescraper_results/source_revision.txt || true
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo '## Fresh BookieScraper / Pinnacle LIVE coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Repository was created and pushed on 2026-09-02; Pinnacle adapter uses the guest Arcadia API and marks isLive events as LIVE.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          try:
+              print(json.dumps(json.loads(Path('bookiescraper_results/pinnacle.json').read_text())['summary'], indent=2))
+          except Exception as exc:
+              print(json.dumps({'error': str(exc)}, indent=2))
+          PY
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-bookiescraper-all-live
+          path: bookiescraper_results/
+          retention-days: 7

@@ -23,7 +23,7 @@ on:
       - "src/gool_bot2/providers/flashscore.py"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -78,6 +78,55 @@ jobs:
           PY
           else
             echo 'summary.json was not produced' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Persist compact latest report in repository
+        if: always()
+        run: |
+          if [ -f live_bookmaker_audit/summary.json ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          src = Path('live_bookmaker_audit/summary.json')
+          data = json.loads(src.read_text())
+          compact = {
+              'generated_at': data.get('generated_at'),
+              'snapshot_count': data.get('snapshot_count'),
+              'unique_flashscore_live_matches': data.get('unique_flashscore_live_matches'),
+              'source_states': data.get('source_states'),
+              'source_summary': data.get('source_summary'),
+              'verdict_counts': data.get('verdict_counts'),
+              'events': [],
+          }
+          for event in data.get('events', []):
+              compact['events'].append({
+                  'event_id': event.get('event_id'),
+                  'home': event.get('home'),
+                  'away': event.get('away'),
+                  'league': event.get('league'),
+                  'flashscore_states': event.get('flashscore_states'),
+                  'sources': {
+                      source: {
+                          'verdict': payload.get('verdict'),
+                          'odds_changed': payload.get('odds_changed'),
+                          'flashscore_progress': payload.get('flashscore_progress'),
+                          'matched_snapshots': sum(1 for row in payload.get('snapshots', []) if row.get('status') == 'matched'),
+                      }
+                      for source, payload in event.get('sources', {}).items()
+                  },
+              })
+          out = Path('reports/live_bookmaker_variants/latest-summary.json')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(json.dumps(compact, ensure_ascii=False, indent=2, sort_keys=True) + '\n')
+          PY
+            git config user.name "gool-bot2-actions"
+            git config user.email "gool-bot2-actions@users.noreply.github.com"
+            git add reports/live_bookmaker_variants/latest-summary.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update live bookmaker audit report"
+              git push
+            fi
           fi
 
       - name: Upload full audit

@@ -1,0 +1,38 @@
+name: old-odds-sources-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe-old-odds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout legacy GOOL odds code
+        uses: actions/checkout@v4
+        with:
+          repository: superprey3-wq/gool_bot
+          path: legacy_gool
+      - name: Install runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests httpx
+      - name: Locate legacy odds modules
+        run: |
+          find legacy_gool -type f | grep -Ei '(odds|kambi|bovada|sports.?game|fair_value|clv)' | sort | tee legacy_odds_files.txt
+      - name: Syntax/import smoke legacy odds modules
+        run: |
+          python - <<'PY'
+          import compileall
+          ok = compileall.compile_dir('legacy_gool', quiet=1)
+          print('compile_ok=', ok)
+          PY
+      - name: Upload legacy odds inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-odds-smoke
+          path: legacy_odds_files.txt

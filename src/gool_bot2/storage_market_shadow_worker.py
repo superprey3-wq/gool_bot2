@@ -33,6 +33,12 @@ def _window_ok(record) -> bool:
     return 10 <= minute <= 75 and not bool(match.get("is_finished"))
 
 
+def _market_strength(info) -> float:
+    delta = max(0.0, float(info.get("strongest_delta_pp") or info.get("score_pp") or 0.0))
+    moves = max(0, int(info.get("strongest_one_way_moves") or 0))
+    return min(0.94, 0.70 + max(0.0, delta - 6.0) * 0.025 + max(0, moves - 2) * 0.02)
+
+
 def _btts(record):
     result = _ORIG_BTTS(record)
     match = record.get("match") or {}; hs = int(match.get("home_score") or 0); aws = int(match.get("away_score") or 0)
@@ -46,7 +52,9 @@ def _btts(record):
         result["blocks"] = []
         result["market_override"] = True
         result["market_override_reason"] = info.get("reason")
-        result["confidence_score"] = result.get("confidence_score") or 0.0
+        if result.get("confidence_score") is None:
+            result["confidence_score"] = _market_strength(info)
+            result["confidence_source"] = "xbet_market_strength_proxy"
     elif _required() and result.get("passed") and not info.get("confirmed"):
         result["passed"] = False
         result.setdefault("blocks", []).append(f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}")
@@ -76,7 +84,9 @@ def _team(record):
         result["market_override_reason"] = info.get("reason")
         result["selected_side"] = selected
         result["team"] = home if selected == "home" else away
-        result["confidence_score"] = result.get("confidence_score") or 0.0
+        if result.get("confidence_score") is None:
+            result["confidence_score"] = _market_strength(info)
+            result["confidence_source"] = "xbet_market_strength_proxy"
     elif _required() and result.get("passed") and not info.get("confirmed"):
         result["passed"] = False
         result.setdefault("blocks", []).append(f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}")

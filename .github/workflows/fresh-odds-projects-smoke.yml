@@ -6,7 +6,7 @@ on:
       max_matches:
         description: "How many current Flashscore live matches to probe"
         required: false
-        default: "6"
+        default: "8"
   push:
     branches: [main]
     paths:
@@ -19,9 +19,9 @@ permissions:
 jobs:
   live-odds-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
-      FRESH_ODDS_MAX_MATCHES: ${{ inputs.max_matches || '6' }}
+      FRESH_ODDS_MAX_MATCHES: ${{ inputs.max_matches || '8' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,19 +36,23 @@ jobs:
           pip install -e .
           mkdir -p fresh_odds_results fresh_sources
 
-      - name: Get current online matches from GOOL Flashscore
+      - name: Get useful current online matches from GOOL Flashscore
         run: |
           python scripts/fresh_odds_projects_smoke.py discover \
             --output fresh_odds_results/online_matches.json \
             --limit "$FRESH_ODDS_MAX_MATCHES"
 
-      # FRESH PROJECT #1 — direct 2026 Flashscore/LSApp implementation.
-      # This is intentionally isolated from every legacy GOOL odds module.
+      # FRESH 2026 PROJECT #1 — direct Flashscore/LSApp implementation.
+      # No legacy GOOL odds code is imported or touched.
       - name: Clone fresh realine0 Flashscore odds project
         run: git clone --depth 1 https://github.com/realine0/flashscore-football-odds-scraper.git fresh_sources/realine
 
-      - name: Install realine0 dependencies
-        run: pip install -r fresh_sources/realine/requirements.txt
+      - name: Install realine0 dependencies including missing HTTP2 extra
+        run: |
+          pip install -r fresh_sources/realine/requirements.txt
+          # The project creates httpx.AsyncClient(http2=True) but its requirements
+          # currently omit h2. Install the runtime extra without modifying the repo.
+          pip install 'httpx[http2]'
 
       - name: Probe realine0 LSApp odds on current live matches
         continue-on-error: true
@@ -59,17 +63,26 @@ jobs:
             --output fresh_odds_results/realine.json \
             --limit "$FRESH_ODDS_MAX_MATCHES"
 
-      # FRESH PROJECT #2 — M3MONs 2026 scraper, using its lightweight curl engine.
+      # FRESH 2026 PROJECT #2 — M3MONs. First try its documented route/curl
+      # engine, then current 2026 Flashscore team-profile URLs/full-time route,
+      # with Playwright as a final fallback.
       - name: Clone fresh M3MONs FlashscoreScraper
         run: git clone --depth 1 https://github.com/M3MONs/FlashscoreScraper.git fresh_sources/m3mons
 
-      - name: Install uv for Python 3.13 project
+      - name: Install uv for M3MONs Python 3.13 project
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
+      - name: Install Chromium in M3MONs environment
+        run: |
+          uv run --project fresh_sources/m3mons --python 3.13 \
+            python -m playwright install chromium
+
       - name: Probe M3MONs odds on current live matches
         continue-on-error: true
+        env:
+          M3MONS_PLAYWRIGHT: "1"
         run: |
           uv run --project fresh_sources/m3mons --python 3.13 \
             python "$GITHUB_WORKSPACE/scripts/fresh_odds_projects_smoke.py" m3mons \
@@ -78,15 +91,14 @@ jobs:
             --output "$GITHUB_WORKSPACE/fresh_odds_results/m3mons.json" \
             --limit "$FRESH_ODDS_MAX_MATCHES"
 
-      # FRESH PROJECT #3 — Pinnacle 2026 Playwright/API-intercept scraper.
-      # It is slower, so only the first 3 live matches are tested.
+      # FRESH 2026 PROJECT #3 — Pinnacle Playwright/API-intercept scraper.
       - name: Clone fresh Pinnacle odds project
         run: git clone --depth 1 https://github.com/ACHBIDHAN/Pinnacle_Football_Odds_Scraper.git fresh_sources/pinnacle
 
       - name: Install Pinnacle dependencies and Chromium
         run: |
           pip install -r fresh_sources/pinnacle/requirements.txt
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
 
       - name: Probe Pinnacle on current Flashscore live matches
         continue-on-error: true
@@ -95,7 +107,7 @@ jobs:
             --matches fresh_odds_results/online_matches.json \
             --source-dir fresh_sources/pinnacle \
             --output fresh_odds_results/pinnacle.json \
-            --limit 3
+            --limit "$FRESH_ODDS_MAX_MATCHES"
 
       - name: Record exact fresh project revisions
         if: always()
@@ -117,7 +129,7 @@ jobs:
 
           echo '## Fresh odds projects smoke' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Current Flashscore live matches were tested only through the three fresh 2026 projects. Legacy GOOL odds code was not imported or modified.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Only fresh 2026 external odds projects were exercised. Legacy GOOL odds modules were not imported or modified.' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat fresh_odds_results/summary.json >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,85 @@
+name: final-kept-sources-live-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/final-kept-sources-live-audit.yml"
+      - "scripts/final_kept_sources_live_audit.py"
+      - "scripts/targeted_new_sources_live_audit.py"
+      - "scripts/live_bookmaker_variants_audit.py"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL and direct-feed probe library
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install 'git+https://github.com/DanielTomaro13/sportsdata-mcp.git@91b6b74bc0ab8d0dcbbcddddcf59b8f01a8992bf'
+
+      - name: Run final audit against all current Flashscore LIVE
+        run: |
+          python scripts/final_kept_sources_live_audit.py \
+            --output-dir final_kept_sources_audit \
+            --snapshots 3 \
+            --interval 30
+
+      - name: Publish compact result
+        if: always()
+        run: |
+          echo '## Final kept sources vs all current GOOL Flashscore LIVE' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f final_kept_sources_audit/summary.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          d = json.loads(Path('final_kept_sources_audit/summary.json').read_text())
+          print(f"Initial Flashscore LIVE: **{d.get('initial_flashscore_live_matches', 0)}**")
+          print('')
+          for source, payload in d.get('source_coverage', {}).items():
+              print(f"- **{source}**: quotes {payload.get('quote_events')}/{payload.get('total_events')} ({payload.get('coverage_pct')}%), PROVEN={payload.get('proven')}, verdicts={payload.get('verdicts')}")
+          PY
+          else
+            echo 'summary.json missing' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Persist latest report
+        if: always()
+        run: |
+          if [ -f final_kept_sources_audit/summary.json ]; then
+            cp final_kept_sources_audit/summary.json /tmp/final-kept-sources-summary.json
+            git config user.name "gool-bot2-actions"
+            git config user.email "gool-bot2-actions@users.noreply.github.com"
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p reports/final_kept_sources
+            cp /tmp/final-kept-sources-summary.json reports/final_kept_sources/latest-summary.json
+            git add reports/final_kept_sources/latest-summary.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update final kept-sources live audit"
+              git push origin HEAD:main
+            fi
+          fi
+
+      - name: Upload full audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-kept-sources-live-audit
+          path: final_kept_sources_audit/
+          if-no-files-found: warn
+          retention-days: 7

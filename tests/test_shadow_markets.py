@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from gool_bot2.shadow_markets import analyze_btts_shadow, analyze_team_goal_shadow
@@ -90,3 +91,9 @@ def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Pat
     assert journal.exists()
     assert analysis.exists()
     assert list(cards.glob("*.png"))
+
+    first = json.loads(analysis.read_text("utf-8").splitlines()[0])
+    assert first["home"] == "Home"
+    assert first["away"] == "Away"
+    assert isinstance(first["market_home"], dict)
+    assert isinstance(first["market_away"], dict)

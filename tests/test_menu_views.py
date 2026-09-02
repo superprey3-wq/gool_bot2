@@ -78,7 +78,7 @@ def test_analysis_only_shows_fresh_online_rows_and_stays_under_telegram_limit(tm
             "home": {"side": "home", "team": "A", "pressure_score": 0.7},
             "away": {"side": "away", "team": "B", "pressure_score": 0.8},
             "score": [0, 0],
-            "confidence_score": 0.81,
+            "confidence_score": 0.99,
             "decision": "SIGNAL",
             "blocks": [],
         },

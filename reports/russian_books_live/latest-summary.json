@@ -1,0 +1,4155 @@
+{
+  "events": [
+    {
+      "away": "Delfines Del Este (Dom)",
+      "event_id": "WnnGkbGG",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 19,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 20,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 22,
+          "snapshot": 3
+        }
+      ],
+      "home": "Broki (Sur)",
+      "league": "NORTH & CENTRAL AMERICA: CONCACAF Caribbean Cup",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3545,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3545,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3545,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "749463365",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.3",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.616",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=7",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=3.24",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.344",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "749463365",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.3",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.616",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=6.7",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=3.44",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.31",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Delfines Del Este",
+              "book_event_id": "749463365",
+              "book_home": "Broki",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.2",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.67",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=6.69",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=3.44",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.31",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Brasil de Farroupilha",
+      "event_id": "SUyuHKHG",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 24,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 26,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 3
+        }
+      ],
+      "home": "Gaucho",
+      "league": "BRAZIL: Gaucho 2",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.313,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.313,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.313,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "749463361",
+              "book_home": "Gaucho Passo Fundo",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 114,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.496",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.495",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.24",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.56",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.035"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "749463361",
+              "book_home": "Gaucho Passo Fundo",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 114,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.45",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.635",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.24",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.06",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.045"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Brasil de Farroupilha",
+              "book_event_id": "749463361",
+              "book_home": "Gaucho Passo Fundo",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 114,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.496",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.495",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.66",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.56",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.035"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Pelotas",
+      "event_id": "4ULCVJW9",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 24,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 26,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 3
+        }
+      ],
+      "home": "Santa Cruz RS",
+      "league": "BRAZIL: Gaucho 2",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3282,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3282,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3282,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "EC Pelotas",
+              "book_event_id": "749463360",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 106,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.675",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.112",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=6.1",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.4",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.04"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Pelotas",
+              "book_event_id": "749463360",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 106,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.675",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.112",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=6.19",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.48",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.04"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Pelotas",
+              "book_event_id": "749463360",
+              "book_home": "Santa Cruz RS",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 106,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.675",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.112",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=6.19",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].P=-1.5",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=8.48",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].P=-1.5",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.04"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "EC Sao Jose",
+      "event_id": "pxNBDZmm",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 24,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 25,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 3
+        }
+      ],
+      "home": "Goiatuba",
+      "league": "BRAZIL: Serie D - Promotion - Play Offs",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3406,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3406,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3406,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "EC Sao Jose Porto Alegre",
+              "book_event_id": "749463362",
+              "book_home": "Goiatuba EC",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 126,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=5.02",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.15",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.16",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=8",
+                "AE[0].ME[3].C=1.696",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=7",
+                "AE[0].ME[4].C=11",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Sao Jose Porto Alegre",
+              "book_event_id": "749463362",
+              "book_home": "Goiatuba EC",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 110,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=5.02",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.15",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.16",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=8",
+                "AE[0].ME[3].C=1.696",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=7",
+                "AE[0].ME[4].C=3.235",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "EC Sao Jose Porto Alegre",
+              "book_event_id": "749463362",
+              "book_home": "Goiatuba EC",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 126,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=4.31",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.192",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.47",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=8",
+                "AE[0].ME[3].C=1.544",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=7",
+                "AE[0].ME[4].C=11.6",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "U. De Concepcion",
+      "event_id": "hURr4uXQ",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 24,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 25,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 3
+        }
+      ],
+      "home": "Coquimbo",
+      "league": "CHILE: Liga de Primera",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.2429,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.2429,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.2429,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "749462233",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.84,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.26",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.78",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.46",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.545",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.205",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "749462233",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.84,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.26",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.78",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.46",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.545",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.13",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Universidad de Concepcion",
+              "book_event_id": "749462233",
+              "book_home": "Coquimbo Unido",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.84,
+              "quote_count": 120,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.26",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.78",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.53",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.52",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.22",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Rancho Santana",
+      "event_id": "Ea7ced4l",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 25,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 1,
+          "minute": 28,
+          "snapshot": 3
+        }
+      ],
+      "home": "Jalapa",
+      "league": "NICARAGUA: Liga Primera - Apertura",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.2484,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.2484,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.2484,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Rancho Santana",
+              "book_event_id": "749463363",
+              "book_home": "ART Municipal Jalapa",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 76,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.41",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.77",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.36",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=7.1",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.096",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Rancho Santana",
+              "book_event_id": "749463363",
+              "book_home": "ART Municipal Jalapa",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 76,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.41",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.77",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.416",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=7.2",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.095",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Rancho Santana",
+              "book_event_id": "749463363",
+              "book_home": "ART Municipal Jalapa",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 64,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.475",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=2.675",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=2.755",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.416",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.56",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Instituto 2",
+      "event_id": "CrkJfI84",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 26,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 27,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 29,
+          "snapshot": 3
+        }
+      ],
+      "home": "Talleres Cordoba 2",
+      "league": "ARGENTINA: Reserve League - Clausura",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.6037,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.6037,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.6037,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Guayaquil City",
+      "event_id": "EDEMFL7r",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "home": "Dep. Cuenca",
+      "league": "ECUADOR: Liga Pro",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.2403,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.2403,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.2403,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "749456912",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 108,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.38",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.04",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.85",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=11.6",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.016",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "749456912",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 108,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.38",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.04",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.85",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=11.6",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.016",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Guayaquil City",
+              "book_event_id": "749456912",
+              "book_home": "Deportivo Cuenca",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 108,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.38",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=3.04",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=4.85",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=11.6",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.016",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        }
+      }
+    },
+    {
+      "away": "Guarani",
+      "event_id": "Yy0UwEFD",
+      "flashscore_states": [
+        {
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "home": "Olimpia Asuncion",
+      "league": "PARAGUAY: Copa de Primera - Clausura",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3193,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": false,
+          "matched_quote_snapshots": 3,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "749456945",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 124,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.72",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.46",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=7.94",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=4.37",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.19",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "749456945",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 124,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.72",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.46",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=7.94",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=4.37",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.19",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Club Guarani",
+              "book_event_id": "749456945",
+              "book_home": "Club Olimpia",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.965,
+              "quote_count": 124,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=2.72",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=1.46",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=7.94",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=4.37",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=1.19",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].T=7"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "FOUND_NO_CHANGE"
+        }
+      }
+    },
+    {
+      "away": "Ferretti",
+      "event_id": "rHGR0ItR",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:24:39+00:00",
+          "home_score": 1,
+          "minute": 68,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:26:08+00:00",
+          "home_score": 1,
+          "minute": 70,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-02T22:27:36+00:00",
+          "home_score": 1,
+          "minute": 71,
+          "snapshot": 3
+        }
+      ],
+      "home": "Sport Sebaco",
+      "league": "NICARAGUA: Liga Primera - Apertura",
+      "sources": {
+        "betcity": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "fonbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "leon": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "olimpbet": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "pari": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "source_error"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.0,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "source_error"
+            }
+          ],
+          "verdict": "SOURCE_ERROR"
+        },
+        "winline": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "snapshots": [
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.3961,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 1,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.3961,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 2,
+              "status": "not_found"
+            },
+            {
+              "book_away": null,
+              "book_event_id": null,
+              "book_home": null,
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.3961,
+              "quote_count": null,
+              "quote_sample": [],
+              "snapshot": 3,
+              "status": "not_found"
+            }
+          ],
+          "verdict": "NOT_FOUND"
+        },
+        "xbet_family": {
+          "flashscore_progress": true,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "snapshots": [
+            {
+              "book_away": "Walter Ferretti",
+              "book_event_id": "749453514",
+              "book_home": "Sebaco",
+              "captured_at": "2026-09-02T22:24:39+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 118,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.064",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=7.75",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=1.784",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=2.03",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=2.84",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 1,
+              "status": "matched"
+            },
+            {
+              "book_away": "Walter Ferretti",
+              "book_event_id": "749453514",
+              "book_home": "Sebaco",
+              "captured_at": "2026-09-02T22:26:08+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 110,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.075",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=7.26",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=1.904",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.896",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.2",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 2,
+              "status": "matched"
+            },
+            {
+              "book_away": "Walter Ferretti",
+              "book_event_id": "749453514",
+              "book_home": "Sebaco",
+              "captured_at": "2026-09-02T22:27:36+00:00",
+              "mapping_score": 0.93,
+              "quote_count": 110,
+              "quote_sample": [
+                "AE[0].G=2",
+                "AE[0].ME[0].C=1.064",
+                "AE[0].ME[0].G=2",
+                "AE[0].ME[0].T=7",
+                "AE[0].ME[1].C=7.75",
+                "AE[0].ME[1].G=2",
+                "AE[0].ME[1].T=8",
+                "AE[0].ME[2].C=1.904",
+                "AE[0].ME[2].G=2",
+                "AE[0].ME[2].T=7",
+                "AE[0].ME[3].C=1.896",
+                "AE[0].ME[3].G=2",
+                "AE[0].ME[3].T=8",
+                "AE[0].ME[4].C=3.2",
+                "AE[0].ME[4].G=2",
+                "AE[0].ME[4].P=-1.5"
+              ],
+              "snapshot": 3,
+              "status": "matched"
+            }
+          ],
+          "verdict": "PROVEN"
+        }
+      }
+    }
+  ],
+  "generated_at": "2026-09-02T22:28:33+00:00",
+  "initial_flashscore_live_matches": 10,
+  "snapshot_count": 3,
+  "source_coverage": {
+    "betcity": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "NOT_FOUND": 10
+      }
+    },
+    "fonbet": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      }
+    },
+    "leon": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      }
+    },
+    "olimpbet": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      }
+    },
+    "pari": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "SOURCE_ERROR": 10
+      }
+    },
+    "winline": {
+      "coverage_pct": 0.0,
+      "proven": 0,
+      "quote_events": 0,
+      "total_events": 10,
+      "verdicts": {
+        "NOT_FOUND": 10
+      }
+    },
+    "xbet_family": {
+      "coverage_pct": 90.0,
+      "proven": 7,
+      "quote_events": 9,
+      "total_events": 10,
+      "verdicts": {
+        "FOUND_NO_CHANGE": 2,
+        "NOT_FOUND": 1,
+        "PROVEN": 7
+      }
+    }
+  },
+  "source_diagnostics": {
+    "betcity": [
+      [
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://ad.betcity.ru/d/on_air/bets?rev=8&add=dep_event&template=1&ver=73&csn=786ybia"
+        }
+      ],
+      [
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://ad.betcity.ru/d/on_air/bets?rev=8&add=dep_event&template=1&ver=73&csn=i5nqbzn"
+        }
+      ],
+      [
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://ad.betcity.ru/d/on_air/bets?rev=8&add=dep_event&template=1&ver=73&csn=xxmse9c"
+        }
+      ]
+    ],
+    "fonbet": [
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��ks\u0014I�.\n��0���vFt�/�M\u0012\u0012�\b� \n�̩ci))A9�25�)(z�6\u0003��5oWwCU��\u001a���.3��k�#.�\u0012\u0012\u0012f�\u0017�_ؿ�,_\u001e\u0011���J���ۚ)I\u0011�+<<ܗ�����\u001f'6�+7Z�+��������\t��u�0���ĵ~o=����'V��f�w�rs��\u001a��\u0002۵<�r�􊥍�J��Q.�l۶l�I/����\u000e��[�ċ\"�q,\u0007�\u001fl��Ù栽r��\u0007+\u0007�����a��\u0017�7W���؟cZ����ߟhwW[\u001b-��;T/3}��\u0010.�F�\u0016���mY�\u0013�ͽ��\u001e�ی-8\u0007=\bm�n\b��\u0011�9�m���7Z��\u0010�&�g�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error timed out>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���v\u0014I�&\fߊ/~|=��\u0016��C���\u0004\u0014\u00024���y�]�BR E\u0013(�P�ԬY+�<�[YY��5�\u0003d&�dW~?�Z\u001c�\b��-�-|W�m�f\u001ea���\u0018\nQ3����n���\u000e��~����#W�+�[�\u000b�^���8�ϱ\u00179�\u0013��K���_�<��\u001c4;ݵ���N�?��\u0013�p����������v��]踮븎7�p�����B�uM�(\t<�����no0��WN7{`e_2�\u0007#�ȓ/�o�\f�=�?�v\u0012'\f�<��Xm]m�6\u0006�ev�9�\u0017�e���b07r\u001d'�\u0012��{e�Kﶅ\u0005��\u0007��Џ��8�6\u0007ݫ��+W[��\u0000���然��",
+          "state": "error",
+          "status": 200,
+          "url": "https://line04w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��kwTG�.\n��\u001c���㴨u��7IH@Y�\u001aa�ӧ�ȱ$%(�T�:3eL���\u0000l�]o��v�rcl�/Uu>�Z\\d\u000b��_���ə1#VfČX�T�\u001e�ޣ�HZ+b�X�\"f������om%k�Z�K������/�\u001bڱ�E�m��[W����_��d�tzW/&���`�\u0007;t<۷m�\u001b]���Zk'\u001d�B�q\u001c۱�х\u000bﶺ�K��u���w]������V�?�K\u0006���I\u001f�\u001cHfz�\u0017D�+_���\r{}�?ײc;\b�~��]om��?ݡ~�\u0015�v�Fp�\u0015�\b�\r\u001dێ�\u0018l�m���ݖ��m�Aj3�\"�\u0017���\u001a���{�[�a{\bS̳\u0003�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line05w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line31w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��ks\u0014I�.\n��0���vFt�/�M\u0012\u0012�\b� \n�̩ci))A9�25�)(z�6\u0003��5oWwCU��\u001a���.3��k�#.�\u0012\u0012\u0012f�\u0017�_ؿ�,_\u001e\u0011���J���ۚ)I\u0011�+<<ܗ�����\u001f'6�+7Z�+��������\t��\rM?���ĵ~o=����'V��f�w�rs��\u001a��\u0002۵<�r�􊥍�J��Q.�l۶l�I/����\u000e��[�ċ\"�q,\u0007�\u001fl��Ù栽r��\u0007+\u0007�����a��\u0017�7W���؟cZ����ߟhwW[\u001b-��;T/3}��\u0010.�F�\u0016���mY�\u0013�ͽ��\u001e�ی-8\u0007=\bm�n\b��\u0011�9�m���7Z��\u0010�&�g�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error timed out>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���v\u0014I�&\fߊ/~|=��\u0016��C���\u0004\u0014\u00024���y�]�BR E\u0013(�P�ԬY+�<�[YY��5�\u0003d&�dW~?�Z\u001c�\b��-�-|W�m�f\u001ea���\u0018\nQ3����n���\u000e��~����#W�+�[�\u000b�^���8�ϱ\u00179���^\u0014��K���_�<��\u001c4;ݵ���N�?��\u0013��\u00138��\u000f�X��Zi7;څ�뺎�x�\u000b�>lm\f.�[�䋒��\u001c/��#����`��o��n��ʾd���a\u001cy�E�͕A�'���N℡�G�\u001b���-���@��\u000e='�b��\u0012�[\f�F���^\u00026w�,w�ݶ��\u0014� �\u0019�1�\u001b'��{u�{�jk�\u001e��\u0014",
+          "state": "error",
+          "status": 200,
+          "url": "https://line04w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��mw\u0014G�.\f��Z�23�\u001e���2�$!\u0001m\u0001\u001a�K�s�Y�RR�j(Ui�J��Yg-�v���\u001b`�i\u000f`c����\u0007�\b�l!��\u000b�/�_r�ؑY\u0019�#�Tb�s�j\u000f�2#vFFF������?�ۈV����[�A��}�_\u0002�7C'\f\f#�����{룿\u0018���J4�:�k\u0017��Nk0���[�隦㌮X�h����r�iY�i���¹\u000fZ���v�xQ�ڶi����`��\u001f�D���٨\u000fV\u000e\u00043\u001d��\u0002�\u0016/��V���؟m���y�?��6Z��P���lӳ\u0003��*�[\u0000���i\u0006v\b6�֗{�n#��}�Ah�s\u0002�7\b��aoc����\u001a���7�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line05w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line31w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��ks\u0014I�.\n��0���vFt�/�M\u0012\u0012�\b� \n�̩ci))A9�25�)(z�6\u0003��5oWwCU��\u001a���.3��k�#.�\u0012\u0012\u0012f�\u0017�_ؿ�,_\u001e\u0011���J���ۚ)I\u0011�+<<ܗ�����\u001f'6�+7Z�+��������\t�ȳ\u0003����ĵ~o=����'V��f�w�rs��\u001a��\u0002۵<�r�􊥍�J��Q.�l۶l�I/����\u000e��[�ċ\"�q,���\u0013��^8�\u001c�W�7�`�@0�u]?\f\u001c���ʰ�\u0017�sL+�|���\u0013��jk�\u0005�t��e��X�\u0013�e���B07�-+t\"����ܣw��\u0005�\u0007�M�\r��0�6������Fk�\u001e�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error timed out>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���v\u0014I�&\fߊ/~|=��\u0016��C���\u0004\u0014\u00024���y�]�BR E\u0013(�P�ԬY+�<�[YY��5�\u0003d&�dW~?�Z\u001c�\b��-�-|W�m�f\u001ea���\u0018\nQ3����n���\u000e��~����#W�+�[�\u000b�^���8�ϱ\u00179I�۱\u001d��K���_�<��\u001c4;ݵ���N�?��\u0013��\u00138��\u000f�X��Zi7;څ�뺎�x�\u000b�>lm\f.�[�䋒��\u001c\u000f��_��\u00063�~{�t�\u0007V�%3}�\u000f�ȓ/�o�\f�=�?�v\u0012'\f�<��Xm]m�6\u0006�ev�9�\u0017�e���b07r\u001d'�\u0012��{e�Kﶅ\u0005��\u0007��Џ��8�6\u0007ݫ��+W[��\u0000���",
+          "state": "error",
+          "status": 200,
+          "url": "https://line04w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��mw\u0014G�.\f��Z�23�\u001e���2�$!\u0001m\u0001\u001a�K�s�Y�RR�j(Ui�J��Yg-�v���\u001b`�i\u000f`c����\u0007�\b�l!��\u000b�/�_r�ؑY\u0019�#�Tb�s�j\u000f�2#vFFF������?�ۈV����[�A��}�_\u0002�7Cױ<������{룿\u0018���J4�:�k\u0017��Nk0���[�隦㌮X�h����r�iY�i���¹\u000fZ���v�xQ�ڶi����`��\u001f�D���٨\u000fV\u000e\u00043\u001d��\u0002�\u0016/��V���؟m���y�?��6Z��P���lӳ\u0003��*�[\u0000���i\u0006v\b6�֗{�n#��}�Ah�s\u0002�7\b��aoc����\u001a���7�<",
+          "state": "error",
+          "status": 200,
+          "url": "https://line05w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line31w.bk6bba-resources.com/events/list?lang=ru&version=0&scopeMarket=1600"
+        }
+      ]
+    ],
+    "leon": [
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=; body=",
+          "state": "error",
+          "status": 200,
+          "url": "https://leonbets.ru/api-2/betline/sports?ctag=ru-RU&flags=urlv2"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=; body=",
+          "state": "error",
+          "status": 200,
+          "url": "https://leonbets.ru/api-2/betline/sports?ctag=ru-RU&flags=urlv2"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=; body=",
+          "state": "error",
+          "status": 200,
+          "url": "https://leonbets.ru/api-2/betline/sports?ctag=ru-RU&flags=urlv2"
+        }
+      ]
+    ],
+    "olimpbet": [
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000��{�\u001c�u'�U*z�\u0001#8\u001d���D�@\u0000� � /\u0001��Z+\u0018��&��`\u001aEn(�\u0014ז\u001cփ\u0014u�ZJ�,[������\u000f� (�_��\u001b�|uw=���ꩬ*R�^\u0001D�~T���S���;����������l~t�`tq�ܵ�\\}�Ƌ/�t�ƫ�\\���W/����Wo^�y�����߹z�K��z��K�=7zzt�8�\u001f]$O��M�8�O�7���L|\u001f���{��I镣���x%�/,�p���\u000f�\u001f.�,?�2�_�1�ߟ.F?P﬿���xv\"r������������\bI�\u001e���ޛ��7�\u001f!qD�$\u0016_���[�\u0007�O����/\u001f��|\u001c,",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000��}m�\u001c�u�_\u0019�'\n�6�����(�Rx-S�Hو\u0012A\u0018�cjn�����ʁ\u0001S��\u0003\\\u001b��� ���8q�O\u0006�\u0017B�\u0014Ra�\u001f�z��~9��z�U]�m��j��N�<���:�y��n~|oy�8[\u001d\u001f]�=�8��O��{���߼q�ݟ^��\u0017�^~��o\\�q���ׯ�W����5f}�굗�}�/�߽������B������}��b��������\u0005����~z���������\u0012�\u0017�8�����\u0017�g����\u001fߺ�<��B����{ǧ�3q�\u0003v��������G�\"I������{�3�\u0006q�$K�4���|r�����7�'���O",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events?vids%5B%5D=1%3A"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000��{�\u001c�u'�U*z�\u0001#8\u001d���D�@\u0000� � /\u0001��Z+\u0018��&��`\u001aEn8B$-K\u000e�EI+k)ɲl���\u000f�\u000f� (�_��\u001b�|uw=���ꩬ*R�^\u0011@�~T���S���;���������l~t�`tq���o\\}��K/�|�ƫ�\\���W/���KWo^�y������߸z�K��z��K�??zzt�8�\u001f]$O��M�8�O�7���L|\u001f���{��I镣���x%�/,�p�������O��r\u0019�/ݘ��O\u0017��S﬿���xv\"r������������\bI�\u001e���ޛ��7�\u001f!��$I���v�h�x����\u0007�\u000f��Y>\u0018",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000��}m�\u001c�u�_\u0019�'\t�6�����(�Rx-S�Hو\u0012A\u0018�cjn�����ʁ\u0001S��\u0003\\\u001b��� ���8q�O\u0006(��h)����?��6�o�TU7��K�m[^���眪�:�<O���-��OVg��+��\u0017��_��������[ׯ���+���Ko����ׯ\\���U���\\�J��^���{/��x�{W^Y��ܰO���_���O\\^�^Z�]}px������w�O�\u001a�\u001c��O�+!}a����?�~�}����b�ҵ�7�'�_�wv�s��ts�/y@����>:�t|�^$�_Z�<�sw}���/\u0012E1ɲ�}̿l�l��><�������\u000f",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events?vids%5B%5D=1%3A"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000���\u001cǕ&�*a�@���p�Xa�\u000f\b�\u0014$��K\u0014�ۚ��\u0012UI \u001b�JLV\u0015F��̸����N�FC�G�n���?4\u0003.h� \t�B�\u001b�o���q�H�{\u0004��\u001e\u0011@�\\\"�s���Y����h~w�����GW\u000eF\u0017FW��z����^zy���]����^z���+{W^ڕ�\\~��.��py���W��Ώ�M\u0017���\u000b�������|B�鿎f��\u0010�\u001fߝ/N*�\u001cM�L��+!}a���w��Y~�|����0}��|�\u0018�@��������\t��\u001d���{ӣ�K��#�#(=?ڟ߹;=�o�?�p�'�K~u����������Gg�\u0018\u0007�?.\u001f��",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000��}m�\u001c�u�_\u0019�'\u0019�\u000e�����(�Rx-�\b��\u0011%�0$���,w�ݥ�\u0003\u0003�t\u0003\u0007�\rYQ\u0010\u0004�s\u0015'\u000e��\u0000%Q�[D���t�g�圪�aWuɷm˫�3���S��N�穿��������|}r|������k?���민z�ƛ?�v��߼���ׯ޼v��+�ꕫ?�zȬ/\\;|����B���k�ϟ���\u0015b�/o�N��\u0015��g����\u001c�,��ow���'��W���Vg���������\u0017�m>�<�|�l��t�������\u0017����?9[���<`��z{u|~���1��8v~����չx����\u0014e�/��Ż�G�/7_m��|u��b����",
+          "state": "error",
+          "status": 200,
+          "url": "https://www.olimp.bet/api/v4/0/live/sports-with-competitions-with-events?vids%5B%5D=1%3A"
+        }
+      ]
+    ],
+    "pari": [
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���r\u001cG�&��J��̌�\u0006+���\r\u0000\u0001\u0012\u0012@b\b^j��mi\u0001 Ad3��N$D��ƌ\u0017�zW�DJ�.5E�\"%U�옪�\u000bD�\u0002�l?\u0001�\n�$g��L��\u001e�D�=�fZE\u0000\u0011�+<<ܗ�����\u001f�l�+W�����V��y�\u001fC'�\"�3\u001d���w�zݍ�_�xg%�������r��5��\u0015خ�Y��\u000e�X�l���r�e۶e[�������V�xQ�9��x����f�ן��Z+\u000bq\u000f��\u0012�t]�\u000f\u0003G�h6^�w{b�iE��[��N����l�:}�2�w,�\t�5�\u0010�\r\u001c�F\u00046w7���n3��=�Ah�wC�7���~ws�����",
+          "state": "error",
+          "status": 200,
+          "url": "https://line01.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��kwTG�.\n��5����)Q�~�o��\u0000[\u0002m\u0012C�>�G�DJP6)�:3eL���0�R�\\6`W�\u001b����U烫�E�\u0010H�\u0005�\u000b���\u00193\"3#fĺf����=ʍ�\u0015�\u0015+.3�|����w�\u001a�W����n���|�\u001fc/r\u0012?p|���;�����_�_����7ڝ��\u001a\u0017����\u000fN��N�8��x���\\m5�ڃ�뺎�x�\u0007\u0017>hn�Ϸ�W凒��\u001c/��;��N�?��V�\u001b]�eO�&t0�#O~h����t��<�I�0t~�Nks��Մ�l�����sB/��.������cu$�����\u000e-m�\u001e�\u0007-Hu�~\fe�\u0004��w��;\u001b[�~�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��msTG�/�~�\u001d~qgN�\u0011��\u001f�$$�-@�d�3�'*J�@5\u0014U:U%c�ĉ��n{n?\u0001vO�\u0001lll�t�\r��\u0007�\u0002!\u0011��\u0004�\u0015�'�+W��\\���T�_4mI{g��;w�ʵ~�����m6ׯ���[�A��}�\u001fc/r\u0012?p\u0013����.�{WG��כ�f�wy���i\rFp\"�w\u0002����\u0015+���v��]踮븎7�p�Vwx�ݺ&_�\u0004��x�?�7����s�A{�t�\u000fV\u000e$3}�\u000f�ȓ/Zl�\u000f{}�?�v\u0012'\f�x�ݽ��l�?ݡ~�\u001dzN��p�%�\u0018̍<�F\u00026�����ݶ��}�Aj3�c�7N��aos�wu�5l\u000f�o�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line31.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���r\u001cG�&��J��̌�\u0006+���\r\u0000\u0001\u0012\u0012@b\b^j��mi\u0001 Ad3��N$D��ƌ\u0017�zW�DJ�.5E�\"%U�옪�\u000bD�\u0002�l?\u0001�\n�$g��L��\u001e�D�=�fZE\u0000\u0011�+<<ܗ�����\u001f�l�+W�����V��y�\u001fC'�\"7�|���w�zݍ�_�xg%�������r��5��\u0015خ�Y��\u000e�X�l���r�e۶e[�������V�xQ�9��@�[��^*�j�,�=�rK0�u]?\f\u001c��x����9�\u0015Y�o��;��js�\t�����L߱|'�����B07pX\u001b\u0011���X�һ�Ă��\u0007�M�\r��0�6������f�����",
+          "state": "error",
+          "status": 200,
+          "url": "https://line01.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��kwTG�.\n��5����)Q�~�o��\u0000[\u0002m\u0012C�>�G�DJP6)�:3eL���0�R�\\6`W�\u001b����U烫�E�\u0010H�\u0005�\u000b���\u00193\"3#fĺf����=ʍ�\u0015�\u0015+.3�|����w�\u001a�W����n���|�\u001fc/r���#���;�����_�_����7ڝ��\u001a\u0017����\u000fN��N�8�?|���\\m5�ڃ�뺎˪\u0016\u000f.|���o5��\u000f%��9^�wz[�n��k�.7��˞�M���8��\u0016\u001b��NWnϳ��\tC�W�6ך[M��f_�\u000e='�bx�\u0012�[\fݍ<VG\u0002}�l\\��Ҷ��{ЂTg��P6N��~gk�������7�{Nh",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��msTG�/�~�\u001d~qgN�\u0011��\u001f�$$�-@�d�3�'*J�@5\u0014U:U%c�ĉ��n{n?\u0001vO�\u0001lll�t�\r��\u0007�\u0002!\u0011��\u0004�\u0015�'�+W��\\���T�_4mI{g��;w�ʵ~�����m6ׯ���[�A��}�\u001fc/r��vm;���.�{WG�������]^m�uZ��\u001f�����q|t��fk���h\u0017:��:��.\\���\u001d�o���\u0017%��9\u001e�?����s�A{�t�\u000fV\u000e$3}�\u000f�ȓ/Zl�\u000f{}�?�v\u0012'\f�x�ݽ��l�?ݡ~�\u001dzN��p�%�\u0018̍<�F\u00026�����ݶ��}�Aj3�c�7N��aos�wu�5l",
+          "state": "error",
+          "status": 200,
+          "url": "https://line31.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000���r\u001cG�&��J��̌�\u0006+���\r\u0000\u0001\u0012\u0012@b\b^j��mi\u0001 Ad3��N$D��ƌ\u0017�zW�DJ�.5E�\"%U�옪�\u000bD�\u0002�l?\u0001�\n�$g��L��\u001e�D�=�fZE\u0000\u0011�+<<ܗ�����\u001f�l�+W�����V��y�\u001fC'�\"�uL���w�zݍ�_�xg%�������r��5��\u0015خ�Y��\u000e�X�l���r�e۶e[�������V�xQ�9��@�[��^*�j�,�=�rK0�u]?\f\u001c��x����9�\u0015Y�o��;��js�\t�����L߱|'�����B07pX\u001b\u0011���X�һ�Ă��\u0007�M�\r��0�6������f�����",
+          "state": "error",
+          "status": 200,
+          "url": "https://line01.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��kwTG�.\n��5����iQ�~�o��\u0000[\u0002m\u0012C�>�G�DJP\u0016)�:3eL���0�R�\\6`W�\u001b����U烫�E�\u0010H�\u0005�\u000b���\u00193\"3#fĺf����=ʍ�\u0015�\u0015+.3�|����w�\u001a�W����n���|�b/r��\u000f�8��w.u;\u001bÿ����j��hw.�k\\l7{�?8��;�������Vs��hk\u000f:��:��\r\u001f\\����?�j^�\u001fJ\u0002�s<h������\u001a���r�\u000b��I��}?�#O~h����t��<�I�0t����Zs�\t����١�^\f�]\"������H�ϝ��\u001dZ�\u0016=x\u000fZ��\f�\u0018��\t���l�w6���",
+          "state": "error",
+          "status": 200,
+          "url": "https://line02.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+          "state": "error",
+          "status": 0,
+          "url": "https://line03.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=application/json; charset=utf-8; body=\u001f�\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000��msTG�/�~�\u001d~qgN�\u0011��\u001f�$$�-@�d�3�'*J�@5\u0014U:U%c�ĉ��n{n?\u0001vO�\u0001lll�t�\r��\u0007�\u0002!\u0011��\u0004�\u0015�'�+W��\\���T�_4mI{g��;w�ʵ~�����m6ׯ���[�A��}�\u001fc/r����0���.�{WG�������]^m�uZ��\u001f�����q|t��fk���h\u0017:��:��.\\���\u001d�o���\u0017%��9^�\u000f�\r6{��\\s�^?�샕\u0003�L���8��\u0016���^_�ϳ��\tC�\u001f�kw/�6[�Ow�_f��\u0013z1\\v��-\u0006s#��\u0001ñ޻�֣w���\u0007��Џ��8�6�������ְ=�",
+          "state": "error",
+          "status": 200,
+          "url": "https://line31.pb06e2-resources.com/events/list?lang=ru&version=0&scopeMarket=2300"
+        }
+      ]
+    ],
+    "winline": [
+      [
+        {
+          "state": "ok",
+          "status": 101,
+          "url": "wss://wss.winline.ru/data_ng"
+        }
+      ],
+      [
+        {
+          "state": "ok",
+          "status": 101,
+          "url": "wss://wss.winline.ru/data_ng"
+        }
+      ],
+      [
+        {
+          "state": "ok",
+          "status": 101,
+          "url": "wss://wss.winline.ru/data_ng"
+        }
+      ]
+    ],
+    "xbet_family": [
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n<link rel=\"stylesheet\" href=\"/sys-static/shared-assets/Desktop/__shared_css_16102c.css\" crossorigin>\n<script type=\"module\" src=\"/sys-static/sys-tec",
+          "state": "error",
+          "status": 203,
+          "url": "https://1xbet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://1xbet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><script>window.cdn={cdnURL:\"https://v3.traincdn.com\",scripts:[{\"type\":\"module\",\"src\":\"/sys-static/sys-technical-pages-app-static/Desktop/Other/entry-f60952932d.js\",\"crossorigin\":true}]};(()=>{var f;const c=document,s=(f=window.cdn)!=null?f:window.cdn={},{cdnU",
+          "state": "error",
+          "status": 203,
+          "url": "https://linebet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://linebet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n<link rel=\"stylesheet\" href=\"/sys-static/shared-assets/Desktop/__shared_css_16102c.css\" crossorigin>\n<script type=\"module\" src=\"/sys-static/sys-tec",
+          "state": "error",
+          "status": 203,
+          "url": "https://1xbet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://1xbet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><script>window.cdn={cdnURL:\"https://v3.traincdn.com\",scripts:[{\"type\":\"module\",\"src\":\"/sys-static/sys-technical-pages-app-static/Desktop/Other/entry-f60952932d.js\",\"crossorigin\":true}]};(()=>{var f;const c=document,s=(f=window.cdn)!=null?f:window.cdn={},{cdnU",
+          "state": "error",
+          "status": 203,
+          "url": "https://linebet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://linebet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        }
+      ],
+      [
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n<link rel=\"stylesheet\" href=\"/sys-static/shared-assets/Desktop/__shared_css_16102c.css\" crossorigin>\n<script type=\"module\" src=\"/sys-static/sys-tec",
+          "state": "error",
+          "status": 203,
+          "url": "https://1xbet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://1xbet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&partner=51&getEmpty=true"
+        },
+        {
+          "error": "non_json:JSONDecodeError; ct=text/html;charset=utf-8; body=<!DOCTYPE html><html  data-capo=\"\"><head><script>window.cdn={cdnURL:\"https://v3.traincdn.com\",scripts:[{\"type\":\"module\",\"src\":\"/sys-static/sys-technical-pages-app-static/Desktop/Other/entry-f60952932d.js\",\"crossorigin\":true}]};(()=>{var f;const c=document,s=(f=window.cdn)!=null?f:window.cdn={},{cdnU",
+          "state": "error",
+          "status": 203,
+          "url": "https://linebet.com/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        },
+        {
+          "error": null,
+          "state": "ok",
+          "status": 200,
+          "url": "https://linebet.com/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=87&partner=189&getEmpty=true"
+        }
+      ]
+    ]
+  },
+  "source_states": {
+    "betcity": [
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "fonbet": [
+      "error",
+      "error",
+      "error"
+    ],
+    "leon": [
+      "error",
+      "error",
+      "error"
+    ],
+    "olimpbet": [
+      "error",
+      "error",
+      "error"
+    ],
+    "pari": [
+      "error",
+      "error",
+      "error"
+    ],
+    "winline": [
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "xbet_family": [
+      "ok",
+      "ok",
+      "ok"
+    ]
+  },
+  "source_summary": {
+    "betcity": {
+      "NOT_FOUND": 10
+    },
+    "fonbet": {
+      "SOURCE_ERROR": 10
+    },
+    "leon": {
+      "SOURCE_ERROR": 10
+    },
+    "olimpbet": {
+      "SOURCE_ERROR": 10
+    },
+    "pari": {
+      "SOURCE_ERROR": 10
+    },
+    "winline": {
+      "NOT_FOUND": 10
+    },
+    "xbet_family": {
+      "FOUND_NO_CHANGE": 2,
+      "NOT_FOUND": 1,
+      "PROVEN": 7
+    }
+  },
+  "strict_rule": "PROVEN requires >=2 quote-bearing snapshots, Flashscore minute/score progress, and changed bookmaker quote fingerprint for same matched event."
+}

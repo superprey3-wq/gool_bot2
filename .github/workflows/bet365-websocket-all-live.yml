@@ -1,0 +1,115 @@
+name: bet365-websocket-all-live
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bet365-websocket-all-live.yml"
+      - "scripts/bet365_ws_flashscore_audit.py"
+
+permissions:
+  contents: write
+
+jobs:
+  bet365-ws:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GOOL and Bet365 runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . flask flask-cors pytz
+          sudo apt-get update
+          sudo apt-get install -y xvfb curl
+          git clone --depth 1 https://github.com/joe-bring/bet365-scraper.git /tmp/bet365-scraper
+          mkdir -p bet365_ws_results
+
+      - name: Start Bet365 local parser API
+        run: |
+          nohup python /tmp/bet365-scraper/local_api.py > bet365_ws_results/local_api.log 2>&1 &
+          echo $! > bet365_ws_results/local_api.pid
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8485/sports >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -sS http://127.0.0.1:8485/sports > bet365_ws_results/sports_before.json || true
+
+      - name: Launch Bet365 in Chrome with websocket hook extension
+        run: |
+          EXT=/tmp/bet365-scraper/chrome_extention
+          PROFILE=/tmp/bet365-profile
+          rm -rf "$PROFILE"
+          mkdir -p "$PROFILE"
+          nohup xvfb-run -a google-chrome \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --disable-extensions-except="$EXT" \
+            --load-extension="$EXT" \
+            --user-data-dir="$PROFILE" \
+            --window-size=1440,1100 \
+            'https://www.bet365.com/#/IP/B1' \
+            > bet365_ws_results/chrome.log 2>&1 &
+          echo $! > bet365_ws_results/chrome.pid
+          sleep 30
+          curl -sS http://127.0.0.1:8485/sports > bet365_ws_results/sports_after_launch.json || true
+          curl -sS 'http://127.0.0.1:8485/live?sport=1' > bet365_ws_results/live_after_launch.json || true
+
+      - name: Audit three WebSocket snapshots against all GOOL Flashscore live matches
+        continue-on-error: true
+        run: |
+          python scripts/bet365_ws_flashscore_audit.py \
+            --api 'http://127.0.0.1:8485/live?sport=1' \
+            --output bet365_ws_results/summary.json \
+            --snapshots 3 \
+            --interval 35 \
+            --limit 1000
+
+      - name: Persist latest WebSocket result
+        if: always()
+        run: |
+          if [ -f bet365_ws_results/summary.json ]; then
+            mkdir -p reports/bet365_ws
+            cp bet365_ws_results/summary.json reports/bet365_ws/latest-summary.json
+            git config user.name 'gool-bot2-actions'
+            git config user.email 'gool-bot2-actions@users.noreply.github.com'
+            git add reports/bet365_ws/latest-summary.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'chore: update Bet365 websocket audit report'
+              git push
+            fi
+          fi
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo '## Bet365 OVInPlay WebSocket → GOOL Flashscore' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f bet365_ws_results/summary.json ]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          d=json.loads(Path('bet365_ws_results/summary.json').read_text())
+          print(json.dumps({k:d.get(k) for k in ['generated_at','unique_flashscore_live_matches','bet365_event_counts','source_errors','verdict_counts']}, indent=2))
+          PY
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No summary produced. Browser/API logs are in the artifact.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Bet365 websocket diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bet365-websocket-all-live
+          path: bet365_ws_results/
+          if-no-files-found: warn
+          retention-days: 7

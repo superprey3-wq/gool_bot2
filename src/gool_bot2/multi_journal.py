@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from .journal import load_signal_journal, save_signal_journal
 from .multi_bank import apply_settlement_fields, attach_entry_fields, ensure_bank_fields
 from .multi_router import RouterDecision
+from .signal_cards import flashscore_meta, stats_snapshot
 
 
 def _now() -> str:
@@ -60,9 +62,10 @@ def entry_from_decision(
     if not match_id:
         return None
     score = _score(record)
+    mode = "active" if str(os.getenv("GOOL_MULTI_TELEGRAM_MODE", "shadow")).strip().lower() == "active" else "shadow"
     return {
         "created_at": _now(),
-        "mode": "shadow",
+        "mode": mode,
         "head": "multi",
         "match_id": match_id,
         "home": match.get("home"),
@@ -93,6 +96,9 @@ def entry_from_decision(
         "expert_blocks": list(winner.expert_blocks),
         "experts": experts,
         "alternatives": [row.to_dict() for row in decision.alternatives],
+        "flashscore_meta": flashscore_meta(record),
+        "stats_snapshot": stats_snapshot(record),
+        "cards": dict(record.get("cards") or {}),
         "result": "pending",
         "profit_units": None,
     }
@@ -251,6 +257,10 @@ def settle_multi_journal(record: dict[str, Any], journal_path: Path) -> list[dic
     changed: list[dict[str, Any]] = []
     for row in rows:
         if settle_entry(row, record):
+            row["settled_stats_snapshot"] = stats_snapshot(record)
+            row["settled_cards"] = dict(record.get("cards") or {})
+            if not row.get("flashscore_meta"):
+                row["flashscore_meta"] = flashscore_meta(record)
             apply_settlement_fields(row)
             changed.append(dict(row))
     if changed or bank_changed:

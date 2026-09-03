@@ -6,12 +6,12 @@ on:
       - feature/gool-multi-router
     paths:
       - 'scripts/gool_multi_live_audit.py'
-      - 'scripts/xbet_first_half_probe.py'
       - 'src/gool_bot2/multi_*.py'
       - 'src/gool_bot2/xbet_market_pressure.py'
       - 'src/gool_bot2/xbet_market_robust.py'
       - 'src/gool_bot2/xbet_market_worker.py'
       - 'src/gool_bot2/providers/flashscore.py'
+      - 'tests/test_multi_router.py'
       - 'tests/test_xbet_market_robust.py'
       - '.github/workflows/gool-multi-live-audit.yml'
   workflow_dispatch:
@@ -36,15 +36,11 @@ jobs:
       - name: Unit safety check for Multi Bot
         run: pytest -q tests/test_multi_router.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_xbet_market_robust.py
 
-      - name: Probe live 1xBet first-half market structure
-        env:
-          XBET_MATCH_MIN_SCORE: '0.68'
-        run: python scripts/xbet_first_half_probe.py
-
-      - name: Capture all current Flashscore LIVE and merged 1xBet markets
+      - name: Capture current Flashscore LIVE and standard 1xBet markets
         env:
           XBET_MATCH_MIN_SCORE: '0.68'
           XBET_GAME_WORKERS: '8'
+          XBET_INDEX_CACHE_SECONDS: '75'
         run: python scripts/gool_multi_live_audit.py --snapshots 3 --interval 15 --out-dir artifacts/gool_multi_live_audit
 
       - name: Show report in job summary

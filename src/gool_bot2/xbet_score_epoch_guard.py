@@ -12,7 +12,14 @@ from . import xbet_market_pressure as market
 
 
 def extract_xbet_score(game: dict[str, Any] | None) -> tuple[int, int] | None:
-    """Return the bookmaker's full-time live score from GetGameZip SC.FS."""
+    """Return the bookmaker live score from GetGameZip ``SC.FS``.
+
+    1xBet suppresses zero-valued sides in many football responses: ``{}`` means
+    0:0, ``{"S1": 3}`` means 3:0 and ``{"S2": 1}`` means 0:1. Treat a missing
+    S1/S2 inside an otherwise valid FS dictionary as zero, while still rejecting
+    a missing/non-dict FS object. Score/timeline guards then independently catch
+    any disagreement with Flashscore before a market can become actionable.
+    """
     if not isinstance(game, dict):
         return None
     sc = game.get("SC")
@@ -22,7 +29,8 @@ def extract_xbet_score(game: dict[str, Any] | None) -> tuple[int, int] | None:
     if not isinstance(fs, dict):
         return None
     try:
-        home = int(fs.get("S1")); away = int(fs.get("S2"))
+        home = int(fs.get("S1", 0) or 0)
+        away = int(fs.get("S2", 0) or 0)
     except (TypeError, ValueError):
         return None
     return (home, away) if home >= 0 and away >= 0 else None

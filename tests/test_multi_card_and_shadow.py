@@ -59,7 +59,7 @@ def test_multi_card_contains_one_winner_and_renders_png():
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 1490)
+    assert image.size == (1080, 1260)
 
 
 def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):

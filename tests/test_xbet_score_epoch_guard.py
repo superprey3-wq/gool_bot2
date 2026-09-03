@@ -35,6 +35,13 @@ def test_extracts_bookmaker_full_score():
     assert extract_xbet_score({}) is None
 
 
+def test_extracts_zero_suppressed_bookmaker_score():
+    assert extract_xbet_score({"SC": {"FS": {}}}) == (0, 0)
+    assert extract_xbet_score({"SC": {"FS": {"S1": 3}}}) == (3, 0)
+    assert extract_xbet_score({"SC": {"FS": {"S2": 1}}}) == (0, 1)
+    assert extract_xbet_score({"SC": {"FS": None}}) is None
+
+
 def test_goal_seen_by_xbet_before_flashscore_blocks_repricing(tmp_path):
     obj = _collector(tmp_path, fs_score=(0, 0), xbet_score=(1, 0))
     state = _collect_once_score_safe(obj)

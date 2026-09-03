@@ -5,8 +5,9 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from . import telegram
-from .multi_card import render_multi_card, render_multi_result_card
+from .multi_card import render_multi_result_card
 from .multi_router import RouterDecision
+from .multi_steam_card import is_strong_steam, render_multi_signal_card
 
 
 ACTIVE_MODE = "active"
@@ -44,9 +45,10 @@ def _signal_source(entry: dict[str, Any]) -> str:
     return str(entry.get("signal_source") or "GOOL")
 
 
-def _signal_caption(entry: dict[str, Any]) -> str:
+def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str:
+    title = "🔥 <b>GOOL MULTI · СИЛЬНЫЙ ПРОГРУЗ</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
     return (
-        "🎯 <b>GOOL MULTI · BEST BET</b>\n"
+        f"{title}\n"
         f"{entry.get('home','?')} — {entry.get('away','?')}\n"
         f"{int(entry.get('minute') or 0)}' · {int((entry.get('score') or [0,0])[0])}:{int((entry.get('score') or [0,0])[1])}\n"
         f"<b>{entry.get('market','?')} @ {float(entry.get('odd') or 0):.2f}</b>\n"
@@ -88,18 +90,22 @@ def emit_multi_signal(
         return 0
     active_entry = dict(entry)
     active_entry["mode"] = "active"
-    caption = _signal_caption(active_entry)
+    strong_steam = is_strong_steam(decision)
+    caption = _signal_caption(active_entry, strong_steam=strong_steam)
     sent = 0
     try:
         sent = telegram.broadcast_photo(
-            render_multi_card(record, decision, entry=active_entry, market_row=market_row),
+            render_multi_signal_card(record, decision, entry=active_entry, market_row=market_row),
             caption=caption,
         )
     except Exception as exc:
         print(f"GOOL_MULTI_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
     if sent == 0:
         sent = telegram.broadcast(caption)
-    print(f"GOOL_MULTI_SIGNAL_SENT match={entry.get('match_id')} sent={sent}", flush=True)
+    print(
+        f"GOOL_MULTI_SIGNAL_SENT match={entry.get('match_id')} sent={sent} strong_steam={int(strong_steam)}",
+        flush=True,
+    )
     return sent
 
 

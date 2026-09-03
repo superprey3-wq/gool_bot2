@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .market_override_policy import can_override_another_goal, decorate_market_info
-from .value_bet_policy import attach_value
+from .value_bet_policy import ABSOLUTE_MIN_BET_ODD, attach_value
 from .xbet_market_pressure import evaluate_system
 
 
@@ -468,7 +468,7 @@ def score_candidate(candidate: MarketCandidate, minute: int) -> MarketCandidate:
     elif candidate.market_age_seconds > max_age:
         candidate.blocks.append(f"market_stale:{candidate.market_age_seconds:.1f}>{max_age:.1f}")
 
-    if candidate.odd < 1.25:
+    if candidate.odd < ABSOLUTE_MIN_BET_ODD:
         candidate.blocks.append("price_too_low")
     if candidate.data_quality < 0.35:
         candidate.blocks.append("data_quality_too_low")

@@ -3,11 +3,68 @@ from __future__ import annotations
 from pathlib import Path
 
 from gool_bot2 import xbet_market_pressure as market
-from gool_bot2.xbet_market_robust import RobustXBetMarketCollector
+from gool_bot2.xbet_market_robust import RobustXBetMarketCollector, decode_standard_markets
 
 
 def _payload(*events):
     return {"Value": [{"I": event_id, "O1": home, "O2": away} for event_id, home, away in events]}
+
+
+def test_decode_standard_markets_keeps_x5_and_real_first_half_subgame():
+    game = {
+        "GE": [{
+            "G": 4,
+            "E": [
+                [
+                    {"T": 9, "P": 1.5, "C": 1.40, "G": 4},
+                    {"T": 9, "P": 2.0, "C": 1.85, "G": 4},
+                    {"T": 9, "P": 2.5, "C": 2.40, "G": 4},
+                ],
+                [
+                    {"T": 10, "P": 1.5, "C": 2.70, "G": 4},
+                    {"T": 10, "P": 2.0, "C": 1.80, "G": 4},
+                    {"T": 10, "P": 2.5, "C": 1.45, "G": 4},
+                ],
+            ],
+        }],
+        "SG": [
+            {
+                "P": 1,
+                "PN": "1st half",
+                "GE": [{
+                    "G": 4,
+                    "E": [
+                        [
+                            {"T": 9, "P": 0.5, "C": 1.28, "G": 4},
+                            {"T": 9, "P": 1.0, "C": 2.10, "G": 4},
+                            {"T": 9, "P": 1.5, "C": 3.20, "G": 4},
+                        ],
+                        [
+                            {"T": 10, "P": 0.5, "C": 3.40, "G": 4},
+                            {"T": 10, "P": 1.0, "C": 1.62, "G": 4},
+                            {"T": 10, "P": 1.5, "C": 1.30, "G": 4},
+                        ],
+                    ],
+                }],
+            },
+            {
+                "P": 2,
+                "PN": "2nd half",
+                "GE": [{
+                    "G": 4,
+                    "E": [[{"T": 9, "P": 0.5, "C": 1.50, "G": 4}], [{"T": 10, "P": 0.5, "C": 2.20, "G": 4}]],
+                }],
+            },
+        ],
+    }
+
+    decoded = decode_standard_markets(game)
+
+    assert [row["line"] for row in decoded["match_total"]] == [1.5, 2.5]
+    assert [row["line"] for row in decoded["first_half_total"]] == [0.5, 1.5]
+    assert all(row["line"] != 1.0 for row in decoded["first_half_total"])
+    assert decoded["first_half_total"][0]["over"] == 1.28
+    assert decoded["first_half_total"][0]["under"] == 3.40
 
 
 def test_fetch_index_merges_partial_roots(monkeypatch, tmp_path: Path):
@@ -68,7 +125,6 @@ def test_empty_index_cycle_reuses_recent_ids_but_not_old_market_data(monkeypatch
     assert root is not None
     assert collector._index_cache_used is True
     assert collector._index_cache_age_seconds is not None
-    # Candidate ids are cached, but the market/game payload is still requested live.
     assert collector._game("42") is not None
 
 

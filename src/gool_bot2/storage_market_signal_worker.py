@@ -60,7 +60,22 @@ def _set_value(record: dict[str, Any], head: str, probability: Any, source: str)
 
 def _attach(record: dict[str, Any]) -> None:
     confirmations = record.setdefault("xbet_market", {})
-    confirmations["another_goal"] = _eval(record, "another_goal")
+    another = _eval(record, "another_goal")
+    confirmations["another_goal"] = another
+
+    # goal_before_ht already has its own trained model + GOOL 1T analysis. We do
+    # not pretend the full-match dynamic total is an exact first-half market; it
+    # is only a fresh bookmaker-pressure confirmation for the next goal.
+    first_half = dict(another)
+    first_half.update({
+        "head": "goal_before_ht",
+        "market_reference": "next_goal_full_match_total",
+        "market_reference_only": True,
+        "override": False,
+        "value_bet": False,
+        "value_override": False,
+    })
+    confirmations["goal_before_ht"] = first_half
     confirmations["two_more_goals"] = _eval(record, "two_more_goals")
     row = _market_row(record)
     confirmations["source"] = None if row is None else {"xbet_event_id": row.get("xbet_event_id"), "captured_at": row.get("captured_at")}
@@ -178,8 +193,24 @@ def _two_more(record: dict[str, Any]) -> dict[str, Any]:
 
 def _model_gate(head: str, probability: float, score: float) -> GateResult:
     gate = _ORIG_MODEL_GATE(head, probability, score)
-    if head != "another_goal":
+    if head not in {"another_goal", "goal_before_ht"}:
         return gate
+
+    if head == "goal_before_ht":
+        info = _confirmation(head)
+        if not _required():
+            return gate
+        reasons = tuple(gate.reasons)
+        if not info.get("override_fresh"):
+            return GateResult(False, reasons + ("xbet_market_not_fresh",))
+        if not info.get("override_price_ok"):
+            odd = info.get("override_primary_odd")
+            odd_text = "NA" if odd is None else f"{float(odd):.2f}"
+            return GateResult(False, reasons + (f"xbet_market_low_odd:{odd_text}<{float(info.get('override_min_odd') or 1.40):.2f}",))
+        if info.get("confirmed"):
+            return gate
+        return GateResult(False, reasons + (f"xbet_market_not_confirmed:{info.get('level','NO_DATA')}",))
+
     if _CURRENT:
         info = _set_value(_CURRENT, head, probability, "blended_probability")
     else:
@@ -257,6 +288,8 @@ def _source(info: dict[str, Any], fallback: str) -> str:
         return "xbet_value_override"
     if info.get("value_bet"):
         return "xbet_value_bet"
+    if info.get("market_reference_only") and info.get("confirmed"):
+        return "gool_xbet_confirmed"
     return fallback
 
 
@@ -268,7 +301,7 @@ def _save(path: Path, rows: list[dict[str, Any]]) -> None:
             if str(row.get("match_id") or "") != mid:
                 continue
             head = str(row.get("head") or "")
-            if head in {"another_goal", "two_more_goals"}:
+            if head in {"another_goal", "goal_before_ht", "two_more_goals"}:
                 info = dict(market.get(head) or row.get("xbet_market") or {})
                 row["xbet_market"] = info
                 row["xbet_market_required"] = _required()

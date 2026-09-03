@@ -28,19 +28,18 @@ def test_expert_adapter_reuses_current_gool_outputs_without_fabrication():
 
 def test_multi_card_contains_one_winner_and_renders_png():
     winner = MarketCandidate(
-        key="match_total:4", family="asian_match_total", label="ТБ 4", odd=1.60,
-        model_probability=0.55, push_probability=0.27, goals_to_win=2,
-        correlation_key="two_goal_path", data_quality=0.92, rating=87.0,
+        key="match_total:4.5", family="match_total", strategy="two_more_goals", label="ТБ 4.5", odd=1.60,
+        model_probability=0.55, goals_to_win=2, correlation_key="two_goal_path", data_quality=0.92, rating=87.0,
         expected_roi=0.15, value_edge_pp=9.4, market_pressure_pp=6.5,
     )
     alt = MarketCandidate(
-        key="match_total:3.5", family="match_total", label="ТБ 3.5", odd=1.30,
+        key="match_total:3.5", family="match_total", strategy="another_goal", label="ТБ 3.5", odd=1.40,
         model_probability=0.82, goals_to_win=1, correlation_key="any_next_goal",
         data_quality=0.92, rating=79.0, expected_roi=0.06, value_edge_pp=5.1,
     )
     decision = RouterDecision(
         status="BET", minute=54, score=(1, 2), winner=winner, alternatives=[alt], rejected=[],
-        reason="Лучший баланс VALUE и вероятности: средняя линия даёт защиту возвратом.",
+        reason="Лучший баланс VALUE, вероятности и LIVE-рынка.",
     )
     record = {
         "match": {
@@ -60,7 +59,7 @@ def test_multi_card_contains_one_winner_and_renders_png():
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 1260)
+    assert image.size == (1080, 1490)
 
 
 def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):
@@ -80,15 +79,15 @@ def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):
         "score_away": 2,
         "markets": {
             "match_total": [
-                {"line": 3.5, "over": 1.35, "under": 3.00},
-                {"line": 4.0, "over": 1.65, "under": 2.10},
+                {"line": 3.5, "over": 1.40, "under": 3.00},
                 {"line": 4.5, "over": 2.00, "under": 1.75},
             ],
+            "first_half_total": [],
             "home_total": [],
             "away_total": [],
             "btts": {},
         },
-        "pressure": {"match_total:4.0": {"prob_delta_pp": 6.0}},
+        "pressure": {"match_total:4.5": {"prob_delta_pp": 6.0}},
     }
     journal = tmp_path / "multi-shadow.jsonl"
 

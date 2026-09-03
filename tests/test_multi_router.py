@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from gool_bot2.multi_router import analyze_multi_match, build_goal_market_candidates, route_market
+
+
+def _fresh() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _market_row() -> dict:
     return {
         "score_home": 1,
         "score_away": 2,
+        "captured_at": _fresh(),
         "markets": {
             "match_total": [
                 {"line": 3.5, "over": 1.30, "under": 3.35},
@@ -74,6 +81,7 @@ def test_btts_and_scoreless_team_total_share_one_correlation_slot():
     market = {
         "score_home": 1,
         "score_away": 0,
+        "captured_at": _fresh(),
         "markets": {
             "match_total": [{"line": 1.5, "over": 1.42, "under": 2.70}],
             "home_total": [{"line": 1.5, "over": 1.85, "under": 1.90}],

@@ -1,21 +1,10 @@
 from __future__ import annotations
 
 import html
-from collections import Counter
 from typing import Any
 
 from .multi_menu import _latest_analysis
-from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
 
-
-_EXPERT_LABELS = {
-    "another_goal": "AG",
-    "goal_before_ht": "1Т",
-    "two_more_goals": "+2",
-    "home_goal": "H",
-    "away_goal": "A",
-    "btts": "ОЗ",
-}
 
 _STRATEGY_EXPERT = {
     "another_goal": "another_goal",
@@ -25,8 +14,6 @@ _STRATEGY_EXPERT = {
     "away_goal": "away_goal",
     "both_teams_to_score": "btts",
 }
-
-_CATEGORY_ORDER = ("GOOL", "PRICE", "VALUE", "RATING", "FRESH", "DATA", "TIME", "EVENT", "1XBET")
 
 
 def _h(value: Any) -> str:
@@ -47,166 +34,6 @@ def _metric(expert: dict[str, Any], key: str) -> str:
     return "probability" if key in {"another_goal", "goal_before_ht"} else "confidence"
 
 
-def _expert_value_text(expert: dict[str, Any], key: str) -> str:
-    value = _num(expert.get("probability"))
-    if value is None:
-        return "—"
-    if _metric(expert, key) == "confidence":
-        return f"C{value * 100:.0f}/100"
-    return f"P{value * 100:.0f}%"
-
-
-def _expert_summary(experts: dict[str, Any]) -> str:
-    out: list[str] = []
-    for key, label in _EXPERT_LABELS.items():
-        expert = experts.get(key) or {}
-        if expert.get("probability") is None:
-            continue
-        mark = "✓" if bool(expert.get("passed", True)) else "×"
-        out.append(f"{label} {_expert_value_text(expert, key)}{mark}")
-    return " · ".join(out) or "экспертных оценок нет"
-
-
-def _context_line(row: dict[str, Any]) -> str:
-    context = row.get("context") or {}
-    prematch = context.get("prematch") or {}
-    live = context.get("live") or {}
-    if prematch.get("available"):
-        pre = (
-            f"PRE история H{int(prematch.get('home_recent') or 0)}/A{int(prematch.get('away_recent') or 0)}"
-            f" · дом/выезд {int(prematch.get('home_at_home') or 0)}/{int(prematch.get('away_away') or 0)}"
-            f" · H2H {int(prematch.get('h2h') or 0)}"
-        )
-    else:
-        pre = "PRE нет данных"
-    xg = _num(live.get("xg_total"))
-    shots = _num(live.get("shots_total"))
-    sot = _num(live.get("sot_total"))
-    dq = _num(row.get("data_quality"))
-    live_text = (
-        f"LIVE xG {'—' if xg is None else f'{xg:.2f}'}"
-        f" · уд {'—' if shots is None else f'{shots:.0f}'}"
-        f" · в створ {'—' if sot is None else f'{sot:.0f}'}"
-    )
-    if dq is not None:
-        live_text += f" · DQ {dq:.2f}"
-    return f"{pre}\n{live_text}"
-
-
-def _expert_block_text(block: str) -> str:
-    raw = str(block or "")
-    prefix = ""
-    if raw.startswith("prematch:"):
-        prefix, raw = "PRE: ", raw.split(":", 1)[1]
-    elif raw.startswith("live:"):
-        prefix, raw = "LIVE: ", raw.split(":", 1)[1]
-    elif raw.startswith("home:"):
-        prefix, raw = "HOME: ", raw.split(":", 1)[1]
-    elif raw.startswith("away:"):
-        prefix, raw = "AWAY: ", raw.split(":", 1)[1]
-
-    exact = {
-        "history": "мало prematch-истории",
-        "avg_goals": "низкий prematch avg goals",
-        "too_many_0_1_goal_games": "слишком много матчей на 0–1 гол",
-        "prematch_score": "prematch score ниже порога",
-        "no_recent_threat": "нет свежей угрозы",
-        "no_quality_threat": "нет качественной угрозы",
-        "recent_not_ready": "ещё не накоплены 5m LIVE-данные",
-        "side_pressure_low": "давление команды ниже порога",
-        "side_evidence_low": "мало LIVE-показателей команды",
-        "side_no_recent_threat": "нет свежей угрозы команды",
-        "side_no_quality_threat": "нет качественной угрозы команды",
-        "side_prematch_scoring_profile_low": "слабый prematch-профиль гола команды",
-        "warmup": "ещё warmup",
-        "window_closed": "окно стратегии закрыто",
-        "btts_already_won": "ОЗ уже выполнен",
-    }
-    text = exact.get(raw)
-    if text is None:
-        if raw.startswith("cum="):
-            text = f"общее давление {raw[4:]}"
-        elif raw.startswith("5m="):
-            text = f"давление 5m {raw[3:]}"
-        elif raw.startswith("10m="):
-            text = f"давление 10m {raw[4:]}"
-        elif raw.startswith("evidence="):
-            text = f"недостаточно momentum-истории ({raw})"
-        elif raw.startswith("pressure="):
-            text = f"давление {raw[len('pressure='):]}"
-        elif "window_closed" in raw:
-            text = "окно стратегии закрыто"
-        else:
-            text = raw
-    return prefix + text
-
-
-def _ag_detail(expert: dict[str, Any]) -> str:
-    diagnostics = expert.get("diagnostics") or {}
-    prematch = diagnostics.get("prematch") or {}
-    live = diagnostics.get("live") or {}
-    parts = [f"GOOL AG: {_expert_value_text(expert, 'another_goal')} · {'PASS' if expert.get('passed') else 'WAIT'}"]
-
-    if prematch.get("available"):
-        score = _num(prematch.get("score"))
-        minimum = _num(prematch.get("minimum"))
-        avg = _num(prematch.get("combined_avg_total"))
-        state = "✓" if prematch.get("passed") else "×"
-        value = "—" if score is None else f"{score:.2f}"
-        threshold = "" if minimum is None else f"/{minimum:.2f}"
-        avg_text = "" if avg is None else f" · avg {avg:.2f}"
-        parts.append(f"PRE {state} score {value}{threshold}{avg_text}")
-
-    if live.get("available"):
-        state = "✓" if live.get("passed") else "×"
-        pressure = _num(live.get("pressure"))
-        cumulative = _num(live.get("cumulative"))
-        p5 = _num(live.get("pressure_5m"))
-        p10 = _num(live.get("pressure_10m"))
-        mc = _num(live.get("minimum_cumulative"))
-        m5 = _num(live.get("minimum_5m"))
-        m10 = _num(live.get("minimum_10m"))
-        bits = [f"LIVE {state} pressure {'—' if pressure is None else f'{pressure:.2f}'}"]
-        if cumulative is not None:
-            bits.append(f"cum {cumulative:.2f}{'' if mc is None else f'/{mc:.2f}'}")
-        if p5 is not None:
-            bits.append(f"5m {p5:.2f}{'' if m5 is None else f'/{m5:.2f}'}")
-        if p10 is not None:
-            bits.append(f"10m {p10:.2f}{'' if m10 is None else f'/{m10:.2f}'}")
-        parts.append(" · ".join(bits))
-
-    reasons = [_expert_block_text(x) for x in (expert.get("blocks") or [])]
-    reasons = list(dict.fromkeys(x for x in reasons if x))
-    if reasons:
-        parts.append("GOOL стоп: " + "; ".join(reasons[:3]))
-    return "\n".join(parts)
-
-
-def _generic_expert_detail(expert: dict[str, Any], key: str) -> str:
-    label = _EXPERT_LABELS.get(key, key)
-    state = "PASS" if expert.get("passed") else "WAIT"
-    line = f"GOOL {label}: {_expert_value_text(expert, key)} · {state}"
-    pressure = _num(expert.get("pressure_score"))
-    minimum = _num(expert.get("minimum"))
-    if pressure is not None:
-        line += f" · pressure {pressure:.2f}{'' if minimum is None else f'/{minimum:.2f}'}"
-    reasons = [_expert_block_text(x) for x in (expert.get("blocks") or [])]
-    reasons = list(dict.fromkeys(x for x in reasons if x))
-    if reasons:
-        line += "\nGOOL стоп: " + "; ".join(reasons[:3])
-    return line
-
-
-def _expert_detail(experts: dict[str, Any], strategy: str) -> str:
-    key = _STRATEGY_EXPERT.get(strategy, strategy)
-    expert = experts.get(key) or {}
-    if not expert:
-        return "GOOL: для этого рынка нет экспертной оценки."
-    if key == "another_goal":
-        return _ag_detail(expert)
-    return _generic_expert_detail(expert, key)
-
-
 def _top_candidate(router: dict[str, Any]) -> dict[str, Any] | None:
     winner = router.get("winner")
     if isinstance(winner, dict) and winner:
@@ -217,178 +44,205 @@ def _top_candidate(router: dict[str, Any]) -> dict[str, Any] | None:
     return max(rejected, key=lambda row: float(row.get("rating") or 0.0))
 
 
-def _candidate_metric(candidate: dict[str, Any], experts: dict[str, Any]) -> str:
-    key = _STRATEGY_EXPERT.get(str(candidate.get("strategy") or ""), "")
-    expert = experts.get(key) or {}
-    value = _num(candidate.get("model_probability"))
+def _general_goal_candidate(router: dict[str, Any]) -> dict[str, Any] | None:
+    rows: list[dict[str, Any]] = []
+    winner = router.get("winner")
+    if isinstance(winner, dict) and winner:
+        rows.append(winner)
+    rows.extend(row for row in (router.get("alternatives") or []) if isinstance(row, dict))
+    rows.extend(row for row in (router.get("rejected") or []) if isinstance(row, dict))
+    goal_rows = [
+        row for row in rows
+        if str(row.get("strategy") or "") == "another_goal"
+        and str(row.get("family") or "") == "match_total"
+    ]
+    if not goal_rows:
+        return None
+    return max(goal_rows, key=lambda row: float(row.get("rating") or 0.0))
+
+
+def _general_goal_market(row: dict[str, Any]) -> tuple[str, float | None] | None:
+    market = row.get("market") or {}
+    target = ((market.get("targets") or {}).get("another_goal") or {})
+    label = str(target.get("label") or "").strip()
+    odd = _num(target.get("odd"))
+    if label and target.get("available") and odd is not None and odd > 1.0:
+        return label, odd
+
+    candidate = _general_goal_candidate(row.get("router") or {})
+    if candidate:
+        label = str(candidate.get("label") or "").strip()
+        odd = _num(candidate.get("odd"))
+        if label and odd is not None and odd > 1.0:
+            return label, odd
+    return None
+
+
+def _live_line(row: dict[str, Any]) -> str:
+    live = ((row.get("context") or {}).get("live") or {})
+    xg = _num(live.get("xg_total"))
+    shots = _num(live.get("shots_total"))
+    sot = _num(live.get("sot_total"))
+    big = _num(live.get("big_chances_total"))
+
+    parts: list[str] = []
+    if xg is not None:
+        parts.append(f"xG {xg:.2f}")
+    if shots is not None:
+        parts.append(f"удары {shots:.0f}")
+    if sot is not None:
+        parts.append(f"в створ {sot:.0f}")
+    if big is not None:
+        parts.append(f"моменты {big:.0f}")
+    return "📊 Игра: " + (" · ".join(parts) if parts else "мало LIVE-данных")
+
+
+def _goal_model_line(experts: dict[str, Any]) -> str | None:
+    expert = experts.get("another_goal") or {}
+    value = _num(expert.get("probability"))
     if value is None:
-        return ""
-    if _metric(expert, key) == "confidence":
-        return f"C {value * 100:.0f}/100"
-    return f"P {value * 100:.1f}%"
+        return None
+    if _metric(expert, "another_goal") != "probability":
+        return None
+    state = "подтверждает" if bool(expert.get("passed", True)) else "пока не подтверждает"
+    return f"🧠 Ещё гол: {value * 100:.0f}% · GOOL {state}"
 
 
-def _candidate_line(candidate: dict[str, Any], experts: dict[str, Any]) -> str:
-    odd = _num(candidate.get("odd")) or 0.0
-    rating = _num(candidate.get("rating")) or 0.0
-    market_p = _num(candidate.get("market_probability"))
-    roi = _num(candidate.get("expected_roi"))
-    edge = _num(candidate.get("value_edge_pp"))
-    steam = _num(candidate.get("market_pressure_pp"))
-    parts = [f"{candidate.get('label') or '?'} @ {odd:.2f}", f"R {rating:.0f}/100"]
-    metric = _candidate_metric(candidate, experts)
-    if metric:
-        parts.append(metric)
-    if market_p is not None:
-        parts.append(f"fair {market_p * 100:.1f}%")
-    if roi is not None:
-        parts.append(f"EV {roi * 100:+.1f}%")
-    if edge is not None:
-        parts.append(f"edge {edge:+.1f}п.п.")
-    if steam is not None and abs(steam) >= 0.05:
-        parts.append(f"ΔP {steam:+.1f}п.п.")
-    return " · ".join(parts)
+def _plain_block(block: Any) -> str | None:
+    raw = str(block or "").strip()
+    if not raw:
+        return None
+    if ":" in raw and raw.split(":", 1)[0] in {"prematch", "live", "home", "away"}:
+        raw = raw.split(":", 1)[1]
+
+    exact = {
+        "history": "мало истории до матча",
+        "avg_goals": "команды обычно играют низово",
+        "too_many_0_1_goal_games": "слишком много низовых матчей",
+        "prematch_score": "слабый профиль на гол до матча",
+        "no_recent_threat": "давно нет опасных атак",
+        "no_quality_threat": "мало острых моментов",
+        "recent_not_ready": "ещё мало свежих LIVE-данных",
+        "side_pressure_low": "мало давления команды",
+        "side_evidence_low": "мало атак и моментов команды",
+        "side_no_recent_threat": "давно нет опасных атак команды",
+        "side_no_quality_threat": "мало острых моментов команды",
+        "side_prematch_scoring_profile_low": "команда редко забивает по prematch",
+        "warmup": "слишком рано для ставки",
+        "window_closed": "окно этой ставки уже закрыто",
+        "btts_already_won": "обе команды уже забили",
+    }
+    if raw in exact:
+        return exact[raw]
+    if raw.startswith(("cum=", "5m=", "10m=", "pressure=")):
+        return "мало давления"
+    if raw.startswith("evidence="):
+        return "мало свежих данных по атакам"
+    if "window_closed" in raw:
+        return "окно этой ставки уже закрыто"
+    return None
 
 
-def _block_category(block: str) -> str:
-    raw = str(block or "")
-    if raw == "price_too_low":
-        return "PRICE"
-    if raw == "no_positive_value":
-        return "VALUE"
-    if raw == "gool_wait_without_verified_override":
-        return "GOOL"
-    if raw == "router_rating_below_62":
-        return "RATING"
-    if raw.startswith("market_stale") or raw == "market_timestamp_missing":
-        return "FRESH"
-    if raw == "data_quality_too_low":
-        return "DATA"
-    if "window_closed" in raw or raw.startswith("warmup_until"):
-        return "TIME"
-    return "1XBET"
+def _expert_plain_reasons(expert: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    for block in (expert.get("blocks") or []):
+        text = _plain_block(block)
+        if text and text not in reasons:
+            reasons.append(text)
+    return reasons
 
 
-def _candidate_block_text(block: str, candidate: dict[str, Any]) -> str:
-    raw = str(block or "")
-    odd = _num(candidate.get("odd")) or 0.0
-    rating = _num(candidate.get("rating")) or 0.0
-    roi = _num(candidate.get("expected_roi"))
-    quality = _num(candidate.get("data_quality"))
-    age = _num(candidate.get("market_age_seconds"))
-    if raw == "price_too_low":
-        return f"PRICE: кэф {odd:.2f} < {ABSOLUTE_MIN_BET_ODD:.2f}"
-    if raw == "no_positive_value":
-        return f"VALUE: EV {'—' if roi is None else f'{roi * 100:+.1f}%'} < +1.0%"
-    if raw == "gool_wait_without_verified_override":
-        return "GOOL: эксперт WAIT, подтверждённого MARKET/VALUE override нет"
-    if raw == "router_rating_below_62":
-        return f"RATING: {rating:.0f}/100 < 62"
-    if raw == "data_quality_too_low":
-        return f"DATA: quality {'—' if quality is None else f'{quality:.2f}'} < 0.35"
-    if raw == "market_timestamp_missing":
-        return "FRESH: у 1xBet snapshot нет времени"
-    if raw.startswith("market_stale"):
-        return f"FRESH: 1xBet snapshot {'—' if age is None else f'{age:.0f}s'} слишком старый"
-    if raw.startswith("warmup_until_10"):
-        return "TIME: до 10-й минуты warmup"
-    if raw.startswith("first_half_window_closed"):
-        return "TIME: рынок 1-го тайма уже закрыт"
-    if raw.startswith("two_goal_window_closed"):
-        return "TIME: +2 закрыт после 65-й минуты"
-    if raw.startswith("another_goal_window_closed"):
-        return "TIME: ещё гол закрыт после 85-й минуты"
-    if raw.startswith("entry_window_closed"):
-        return "TIME: ИТБ/ОЗ закрыты после 75-й минуты"
-    if raw == "correlated_better_option":
-        return "ROUTER: есть более сильный коррелированный рынок"
-    return raw
+def _candidate_plain_reasons(candidate: dict[str, Any] | None) -> list[str]:
+    if not candidate:
+        return []
+    reasons: list[str] = []
+    for raw_value in (candidate.get("blocks") or []):
+        raw = str(raw_value or "")
+        text: str | None = None
+        if raw == "price_too_low":
+            text = "слишком низкий кэф"
+        elif raw == "no_positive_value":
+            text = "кэф не даёт нормального запаса"
+        elif raw == "router_rating_below_62":
+            text = "сигнал пока слабый"
+        elif raw == "data_quality_too_low":
+            text = "мало надёжных LIVE-данных"
+        elif raw == "market_timestamp_missing" or raw.startswith("market_stale"):
+            text = "кэф 1xBet уже не свежий"
+        elif raw.startswith("warmup_until"):
+            text = "слишком рано для ставки"
+        elif "window_closed" in raw:
+            text = "окно этой ставки уже закрыто"
+        elif raw == "gool_wait_without_verified_override":
+            continue
+        if text and text not in reasons:
+            reasons.append(text)
+    return reasons
 
 
-def _guard_text(reason: Any) -> str:
-    raw = str(reason or "EVENT_REPRICE")
-    if "RED_CARD" in raw:
-        return "EVENT GUARD: красная карточка — 1xBet переоценивает рынок, steam игнорируется"
-    if "POST_GOAL" in raw:
-        return "EVENT GUARD: гол/смена score epoch — ждём перерасчёт 1xBet"
-    if "ODDS_SHOCK" in raw:
-        return "EVENT GUARD: резкий odds shock, похожий на пенальти/VAR — не считаем его прогрузом"
-    if "SUSPENSION" in raw or "REOPEN" in raw:
-        return "EVENT GUARD: рынок был приостановлен/открыт заново (VAR/пенальти), ждём стабилизацию"
-    if raw == "SCORE_DESYNC":
-        return "SCORE: Flashscore и 1xBet показывают разный счёт"
-    if "TIMELINE_SCORE_DESYNC" in raw:
-        return "SCORE: timeline Flashscore ещё не синхронизирован со счётом/1xBet"
-    if raw == "XBET_SCORE_UNAVAILABLE":
-        return "1xBet: не удалось подтвердить счёт — рынок временно запрещён"
-    return f"EVENT GUARD: {raw}"
-
-
-def _no_candidate_text(row: dict[str, Any]) -> str:
+def _market_plain_reason(row: dict[str, Any]) -> str | None:
     market = row.get("market") or {}
     if not market.get("available"):
-        return "1xBet: матч не сопоставлен или нет свежего market snapshot."
-    if market.get("repricing_guard"):
-        return _guard_text(market.get("repricing_guard_reason"))
+        return "1xBet пока не дал свежий рынок"
+
     if market.get("score_desync"):
-        return "SCORE: Flashscore и 1xBet не совпадают — ставки запрещены."
+        return "счёт Flashscore и 1xBet расходится"
     if market.get("timeline_score_desync"):
-        return "SCORE: Flashscore timeline не синхронизирован — ставки запрещены."
+        return "счёт ещё синхронизируется"
+
+    if market.get("repricing_guard"):
+        raw = str(market.get("repricing_guard_reason") or "")
+        if raw == "XBET_SCORE_UNAVAILABLE":
+            return "1xBet не подтвердил текущий счёт"
+        if raw == "SCORE_DESYNC":
+            return "счёт Flashscore и 1xBet расходится"
+        if "TIMELINE_SCORE_DESYNC" in raw:
+            return "счёт ещё синхронизируется"
+        if "POST_GOAL" in raw:
+            return "только что был гол — ждём новые кэфы"
+        if "RED_CARD" in raw:
+            return "было удаление — ждём новые кэфы"
+        if "ODDS_SHOCK" in raw:
+            return "кэфы резко дёрнулись — ждём стабилизацию"
+        if "SUSPENSION" in raw or "REOPEN" in raw:
+            return "рынок только что закрывался — ждём стабилизацию"
+        return "1xBet сейчас переоценивает рынок"
+    return None
+
+
+def _wait_reason(row: dict[str, Any], candidate: dict[str, Any] | None) -> str:
+    market_reason = _market_plain_reason(row)
+    if market_reason:
+        return market_reason
 
     experts = row.get("experts") or {}
-    targets = market.get("targets") or {}
-    missing: list[str] = []
-    for expert_key, expert in experts.items():
-        if expert.get("probability") is None:
-            continue
-        target = targets.get(expert_key)
-        if isinstance(target, dict) and not target.get("available"):
-            missing.append(str(target.get("label") or expert_key))
-    if missing:
-        return "1xBet: нет нужной классической .5 линии: " + ", ".join(missing[:4]) + "."
-    age = _num(market.get("age_seconds"))
-    if age is not None:
-        return f"1xBet: рынок есть ({age:.0f}s), но ни один GOOL-эксперт не построил допустимый кандидат."
-    return "1xBet: рынок есть, но допустимый Multi-кандидат не построен."
+    reasons = _expert_plain_reasons(experts.get("another_goal") or {})
+    if not reasons and candidate:
+        key = _STRATEGY_EXPERT.get(str(candidate.get("strategy") or ""), "")
+        reasons = _expert_plain_reasons(experts.get(key) or {})
+    reasons.extend(text for text in _candidate_plain_reasons(candidate) if text not in reasons)
+
+    if reasons:
+        return ", ".join(reasons[:3])
+    return "GOOL пока не видит достаточно сильной игры для ставки"
 
 
-def _wait_categories(states: list[dict[str, Any]]) -> Counter[str]:
-    counts: Counter[str] = Counter()
-    for row in states:
-        router = row.get("router") or {}
-        if str(router.get("status") or "WAIT") == "BET":
-            continue
-        candidate = _top_candidate(router)
-        if candidate:
-            categories = {_block_category(block) for block in (candidate.get("blocks") or [])}
-            for category in categories:
-                counts[category] += 1
-            continue
-        market = row.get("market") or {}
-        if market.get("repricing_guard"):
-            counts["EVENT"] += 1
-        elif market.get("score_desync") or market.get("timeline_score_desync"):
-            counts["1XBET"] += 1
-        else:
-            counts["1XBET"] += 1
-    return counts
-
-
-def _wait_summary(states: list[dict[str, Any]]) -> str:
-    counts = _wait_categories(states)
-    labels = {
-        "GOOL": "GOOL WAIT",
-        "PRICE": f"PRICE<{ABSOLUTE_MIN_BET_ODD:.2f}",
-        "VALUE": "VALUE/EV",
-        "RATING": "RATING<62",
-        "FRESH": "STALE",
-        "DATA": "DATA",
-        "TIME": "TIME",
-        "EVENT": "EVENT GUARD",
-        "1XBET": "1xBet/LINE",
-    }
-    parts = [f"{labels[key]} {counts[key]}" for key in _CATEGORY_ORDER if counts.get(key)]
-    return "Главные стопы WAIT: " + (" · ".join(parts) if parts else "нет")
+def _bet_reason(candidate: dict[str, Any] | None) -> str:
+    if not candidate:
+        return "GOOL подтвердил ставку"
+    strategy = str(candidate.get("strategy") or "")
+    family = str(candidate.get("family") or "")
+    if family == "team_total":
+        return "эта команда выглядит опаснее, а её кэф лучше общего тотала"
+    if strategy == "another_goal":
+        return "хватает давления и моментов ещё на один гол"
+    if strategy == "two_more_goals":
+        return "темп высокий и времени хватает ещё на два гола"
+    if strategy == "goal_before_ht":
+        return "есть давление на гол до перерыва"
+    if strategy == "both_teams_to_score":
+        return "есть хорошие шансы, что не забившая команда ответит"
+    return "GOOL подтвердил рынок по игре и кэфу"
 
 
 def _row_rank(row: dict[str, Any]) -> tuple[int, float]:
@@ -401,22 +255,14 @@ def _row_rank(row: dict[str, Any]) -> tuple[int, float]:
 def analysis_text(*_: Any, **__: Any) -> str:
     states = list(_latest_analysis().values())
     if not states:
-        return "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\nСейчас нет свежих Multi-оценок в рабочем окне до 85'."
+        return "🧠 <b>GOOL MULTI · КРАТКИЙ ОТЧЁТ</b>\n\nСейчас нет свежих матчей для анализа."
 
     states.sort(key=_row_rank, reverse=True)
     bets = sum(1 for row in states if str((row.get("router") or {}).get("status") or "") == "BET")
-    overrides = sum(
-        1
-        for row in states
-        if bool((((row.get("router") or {}).get("winner") or {}).get("market_override")))
-        or bool((((row.get("router") or {}).get("winner") or {}).get("value_override")))
-    )
+    waits = len(states) - bets
     parts = [
-        "🧠 <b>GOOL MULTI · АНАЛИЗ ОНЛАЙН</b>",
-        "MODEL + PREMATCH + LIVE + 1xBet → один BEST BET / WAIT",
-        "P = модельная вероятность · C = GOOL confidence (не калиброванная вероятность)",
-        f"Матчей: <b>{len(states)}</b> · BET: <b>{bets}</b> · WAIT: <b>{len(states) - bets}</b> · override: <b>{overrides}</b>",
-        _wait_summary(states),
+        "🧠 <b>GOOL MULTI · КРАТКИЙ ОТЧЁТ</b>",
+        f"Матчей: <b>{len(states)}</b> · ставок: <b>{bets}</b> · ждём: <b>{waits}</b>",
     ]
 
     shown = 0
@@ -425,27 +271,31 @@ def analysis_text(*_: Any, **__: Any) -> str:
         status = str(router.get("status") or "WAIT")
         candidate = _top_candidate(router)
         score = row.get("score") or [0, 0]
-        decision = "🔥 BET" if status == "BET" else "⏳ WAIT"
-        experts = row.get("experts") or {}
+        decision = "🔥 СТАВКА" if status == "BET" else "⏳ ЖДЁМ"
         lines = [
             f"<b>{_h(row.get('home'))} — {_h(row.get('away'))}</b> · {int(row.get('minute') or 0)}' · {score[0]}:{score[1]} · {decision}",
-            _h(_expert_summary(experts)),
-            _h(_context_line(row)),
         ]
 
-        if candidate:
-            prefix = "BEST" if status == "BET" else "Ближайший рынок"
-            lines.append(f"1xBet {prefix}: {_h(_candidate_line(candidate, experts))}")
-            if status == "WAIT":
-                blocks = [_candidate_block_text(x, candidate) for x in (candidate.get("blocks") or [])]
-                blocks = list(dict.fromkeys(x for x in blocks if x))
-                if blocks:
-                    lines.append("❌ " + _h("; ".join(blocks[:4])))
-                lines.append(_h(_expert_detail(experts, str(candidate.get("strategy") or ""))))
-            else:
-                lines.append("↳ " + _h(router.get("reason") or "Лучший проходящий рынок."))
+        if status == "BET" and candidate:
+            odd = _num(candidate.get("odd"))
+            odd_text = "—" if odd is None else f"{odd:.2f}"
+            lines.append(f"🎯 BEST: {_h(candidate.get('label') or '?')} @ {odd_text}")
         else:
-            lines.append("❌ " + _h(_no_candidate_text(row)))
+            goal_market = _general_goal_market(row)
+            if goal_market:
+                label, odd = goal_market
+                odd_text = "—" if odd is None else f"{odd:.2f}"
+                lines.append(f"🎯 Ещё 1 гол: {_h(label)} @ {odd_text}")
+
+        model_line = _goal_model_line(row.get("experts") or {})
+        if model_line:
+            lines.append(_h(model_line))
+        lines.append(_h(_live_line(row)))
+
+        if status == "WAIT":
+            lines.append("⛔ " + _h("Почему ждём: " + _wait_reason(row, candidate)))
+        else:
+            lines.append("✅ " + _h("Почему ставка: " + _bet_reason(candidate)))
 
         block = "\n".join(lines)
         if len("\n\n".join(parts + [block])) > 3850:
@@ -456,5 +306,5 @@ def analysis_text(*_: Any, **__: Any) -> str:
             break
 
     if shown < len(states):
-        parts.append(f"<i>Показано {shown} из {len(states)} матчей — сначала BET и самые близкие WAIT.</i>")
+        parts.append(f"<i>Показано {shown} из {len(states)} матчей.</i>")
     return "\n\n".join(parts)

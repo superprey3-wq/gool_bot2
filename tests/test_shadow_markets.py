@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from gool_bot2.shadow_markets import analyze_btts_shadow, analyze_team_goal_shadow
+from gool_bot2.shadow_market_cards import render_shadow_market_card
 from gool_bot2 import shadow_market_worker as shadow_worker
 
 
@@ -82,10 +83,11 @@ def test_shadow_team_goal_selects_a_team_without_emitting_active_signal():
 
 
 def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Path, monkeypatch):
-    # Other production-wrapper tests intentionally monkey-patch the module globals.
-    # Restore the base analyzers here so this unit test is independent of collection order.
+    # Other production-wrapper tests intentionally monkey-patch these globals.
+    # Restore the base functions so this unit test is independent of collection order.
     monkeypatch.setattr(shadow_worker, "analyze_btts_shadow", analyze_btts_shadow)
     monkeypatch.setattr(shadow_worker, "analyze_team_goal_shadow", analyze_team_goal_shadow)
+    monkeypatch.setattr(shadow_worker, "render_shadow_market_card", render_shadow_market_card)
 
     journal = tmp_path / "shadow.json"
     analysis = tmp_path / "shadow.jsonl"

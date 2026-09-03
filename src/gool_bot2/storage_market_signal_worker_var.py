@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from . import signal_worker as core
 from . import signal_worker_all as base
+from . import signal_worker_all_cards as cards
 from . import storage_market_signal_worker as app
+from . import storage_signal_worker as storage
+from . import telegram as telegram_mod
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
+from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
+from .multi_menu import journal_path as multi_journal_path, reconcile_pending
+from .multi_model_capture import ensure_model_snapshot_capture
+from .multi_product import install_multi_product
+from .multi_runtime import observe_multi_shadow
+from .multi_telegram import silence_legacy_telegram
 from .var_settlement_guard import clear_provisional, confirmed_win
 
 _ORIG_SETTLE = base._settle_pending
 _ORIG_TWO = base._settle_two_more
+_ORIG_PROCESS = storage.StorageCardAllMatchSignalWorker._process
+_ORIG_POLL = base.poll_telegram_updates
+_ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
+_LAST_BANK_REPORT_ATTEMPT = 0.0
 
 
 def _find_row(journal: list[dict[str, Any]], returned: dict[str, Any]) -> dict[str, Any] | None:
@@ -98,8 +112,55 @@ def _guard_two(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[di
     return kept
 
 
+def _ensure_model_with_multi_snapshot(self):
+    return ensure_model_snapshot_capture(self, _ORIG_ENSURE_MODEL)
+
+
+def _process_with_multi(self, record: dict[str, Any]):
+    # In shadow mode the old Telegram path behaves exactly as before. In active
+    # Multi mode we still execute the full legacy analysis because Multi reuses
+    # its model/prematch/live outputs, but hide the Telegram token only while
+    # that legacy process is running. The token is restored before Multi emits
+    # its one BEST BET/result image, so users never receive duplicate strategy
+    # cards during cutover.
+    with silence_legacy_telegram():
+        emitted = _ORIG_PROCESS(self, record)
+    try:
+        observe_multi_shadow(self, record)
+    except Exception as exc:
+        print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return emitted
+
+
+def _poll_with_multi_bank(journal_path, offset: int = 0, timeout: int = 0):
+    global _LAST_BANK_REPORT_ATTEMPT
+    next_offset, actions = _ORIG_POLL(journal_path, offset=offset, timeout=timeout)
+    try:
+        multi_path = multi_journal_path()
+        due = daily_report_due_date(multi_path)
+        now_mono = time.monotonic()
+        if due is not None and now_mono - _LAST_BANK_REPORT_ATTEMPT >= 60.0:
+            _LAST_BANK_REPORT_ATTEMPT = now_mono
+            reconcile_pending()
+            text = render_daily_bank_report(multi_path, report_date=due)
+            sent = telegram_mod.broadcast(text)
+            if sent > 0:
+                mark_daily_report_sent(multi_path, due)
+                print(f"GOOL_MULTI_BANK_REPORT date={due.isoformat()} sent={sent}", flush=True)
+                actions += sent
+            else:
+                print(f"GOOL_MULTI_BANK_REPORT_RETRY date={due.isoformat()} sent=0", flush=True)
+    except Exception as exc:
+        print(f"GOOL_MULTI_BANK_REPORT_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return next_offset, actions
+
+
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
+cards.CardAllMatchSignalWorker._ensure_model = _ensure_model_with_multi_snapshot
+storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
+base.poll_telegram_updates = _poll_with_multi_bank
+install_multi_product()
 
 
 def main() -> None:

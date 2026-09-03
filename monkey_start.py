@@ -83,6 +83,9 @@ def main() -> None:
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
+    # Production cutover: old server env files do not need a new variable.
+    # Explicit GOOL_MULTI_TELEGRAM_MODE=shadow still provides an instant rollback.
+    os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
 
     raw_live.mkdir(parents=True, exist_ok=True)
     journal.parent.mkdir(parents=True, exist_ok=True)
@@ -112,6 +115,7 @@ def main() -> None:
     if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or not os.getenv("TELEGRAM_CHAT_ID", "").strip():
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
+    print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)

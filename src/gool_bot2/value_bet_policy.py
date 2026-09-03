@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 VALUE_LEVELS = ("NO_VALUE", "VALUE", "STRONG_VALUE", "VERY_STRONG_VALUE")
+ABSOLUTE_MIN_BET_ODD = 1.40
 
 
 def _prob(value: Any) -> float | None:
@@ -29,6 +30,32 @@ def _value_target(info: dict[str, Any]) -> dict[str, Any]:
     return targets[0]
 
 
+def _fair_probability(odd: Any, opposite: Any) -> float | None:
+    """Normalize a two-way price when a caller did not precompute fair P.
+
+    Most xBet selections already carry ``prob`` from the market decoder, but
+    exact first-half totals are built later from the 1st-half subgame. Keeping
+    this fallback in the VALUE policy makes those markets (and future two-way
+    markets) impossible to silently lose VALUE/override just because ``prob``
+    was omitted by an adapter.
+    """
+    try:
+        primary = float(odd)
+    except (TypeError, ValueError):
+        return None
+    if primary <= 1.0:
+        return None
+    a = 1.0 / primary
+    try:
+        other = float(opposite)
+    except (TypeError, ValueError):
+        other = 0.0
+    if other <= 1.0:
+        return a
+    b = 1.0 / other
+    return a / (a + b) if a + b > 0 else None
+
+
 def attach_value(info: dict[str, Any] | None, model_probability: Any, *, probability_source: str = "gool") -> dict[str, Any]:
     out = dict(info or {})
     model_p = _prob(model_probability)
@@ -40,6 +67,8 @@ def attach_value(info: dict[str, Any] | None, model_probability: Any, *, probabi
         odd = float(selection.get("odd")) if selection.get("odd") is not None else None
     except (TypeError, ValueError):
         odd = None
+    if market_p is None and odd is not None:
+        market_p = _fair_probability(odd, selection.get("opposite"))
 
     out.update({
         "value_model_probability": model_p,
@@ -59,7 +88,7 @@ def attach_value(info: dict[str, Any] | None, model_probability: Any, *, probabi
     very_edge = float(os.getenv("XBET_VALUE_VERY_STRONG_EDGE_PP", "12"))
     min_model = float(os.getenv("XBET_VALUE_MIN_MODEL_PROBABILITY", "0.60"))
     override_model = float(os.getenv("XBET_VALUE_OVERRIDE_MIN_MODEL_PROBABILITY", "0.65"))
-    min_odd = float(os.getenv("XBET_VALUE_MIN_ODD", "1.45"))
+    min_odd = max(ABSOLUTE_MIN_BET_ODD, float(os.getenv("XBET_VALUE_MIN_ODD", str(ABSOLUTE_MIN_BET_ODD))))
     max_odd = float(os.getenv("XBET_VALUE_MAX_ODD", "4.50"))
     max_age = float(os.getenv("XBET_VALUE_MAX_AGE_SECONDS", "35"))
     try:

@@ -37,17 +37,15 @@ def _all_candidates(decision: RouterDecision) -> list[MarketCandidate]:
 def _confidence_rating(candidate: MarketCandidate) -> float:
     """Re-rate a heuristic confidence without pretending it is bet probability."""
     strength_score = max(0.0, min(100.0, float(candidate.model_probability) * 100.0))
-    neutral_value_score = 50.0
     market_score = max(0.0, min(100.0, 50.0 + float(candidate.market_pressure_pp) * 5.0))
     data_score = max(0.0, min(100.0, float(candidate.data_quality) * 100.0))
     override_bonus = 6.0 if candidate.market_override else 0.0
     opposition_pp = max(0.0, -float(candidate.market_pressure_pp))
     opposition_penalty = min(12.0, max(0.0, opposition_pp - 3.0) * 2.0)
     return round(
-        0.43 * strength_score
-        + 0.31 * neutral_value_score
-        + 0.16 * market_score
-        + 0.10 * data_score
+        0.55 * strength_score
+        + 0.20 * market_score
+        + 0.25 * data_score
         + override_bonus
         - opposition_penalty,
         1,
@@ -61,7 +59,7 @@ def _normalize_confidence_metrics(decision: RouterDecision, experts: dict[str, A
     calibrated probability. That must not turn e.g. GOOL confidence 0.73 at
     odds 3.14 into a literal +128% model ROI. We keep confidence as a strength
     signal, but value/EV overrides are disabled and the candidate is re-rated
-    with a neutral value component.
+    without any value/EV component.
     """
     for row in _all_candidates(decision):
         if _metric(experts, row.strategy) == "probability":

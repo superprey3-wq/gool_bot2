@@ -9,6 +9,7 @@ from . import storage_signal_worker as storage
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
+from .multi_product import install_multi_product
 from .multi_runtime import observe_multi_shadow
 from .var_settlement_guard import clear_provisional, confirmed_win
 
@@ -113,6 +114,7 @@ def _process_with_multi(self, record: dict[str, Any]):
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
 storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
+install_multi_product()
 
 
 def main() -> None:

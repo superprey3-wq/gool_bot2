@@ -81,6 +81,8 @@ def main() -> None:
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "12")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
+    os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
+    os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
 
     raw_live.mkdir(parents=True, exist_ok=True)
     journal.parent.mkdir(parents=True, exist_ok=True)
@@ -114,6 +116,7 @@ def main() -> None:
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
     print(f"GOOL_BOOT xbet state={xbet_state} interval={os.environ['XBET_MARKET_INTERVAL_SECONDS']} required={os.environ['XBET_MARKET_REQUIRED']}", flush=True)
+    print(f"GOOL_BOOT var_guard seconds={os.environ['VAR_WIN_CONFIRM_SECONDS']} snapshots={os.environ['VAR_WIN_CONFIRM_SNAPSHOTS']}", flush=True)
 
     cleanup_env = os.environ.copy()
     cleanup = subprocess.run(
@@ -141,13 +144,13 @@ def main() -> None:
         "--interval", os.getenv("XBET_MARKET_INTERVAL_SECONDS", "12"),
     ], env=env)
     worker = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.storage_market_signal_worker",
+        sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var",
         "--raw-dir", str(raw_live),
         "--journal", str(journal),
         "--analysis", str(analysis),
     ], env=env)
     shadow = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.storage_market_shadow_worker",
+        sys.executable, "-m", "gool_bot2.storage_market_shadow_worker_var",
         "--raw-dir", str(raw_live),
         "--journal", str(shadow_journal),
         "--analysis", str(shadow_analysis),

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from gool_bot2.providers.flashscore import FlashscoreProvider
-from gool_bot2.xbet_market_pressure import XBetMarketCollector
+from gool_bot2.xbet_market_robust import RobustXBetMarketCollector
 
 
 def _line(rows: list[dict[str, Any]], value: float) -> dict[str, Any] | None:
@@ -67,7 +67,7 @@ def _required_markets(match: Any, market_row: dict[str, Any] | None) -> dict[str
     }
 
 
-def _snapshot(collector: XBetMarketCollector, index: int) -> dict[str, Any]:
+def _snapshot(collector: RobustXBetMarketCollector, index: int) -> dict[str, Any]:
     captured = datetime.now(timezone.utc).isoformat()
     flashscore = FlashscoreProvider().live_matches()
     state = collector.collect_once()
@@ -76,6 +76,7 @@ def _snapshot(collector: XBetMarketCollector, index: int) -> dict[str, Any]:
     for match in flashscore:
         mid = str(match.provider_match_id)
         market_row = xbet.get(mid)
+        minute = int(match.minute or 0)
         coverage = _required_markets(match, market_row)
         rows.append({
             "flashscore_event_id": mid,
@@ -83,7 +84,8 @@ def _snapshot(collector: XBetMarketCollector, index: int) -> dict[str, Any]:
             "home": match.home,
             "away": match.away,
             "league": match.league,
-            "minute": int(match.minute or 0),
+            "minute": minute,
+            "active_gool_window": 0 < minute <= 75,
             "score": [int(match.home_score or 0), int(match.away_score or 0)],
             "mapped_to_1xbet": market_row is not None,
             "xbet_minute": None if market_row is None else market_row.get("minute"),
@@ -96,8 +98,10 @@ def _snapshot(collector: XBetMarketCollector, index: int) -> dict[str, Any]:
         "snapshot": index,
         "captured_at": captured,
         "flashscore_live_count": len(flashscore),
-        "xbet_mapped_count": len(xbet),
+        "xbet_mapped_count": sum(1 for row in rows if row.get("mapped_to_1xbet")),
         "xbet_root": state.get("root"),
+        "xbet_index_root_counts": dict(getattr(collector, "_index_root_counts", {}) or {}),
+        "xbet_index_merged_events": len(getattr(collector, "_event_roots", {}) or {}),
         "xbet_latency_ms": state.get("latency_ms"),
         "matches": rows,
     }
@@ -110,12 +114,15 @@ def _movement(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
             by_match[str(row.get("flashscore_event_id"))].append(row)
     out: dict[str, Any] = {}
     for mid, rows in by_match.items():
-        rows.sort(key=lambda row: int(row.get("minute") or 0))
+        rows.sort(key=lambda row: str(row.get("market_captured_at") or ""))
         odds_changed: set[str] = set()
         minute_changed = False
         score_changed = False
+        mapped_observations = 0
         previous = None
         for row in rows:
+            if row.get("mapped_to_1xbet"):
+                mapped_observations += 1
             if previous is not None:
                 minute_changed = minute_changed or int(row.get("minute") or 0) != int(previous.get("minute") or 0)
                 score_changed = score_changed or list(row.get("score") or []) != list(previous.get("score") or [])
@@ -129,6 +136,7 @@ def _movement(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
             "home": rows[-1].get("home"),
             "away": rows[-1].get("away"),
             "observations": len(rows),
+            "mapped_observations": mapped_observations,
             "minute_changed": minute_changed,
             "score_changed": score_changed,
             "odds_changed": sorted(odds_changed),
@@ -137,23 +145,38 @@ def _movement(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def _pct(numerator: int, denominator: int) -> float:
+    return round(numerator * 100.0 / denominator, 1) if denominator else 0.0
+
+
 def _summary(snapshots: list[dict[str, Any]], movement: dict[str, Any]) -> dict[str, Any]:
     latest = snapshots[-1] if snapshots else {"matches": []}
-    rows = latest.get("matches") or []
-    missing: dict[str, int] = defaultdict(int)
-    for row in rows:
+    rows = list(latest.get("matches") or [])
+    active = [row for row in rows if row.get("active_gool_window")]
+    mapped = [row for row in rows if row.get("mapped_to_1xbet")]
+    active_mapped = [row for row in active if row.get("mapped_to_1xbet")]
+    complete = [row for row in mapped if (row.get("coverage") or {}).get("all_required_available")]
+    active_complete = [row for row in active_mapped if (row.get("coverage") or {}).get("all_required_available")]
+
+    missing_active_mapped: dict[str, int] = defaultdict(int)
+    for row in active_mapped:
         for key in ((row.get("coverage") or {}).get("missing") or []):
-            missing[str(key)] += 1
-    mapped = sum(1 for row in rows if row.get("mapped_to_1xbet"))
-    complete = sum(1 for row in rows if (row.get("coverage") or {}).get("all_required_available"))
+            missing_active_mapped[str(key)] += 1
+
     sync = sum(1 for row in movement.values() if row.get("live_sync_evidence"))
     return {
         "flashscore_live": len(rows),
-        "mapped_1xbet": mapped,
-        "mapping_pct": round(mapped * 100.0 / len(rows), 1) if rows else 0.0,
-        "all_six_markets": complete,
-        "all_six_markets_pct": round(complete * 100.0 / len(rows), 1) if rows else 0.0,
-        "missing_by_market": dict(sorted(missing.items())),
+        "mapped_1xbet": len(mapped),
+        "mapping_pct": _pct(len(mapped), len(rows)),
+        "all_six_markets": len(complete),
+        "all_six_markets_pct": _pct(len(complete), len(rows)),
+        "active_window_live": len(active),
+        "active_window_mapped_1xbet": len(active_mapped),
+        "active_window_mapping_pct": _pct(len(active_mapped), len(active)),
+        "active_window_all_six_markets": len(active_complete),
+        "active_window_all_six_pct_of_mapped": _pct(len(active_complete), len(active_mapped)),
+        "active_window_all_six_pct_of_live": _pct(len(active_complete), len(active)),
+        "missing_by_market_among_active_mapped": dict(sorted(missing_active_mapped.items())),
         "matches_with_minute_or_score_plus_odds_movement": sync,
         "snapshots": len(snapshots),
         "note": "This audit validates real Flashscore->1xBet mapping and the six GOOL MULTI market families. It does not fabricate GOOL model probabilities when production model files are unavailable in GitHub Actions.",
@@ -168,26 +191,36 @@ def _markdown(report: dict[str, Any]) -> str:
         f"Captured: {report['created_at']}",
         f"Snapshots: {s['snapshots']}",
         f"Flashscore LIVE: **{s['flashscore_live']}**",
-        f"Mapped to 1xBet: **{s['mapped_1xbet']} ({s['mapping_pct']}%)**",
-        f"All six requested market slots present: **{s['all_six_markets']} ({s['all_six_markets_pct']}%)**",
+        f"Mapped to 1xBet (all LIVE): **{s['mapped_1xbet']} ({s['mapping_pct']}%)**",
+        f"All six market slots (all LIVE): **{s['all_six_markets']} ({s['all_six_markets_pct']}%)**",
+        f"Active GOOL window 1-75': **{s['active_window_live']}** matches",
+        f"Mapped to 1xBet in active window: **{s['active_window_mapped_1xbet']} ({s['active_window_mapping_pct']}%)**",
+        f"All six slots in active window: **{s['active_window_all_six_markets']}** / mapped **({s['active_window_all_six_pct_of_mapped']}%)**; / all active **({s['active_window_all_six_pct_of_live']}%)**",
         f"Matches with minute/score movement plus odds movement: **{s['matches_with_minute_or_score_plus_odds_movement']}**",
         "",
-        "## Missing market slots",
+        "## 1xBet index roots by snapshot",
         "",
     ]
-    if s["missing_by_market"]:
-        for key, count in s["missing_by_market"].items():
+    for snap in report.get("snapshots") or []:
+        lines.append(
+            f"- snapshot {snap.get('snapshot')}: merged_events={snap.get('xbet_index_merged_events')} "
+            f"mapped={snap.get('xbet_mapped_count')} roots={snap.get('xbet_index_root_counts')}"
+        )
+    lines += ["", "## Missing market slots among mapped active matches", ""]
+    missing = s["missing_by_market_among_active_mapped"]
+    if missing:
+        for key, count in missing.items():
             lines.append(f"- {key}: {count}")
     else:
         lines.append("- none")
-    lines += ["", "## Latest LIVE coverage", "", "| Match | Min | Score | 1xBet | +1 | Asian +1.0 | +2 | ITB1 | ITB2 | BTTS |", "|---|---:|---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"]
+    lines += ["", "## Latest LIVE coverage", "", "| Match | Min | Score | Active | 1xBet | +1 | Asian +1.0 | +2 | ITB1 | ITB2 | BTTS |", "|---|---:|---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"]
     latest = report["snapshots"][-1] if report.get("snapshots") else {"matches": []}
     for row in latest.get("matches") or []:
         c = ((row.get("coverage") or {}).get("checks") or {})
         mark = lambda key: "✅" if c.get(key) is not None else "—"
         lines.append(
             f"| {row.get('home')} — {row.get('away')} | {row.get('minute')} | {row.get('score',[0,0])[0]}:{row.get('score',[0,0])[1]} | "
-            f"{'✅' if row.get('mapped_to_1xbet') else '—'} | {mark('another_goal')} | {mark('asian_middle')} | {mark('two_more_goals')} | {mark('home_goal')} | {mark('away_goal')} | {mark('btts_yes')} |"
+            f"{'✅' if row.get('active_gool_window') else '—'} | {'✅' if row.get('mapped_to_1xbet') else '—'} | {mark('another_goal')} | {mark('asian_middle')} | {mark('two_more_goals')} | {mark('home_goal')} | {mark('away_goal')} | {mark('btts_yes')} |"
         )
     lines += ["", "## Important", "", s["note"], ""]
     return "\n".join(lines)
@@ -202,14 +235,15 @@ def main() -> None:
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    collector = XBetMarketCollector(out_dir / "xbet_market_state.json", out_dir / "xbet_market_history.jsonl")
+    collector = RobustXBetMarketCollector(out_dir / "xbet_market_state.json", out_dir / "xbet_market_history.jsonl")
     snapshots: list[dict[str, Any]] = []
     for index in range(1, max(1, args.snapshots) + 1):
         snap = _snapshot(collector, index)
         snapshots.append(snap)
         print(
             f"AUDIT_SNAPSHOT {index}/{args.snapshots} flashscore={snap['flashscore_live_count']} "
-            f"xbet={snap['xbet_mapped_count']} root={snap.get('xbet_root')} latency_ms={snap.get('xbet_latency_ms')}",
+            f"xbet={snap['xbet_mapped_count']} merged_events={snap.get('xbet_index_merged_events')} "
+            f"root={snap.get('xbet_root')} roots={snap.get('xbet_index_root_counts')} latency_ms={snap.get('xbet_latency_ms')}",
             flush=True,
         )
         if index < max(1, args.snapshots):

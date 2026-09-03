@@ -11,6 +11,7 @@ from typing import Any
 from .journal import append_analysis, load_signal_journal, save_signal_journal
 from .shadow_market_cards import render_shadow_market_card, render_shadow_market_result_card
 from .shadow_markets import analyze_btts_shadow, analyze_team_goal_shadow
+from .signal_cards import flashscore_meta, stats_snapshot
 from .telegram import broadcast, broadcast_photo
 
 
@@ -177,6 +178,8 @@ def process_record(record: dict[str, Any], journal_path: Path, analysis_path: Pa
             "card_path": card_path,
             "telegram_sent": bool(sent),
             "experimental_market": True,
+            "flashscore_meta": flashscore_meta(record),
+            "stats_snapshot": stats_snapshot(record),
         }
         rows.append(row)
         save_signal_journal(journal_path, rows)

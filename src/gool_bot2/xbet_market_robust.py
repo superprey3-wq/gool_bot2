@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -8,21 +10,25 @@ from . import xbet_market_pressure as market
 
 
 class RobustXBetMarketCollector(market.XBetMarketCollector):
-    """1xBet collector that does not trust a single intermittently partial root.
+    """1xBet collector resilient to partial mirrors and short index blackouts.
 
-    The public 1xBet LiveFeed mirrors can return different subsets of the same
-    football live index from one request to the next. The legacy collector used
-    the first non-empty response, which could make an already mapped Flashscore
-    match disappear on the next 12-second cycle. This collector merges candidate
-    events from every reachable configured root/query and remembers which roots
-    advertised each event so GetGameZip is attempted against the most likely
-    mirrors first.
+    Public 1xBet LiveFeed mirrors can return different subsets of the football
+    live index, or briefly return an empty index from every mirror. We merge all
+    reachable roots/queries and keep a deliberately short last-good index cache.
+    The cache only preserves candidate ids/names; every actual market snapshot is
+    still fetched live through GetGameZip, so stale odds are never replayed as a
+    new market observation.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._event_roots: dict[str, list[str]] = {}
         self._index_root_counts: dict[str, int] = {}
+        self._last_index_rows: list[dict[str, Any]] = []
+        self._last_event_roots: dict[str, list[str]] = {}
+        self._last_index_at: float = 0.0
+        self._index_cache_used: bool = False
+        self._index_cache_age_seconds: float | None = None
 
     @staticmethod
     def _index_rows(root: str, query: str) -> tuple[str, list[dict[str, Any]]]:
@@ -67,15 +73,33 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                     if previous is None or (not previous.get("home") and row.get("home")):
                         merged[event_id] = row
 
-        self._event_roots = event_roots
         self._index_root_counts = {root: len(ids) for root, ids in root_events.items()}
-        if not merged:
-            return None, []
+        now = time.monotonic()
+        if merged:
+            rows = list(merged.values())
+            self._event_roots = event_roots
+            self._last_event_roots = {key: list(value) for key, value in event_roots.items()}
+            self._last_index_rows = [dict(row) for row in rows]
+            self._last_index_at = now
+            self._index_cache_used = False
+            self._index_cache_age_seconds = 0.0
+            best_root = max(roots, key=lambda root: self._index_root_counts.get(root, 0))
+            if self._index_root_counts.get(best_root, 0) > 0:
+                self.active_root = best_root
+            return self.active_root, rows
 
-        best_root = max(roots, key=lambda root: self._index_root_counts.get(root, 0))
-        if self._index_root_counts.get(best_root, 0) > 0:
-            self.active_root = best_root
-        return self.active_root, list(merged.values())
+        max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "45")))
+        age = now - self._last_index_at if self._last_index_at > 0 else 999999.0
+        if self._last_index_rows and age <= max_cache_age:
+            self._event_roots = {key: list(value) for key, value in self._last_event_roots.items()}
+            self._index_cache_used = True
+            self._index_cache_age_seconds = round(age, 1)
+            return self.active_root, [dict(row) for row in self._last_index_rows]
+
+        self._event_roots = {}
+        self._index_cache_used = False
+        self._index_cache_age_seconds = None
+        return None, []
 
     def _game(self, event_id: str) -> dict[str, Any] | None:
         params = {

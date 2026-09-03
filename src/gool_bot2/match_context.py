@@ -4,27 +4,71 @@ from statistics import mean, median
 from typing import Any
 
 
+_ATTACK_KEYS = (
+    "shots",
+    "shots_on_target",
+    "shots_inside_box",
+    "big_chances",
+    "high_xg_shots",
+    "touches_box",
+    "dangerous_attacks",
+    "corners",
+)
+
+
+def _stat_pair(stats: dict[str, Any], key: str) -> tuple[float, float] | None:
+    value = stats.get(key)
+    if not value or not isinstance(value, (list, tuple)) or len(value) < 2:
+        return None
+    try:
+        return float(value[0]), float(value[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _empty_attack_snapshot(stats: dict[str, Any]) -> bool:
+    """Identify placeholder/stale secondary snapshots that are all zero.
+
+    FotMob/365Scores can map a live match before their shot map has refreshed.
+    Such a row must not outvote a non-zero Flashscore cumulative snapshot.
+    Require at least two observable attack metrics before calling it empty.
+    """
+    seen: list[tuple[float, float]] = []
+    for key in _ATTACK_KEYS:
+        pair = _stat_pair(stats, key)
+        if pair is not None:
+            seen.append(pair)
+    return len(seen) >= 2 and all(abs(home) + abs(away) <= 1e-12 for home, away in seen)
+
+
 def _pairs(record: dict[str, Any], key: str) -> list[tuple[float, float]]:
+    providers = record.get("providers") or {}
+    flash_stats = ((providers.get("flashscore") or {}).get("stats") or {}) if isinstance(providers, dict) else {}
+    flash_pair = _stat_pair(flash_stats, key)
+    flash_active = flash_pair is not None and abs(flash_pair[0]) + abs(flash_pair[1]) > 1e-12
+
     out: list[tuple[float, float]] = []
-    for provider in (record.get("providers") or {}).values():
+    for provider_name, provider in providers.items():
         stats = (provider or {}).get("stats") or {}
-        value = stats.get(key)
-        if not value or not isinstance(value, (list, tuple)) or len(value) < 2:
+        pair = _stat_pair(stats, key)
+        if pair is None:
             continue
-        try:
-            out.append((float(value[0]), float(value[1])))
-        except (TypeError, ValueError):
+        # Keep all genuine disagreements. Only ignore a secondary source when
+        # its entire attacking snapshot is still zero while Flashscore already
+        # has cumulative activity for this metric.
+        if str(provider_name) != "flashscore" and flash_active and _empty_attack_snapshot(stats):
             continue
+        out.append(pair)
     return out
 
 
 def provider_pair(record: dict[str, Any], key: str, mode: str = "consensus") -> tuple[float | None, float | None]:
-    """Read a cumulative stat from all available providers.
+    """Read a cumulative stat from all usable providers.
 
-    The production collector can attach Flashscore, FotMob and 365Scores. The
-    default consensus is the median per side, so one malformed/outlier provider
-    cannot drag the LIVE picture far away from the other two. With two sources
-    median naturally equals their average; with one source its value is kept.
+    GOOL receives Flashscore, FotMob and 365Scores. The default consensus uses
+    the median per side after removing clearly empty/stale secondary snapshots.
+    This lets genuine cross-site agreement protect against one outlier without
+    allowing placeholder zero rows to erase real cumulative match activity.
     """
     pairs = _pairs(record, key)
     if not pairs:

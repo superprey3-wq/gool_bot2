@@ -1,12 +1,57 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from typing import Any
 
 from . import xbet_market_pressure as market
+
+
+def _half_goal_only(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Keep classic O/U x.5 lines only (0.5, 1.5, 2.5, ...).
+
+    Integer Asian totals and quarter lines are deliberately excluded from the
+    GOOL Multi market state, so the router cannot accidentally select a push or
+    split-stake Asian line.
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        try:
+            line = float(row.get("line"))
+        except (TypeError, ValueError):
+            continue
+        if abs((line % 1.0) - 0.5) < 1e-9:
+            out.append(dict(row))
+    return out
+
+
+def decode_standard_markets(game: dict[str, Any]) -> dict[str, Any]:
+    """Decode full-match markets plus the real 1xBet 1st-half subgame total."""
+    decoded = market.decode_markets(game)
+    decoded["match_total"] = _half_goal_only(decoded.get("match_total"))
+    decoded["home_total"] = _half_goal_only(decoded.get("home_total"))
+    decoded["away_total"] = _half_goal_only(decoded.get("away_total"))
+
+    first_half: list[dict[str, Any]] = []
+    for subgame in game.get("SG") or []:
+        if not isinstance(subgame, dict):
+            continue
+        period = subgame.get("P")
+        name = str(subgame.get("PN") or "").strip().lower()
+        if period != 1 and name not in {"1st half", "first half", "1 half"}:
+            continue
+        # Running _nodes on the SG object itself intentionally makes these nodes
+        # non-sub for _pairs(), while still limiting decoding to this exact period.
+        nodes = market._nodes(subgame)
+        first_half = _half_goal_only(market._pairs(nodes, 9, 10, 4))
+        if first_half:
+            break
+    decoded["first_half_total"] = first_half
+    return decoded
 
 
 class RobustXBetMarketCollector(market.XBetMarketCollector):
@@ -123,3 +168,67 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 self.active_root = root
                 return value
         return None
+
+    @staticmethod
+    def _flat(markets: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        out = market.XBetMarketCollector._flat(markets)
+        for row in markets.get("first_half_total") or []:
+            if not row.get("over"):
+                continue
+            over = float(row["over"])
+            under = None if row.get("under") is None else float(row["under"])
+            out[f"first_half_total:{row.get('line')}"] = {
+                "odd": over,
+                "prob": market._norm_probability(over, under),
+            }
+        return out
+
+    def collect_once(self) -> dict[str, Any]:
+        started = time.time()
+        matches = self.flashscore.live_matches()
+        root, candidates = self._fetch_index()
+        output: dict[str, Any] = {}
+        jobs = []
+        with ThreadPoolExecutor(max_workers=max(2, int(os.getenv("XBET_GAME_WORKERS", "8")))) as pool:
+            for fs in matches:
+                event_id = self._map(fs, candidates)
+                if event_id:
+                    jobs.append((fs, event_id, pool.submit(self._game, event_id)))
+            for fs, event_id, future in jobs:
+                try:
+                    game = future.result(timeout=12)
+                except Exception:
+                    game = None
+                if not game:
+                    continue
+                markets = decode_standard_markets(game)
+                now = time.time()
+                score = (int(fs.home_score or 0), int(fs.away_score or 0))
+                pressure = self._pressure(str(fs.provider_match_id), score, now, markets)
+                output[str(fs.provider_match_id)] = {
+                    "flashscore_event_id": str(fs.provider_match_id),
+                    "xbet_event_id": event_id,
+                    "home": fs.home,
+                    "away": fs.away,
+                    "minute": int(fs.minute or 0),
+                    "score_home": score[0],
+                    "score_away": score[1],
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "markets": markets,
+                    "pressure": pressure,
+                    "line_move": False,
+                }
+        state = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "root": root,
+            "latency_ms": int((time.time() - started) * 1000),
+            "matches": output,
+        }
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.state_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(self.state_path)
+        self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.history_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return state

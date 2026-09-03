@@ -18,6 +18,7 @@ on:
       - 'tests/test_multi_first_half_value.py'
       - 'tests/test_multi_min_odd.py'
       - 'tests/test_multi_cards_delivery.py'
+      - 'tests/test_multi_card_journal_assets.py'
       - 'tests/test_multi_journal.py'
       - 'tests/test_multi_menu.py'
       - 'tests/test_multi_bank.py'
@@ -45,7 +46,7 @@ jobs:
           pip install -e '.[dev]'
 
       - name: Unit safety check for Multi Bot
-        run: pytest -q tests/test_multi_router.py tests/test_multi_neutral_market.py tests/test_multi_market_opposition.py tests/test_multi_first_half_value.py tests/test_multi_min_odd.py tests/test_multi_cards_delivery.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_multi_journal.py tests/test_multi_menu.py tests/test_multi_bank.py tests/test_multi_model_capture.py tests/test_xbet_market_robust.py tests/test_xbet_first_half_child.py
+        run: pytest -q tests/test_multi_router.py tests/test_multi_neutral_market.py tests/test_multi_market_opposition.py tests/test_multi_first_half_value.py tests/test_multi_min_odd.py tests/test_multi_cards_delivery.py tests/test_multi_card_journal_assets.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_multi_journal.py tests/test_multi_menu.py tests/test_multi_bank.py tests/test_multi_model_capture.py tests/test_xbet_market_robust.py tests/test_xbet_first_half_child.py
 
       - name: Render Multi signal/result card previews
         run: python scripts/gool_multi_card_preview.py --out-dir artifacts/gool_multi_cards

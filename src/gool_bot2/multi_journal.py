@@ -199,11 +199,21 @@ def settle_entry(row: dict[str, Any], record: dict[str, Any]) -> bool:
             if is_halftime:
                 ht_score = [hs, aws]
             else:
+                entry_score = list(row.get("score") or [0, 0])
+                if [hs, aws] == [int(entry_score[0] or 0), int(entry_score[1] or 0)]:
+                    _finish_row(
+                        row,
+                        result="lost",
+                        minute=45,
+                        score=[hs, aws],
+                        reason="no_first_half_goal_score_unchanged",
+                    )
+                    return True
                 _finish_row(
                     row,
                     result="void",
                     minute=45,
-                    score=list(row.get("score") or [0, 0]),
+                    score=[int(entry_score[0] or 0), int(entry_score[1] or 0)],
                     reason="half_time_score_unavailable",
                 )
                 return True

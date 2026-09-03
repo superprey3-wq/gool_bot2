@@ -67,6 +67,28 @@ def test_three_provider_consensus_rejects_one_bad_low_outlier():
     assert provider_pair(record, "xg") == (0.65, 0.98)
 
 
+def test_empty_secondary_snapshots_do_not_erase_flashscore_activity():
+    record = {
+        "providers": {
+            "flashscore": {
+                "stats": {
+                    "shots": (6, 9),
+                    "shots_on_target": (2, 4),
+                    "big_chances": (2, 2),
+                    "touches_box": (10, 19),
+                    "xg": (0.68, 1.02),
+                }
+            },
+            "fotmob": {"stats": {"shots": (0, 0), "shots_on_target": (0, 0), "big_chances": (0, 0)}},
+            "365scores": {"stats": {"shots": (0, 0), "shots_on_target": (0, 0), "big_chances": (0, 0)}},
+        }
+    }
+    assert provider_pair(record, "shots") == (6.0, 9.0)
+    assert provider_pair(record, "shots_on_target") == (2.0, 4.0)
+    assert provider_pair(record, "big_chances") == (2.0, 2.0)
+    assert provider_pair(record, "xg") == (0.68, 1.02)
+
+
 def test_two_provider_consensus_is_their_midpoint():
     record = {
         "providers": {

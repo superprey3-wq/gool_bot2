@@ -7,6 +7,7 @@ from typing import Any
 from . import signal_worker_all_cards as cards
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_experts import build_expert_snapshot
+from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_shadow import analyze_and_record
 from .shadow_markets import analyze_btts_shadow, side_goal_pressure
 from .xbet_market_pressure import load_market_state
@@ -41,17 +42,43 @@ def _market_row(record: dict[str, Any]) -> dict[str, Any] | None:
     return ((load_market_state().get("matches") or {}).get(mid) or None)
 
 
-def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
-    """Feed the current production snapshot into GOOL MULTI without Telegram.
+def _paths() -> tuple[Path, Path]:
+    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
+    analysis_raw = os.getenv("GOOL_MULTI_ANALYSIS_PATH", "").strip()
+    if not analysis_raw:
+        analysis_raw = os.getenv("GOOL_MULTI_SHADOW_PATH", "").strip()
+    analysis = Path(analysis_raw) if analysis_raw else runtime / "live" / "gool_multi_analysis.jsonl"
+    journal_raw = os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip()
+    journal = Path(journal_raw) if journal_raw else runtime / "live" / "gool_multi_journal.json"
+    return analysis, journal
 
-    This runs inside the existing signal worker process. It reuses the already
-    calculated GOOL model result, GOOL LIVE +2 state and 1xBet market state, so
-    no second bot/collector/model pipeline is created.
+
+def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
+    """Feed the production snapshot into GOOL MULTI without Telegram emission.
+
+    Analysis JSONL contains every router observation. The Multi journal contains
+    only unique BEST BET entries, at most one open exposure per match, with live
+    settlement from Flashscore score/timeline data.
     """
     match = record.get("match") or {}
     mid = str(match.get("flashscore_event_id") or "")
     minute = int(match.get("minute") or 0)
-    if not mid or minute <= 0 or bool(match.get("is_finished")):
+    if not mid:
+        return
+
+    analysis_path, journal_path = _paths()
+
+    # Settlement must run even on the final row or when model/market data is
+    # temporarily unavailable; otherwise a valid Multi entry could stay pending.
+    settled = settle_multi_journal(record, journal_path)
+    for row in settled:
+        print(
+            f"GOOL_MULTI_SETTLED match={mid} market={row.get('market')} result={row.get('result')} "
+            f"profit={row.get('profit_units')} score={row.get('settled_score')}",
+            flush=True,
+        )
+
+    if minute <= 0 or bool(match.get("is_finished")):
         return
 
     model_result = dict(getattr(worker, "_diag_model_result", {}) or {})
@@ -71,10 +98,15 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         return
 
     market = _market_row(record)
-    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
-    journal = Path(os.getenv("GOOL_MULTI_SHADOW_PATH", str(runtime / "live" / "gool_multi_shadow.jsonl")))
     quality = _data_quality(record)
-    decision = analyze_and_record(record, market, experts, journal, data_quality=quality)
+    decision = analyze_and_record(record, market, experts, analysis_path, data_quality=quality)
+    _, created = sync_multi_journal(
+        record,
+        decision,
+        experts,
+        journal_path,
+        data_quality=quality,
+    )
 
     winner = None if decision.winner is None else f"{decision.winner.label}@{decision.winner.odd:.2f}"
     source = None if decision.winner is None else (
@@ -84,6 +116,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     )
     print(
         f"GOOL_MULTI_SHADOW match={mid} minute={minute} score={match.get('home_score',0)}:{match.get('away_score',0)} "
-        f"decision={decision.status} best={winner or '-'} source={source or '-'} quality={quality:.2f}",
+        f"decision={decision.status} best={winner or '-'} source={source or '-'} quality={quality:.2f} "
+        f"journal_entry={'yes' if created else 'no'}",
         flush=True,
     )

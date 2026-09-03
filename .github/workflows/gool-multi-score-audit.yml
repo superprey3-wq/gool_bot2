@@ -32,7 +32,7 @@ jobs:
       - name: Score guard safety tests
         run: pytest -q tests/test_xbet_score_epoch_guard.py tests/test_xbet_robust_event_guard.py
 
-      - name: Repeated real LIVE score audit
+      - name: Repeated real LIVE score audit after production mismatch
         env:
           XBET_MATCH_MIN_SCORE: '0.68'
           XBET_GAME_WORKERS: '8'

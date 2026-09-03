@@ -25,6 +25,13 @@ def load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
+def _truthy(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def ensure_deps() -> None:
     packages = {
         "numpy": "numpy>=1.26",
@@ -79,7 +86,14 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
-    os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "12")
+
+    # The collector writes a new LIVE snapshot once per minute. Polling the same
+    # raw files every 3 seconds adds needless process wakeups on a small VPS.
+    os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
+    os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
+    # 15s still stays comfortably inside the router's default 35s market-age
+    # guard while reducing 1xBet JSON parsing/network work by ~20% vs 12s.
+    os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
@@ -120,6 +134,7 @@ def main() -> None:
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
     print(f"GOOL_BOOT xbet state={xbet_state} interval={os.environ['XBET_MARKET_INTERVAL_SECONDS']} required={os.environ['XBET_MARKET_REQUIRED']}", flush=True)
+    print(f"GOOL_BOOT worker_sleep={os.environ['SIGNAL_WORKER_SLEEP']}s", flush=True)
     print(f"GOOL_BOOT var_guard seconds={os.environ['VAR_WIN_CONFIRM_SECONDS']} snapshots={os.environ['VAR_WIN_CONFIRM_SNAPSHOTS']}", flush=True)
 
     cleanup_env = os.environ.copy()
@@ -145,7 +160,7 @@ def main() -> None:
         sys.executable, "-m", "gool_bot2.xbet_market_worker",
         "--state", str(xbet_state),
         "--history", str(xbet_history),
-        "--interval", os.getenv("XBET_MARKET_INTERVAL_SECONDS", "12"),
+        "--interval", os.getenv("XBET_MARKET_INTERVAL_SECONDS", "15"),
     ], env=env)
     worker = subprocess.Popen([
         sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var",
@@ -153,15 +168,39 @@ def main() -> None:
         "--journal", str(journal),
         "--analysis", str(analysis),
     ], env=env)
-    shadow = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.storage_market_shadow_worker_var",
-        "--raw-dir", str(raw_live),
-        "--journal", str(shadow_journal),
-        "--analysis", str(shadow_analysis),
-        "--cards", str(shadow_cards),
-    ], env=env)
-    print(f"GOOL_BOOT running collector_pid={collector.pid} xbet_pid={xbet.pid} worker_pid={worker.pid} shadow_pid={shadow.pid}", flush=True)
-    procs = (("collector", collector), ("xbet", xbet), ("worker", worker), ("shadow", shadow))
+
+    # Multi active already calculates BTTS/home-goal/away-goal inside the main
+    # worker. Running the old experimental shadow process at the same time
+    # duplicates raw-file scans, prematch JSON hydration and market analysis.
+    # Keep it automatically for rollback/shadow mode, or allow explicit opt-in.
+    multi_mode = str(os.environ.get("GOOL_MULTI_TELEGRAM_MODE", "active")).strip().lower()
+    legacy_shadow_enabled = multi_mode != "active" or _truthy("GOOL_LEGACY_SHADOW_WORKER", False)
+    shadow = None
+    if legacy_shadow_enabled:
+        shadow = subprocess.Popen([
+            sys.executable, "-m", "gool_bot2.storage_market_shadow_worker_var",
+            "--raw-dir", str(raw_live),
+            "--journal", str(shadow_journal),
+            "--analysis", str(shadow_analysis),
+            "--cards", str(shadow_cards),
+        ], env=env)
+        print(f"GOOL_BOOT legacy_shadow=enabled pid={shadow.pid}", flush=True)
+    else:
+        print("GOOL_BOOT legacy_shadow=disabled reason=multi_active", flush=True)
+
+    procs: list[tuple[str, subprocess.Popen]] = [
+        ("collector", collector),
+        ("xbet", xbet),
+        ("worker", worker),
+    ]
+    if shadow is not None:
+        procs.append(("shadow", shadow))
+
+    print(
+        f"GOOL_BOOT running collector_pid={collector.pid} xbet_pid={xbet.pid} "
+        f"worker_pid={worker.pid} shadow_pid={shadow.pid if shadow is not None else '-'}",
+        flush=True,
+    )
     try:
         while True:
             for name, proc in procs:

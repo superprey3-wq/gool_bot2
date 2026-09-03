@@ -12,12 +12,7 @@ from . import xbet_market_pressure as market
 
 
 def _half_goal_only(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Keep classic O/U x.5 lines only (0.5, 1.5, 2.5, ...).
-
-    Integer Asian totals and quarter lines are deliberately excluded from the
-    GOOL Multi market state, so the router cannot accidentally select a push or
-    split-stake Asian line.
-    """
+    """Keep classic O/U x.5 lines only (0.5, 1.5, 2.5, ...)."""
     out: list[dict[str, Any]] = []
     for row in rows or []:
         try:
@@ -29,27 +24,29 @@ def _half_goal_only(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     return out
 
 
+def _first_half_subgame(game: dict[str, Any]) -> dict[str, Any] | None:
+    for subgame in game.get("SG") or []:
+        if not isinstance(subgame, dict):
+            continue
+        period = subgame.get("P")
+        name = str(subgame.get("PN") or "").strip().lower()
+        if str(period) == "1" or name in {"1st half", "first half", "1 half"}:
+            return subgame
+    return None
+
+
 def decode_standard_markets(game: dict[str, Any]) -> dict[str, Any]:
-    """Decode full-match markets plus the real 1xBet 1st-half subgame total."""
+    """Decode full-match markets plus an embedded real 1xBet 1st-half total."""
     decoded = market.decode_markets(game)
     decoded["match_total"] = _half_goal_only(decoded.get("match_total"))
     decoded["home_total"] = _half_goal_only(decoded.get("home_total"))
     decoded["away_total"] = _half_goal_only(decoded.get("away_total"))
 
     first_half: list[dict[str, Any]] = []
-    for subgame in game.get("SG") or []:
-        if not isinstance(subgame, dict):
-            continue
-        period = subgame.get("P")
-        name = str(subgame.get("PN") or "").strip().lower()
-        if period != 1 and name not in {"1st half", "first half", "1 half"}:
-            continue
-        # Running _nodes on the SG object itself intentionally makes these nodes
-        # non-sub for _pairs(), while still limiting decoding to this exact period.
+    subgame = _first_half_subgame(game)
+    if subgame:
         nodes = market._nodes(subgame)
         first_half = _half_goal_only(market._pairs(nodes, 9, 10, 4))
-        if first_half:
-            break
     decoded["first_half_total"] = first_half
     return decoded
 
@@ -59,10 +56,8 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
 
     Public 1xBet LiveFeed mirrors can return different subsets of the football
     live index, or briefly return an empty index from every mirror. We merge all
-    reachable roots/queries and keep a deliberately short last-good index cache.
-    The cache only preserves candidate ids/names; every actual market snapshot is
-    still fetched live through GetGameZip, so stale odds are never replayed as a
-    new market observation.
+    reachable roots/queries and keep a short last-good index cache. The cache
+    only preserves candidate ids/names; every market snapshot is fetched live.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -133,7 +128,7 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 self.active_root = best_root
             return self.active_root, rows
 
-        max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "45")))
+        max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "75")))
         age = now - self._last_index_at if self._last_index_at > 0 else 999999.0
         if self._last_index_rows and age <= max_cache_age:
             self._event_roots = {key: list(value) for key, value in self._last_event_roots.items()}
@@ -169,6 +164,33 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 return value
         return None
 
+    def _markets_for_event(self, event_id: str, minute: int, current_total: int) -> dict[str, Any] | None:
+        game = self._game(event_id)
+        if not game:
+            return None
+        markets = decode_standard_markets(game)
+        if not (0 < int(minute) <= 45):
+            return markets
+
+        target = float(current_total) + 0.5
+        embedded = market._line_row(markets.get("first_half_total") or [], target)
+        if embedded and embedded.get("over"):
+            return markets
+
+        subgame = _first_half_subgame(game)
+        subgame_id = None if not subgame else str(subgame.get("I") or "").strip()
+        if not subgame_id or subgame_id == str(event_id):
+            return markets
+
+        child = self._game(subgame_id)
+        if not child:
+            return markets
+        child_markets = market.decode_markets(child)
+        child_totals = _half_goal_only(child_markets.get("match_total"))
+        if child_totals:
+            markets["first_half_total"] = child_totals
+        return markets
+
     @staticmethod
     def _flat(markets: dict[str, Any]) -> dict[str, dict[str, Any]]:
         out = market.XBetMarketCollector._flat(markets)
@@ -193,15 +215,16 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
             for fs in matches:
                 event_id = self._map(fs, candidates)
                 if event_id:
-                    jobs.append((fs, event_id, pool.submit(self._game, event_id)))
+                    minute = int(fs.minute or 0)
+                    current_total = int(fs.home_score or 0) + int(fs.away_score or 0)
+                    jobs.append((fs, event_id, pool.submit(self._markets_for_event, event_id, minute, current_total)))
             for fs, event_id, future in jobs:
                 try:
-                    game = future.result(timeout=12)
+                    markets = future.result(timeout=18)
                 except Exception:
-                    game = None
-                if not game:
+                    markets = None
+                if not markets:
                     continue
-                markets = decode_standard_markets(game)
                 now = time.time()
                 score = (int(fs.home_score or 0), int(fs.away_score or 0))
                 pressure = self._pressure(str(fs.provider_match_id), score, now, markets)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import telegram
-from .multi_analysis_view import analysis_text
+from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections, journal_path, reconcile_pending, report_text
 from .multi_telegram import is_multi_telegram_active
@@ -15,11 +15,17 @@ def _report_text_with_bank(*args, **kwargs) -> str:
     return f"{text}\n\n{bank}"
 
 
+def _analysis_text_safe(*args, **kwargs) -> str:
+    """Keep diagnostic comparison signs from being parsed as Telegram HTML tags."""
+    text = _analysis_text(*args, **kwargs)
+    return text.replace("PRICE<", "PRICE&lt;").replace("RATING<", "RATING&lt;")
+
+
 def install_multi_product() -> None:
     """Point menus/reporting at the unified Multi product."""
     telegram.report_text = _report_text_with_bank
     telegram.in_game_sections = in_game_sections
-    telegram.analysis_text = analysis_text
+    telegram.analysis_text = _analysis_text_safe
 
     def _reconcile(_: Path) -> int:
         return reconcile_pending()

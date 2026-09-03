@@ -6,6 +6,7 @@ on:
       - feature/gool-multi-router
     paths:
       - 'scripts/gool_multi_live_audit.py'
+      - 'scripts/gool_multi_card_preview.py'
       - 'src/gool_bot2/multi_*.py'
       - 'src/gool_bot2/xbet_market_pressure.py'
       - 'src/gool_bot2/xbet_market_robust.py'
@@ -15,6 +16,8 @@ on:
       - 'tests/test_multi_neutral_market.py'
       - 'tests/test_multi_market_opposition.py'
       - 'tests/test_multi_first_half_value.py'
+      - 'tests/test_multi_min_odd.py'
+      - 'tests/test_multi_cards_delivery.py'
       - 'tests/test_multi_journal.py'
       - 'tests/test_multi_menu.py'
       - 'tests/test_multi_bank.py'
@@ -42,7 +45,10 @@ jobs:
           pip install -e '.[dev]'
 
       - name: Unit safety check for Multi Bot
-        run: pytest -q tests/test_multi_router.py tests/test_multi_neutral_market.py tests/test_multi_market_opposition.py tests/test_multi_first_half_value.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_multi_journal.py tests/test_multi_menu.py tests/test_multi_bank.py tests/test_multi_model_capture.py tests/test_xbet_market_robust.py tests/test_xbet_first_half_child.py
+        run: pytest -q tests/test_multi_router.py tests/test_multi_neutral_market.py tests/test_multi_market_opposition.py tests/test_multi_first_half_value.py tests/test_multi_min_odd.py tests/test_multi_cards_delivery.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_multi_journal.py tests/test_multi_menu.py tests/test_multi_bank.py tests/test_multi_model_capture.py tests/test_xbet_market_robust.py tests/test_xbet_first_half_child.py
+
+      - name: Render Multi signal/result card previews
+        run: python scripts/gool_multi_card_preview.py --out-dir artifacts/gool_multi_cards
 
       - name: Capture current Flashscore LIVE and standard 1xBet markets
         env:
@@ -65,5 +71,13 @@ jobs:
         with:
           name: gool-multi-live-audit
           path: artifacts/gool_multi_live_audit/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-multi-card-previews
+          path: artifacts/gool_multi_cards/
           if-no-files-found: warn
           retention-days: 7

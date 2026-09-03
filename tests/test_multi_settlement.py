@@ -15,13 +15,19 @@ def _candidate(key: str, family: str, label: str, odd: float) -> MarketCandidate
     )
 
 
-def test_asian_total_push_is_not_counted_as_loss():
-    candidate = _candidate("match_total:4", "asian_match_total", "ТБ 4", 1.60)
+def test_classic_total_has_no_asian_push_path():
+    candidate = _candidate("match_total:3.5", "match_total", "ТБ 3.5", 1.60)
 
-    settled = settle_candidate(candidate, (2, 2))
+    assert settle_candidate(candidate, (2, 2)).result == "won"
+    assert settle_candidate(candidate, (2, 1)).result == "lost"
 
-    assert settled.result == "push"
-    assert settled.profit_units == 0.0
+
+def test_first_half_total_uses_half_time_score_not_final_score():
+    candidate = _candidate("first_half_total:0.5", "first_half_total", "1Т ТБ 0.5", 1.90)
+
+    assert settle_candidate(candidate, (2, 0), half_time_score=(0, 0)).result == "lost"
+    assert settle_candidate(candidate, (2, 0), half_time_score=(1, 0)).result == "won"
+    assert settle_candidate(candidate, (2, 0)).result == "void"
 
 
 def test_shadow_settlement_can_detect_better_alternative():

@@ -135,6 +135,61 @@ def _age_seconds(market_row: dict[str, Any] | None) -> float | None:
         return None
 
 
+def _first_half_market_info(
+    market_row: dict[str, Any],
+    *,
+    probability: float,
+    hs: int,
+    aws: int,
+    source: str,
+) -> dict[str, Any]:
+    line = hs + aws + 0.5
+    item = _row(list(((market_row.get("markets") or {}).get("first_half_total") or [])), line)
+    pressure = (market_row.get("pressure") or {}).get(f"first_half_total:{line}") or {}
+    delta = float(pressure.get("prob_delta_pp") or 0.0)
+    moves = int(pressure.get("one_way_moves") or 0)
+    available = bool(item and item.get("over"))
+    if not available:
+        level = "NO_DATA"
+        confirmed = False
+    elif delta >= 6.0 and moves >= 2:
+        level = "STRONG_STEAM"
+        confirmed = True
+    elif delta >= 3.0:
+        level = "PRESSURE"
+        confirmed = True
+    else:
+        level = "NEUTRAL"
+        confirmed = False
+    info: dict[str, Any] = {
+        "available": available,
+        "confirmed": confirmed,
+        "level": level,
+        "score_pp": round(delta, 2),
+        "line_move": bool(market_row.get("line_move")),
+        "targets": [{
+            "market": "first_half_total",
+            "line": line,
+            "weight": 1.0,
+            "label": f"1Т ТБ {line:g}",
+            "selection": None if not available else {
+                "market": "first_half_total",
+                "line": line,
+                "odd": float(item["over"]),
+                "opposite": item.get("under"),
+            },
+            "prob_delta_pp": delta,
+            "one_way_moves": moves,
+            "old_odd": pressure.get("old_odd"),
+            "new_odd": None if not available else float(item["over"]),
+        }],
+        "head": "goal_before_ht",
+        "reason": f"1xBet {level} · 1Т Δp={delta:.1f} п.п.",
+    }
+    info = decorate_market_info(info, market_row)
+    return attach_value(info, probability, probability_source=source)
+
+
 def _market_info(
     market_row: dict[str, Any],
     *,
@@ -145,6 +200,10 @@ def _market_info(
     source: str,
     selected_side: str | None = None,
 ) -> dict[str, Any]:
+    if head == "goal_before_ht":
+        return _first_half_market_info(
+            market_row, probability=probability, hs=hs, aws=aws, source=source
+        )
     info = evaluate_system(market_row, head, hs, aws, selected_side)
     info = decorate_market_info(info, market_row)
     info = attach_value(info, probability, probability_source=source)
@@ -207,20 +266,19 @@ def build_goal_market_candidates(
     *,
     data_quality: float = 1.0,
 ) -> list[MarketCandidate]:
-    """Build candidates from our GOOL systems and the exact supported 1xBet markets.
+    """Build GOOL candidates using classic x.5 totals only.
 
-    GOOL WAIT/NO is a soft state. It remains visible to the router and can be
-    revived only by the existing verified 1xBet MARKET/VALUE override rules.
-    Hard safety conditions (score desync, stale line, closed time window) are
-    enforced later and cannot be overridden.
+    Integer/quarter Asian totals are intentionally not built. During the first
+    half the existing GOOL goal_before_ht model can compete for the real 1xBet
+    1st-half total. GOOL WAIT/NO remains a soft state that only verified market
+    or value override may revive; score/time/staleness guards stay hard.
     """
-    if not market_row:
-        return []
-    if bool(match.get("is_finished")):
+    if not market_row or bool(match.get("is_finished")):
         return []
 
     hs = int(match.get("home_score") or 0)
     aws = int(match.get("away_score") or 0)
+    minute = int(match.get("minute") or 0)
     if int(market_row.get("score_home") or 0) != hs or int(market_row.get("score_away") or 0) != aws:
         return []
 
@@ -230,6 +288,7 @@ def build_goal_market_candidates(
 
     p1, src1, pass1, blocks1 = _expert(experts, "another_goal")
     p2, src2, pass2, blocks2 = _expert(experts, "two_more_goals")
+    pht, srcht, passht, blocksht = _expert(experts, "goal_before_ht")
     ph, srch, passh, blocksh = _expert(experts, "home_goal")
     pa, srca, passa, blocksa = _expert(experts, "away_goal")
     pb, srcb, passb, blocksb = _expert(experts, "btts")
@@ -257,20 +316,6 @@ def build_goal_market_candidates(
                 market_info=info, market_age_seconds=age, data_quality=data_quality,
             ))
 
-    if p1 is not None and p2 is not None and p1 >= p2:
-        line = total + 1.0
-        item = _row(totals, line)
-        if item and item.get("over"):
-            out.append(_candidate(
-                key=f"match_total:{line:g}", family="asian_match_total", strategy="combined_total",
-                label=f"ТБ {line:g}", odd=float(item["over"]), probability=p2,
-                expert_passed=bool(pass1 and pass2), expert_blocks=[*blocks1, *blocks2],
-                push_probability=max(0.0, p1 - p2), opposite_odd=item.get("under"),
-                goals_to_win=2, correlation_key="two_goal_path", source=f"{src1}+{src2}",
-                market_pressure_pp=_pressure(market_row, "match_total", line),
-                market_age_seconds=age, data_quality=data_quality,
-            ))
-
     if p2 is not None:
         line = total + 1.5
         item = _row(totals, line)
@@ -284,6 +329,22 @@ def build_goal_market_candidates(
                 expert_passed=pass2, expert_blocks=blocks2, opposite_odd=item.get("under"),
                 goals_to_win=2, correlation_key="two_goal_path", source=src2,
                 market_pressure_pp=_pressure(market_row, "match_total", line),
+                market_info=info, market_age_seconds=age, data_quality=data_quality,
+            ))
+
+    if pht is not None and 0 < minute <= 45:
+        line = total + 0.5
+        item = _row(list(markets.get("first_half_total") or []), line)
+        if item and item.get("over"):
+            info = _market_info(
+                market_row, head="goal_before_ht", probability=pht, hs=hs, aws=aws, source=srcht
+            )
+            out.append(_candidate(
+                key=f"first_half_total:{line:g}", family="first_half_total", strategy="goal_before_ht",
+                label=f"1Т ТБ {line:g}", odd=float(item["over"]), probability=pht,
+                expert_passed=passht, expert_blocks=blocksht, opposite_odd=item.get("under"),
+                goals_to_win=1, correlation_key="any_next_goal", source=srcht,
+                market_pressure_pp=_pressure(market_row, "first_half_total", line),
                 market_info=info, market_age_seconds=age, data_quality=data_quality,
             ))
 
@@ -340,17 +401,27 @@ def build_goal_market_candidates(
 def _time_hard_block(candidate: MarketCandidate, minute: int) -> str | None:
     if minute < 10:
         return f"warmup_until_10:{minute}"
+    if candidate.strategy == "goal_before_ht":
+        if minute > 45:
+            return f"first_half_window_closed:{minute}>45"
+        return None
+    if candidate.strategy == "two_more_goals":
+        if minute > 65:
+            return f"two_goal_window_closed:{minute}>65"
+        return None
+    if candidate.strategy == "another_goal":
+        if minute > 85:
+            return f"another_goal_window_closed:{minute}>85"
+        return None
     if minute > 75:
         return f"entry_window_closed:{minute}>75"
-    if candidate.strategy in {"two_more_goals", "combined_total"} and minute > 65:
-        return f"two_goal_window_closed:{minute}>65"
     return None
 
 
 def _override_allowed(candidate: MarketCandidate, minute: int) -> bool:
     if candidate.expert_passed:
         return True
-    if candidate.strategy in {"two_more_goals", "combined_total"} and minute > 60:
+    if candidate.strategy == "two_more_goals" and minute > 60:
         return False
     return bool(candidate.market_override or candidate.value_override)
 
@@ -413,6 +484,8 @@ def score_candidate(candidate: MarketCandidate, minute: int) -> MarketCandidate:
         candidate.reason_tags.append("market_steam")
     if candidate.family == "team_total":
         candidate.reason_tags.append("team_specific")
+    if candidate.family == "first_half_total":
+        candidate.reason_tags.append("first_half")
 
     candidate.eligible = not candidate.blocks
     return candidate
@@ -423,12 +496,14 @@ def _winner_reason(candidate: MarketCandidate, minute: int) -> str:
         return "1xBet MARKET OVERRIDE вернул мягко отклонённый GOOL-рынок; среди всех кандидатов он получил лучший рейтинг."
     if not candidate.expert_passed and candidate.value_override:
         return "Сильный VALUE вернул мягко отклонённый GOOL-рынок; после сравнения он оказался лучшим."
-    if candidate.family == "asian_match_total" and candidate.push_probability >= 0.08:
-        return "Лучший баланс VALUE и вероятности: средняя линия даёт защиту возвратом."
+    if candidate.family == "first_half_total":
+        return "Модель гола до перерыва и реальный тотал 1-го тайма дают лучший текущий баланс вероятности и цены."
     if candidate.family == "team_total":
         return "Выбран командный гол: цена лучше общего рынка при том же голевом сценарии."
     if candidate.family == "btts":
         return "ОЗ даёт лучший баланс цены и вероятности среди связанных голевых рынков."
+    if candidate.strategy == "another_goal" and minute > 75:
+        return "Позднее окно ещё одного гола активно до 85-й минуты; рынок проходит VALUE и LIVE-проверки."
     if candidate.goals_to_win == 1 and minute >= 61:
         return "На этой минуте один гол надёжнее агрессивного сценария +2."
     if candidate.goals_to_win >= 2:

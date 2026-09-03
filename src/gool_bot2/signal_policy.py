@@ -41,8 +41,12 @@ def time_gate(head: str, minute: int, is_halftime: bool = False, is_reentry: boo
         if minute > limit:
             reasons.append(f"entry_window_closed_{limit}")
     elif head == "goal_before_ht":
-        if is_halftime or minute > 25:
-            reasons.append("first_half_signal_window_closed_25")
+        start = int(os.getenv("GOAL_BEFORE_HT_MIN_MINUTE", "12"))
+        limit = int(os.getenv("GOAL_BEFORE_HT_MAX_MINUTE", "40"))
+        if minute < start:
+            reasons.append(f"first_half_warmup_until_{start}")
+        if is_halftime or minute > limit:
+            reasons.append(f"first_half_signal_window_closed_{limit}")
     elif head in {"over_2_5", "both_teams_to_score"}:
         if not is_halftime:
             reasons.append("halftime_model_requires_halftime")
@@ -79,6 +83,13 @@ def model_threshold_gate(head: str, probability: float, score: float) -> GateRes
         # while allowing the two independent gates to do their job.
         min_score = float(os.getenv("ANOTHER_GOAL_MIN_SCORE", "72"))
         min_probability = 0.0
+    elif head == "goal_before_ht":
+        # A shorter horizon needs its own threshold instead of falling through to
+        # the generic 80/75 gate. 1xBet pressure is required separately in the
+        # market integration layer, so these defaults stay selective without
+        # limiting the strategy to only extreme model readings.
+        min_score = float(os.getenv("GOAL_BEFORE_HT_MIN_SCORE", "75"))
+        min_probability = float(os.getenv("GOAL_BEFORE_HT_MIN_PROBABILITY", "68"))
     elif head == "over_2_5":
         min_score = float(os.getenv("OVER25_MIN_SCORE", "70"))
         min_probability = float(os.getenv("OVER25_MIN_PROBABILITY", "70"))

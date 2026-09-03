@@ -5,7 +5,7 @@ import os
 import signal
 from pathlib import Path
 
-from .xbet_market_pressure import XBetMarketCollector
+from .xbet_market_robust import RobustXBetMarketCollector
 from .xbet_score_epoch_guard import install as install_score_epoch_guard
 from .xbet_timeline_score_guard import install as install_timeline_score_guard
 
@@ -19,11 +19,12 @@ def main() -> None:
     args = parser.parse_args()
     install_score_epoch_guard()
     install_timeline_score_guard()
-    collector = XBetMarketCollector(Path(args.state), Path(args.history))
+    collector = RobustXBetMarketCollector(Path(args.state), Path(args.history))
     signal.signal(signal.SIGINT, collector.stop)
     signal.signal(signal.SIGTERM, collector.stop)
     print(
         f"XBET_MARKET started interval={args.interval}s state={args.state} "
+        f"collector=merged_roots "
         f"score_epoch_guard={os.getenv('XBET_SCORE_REPRICE_GUARD_SECONDS', '24')}s "
         f"timeline_epoch_guard={os.getenv('XBET_TIMELINE_REPRICE_GUARD_SECONDS', '45')}s",
         flush=True,

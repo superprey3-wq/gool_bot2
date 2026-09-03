@@ -152,17 +152,12 @@ def test_analysis_view_explains_price_value_and_gool_wait(monkeypatch):
 
     text = multi_analysis_view.analysis_text()
 
-    assert "P = модельная вероятность" in text
-    assert "AG P87%×" in text
-    assert "+2 C50/100×" in text
-    assert "PRE история H10/A10" in text
-    assert "PRE 10/10" not in text
-    assert "PRICE: кэф 1.27 &lt; 1.40" in text
-    assert "VALUE: EV -1.5% &lt; +1.0%" in text
-    assert "GOOL: эксперт WAIT" in text
-    assert "LIVE × pressure 0.76" in text
-    assert "нет свежей угрозы" in text
-    assert "Главные стопы WAIT" in text
+    assert "GOOL MULTI · КРАТКИЙ ОТЧЁТ" in text
+    assert "Vinotinto — San Antonio" in text
+    assert "🎯 Ещё 1 гол: ТБ 0.5 @ 1.27" in text
+    assert "🧠 Ещё гол: 87% · GOOL пока не подтверждает" in text
+    assert "📊 Игра: xG 0.12 · удары 2 · в створ 1" in text
+    assert "⛔ Почему ждём: мало давления, давно нет опасных атак, слишком низкий кэф" in text
     assert len(text) < 4096
 
 
@@ -188,12 +183,11 @@ def test_analysis_view_explains_event_repricing_guard(monkeypatch):
 
     text = multi_analysis_view.analysis_text()
 
-    assert "EVENT GUARD" in text
-    assert "пенальти/VAR" in text
-    assert "не считаем его прогрузом" in text
+    assert "🧠 Ещё гол: 79% · GOOL подтверждает" in text
+    assert "⛔ Почему ждём: кэфы резко дёрнулись — ждём стабилизацию" in text
 
 
-def test_analysis_view_explains_missing_half_goal_line(monkeypatch):
+def test_analysis_view_handles_missing_goal_line_compactly(monkeypatch):
     row = {
         "match_id": "m3",
         "home": "Home",
@@ -213,4 +207,5 @@ def test_analysis_view_explains_missing_half_goal_line(monkeypatch):
 
     text = multi_analysis_view.analysis_text()
 
-    assert "нет нужной классической .5 линии: ТБ 0.5" in text
+    assert "🧠 Ещё гол: 81% · GOOL подтверждает" in text
+    assert "⛔ Почему ждём: GOOL пока не видит достаточно сильной игры для ставки" in text

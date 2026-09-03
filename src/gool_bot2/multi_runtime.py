@@ -94,6 +94,11 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         away_goal_analysis=away_goal,
         btts_analysis=btts,
     )
+    # A 1st-half market is closed at the interval even though Flashscore reports
+    # minute 45. Keep the model in diagnostics before HT, but never allow a
+    # halftime 1xBet move to revive a closed first-half bet.
+    if bool(match.get("is_halftime")):
+        experts.pop("goal_before_ht", None)
     if not experts:
         return
 

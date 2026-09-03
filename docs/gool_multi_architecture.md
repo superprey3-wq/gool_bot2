@@ -1,96 +1,117 @@
-# GOOL MULTI — shadow architecture
+# GOOL MULTI — one bot, many GOOL experts
 
-`feature/gool-multi-router` is an isolated redesign layer. It does not replace the production signal workers and it does not send Telegram messages.
+`feature/gool-multi-router` is the conversion path from separate GOOL strategies to one match-level Multi Bot. The production `main` branch is not changed while this is validated.
 
-## Product idea
+## Product rule
 
-GOOL MULTI treats a football match as one decision problem instead of five independent signal strategies.
+One match is one decision problem:
 
-Pipeline:
+`LIVE match -> all GOOL systems -> supported 1xBet markets -> one ranking -> BEST BET or WAIT`
 
-1. Existing GOOL experts analyse the match.
-2. Live 1xBet lines are decoded into a small set of goal-market candidates.
-3. The line optimizer compares neighboring lines that describe the same goal path.
-4. The router removes correlated duplicates and chooses one best market.
-5. The full decision (winner, alternatives and rejects) is written to the shadow journal.
-6. A unified card can be rendered from that decision, but the shadow layer has no Telegram dependency.
+The existing systems remain the football experts. They no longer compete by independently sending several signals from the same match.
 
-## Initial market scope
+Current expert inputs:
 
-The first version is deliberately narrow and goal-only:
+- `another_goal`;
+- `goal_before_ht`;
+- `two_more_goals`;
+- home team to score;
+- away team to score;
+- BTTS Yes.
 
-- next match goal / dynamic match total +0.5;
-- Asian middle match total +1.0;
-- two more goals / dynamic match total +1.5;
-- home team to score / home total +0.5 from current score;
-- away team to score / away total +0.5 from current score;
-- BTTS Yes when exactly one team is still scoreless.
+The router receives every usable expert probability/confidence, including a normal GOOL `WAIT`. A `WAIT` is not automatically a bet: it may enter the final competition only when the existing verified 1xBet override rules say that the market move is exceptional.
 
-No 1X2, handicaps, corners, cards, exact score or unrelated markets are included.
+## 1xBet is the runtime bookmaker source
 
-## Important probability rule
+GOOL MULTI reuses the current `xbet_market_worker` state. It does not start another bookmaker collector and it does not add Bet365/Betano/Kambi to the runtime.
 
-GOOL MULTI does not invent a probability for a market that has no matching expert model.
+Supported initial 1xBet goal markets:
 
-For an Asian total `current goals + 1.0`, the current GOOL outputs are sufficient:
+- dynamic match total `current goals + 0.5` (one more match goal);
+- Asian middle total `current goals + 1.0`;
+- dynamic match total `current goals + 1.5` (two more goals);
+- home team total `current home goals + 0.5`;
+- away team total `current away goals + 0.5`;
+- BTTS Yes.
+
+No 1X2, handicaps, corners, cards, exact score or unrelated markets are part of this router.
+
+`goal_before_ht` remains an expert in the unified snapshot, but it is not mapped to a fake full-match market. It becomes a selectable Multi Bot market only when the exact 1xBet first-half line is decoded and matched. Until then, the existing first-half production logic remains separate.
+
+## GOOL WAIT vs hard block
+
+This distinction is mandatory.
+
+### Soft GOOL WAIT
+
+Examples: ordinary model threshold miss, prematch/live pressure not strong enough, team-pressure filter miss.
+
+A soft WAIT may be revived when the corresponding 1xBet market produces a verified `MARKET_OVERRIDE` or `VALUE_OVERRIDE` under the existing Bot 2 rules. This preserves real behaviour such as a team-goal market moving from roughly `7.09 -> 4.76` with strong one-way steam even when the normal GOOL system did not pass.
+
+### Hard block
+
+1xBet can never override:
+
+- Flashscore/1xBet score desynchronisation;
+- stale or missing market timestamp;
+- finished match;
+- closed strategy time window;
+- `+2` hard window after 65';
+- any market that is not actually present in the decoded 1xBet state.
+
+For `two_more_goals`, the existing production rule is preserved: a rejected +2 scenario may be awakened by market/value override only through 60'; after that it can pass only organically, and after 65' it is closed completely.
+
+## Ranking
+
+Every eligible market is scored using the same comparison layer:
+
+- GOOL probability/confidence;
+- fair 1xBet probability (margin removed when opposite price exists);
+- model VALUE / expected ROI;
+- 1xBet steam / probability movement;
+- LIVE data quality;
+- time/risk of the required number of goals;
+- override evidence when GOOL originally said WAIT.
+
+A strong override only returns a soft-rejected market to the competition. It does not automatically make it the winner. It must still beat the other available GOOL markets in the common ranking and retain positive value.
+
+## Correlation / one visible bet
+
+Correlated bets share one slot. The router compares them and keeps the better price instead of sending duplicates.
+
+Example at `1:0`:
+
+- `ОЗ — Да`;
+- `ИТБ2 0.5`.
+
+Both settle on the same next away goal, so only the stronger option can remain visible.
+
+The same principle applies to neighboring totals that represent the same two-goal path.
+
+## Asian middle total
+
+For `current goals + 1.0` the existing GOOL outputs are sufficient without inventing a model:
 
 - `P(>=2 more goals)` = win probability;
 - `P(>=1 more goal) - P(>=2 more goals)` = push probability;
 - `1 - P(>=1 more goal)` = loss probability.
 
-This lets the router compare, for example, `TB 3.5 @1.30`, `TB 4.0 @1.60`, and `TB 4.5 @1.90` without pretending that the push line is the same bet as `TB 4.5`.
+This lets Multi Bot compare, for example, `ТБ 3.5`, `ТБ 4.0` and `ТБ 4.5` with the push correctly accounted for.
 
-## Router principles
+## Runtime integration
 
-- One visible bet per match decision.
-- Correlated bets compete with each other instead of being sent together.
-- Positive model value is required.
-- Data quality participates in the rating.
-- 1xBet pressure/steam participates in the rating but cannot invent an unsupported football probability.
-- Two-goal win paths are hard-blocked after minute 65.
-- After minute 65 the router can still choose a one-goal market when it qualifies.
+Shadow validation now runs inside the existing `storage_market_signal_worker_var` process. It reuses:
 
-## Unified card
+- the same incoming live record;
+- the already-calculated GOOL model result;
+- the already-calculated GOOL LIVE +2 analysis;
+- team/BTTS GOOL pressure analyses;
+- the same 1xBet state collected by `xbet_market_worker`.
 
-The new card contains:
+There is no second bot process and no second 1xBet process.
 
-- match, score, minute and Flashscore team badges;
-- one large `BEST MARKET` selection and price;
-- GOOL rating;
-- one short explanation of why it won;
-- up to three alternatives from the same match;
-- model VALUE, expected ROI, data quality and market steam.
+Each observation is appended to `gool_multi_shadow.jsonl` and contains the expert states, all candidate markets, blocks, overrides, alternatives and the one selected BEST BET/WAIT decision. The shadow layer does not send Telegram signals yet.
 
-The renderer currently marks the card as `SHADOW` and never broadcasts it.
+## Cutover rule
 
-## Shadow journal
-
-Each observation stores:
-
-- match identity and score epoch;
-- expert snapshot used by the router;
-- data quality;
-- winning market;
-- visible alternatives;
-- rejected markets and exact block reasons;
-- rating, model probability, push probability, VALUE and market pressure.
-
-This data will later allow retrospective checks such as:
-
-- Did the router choose the best market among its alternatives?
-- Did an Asian push-protected line outperform the cheap +0.5 line?
-- Did late one-goal routing outperform late +2 decisions?
-- Which expert or market-pressure combinations are actually profitable?
-
-## Next integration stage
-
-The next stage should connect the shadow layer to the real runtime data without changing production Telegram output:
-
-1. adapter from the trained `another_goal` / `goal_before_ht` model result;
-2. adapter from GOOL LIVE `two_more_goals`;
-3. adapters from shadow `team_to_score` / BTTS analyses;
-4. current xBet market state by Flashscore event id;
-5. computed data-quality score;
-6. continuous `gool_multi_shadow.jsonl` collection.
-
-Only after a meaningful shadow sample should Telegram routing be considered.
+Production Telegram remains unchanged until the shadow sample demonstrates that the unified router behaves correctly. After validation, the intended cutover is to replace separate per-strategy emissions with the single Multi Bot decision/card, not to run both products forever.

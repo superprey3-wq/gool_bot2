@@ -143,7 +143,7 @@ def render_multi_card(
     sc._red_card_badge(draw, 905, 345, cards.get("away_red"))
 
     draw.rounded_rectangle((45, 405, 1035, 625), 26, fill=PANEL2, outline=ACCENT, width=3)
-    draw.text((72, 430), "🎯 BEST BET", font=sc._font(22, True), fill=ACCENT)
+    draw.text((72, 430), "BEST BET", font=sc._font(22, True), fill=ACCENT)
     draw.text((72, 478), winner.label, font=_fit_line(draw, winner.label, 580, 43, True), fill=TEXT)
     draw.text((72, 538), f"GOOL {winner.model_probability * 100:.1f}%  •  RATING {winner.rating:.0f}/100", font=sc._font(19, True), fill=GOLD)
     draw.text((72, 577), source, font=_fit_line(draw, source, 430, 17, True), fill=ACCENT if source == "GOOL" else GOLD)

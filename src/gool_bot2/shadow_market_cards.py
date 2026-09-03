@@ -86,6 +86,45 @@ def _scoreless_team(head: str, selected_side: str | None, hs: int, aws: int, hom
     return "обе команды"
 
 
+def _master_meta(event_id: str) -> dict[str, str]:
+    """Recover Flashscore team identity for legacy rows that lack cached assets.
+
+    This mirrors the first GOOL bot: locate AA÷<event_id> in the Flashscore master
+    feed and read OA/OB logo files plus team ids/slugs. It also works for many
+    recently finished matches still present in the day's master feed.
+    """
+    event_id = str(event_id or "").strip()
+    if not event_id:
+        return {}
+    try:
+        provider = sc.FlashscoreProvider()
+        for path in ("f_1_0_3_en_1", "f_1_0_0_en_1"):
+            body = provider._feed(path)
+            if not body:
+                continue
+            prefix = f"AA÷{event_id}¬"
+            for chunk in body.split("~"):
+                if not chunk.startswith(prefix):
+                    continue
+                fields: dict[str, str] = {}
+                for token in chunk.split("¬")[1:]:
+                    if "÷" in token:
+                        key, value = token.split("÷", 1)
+                        if key and key not in fields:
+                            fields[key] = value
+                return {
+                    "home_team_id": str(fields.get("JA") or "").strip(),
+                    "away_team_id": str(fields.get("JB") or "").strip(),
+                    "home_team_slug": str(fields.get("WU") or "").strip(),
+                    "away_team_slug": str(fields.get("WV") or "").strip(),
+                    "home_logo_file": str(fields.get("OA") or "").strip(),
+                    "away_logo_file": str(fields.get("OB") or "").strip(),
+                }
+    except Exception:
+        return {}
+    return {}
+
+
 def _stat_box(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int, title: str, value: str, accent) -> None:
     draw.rounded_rectangle((x1, y1, x2, y2), 16, fill=PANEL, outline=LINE, width=2)
     draw.text((x1 + 14, y1 + 12), title, font=sc._font(12, True), fill=MUTED)
@@ -197,13 +236,14 @@ def render_shadow_market_result_card(row: dict[str, Any]) -> bytes:
     team = row.get("team")
     label, team_detail = _team_target(head, row.get("selected_side"), int(entry[0]), int(entry[1]), team)
 
-    # Shadow/value rows historically did not persist Flashscore metadata directly.
-    # Entry-card rendering already stores the exact logos and entry stats in the
-    # shared signal-card asset cache, so result cards must recover them here.
     match_id = str(row.get("match_id") or "")
     cached = sc._read_assets().get(match_id, {}) or {}
     meta = dict(row.get("flashscore_meta") or cached.get("flashscore_meta") or {})
     stats = dict(row.get("stats_snapshot") or cached.get("stats_snapshot") or {})
+    if not (meta.get("home_logo_file") or meta.get("home_logo_url")) or not (meta.get("away_logo_file") or meta.get("away_logo_url")):
+        recovered = _master_meta(match_id)
+        if recovered:
+            meta = {**recovered, **{k: v for k, v in meta.items() if v}}
 
     image = Image.new("RGBA", (W, H), BG + (255,))
     draw = ImageDraw.Draw(image)

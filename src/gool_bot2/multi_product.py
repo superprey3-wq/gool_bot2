@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import telegram
+from .multi_analysis_view import analysis_text
 from .multi_bank import current_bank_summary
-from .multi_menu import analysis_text, in_game_sections, journal_path, reconcile_pending, report_text
+from .multi_menu import in_game_sections, journal_path, reconcile_pending, report_text
 from .multi_telegram import is_multi_telegram_active
 
 
@@ -32,7 +33,7 @@ def install_multi_product() -> None:
             "Сигнал и результат приходят одной Multi-карточкой с эмблемами и LIVE-статистикой.\n\n"
             "📊 Отчёт — статистика Multi + виртуальный банк\n"
             "🟢 В игре — открытые BEST BET\n"
-            "🧠 Анализ — все текущие Multi-решения\n"
+            "🧠 Анализ — почему каждый матч BET или WAIT\n"
             "💰 Дневной отчёт банка — автоматически в 23:59"
         )
     else:
@@ -42,7 +43,7 @@ def install_multi_product() -> None:
             "Один лучший рынок на матч: BEST BET или WAIT.\n\n"
             "📊 Отчёт — статистика выбранных Multi-ставок + виртуальный банк\n"
             "🟢 В игре — открытые Multi-ставки\n"
-            "🧠 Анализ — все текущие Multi-решения\n"
+            "🧠 Анализ — почему каждый матч BET или WAIT\n"
             "💰 Виртуальный банк — дневной отчёт автоматически в 23:59\n\n"
             "Боевые Telegram-сигналы пока остаются на старом контуре до включения GOOL_MULTI_TELEGRAM_MODE=active."
         )

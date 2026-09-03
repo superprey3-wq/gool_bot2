@@ -9,6 +9,7 @@ from .match_context import provider_count, xg_or_proxy_pair
 from .multi_experts import build_expert_snapshot
 from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_shadow import analyze_and_record
+from .multi_telegram import emit_multi_results, emit_multi_signal
 from .shadow_markets import analyze_btts_shadow, side_goal_pressure
 from .xbet_market_pressure import load_market_state
 
@@ -54,11 +55,12 @@ def _paths() -> tuple[Path, Path]:
 
 
 def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
-    """Feed the production snapshot into GOOL MULTI without Telegram emission.
+    """Feed one production snapshot into GOOL MULTI.
 
-    Analysis JSONL contains every router observation. The Multi journal contains
-    only unique BEST BET entries, at most one open exposure per match, with live
-    settlement from Flashscore score/timeline data.
+    In shadow mode this only records analysis/journal decisions. When
+    GOOL_MULTI_TELEGRAM_MODE=active, the same function emits the single Multi
+    BEST BET image and its later settlement image; legacy per-strategy Telegram
+    delivery is suppressed by the worker wrapper during cutover.
     """
     match = record.get("match") or {}
     mid = str(match.get("flashscore_event_id") or "")
@@ -71,6 +73,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # Settlement must run even on the final row or when model/market data is
     # temporarily unavailable; otherwise a valid Multi entry could stay pending.
     settled = settle_multi_journal(record, journal_path)
+    if settled:
+        emit_multi_results(record, settled)
     for row in settled:
         print(
             f"GOOL_MULTI_SETTLED match={mid} market={row.get('market')} result={row.get('result')} "
@@ -112,6 +116,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         journal_path,
         data_quality=quality,
     )
+    if created is not None:
+        emit_multi_signal(record, decision, created)
 
     winner = None if decision.winner is None else f"{decision.winner.label}@{decision.winner.odd:.2f}"
     source = None if decision.winner is None else (

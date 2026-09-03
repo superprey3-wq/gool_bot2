@@ -133,6 +133,7 @@ def test_analysis_view_explains_price_value_and_gool_wait(monkeypatch):
             "rejected": [
                 {
                     "label": "ТБ 0.5",
+                    "family": "match_total",
                     "strategy": "another_goal",
                     "odd": 1.27,
                     "rating": 68.0,

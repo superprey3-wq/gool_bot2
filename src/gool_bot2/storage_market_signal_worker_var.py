@@ -7,6 +7,7 @@ from . import signal_worker_all as base
 from . import storage_market_signal_worker as app
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
+from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
 from .var_settlement_guard import clear_provisional, confirmed_win
 
 _ORIG_SETTLE = base._settle_pending

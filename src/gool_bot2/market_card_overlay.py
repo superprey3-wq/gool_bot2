@@ -44,7 +44,8 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
         src = Image.open(BytesIO(png)).convert("RGBA")
     except Exception:
         return png
-    extra = 365
+    correlated = info.get("correlated_confirmation") if isinstance(info.get("correlated_confirmation"), dict) else None
+    extra = 455 if correlated else 365
     img = Image.new("RGBA", (src.width, src.height + extra), sc.BG + (255,))
     img.paste(src, (0, 0))
     d = ImageDraw.Draw(img)
@@ -78,7 +79,8 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
     else:
         state = "НЕТ ПРОГРУЗА" if level == "NEUTRAL" else level
 
-    d.text((62, y0 + 20), "1xBET MARKET + VALUE", font=sc._font(24, True), fill=sc.TEXT)
+    title = "1xBET · ОБЪЕДИНЁННЫЙ РЫНОЧНЫЙ СИГНАЛ" if correlated else "1xBET MARKET + VALUE"
+    d.text((62, y0 + 20), title, font=sc._font(24, True), fill=sc.TEXT)
     d.text((62, y0 + 60), state, font=sc._fit(d, state, 900, 28, True), fill=sc.TEXT)
     score = info.get("score_pp")
     delta = "—" if score is None else f"{float(score):+.1f} п.п."
@@ -89,7 +91,7 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
     old_odd = _fmt_odd(target.get("old_odd")); new_odd = _fmt_odd(target.get("new_odd"))
     if new_odd == "—":
         new_odd = _fmt_odd(info.get("value_odd"))
-    d.text((62, y0 + 112), f"Рынок: {label}", font=sc._font(20, True), fill=sc.TEXT)
+    d.text((62, y0 + 112), f"Основной рынок: {label}", font=sc._font(20, True), fill=sc.TEXT)
     d.text((62, y0 + 148), f"Кэф: {old_odd} → {new_odd}", font=sc._font(20, True), fill=sc.TEXT)
     move = float(target.get("prob_delta_pp") or 0.0)
     one_way = int(target.get("one_way_moves") or 0)
@@ -106,9 +108,23 @@ def append_xbet_market_block(png: bytes, info: dict[str, Any] | None) -> bytes:
     age = info.get("age_seconds")
     age_text = "—" if age is None else f"{float(age):.0f} сек"
     d.text((62, y0 + 270), f"Свежесть: {age_text} · steam {level}", font=sc._font(17, True), fill=sc.MUTED)
+
+    if correlated:
+        secondary_target = _primary_target(correlated)
+        secondary_label = str(correlated.get("label") or secondary_target.get("label") or "ОЗ — Да")
+        sec_old = _fmt_odd(secondary_target.get("old_odd")); sec_new = _fmt_odd(secondary_target.get("new_odd"))
+        sec_move = float(secondary_target.get("prob_delta_pp") or correlated.get("score_pp") or 0.0)
+        sec_moves = int(secondary_target.get("one_way_moves") or correlated.get("strongest_one_way_moves") or 0)
+        sec_level = str(correlated.get("level") or "NO_DATA")
+        d.text((62, y0 + 308), f"Подтверждение: {secondary_label} · {sec_old} → {sec_new}", font=sc._font(19, True), fill=sc.TEXT)
+        d.text((62, y0 + 344), f"Cross-market: {sec_move:+.1f} п.п. · импульсов {sec_moves} · {sec_level}", font=sc._font(18, True), fill=sc.TEXT)
+        reason_y = y0 + 390
+    else:
+        reason_y = y0 + 304
+
     reason = str(info.get("value_reason") or info.get("reason") or "1xBet ещё прогревается")
     reason_font = sc._fit(d, reason, src.width - 124, 16, True)
-    d.text((62, y0 + 304), reason, font=reason_font, fill=sc.MUTED)
+    d.text((62, reason_y), reason, font=reason_font, fill=sc.MUTED)
     out = BytesIO(); img.convert("RGB").save(out, "PNG", optimize=True); return out.getvalue()
 
 
@@ -152,11 +168,13 @@ def _signal_like_text(text: Any) -> bool:
 def _special_caption(row: dict[str, Any], won: bool) -> str:
     override = _is_override_row(row)
     value = is_value_row(row)
+    correlated = bool(row.get("correlated_signal") or (row.get("analysis") or {}).get("correlated_signal"))
+    suffix = " · ОБЪЕДИНЁННЫЙ СИГНАЛ" if correlated else ""
     if override and value:
-        return "✅ <b>ПРОГРУЗ + VALUE ЗАШЛИ</b>" if won else "❌ <b>ПРОГРУЗ + VALUE НЕ ЗАШЛИ</b>"
+        return ("✅ <b>ПРОГРУЗ + VALUE ЗАШЛИ</b>" if won else "❌ <b>ПРОГРУЗ + VALUE НЕ ЗАШЛИ</b>") + suffix
     if value:
-        return "✅ <b>VALUE BET ЗАШЁЛ</b>" if won else "❌ <b>VALUE BET НЕ ЗАШЁЛ</b>"
-    return "✅ <b>ПРОГРУЗ ЗАШЁЛ</b>" if won else "❌ <b>ПРОГРУЗ НЕ ЗАШЁЛ</b>"
+        return ("✅ <b>VALUE BET ЗАШЁЛ</b>" if won else "❌ <b>VALUE BET НЕ ЗАШЁЛ</b>") + suffix
+    return ("✅ <b>ПРОГРУЗ ЗАШЁЛ</b>" if won else "❌ <b>ПРОГРУЗ НЕ ЗАШЁЛ</b>") + suffix
 
 
 def _source_for_analysis(analysis: dict[str, Any], info: dict[str, Any]) -> str:
@@ -287,6 +305,10 @@ def _install_runtime_patches() -> None:
                     row["value_edge_pp"] = info.get("value_edge_pp")
                     row["value_level"] = info.get("value_level")
                     row["xbet_market"] = dict(info)
+                    if analysis.get("correlated_signal"):
+                        row["correlated_signal"] = True
+                        row["correlated_heads"] = list(analysis.get("correlated_heads") or [])
+                        row["correlated_confirmation"] = analysis.get("correlated_confirmation")
             return original_shadow_save(path, rows)
 
         def shadow_send(record, result, png):
@@ -297,7 +319,8 @@ def _install_runtime_patches() -> None:
                 card = png if png is not None else shadow.render_shadow_market_card(record, result)
                 card = append_xbet_market_block(card, info)
                 head = str(result.get("head") or "")
-                label = "ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ"
+                correlated = bool(result.get("correlated_signal"))
+                label = "ОБЪЕДИНЁННЫЙ ГОЛ + ОЗ" if correlated else ("ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ")
                 if info.get("override") and info.get("value_bet"):
                     prefix = "🚨💎 <b>ПРОГРУЗ + VALUE · 1xBet</b>"
                 elif info.get("override"):
@@ -305,7 +328,7 @@ def _install_runtime_patches() -> None:
                 else:
                     prefix = "💎 <b>VALUE BET · 1xBet</b>"
                 sent = telegram.broadcast_photo(card, caption=f"{prefix} · {label}")
-                print(f"XBET_SPECIAL_SHADOW_CARD head={head} deliveries={sent}", flush=True)
+                print(f"XBET_SPECIAL_SHADOW_CARD head={head} correlated={int(correlated)} deliveries={sent}", flush=True)
                 return int(sent > 0)
             except Exception as exc:
                 print(f"XBET_SPECIAL_SHADOW_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
@@ -323,12 +346,13 @@ def _install_runtime_patches() -> None:
                     card = shadow.render_shadow_market_result_card(row)
                     card = append_xbet_result_block(card, row)
                     head = str(row.get("head") or "")
-                    label = "ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ"
+                    correlated = bool(row.get("correlated_signal") or (row.get("analysis") or {}).get("correlated_signal"))
+                    label = "ОБЪЕДИНЁННЫЙ ГОЛ + ОЗ" if correlated else ("ОБЕ ЗАБЬЮТ — ДА" if head == "both_teams_to_score" else "КОМАНДА ЗАБЬЁТ")
                     caption = _special_caption(row, result == "won") + f" · {label}"
                     sent = telegram.broadcast_photo(card, caption=caption)
                     if sent > 0:
                         row["result_notified"] = True
-                    print(f"XBET_SPECIAL_SHADOW_RESULT result={result} deliveries={sent} match={row.get('match_id')}", flush=True)
+                    print(f"XBET_SPECIAL_SHADOW_RESULT result={result} correlated={int(correlated)} deliveries={sent} match={row.get('match_id')}", flush=True)
                 except Exception as exc:
                     print(f"XBET_SPECIAL_SHADOW_RESULT_ERROR {type(exc).__name__}:{exc}", flush=True)
             if normal:

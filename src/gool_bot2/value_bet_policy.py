@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 VALUE_LEVELS = ("NO_VALUE", "VALUE", "STRONG_VALUE", "VERY_STRONG_VALUE")
+ABSOLUTE_MIN_BET_ODD = 1.40
 
 
 def _prob(value: Any) -> float | None:
@@ -87,7 +88,7 @@ def attach_value(info: dict[str, Any] | None, model_probability: Any, *, probabi
     very_edge = float(os.getenv("XBET_VALUE_VERY_STRONG_EDGE_PP", "12"))
     min_model = float(os.getenv("XBET_VALUE_MIN_MODEL_PROBABILITY", "0.60"))
     override_model = float(os.getenv("XBET_VALUE_OVERRIDE_MIN_MODEL_PROBABILITY", "0.65"))
-    min_odd = float(os.getenv("XBET_VALUE_MIN_ODD", "1.45"))
+    min_odd = max(ABSOLUTE_MIN_BET_ODD, float(os.getenv("XBET_VALUE_MIN_ODD", str(ABSOLUTE_MIN_BET_ODD))))
     max_odd = float(os.getenv("XBET_VALUE_MAX_ODD", "4.50"))
     max_age = float(os.getenv("XBET_VALUE_MAX_AGE_SECONDS", "35"))
     try:

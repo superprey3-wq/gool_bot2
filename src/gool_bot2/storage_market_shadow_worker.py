@@ -12,6 +12,7 @@ from .xbet_market_pressure import evaluate_system, load_market_state
 _ORIG_BTTS = worker.analyze_btts_shadow
 _ORIG_TEAM = worker.analyze_team_goal_shadow
 _ORIG_CARD = worker.render_shadow_market_card
+_ORIG_ALREADY_RECORDED = worker._already_recorded
 
 
 def _required() -> bool:
@@ -44,12 +45,66 @@ def _decorate_value(info, probability, source):
     return attach_value(info, probability, probability_source=source)
 
 
+def _equivalent_side(hs: int, aws: int) -> str | None:
+    if hs > 0 and aws == 0:
+        return "away"
+    if aws > 0 and hs == 0:
+        return "home"
+    return None
+
+
+def _copy_correlated(primary: dict, secondary: dict, *, label: str) -> dict:
+    info = dict(primary or {})
+    info["correlated_confirmation"] = {
+        "label": label,
+        "head": secondary.get("head"),
+        "level": secondary.get("level"),
+        "score_pp": secondary.get("score_pp"),
+        "strongest_delta_pp": secondary.get("strongest_delta_pp"),
+        "strongest_one_way_moves": secondary.get("strongest_one_way_moves"),
+        "confirmed": bool(secondary.get("confirmed")),
+        "override": bool(secondary.get("override")),
+        "value_bet": bool(secondary.get("value_bet")),
+        "value_override": bool(secondary.get("value_override")),
+        "value_edge_pp": secondary.get("value_edge_pp"),
+        "value_level": secondary.get("value_level"),
+        "value_odd": secondary.get("value_odd"),
+        "targets": list(secondary.get("targets") or []),
+    }
+    if secondary.get("override") and not info.get("override"):
+        info["override"] = True
+        info["level"] = secondary.get("level") or info.get("level")
+        info["reason"] = f"cross-market: {label} подтверждает сильный прогруз"
+    if secondary.get("value_override") and not info.get("value_override"):
+        info["value_override"] = True
+        info["value_bet"] = True
+        info["value_reason"] = f"cross-market: {label} даёт strong value"
+    info["cross_market"] = True
+    return info
+
+
 def _btts(record):
     result = _ORIG_BTTS(record)
     match = record.get("match") or {}; hs = int(match.get("home_score") or 0); aws = int(match.get("away_score") or 0)
     info = _eval(record, "both_teams_to_score", result.get("target_side"))
     info = _decorate_value(info, result.get("confidence_score"), "gool_btts_confidence")
     result["xbet_market"] = info
+
+    # At 1:0 / 0:1, BTTS Yes and the scoreless team's next-goal market settle
+    # on exactly the same event. Never emit a second bet: the team-goal path is
+    # the canonical signal and BTTS becomes its cross-market confirmation.
+    equivalent = _equivalent_side(hs, aws)
+    if equivalent is not None:
+        result["equivalent_team_goal"] = True
+        result["equivalent_side"] = equivalent
+        result["passed_without_equivalence_dedupe"] = bool(result.get("passed"))
+        result["passed"] = False
+        result.setdefault("blocks", []).append("equivalent_team_goal_merged")
+        result["value_bet"] = bool(info.get("value_bet"))
+        result["value_edge_pp"] = info.get("value_edge_pp")
+        result["value_level"] = info.get("value_level")
+        return result
+
     special_override = bool((info.get("override") or info.get("value_override")) and _window_ok(record) and not (hs > 0 and aws > 0))
     if special_override:
         result["passed_without_market"] = bool(result.get("passed"))
@@ -77,6 +132,7 @@ def _btts(record):
 def _team(record):
     result = _ORIG_TEAM(record)
     match = record.get("match") or {}; home = str(match.get("home") or ""); away = str(match.get("away") or "")
+    hs = int(match.get("home_score") or 0); aws = int(match.get("away_score") or 0)
     selected = result.get("selected_side")
     home_analysis = result.get("home") or {}
     away_analysis = result.get("away") or {}
@@ -86,7 +142,24 @@ def _team(record):
     home_info = _decorate_value(_eval(record, "team_to_score", "home"), home_conf, "gool_home_goal_confidence")
     away_info = _decorate_value(_eval(record, "team_to_score", "away"), away_conf, "gool_away_goal_confidence")
 
-    if selected == "home":
+    equivalent = _equivalent_side(hs, aws)
+    if equivalent is not None:
+        # For 1:0/0:1 the scoreless side is the only canonical target because
+        # its next goal is exactly equivalent to BTTS Yes.
+        selected = equivalent
+        selected_conf = home_conf if selected == "home" else away_conf
+        info = home_info if selected == "home" else away_info
+        btts_probability = selected_conf
+        btts_info = _decorate_value(_eval(record, "both_teams_to_score", selected), btts_probability, "gool_equivalent_btts_confidence")
+        info = _copy_correlated(info, btts_info, label="ОЗ — Да")
+        result["correlated_signal"] = True
+        result["correlated_heads"] = ["team_to_score", "both_teams_to_score"]
+        result["correlated_confirmation"] = info.get("correlated_confirmation")
+        if selected_conf is not None:
+            result["confidence_score"] = selected_conf
+            side_analysis = home_analysis if selected == "home" else away_analysis
+            result["pressure_score"] = side_analysis.get("pressure_score")
+    elif selected == "home":
         info = home_info
     elif selected == "away":
         info = away_info
@@ -134,6 +207,20 @@ def _team(record):
     return result
 
 
+def _already_recorded(rows, mid: str, head: str) -> bool:
+    if _ORIG_ALREADY_RECORDED(rows, mid, head):
+        return True
+    if head not in {"both_teams_to_score", "team_to_score"}:
+        return False
+    # One open exposure for the correlated BTTS/team-goal family per match.
+    return any(
+        str(row.get("match_id") or "") == mid
+        and str(row.get("head") or "") in {"both_teams_to_score", "team_to_score"}
+        and str(row.get("result") or "pending").lower() == "pending"
+        for row in rows
+    )
+
+
 def _card(record, analysis):
     base_png = _ORIG_CARD(record, analysis)
     info = analysis.get("xbet_market") or {}
@@ -144,6 +231,7 @@ def _card(record, analysis):
 
 worker.analyze_btts_shadow = _btts
 worker.analyze_team_goal_shadow = _team
+worker._already_recorded = _already_recorded
 worker.render_shadow_market_card = _card
 
 

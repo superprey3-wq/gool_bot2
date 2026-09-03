@@ -55,7 +55,7 @@ def test_normal_market_cannot_revive_gool_wait():
         "score_away": 0,
         "captured_at": _fresh(),
         "markets": {
-            "match_total": [{"line": 0.5, "over": 1.80, "under": 1.95}],
+            "match_total": [{"line": 0.5, "over": 1.55, "under": 2.30}],
             "home_total": [],
             "away_total": [],
             "btts": {},

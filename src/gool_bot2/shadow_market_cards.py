@@ -144,13 +144,11 @@ def render_shadow_market_card(record: dict[str, Any], analysis: dict[str, Any]) 
     image = Image.new("RGBA", (W, H), BG + (255,))
     draw = ImageDraw.Draw(image)
 
-    # Tournament + LIVE identity.
     draw.rounded_rectangle((24, 20, 1056, 92), 22, fill=PANEL, outline=accent, width=2)
     draw.text((48, 38), league, font=sc._fit(draw, league, 790, 24, True), fill=TEXT)
     draw.rounded_rectangle((885, 31, 1028, 80), 14, fill=(8, 24, 34), outline=accent, width=2)
     draw.text((927, 44), "LIVE", font=sc._font(19, True), fill=accent)
 
-    # Clubs, score and clock.
     sc._badge(image, draw, 178, 205, sc._logo(meta, "home"), home, accent)
     sc._badge(image, draw, 902, 205, sc._logo(meta, "away"), away, accent)
     _center(draw, f"{hs} : {aws}", 145, sc._font(58, True), TEXT)
@@ -161,7 +159,6 @@ def render_shadow_market_card(record: dict[str, Any], analysis: dict[str, Any]) 
         box = draw.textbbox((0, 0), name, font=font)
         draw.text((x - (box[2] - box[0]) / 2, 285), name, font=font, fill=TEXT)
 
-    # Main strategy block.
     draw.rounded_rectangle((44, 335, 1036, 505), 24, fill=PANEL2, outline=accent, width=3)
     _center(draw, label, 360, sc._fit(draw, label, 890, 32, True), accent)
     if head == "team_to_score":
@@ -172,7 +169,6 @@ def render_shadow_market_card(record: dict[str, Any], analysis: dict[str, Any]) 
     strength = "—" if confidence is None else f"{float(confidence) * 100:.0f}/100"
     _center(draw, f"СИЛА СИГНАЛА: {strength}", 460, sc._font(19, True), MUTED)
 
-    # GOOL analysis strip.
     draw.rounded_rectangle((44, 525, 1036, 635), 22, fill=(10, 18, 30), outline=LINE, width=2)
     draw.text((66, 545), "GOOL АНАЛИТИКА", font=sc._font(14, True), fill=accent)
     pressure_text = "—" if pressure is None else f"{float(pressure):.2f}"
@@ -200,8 +196,14 @@ def render_shadow_market_result_card(row: dict[str, Any]) -> bytes:
     entry_minute = int(row.get("minute") or 0)
     team = row.get("team")
     label, team_detail = _team_target(head, row.get("selected_side"), int(entry[0]), int(entry[1]), team)
-    meta = dict(row.get("flashscore_meta") or {})
-    stats = dict(row.get("stats_snapshot") or {})
+
+    # Shadow/value rows historically did not persist Flashscore metadata directly.
+    # Entry-card rendering already stores the exact logos and entry stats in the
+    # shared signal-card asset cache, so result cards must recover them here.
+    match_id = str(row.get("match_id") or "")
+    cached = sc._read_assets().get(match_id, {}) or {}
+    meta = dict(row.get("flashscore_meta") or cached.get("flashscore_meta") or {})
+    stats = dict(row.get("stats_snapshot") or cached.get("stats_snapshot") or {})
 
     image = Image.new("RGBA", (W, H), BG + (255,))
     draw = ImageDraw.Draw(image)

@@ -111,6 +111,24 @@ Settlement rules use Flashscore score and goal timeline. First-half bets are set
 
 The Telegram `📊 Отчёт` calculates win/loss, P/L units and ROI from this journal. `🟢 В игре` shows only currently pending Multi entries. `🧠 Анализ` shows all fresh Multi BET/WAIT decisions.
 
+## Virtual bankroll
+
+The shadow journal also behaves like a paper betting account so the Multi strategy can be judged in rubles, not only units.
+
+Defaults:
+
+- initial bankroll: `100000 RUB`;
+- stake: `2%` of the realized bankroll at the moment a BEST BET is opened;
+- an unsettled bet does not change realized bankroll until settlement;
+- every journal row stores `virtual_bank_before_rub`, `virtual_stake_rub`, `virtual_stake_pct` and, after settlement, `virtual_profit_rub`;
+- old journal rows created before the bankroll state was initialized are not retroactively charged to the new simulation.
+
+Example: `100000 -> stake 2000`; a win at `2.00` makes the realized bankroll `102000`, so the next 2% stake is `2040`.
+
+The current bankroll is added to the manual `📊 Отчёт`. The main worker also emits one automatic bankroll report every day at `23:59` in `REPORT_TIMEZONE` (default `Europe/Moscow`). The daily report shows opening and closing bank, bets opened, turnover, wins/losses/voids/pending, daily P/L and ROI. It also carries the current calendar-month totals so the month can be evaluated continuously; the last daily report of the month is labelled as the month final.
+
+The report scheduler persists its last delivered date in `gool_multi_bank_state.json` and will send the previous day's report after a restart if the 23:59 delivery was missed.
+
 ## Shadow and cutover
 
 The feature branch is still observation-only for Multi bet emission: old production signals can continue while Multi writes its own analysis and settled journal. Menu/report views on this branch read the Multi files so the shadow sample can be audited as one product.

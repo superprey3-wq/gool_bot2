@@ -5,6 +5,7 @@ from typing import Any
 
 from . import signal_worker as core
 from . import signal_worker_all as base
+from . import signal_worker_all_cards as cards
 from . import storage_market_signal_worker as app
 from . import storage_signal_worker as storage
 from . import telegram as telegram_mod
@@ -13,6 +14,7 @@ from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
 from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
 from .multi_menu import journal_path as multi_journal_path, reconcile_pending
+from .multi_model_capture import ensure_model_snapshot_capture
 from .multi_product import install_multi_product
 from .multi_runtime import observe_multi_shadow
 from .var_settlement_guard import clear_provisional, confirmed_win
@@ -21,6 +23,7 @@ _ORIG_SETTLE = base._settle_pending
 _ORIG_TWO = base._settle_two_more
 _ORIG_PROCESS = storage.StorageCardAllMatchSignalWorker._process
 _ORIG_POLL = base.poll_telegram_updates
+_ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
 _LAST_BANK_REPORT_ATTEMPT = 0.0
 
 
@@ -108,6 +111,10 @@ def _guard_two(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[di
     return kept
 
 
+def _ensure_model_with_multi_snapshot(self):
+    return ensure_model_snapshot_capture(self, _ORIG_ENSURE_MODEL)
+
+
 def _process_with_multi(self, record: dict[str, Any]):
     emitted = _ORIG_PROCESS(self, record)
     try:
@@ -142,6 +149,7 @@ def _poll_with_multi_bank(journal_path, offset: int = 0, timeout: int = 0):
 
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
+cards.CardAllMatchSignalWorker._ensure_model = _ensure_model_with_multi_snapshot
 storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
 base.poll_telegram_updates = _poll_with_multi_bank
 install_multi_product()

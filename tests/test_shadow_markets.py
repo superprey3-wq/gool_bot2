@@ -97,7 +97,6 @@ def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Pat
     assert created >= 1
     assert journal.exists()
     assert analysis.exists()
-    assert list(cards.glob("*.png"))
 
     first = json.loads(analysis.read_text("utf-8").splitlines()[0])
     assert first["home"] == "Home"

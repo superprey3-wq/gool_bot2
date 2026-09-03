@@ -31,6 +31,21 @@ def _required() -> bool:
     return str(os.getenv("XBET_MARKET_REQUIRED", "1")).strip().lower() not in {"0", "false", "no", "off"}
 
 
+def _two_more_max_minute() -> int:
+    try:
+        return max(10, min(75, int(os.getenv("GOOL_TWO_MORE_MAX_MINUTE", "65"))))
+    except (TypeError, ValueError):
+        return 65
+
+
+def _two_more_override_max_minute() -> int:
+    hard_max = _two_more_max_minute()
+    try:
+        return max(10, min(hard_max, int(os.getenv("GOOL_TWO_MORE_OVERRIDE_MAX_MINUTE", "60"))))
+    except (TypeError, ValueError):
+        return min(60, hard_max)
+
+
 def _market_row(record: dict[str, Any]) -> dict[str, Any] | None:
     match = record.get("match") or {}
     mid = str(match.get("flashscore_event_id") or "")
@@ -166,9 +181,34 @@ def _ensure_model(self):
 
 def _two_more(record: dict[str, Any]) -> dict[str, Any]:
     result = dict(_ORIG_TWO_MORE(record) or {})
+    match = record.get("match") or {}
+    minute = int(match.get("minute") or 0)
+    hard_max = _two_more_max_minute()
+    override_max = _two_more_override_max_minute()
     confidence = result.get("confidence_score")
     info = _set_value(record, "two_more_goals", confidence, "gool_live_confidence")
-    special_override = bool(info.get("override") or info.get("value_override"))
+
+    # Time is a hard football constraint, not a soft model block. A strong price
+    # must never resurrect a two-more-goals signal when there is too little match
+    # time left. After 60' market/value may confirm an organic GOOL pass, but may
+    # no longer wake a rejected +2 signal. After 65' +2 is completely closed.
+    if minute > hard_max:
+        block = f"two_more_window_closed:{minute}>{hard_max}"
+        result["passed_without_market"] = bool(result.get("passed"))
+        result["passed"] = False
+        result["confidence_score"] = None
+        result["hard_time_block"] = block
+        blocks = list(result.get("blocks") or [])
+        if block not in blocks:
+            blocks.append(block)
+        result["blocks"] = blocks
+        result["market_override_suppressed"] = bool(info.get("override"))
+        result["value_override_suppressed"] = bool(info.get("value_override"))
+        result["xbet_market"] = info
+        result["value_bet"] = bool(info.get("value_bet"))
+        return result
+
+    special_override = minute <= override_max and bool(info.get("override") or info.get("value_override"))
     if special_override:
         result["passed_without_market"] = bool(result.get("passed"))
         result["passed"] = True
@@ -186,6 +226,11 @@ def _two_more(record: dict[str, Any]) -> dict[str, Any]:
         mid = str(((record.get("match") or {}).get("flashscore_event_id") or ""))
         if mid:
             cards._LAST_TWO_MORE[mid] = dict(result)
+    elif minute > override_max and (info.get("override") or info.get("value_override")):
+        result["market_override_suppressed_late"] = bool(info.get("override"))
+        result["value_override_suppressed_late"] = bool(info.get("value_override"))
+        result["override_cutoff_minute"] = override_max
+
     result["xbet_market"] = info
     result["value_bet"] = bool(info.get("value_bet"))
     return result
@@ -245,8 +290,24 @@ def _live_card(record, head, confidence, pressure, card_ctx):
 def _live_emit(self, record, journal, head, confidence, analyzer, model_result, card_ctx):
     if head != "two_more_goals":
         return _ORIG_LIVE_EMIT(self, record, journal, head, confidence, analyzer, model_result, card_ctx)
+
+    match = record.get("match") or {}
+    minute = int(match.get("minute") or 0)
+    hard_max = _two_more_max_minute()
+    override_max = _two_more_override_max_minute()
     info = _set_value(record, head, confidence, "gool_live_confidence")
-    if info.get("override") or info.get("value_override"):
+
+    if minute > hard_max:
+        base.append_analysis(self.analysis_path, {
+            **self._base_analysis(record, str(match.get("flashscore_event_id") or "")),
+            "head": head,
+            "decision": "WAIT",
+            "blocks": [f"two_more_window_closed:{minute}>{hard_max}"],
+            "xbet_market": info,
+        })
+        return 0
+
+    if minute <= override_max and (info.get("override") or info.get("value_override")):
         patched = dict(analyzer or {})
         patched["passed_without_market"] = bool(patched.get("passed"))
         patched["passed"] = True

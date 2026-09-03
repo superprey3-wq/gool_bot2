@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import load_signal_journal, save_signal_journal
+from .multi_bank import apply_settlement_fields, attach_entry_fields, ensure_bank_fields
 from .multi_router import RouterDecision
 
 
@@ -246,11 +247,13 @@ def settle_entry(row: dict[str, Any], record: dict[str, Any]) -> bool:
 
 def settle_multi_journal(record: dict[str, Any], journal_path: Path) -> list[dict[str, Any]]:
     rows = load_signal_journal(journal_path)
+    bank_changed = ensure_bank_fields(rows, journal_path)
     changed: list[dict[str, Any]] = []
     for row in rows:
         if settle_entry(row, record):
+            apply_settlement_fields(row)
             changed.append(dict(row))
-    if changed:
+    if changed or bank_changed:
         save_signal_journal(journal_path, rows)
     return changed
 
@@ -276,6 +279,7 @@ def record_multi_entry(
         return None
     if any(str(row.get("entry_key") or "") == str(candidate.get("entry_key") or "") for row in rows):
         return None
+    attach_entry_fields(candidate, rows, journal_path)
     rows.append(candidate)
     save_signal_journal(journal_path, rows)
     return candidate

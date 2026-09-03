@@ -19,6 +19,24 @@ def _age_seconds(captured_at: Any) -> float | None:
         return None
 
 
+def _primary_target_odd(out: dict[str, Any], targets: list[dict[str, Any]]) -> float | None:
+    if not targets:
+        return None
+    head = str(out.get("head") or "")
+    target: dict[str, Any] | None = None
+    if head == "both_teams_to_score":
+        target = next((x for x in targets if str(x.get("market") or "") == "btts_yes"), None)
+    if target is None:
+        target = max(targets, key=lambda x: float(x.get("weight") or 0.0))
+    selection = target.get("selection") if isinstance(target, dict) else None
+    if not isinstance(selection, dict) or selection.get("odd") is None:
+        return None
+    try:
+        return float(selection.get("odd"))
+    except (TypeError, ValueError):
+        return None
+
+
 def decorate_market_info(info: dict[str, Any] | None, market_row: dict[str, Any] | None) -> dict[str, Any]:
     out = dict(info or {})
     captured_at = None if market_row is None else market_row.get("captured_at")
@@ -29,23 +47,30 @@ def decorate_market_info(info: dict[str, Any] | None, market_row: dict[str, Any]
     max_age = float(os.getenv("XBET_OVERRIDE_MAX_AGE_SECONDS", "35"))
     min_delta = float(os.getenv("XBET_OVERRIDE_MIN_DELTA_PP", "6"))
     min_moves = int(os.getenv("XBET_OVERRIDE_MIN_ONE_WAY_MOVES", "2"))
+    min_odd = float(os.getenv("XBET_OVERRIDE_MIN_ODD", "1.40"))
     level = str(out.get("level") or "NO_DATA")
     targets = [x for x in (out.get("targets") or []) if isinstance(x, dict)]
     strongest_delta = max([float(x.get("prob_delta_pp") or 0.0) for x in targets] or [float(out.get("score_pp") or 0.0)])
     strongest_moves = max([int(x.get("one_way_moves") or 0) for x in targets] or [0])
+    primary_odd = _primary_target_odd(out, targets)
     fresh = age is not None and age <= max_age
     evidence = strongest_delta >= min_delta and strongest_moves >= min_moves
+    price_ok = primary_odd is not None and primary_odd >= min_odd
     override = bool(
         out.get("available")
         and level in OVERRIDE_LEVELS
         and fresh
         and evidence
+        and price_ok
         and level != "SCORE_DESYNC"
     )
     out.update({
         "override": override,
         "override_fresh": fresh,
         "override_evidence": evidence,
+        "override_price_ok": price_ok,
+        "override_primary_odd": primary_odd,
+        "override_min_odd": min_odd,
         "override_min_delta_pp": min_delta,
         "override_min_moves": min_moves,
         "override_max_age_seconds": max_age,
@@ -53,7 +78,10 @@ def decorate_market_info(info: dict[str, Any] | None, market_row: dict[str, Any]
         "strongest_one_way_moves": strongest_moves,
     })
     if override:
-        out["reason"] = f"MARKET OVERRIDE · 1xBet {level} · Δp={strongest_delta:.1f} п.п. · импульсов={strongest_moves}"
+        out["reason"] = f"MARKET OVERRIDE · 1xBet {level} · Δp={strongest_delta:.1f} п.п. · импульсов={strongest_moves} · кэф {primary_odd:.2f}"
+    elif out.get("available") and level in OVERRIDE_LEVELS and fresh and evidence and not price_ok:
+        odd_text = "нет цены" if primary_odd is None else f"кэф {primary_odd:.2f}"
+        out["reason"] = f"MARKET FILTER · LOW_ODD · {odd_text} < {min_odd:.2f}"
     return out
 
 

@@ -5,6 +5,7 @@ from typing import Any
 from . import signal_worker as core
 from . import signal_worker_all as base
 from . import storage_market_signal_worker as app
+from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from .var_settlement_guard import clear_provisional, confirmed_win
 
 _ORIG_SETTLE = base._settle_pending

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from . import signal_worker as core
 from . import signal_worker_all as base
 from . import storage_market_signal_worker as app
 from . import storage_signal_worker as storage
+from . import telegram as telegram_mod
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
+from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
+from .multi_menu import journal_path as multi_journal_path, reconcile_pending
 from .multi_product import install_multi_product
 from .multi_runtime import observe_multi_shadow
 from .var_settlement_guard import clear_provisional, confirmed_win
@@ -16,6 +20,8 @@ from .var_settlement_guard import clear_provisional, confirmed_win
 _ORIG_SETTLE = base._settle_pending
 _ORIG_TWO = base._settle_two_more
 _ORIG_PROCESS = storage.StorageCardAllMatchSignalWorker._process
+_ORIG_POLL = base.poll_telegram_updates
+_LAST_BANK_REPORT_ATTEMPT = 0.0
 
 
 def _find_row(journal: list[dict[str, Any]], returned: dict[str, Any]) -> dict[str, Any] | None:
@@ -111,9 +117,33 @@ def _process_with_multi(self, record: dict[str, Any]):
     return emitted
 
 
+def _poll_with_multi_bank(journal_path, offset: int = 0, timeout: int = 0):
+    global _LAST_BANK_REPORT_ATTEMPT
+    next_offset, actions = _ORIG_POLL(journal_path, offset=offset, timeout=timeout)
+    try:
+        multi_path = multi_journal_path()
+        due = daily_report_due_date(multi_path)
+        now_mono = time.monotonic()
+        if due is not None and now_mono - _LAST_BANK_REPORT_ATTEMPT >= 60.0:
+            _LAST_BANK_REPORT_ATTEMPT = now_mono
+            reconcile_pending()
+            text = render_daily_bank_report(multi_path, report_date=due)
+            sent = telegram_mod.broadcast(text)
+            if sent > 0:
+                mark_daily_report_sent(multi_path, due)
+                print(f"GOOL_MULTI_BANK_REPORT date={due.isoformat()} sent={sent}", flush=True)
+                actions += sent
+            else:
+                print(f"GOOL_MULTI_BANK_REPORT_RETRY date={due.isoformat()} sent=0", flush=True)
+    except Exception as exc:
+        print(f"GOOL_MULTI_BANK_REPORT_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return next_offset, actions
+
+
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
 storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
+base.poll_telegram_updates = _poll_with_multi_bank
 install_multi_product()
 
 

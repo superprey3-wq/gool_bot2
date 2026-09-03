@@ -17,9 +17,12 @@ def _market_row() -> dict:
         "markets": {
             "match_total": [
                 {"line": 3.5, "over": 1.30, "under": 3.35},
+                # This integer line may exist in synthetic/legacy data but the
+                # router must never build an Asian candidate from it.
                 {"line": 4.0, "over": 1.60, "under": 2.20},
                 {"line": 4.5, "over": 1.90, "under": 1.88},
             ],
+            "first_half_total": [],
             "home_total": [
                 {"line": 1.5, "over": 1.72, "under": 2.05},
             ],
@@ -47,18 +50,49 @@ def _experts() -> dict:
     }
 
 
-def test_line_optimizer_can_choose_asian_middle_total():
+def test_router_builds_only_classic_half_goal_totals_not_asian_middle():
     match = {"minute": 54, "home_score": 1, "away_score": 2}
 
-    decision = analyze_multi_match(match, _market_row(), _experts(), data_quality=0.92)
+    candidates = build_goal_market_candidates(match, _market_row(), _experts(), data_quality=0.92)
 
-    assert decision.status == "BET"
-    assert decision.winner is not None
-    assert decision.winner.label == "ТБ 4"
-    assert decision.winner.family == "asian_match_total"
-    assert round(decision.winner.push_probability, 2) == 0.27
-    assert decision.winner.value_edge_pp > 0
-    assert "возврат" in decision.reason.lower()
+    assert candidates
+    assert all(row.family != "asian_match_total" for row in candidates)
+    assert all(row.strategy != "combined_total" for row in candidates)
+    match_totals = [row for row in candidates if row.family == "match_total"]
+    assert {row.label for row in match_totals} == {"ТБ 3.5", "ТБ 4.5"}
+    assert all(abs((float(row.key.split(":")[-1]) % 1.0) - 0.5) < 1e-9 for row in match_totals)
+
+
+def test_first_half_goal_model_uses_real_first_half_total():
+    match = {"minute": 20, "home_score": 1, "away_score": 0}
+    market = {
+        "score_home": 1,
+        "score_away": 0,
+        "captured_at": _fresh(),
+        "markets": {
+            "match_total": [{"line": 1.5, "over": 1.38, "under": 2.90}],
+            "first_half_total": [{"line": 1.5, "over": 1.72, "under": 2.02}],
+            "home_total": [],
+            "away_total": [],
+            "btts": {},
+        },
+        "pressure": {
+            "first_half_total:1.5": {"prob_delta_pp": 4.2, "one_way_moves": 2, "old_odd": 1.88},
+        },
+    }
+    experts = {
+        "another_goal": {"probability": 0.77, "source": "another_goal"},
+        "goal_before_ht": {"probability": 0.71, "source": "goal_before_ht"},
+    }
+
+    candidates = build_goal_market_candidates(match, market, experts, data_quality=0.9)
+
+    ht = [row for row in candidates if row.family == "first_half_total"]
+    assert len(ht) == 1
+    assert ht[0].strategy == "goal_before_ht"
+    assert ht[0].label == "1Т ТБ 1.5"
+    assert ht[0].odd == 1.72
+    assert ht[0].correlation_key == "any_next_goal"
 
 
 def test_late_router_chooses_best_one_goal_market_and_blocks_two_goal_paths():
@@ -76,6 +110,39 @@ def test_late_router_chooses_best_one_goal_market_and_blocks_two_goal_paths():
     assert all(any(block.startswith("two_goal_window_closed:74>65") for block in row.blocks) for row in late)
 
 
+def test_another_goal_remains_open_through_85_and_closes_after():
+    market = {
+        "score_home": 1,
+        "score_away": 1,
+        "captured_at": _fresh(),
+        "markets": {
+            "match_total": [{"line": 2.5, "over": 2.05, "under": 1.70}],
+            "first_half_total": [],
+            "home_total": [],
+            "away_total": [],
+            "btts": {},
+        },
+        "pressure": {"match_total:2.5": {"prob_delta_pp": 2.0, "one_way_moves": 1}},
+    }
+    experts = {"another_goal": {"probability": 0.68, "source": "another_goal", "passed": True}}
+
+    at_85 = analyze_multi_match(
+        {"minute": 85, "home_score": 1, "away_score": 1}, market, experts, data_quality=0.95
+    )
+    after_85 = analyze_multi_match(
+        {"minute": 86, "home_score": 1, "away_score": 1}, market, experts, data_quality=0.95
+    )
+
+    assert at_85.status == "BET"
+    assert at_85.winner is not None
+    assert at_85.winner.strategy == "another_goal"
+    assert after_85.status == "WAIT"
+    assert any(
+        any(block.startswith("another_goal_window_closed:86>85") for block in row.blocks)
+        for row in after_85.rejected
+    )
+
+
 def test_btts_and_scoreless_team_total_share_one_correlation_slot():
     match = {"minute": 57, "home_score": 1, "away_score": 0}
     market = {
@@ -84,6 +151,7 @@ def test_btts_and_scoreless_team_total_share_one_correlation_slot():
         "captured_at": _fresh(),
         "markets": {
             "match_total": [{"line": 1.5, "over": 1.42, "under": 2.70}],
+            "first_half_total": [],
             "home_total": [{"line": 1.5, "over": 1.85, "under": 1.90}],
             "away_total": [{"line": 0.5, "over": 1.82, "under": 1.95}],
             "btts": {"yes": 1.96, "no": 1.78},

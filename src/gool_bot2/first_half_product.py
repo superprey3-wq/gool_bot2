@@ -80,13 +80,42 @@ def _fresh_analysis_state(row: dict[str, Any], max_age_minutes: float = 3.0) -> 
     return -1.0 <= age <= max_age_minutes and 0 < minute < 90
 
 
+def _merge_live_states(*state_maps: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for states in state_maps:
+        for mid, row in (states or {}).items():
+            previous = merged.get(mid)
+            if previous is None or str(row.get("captured_at") or "") >= str(previous.get("captured_at") or ""):
+                merged[mid] = row
+    return merged
+
+
 def _render_in_game(journal_path: Path, analysis_path: Path | None = None) -> list[str]:
-    rows = bot_menu._dedupe(bot_menu._load_rows(journal_path))
-    states_from_analysis = bot_menu._latest_live_states(analysis_path)
+    # The production bot has two journals:
+    #   main   -> another_goal / goal_before_ht / two_more_goals
+    #   shadow -> both_teams_to_score / team_to_score (including 1xBet VALUE/override)
+    # In Game must merge both, otherwise real shadow-market signals disappear from the menu.
+    experiment_path = bot_menu._experiment_journal(journal_path)
+    experiment_analysis = bot_menu._experiment_analysis(analysis_path or journal_path.with_name("gool_bot2_analysis.jsonl"))
+
+    main_rows = [
+        r for r in bot_menu._dedupe(bot_menu._load_rows(journal_path))
+        if str(r.get("head") or "") in bot_menu.MAIN_HEADS
+    ]
+    experiment_rows = [
+        r for r in bot_menu._dedupe(bot_menu._load_rows(experiment_path))
+        if str(r.get("head") or "") in bot_menu.EXPERIMENT_HEADS
+    ]
+    rows = main_rows + experiment_rows
+
+    main_states = bot_menu._latest_live_states(analysis_path)
+    experiment_states = bot_menu._latest_live_states(experiment_analysis)
+    states_from_analysis = _merge_live_states(main_states, experiment_states)
+
     pending = [
         r for r in rows
         if str(r.get("result") or "pending").lower() == "pending"
-        and str(r.get("head") or "") in bot_menu.MAIN_HEADS
+        and str(r.get("head") or "") in bot_menu.ALL_HEADS
     ]
     ids = {str(r.get("match_id") or "") for r in pending if str(r.get("match_id") or "")}
 
@@ -107,6 +136,8 @@ def _render_in_game(journal_path: Path, analysis_path: Path | None = None) -> li
             if bool(state.get("is_live")) and not bool(state.get("is_finished")):
                 allowed.append(row)
             continue
+        # If Flashscore status lookup failed completely, accept only a very fresh
+        # analysis snapshot. This preserves the stale-match protection.
         if not status_ok and _fresh_analysis_state(states_from_analysis.get(mid) or {}):
             allowed.append(row)
 
@@ -118,6 +149,8 @@ def _render_in_game(journal_path: Path, analysis_path: Path | None = None) -> li
         ("another_goal", "⚽ <b>ЕЩЁ ГОЛ</b>"),
         ("goal_before_ht", "🟡 <b>ГОЛ ДО ПЕРЕРЫВА</b>"),
         ("two_more_goals", "🔥 <b>ЕЩЁ +2 ГОЛА</b>"),
+        ("both_teams_to_score", "💜 <b>ОБЕ ЗАБЬЮТ — ДА</b>"),
+        ("team_to_score", "🔵 <b>КОМАНДА ЗАБЬЁТ</b>"),
     )
     messages = [f"🟢 <b>В ИГРЕ</b>\nАктивных сигналов: <b>{len(allowed)}</b>"]
     for head, title in groups:

@@ -44,46 +44,76 @@ def _replace_winner(decision: RouterDecision, winner: MarketCandidate, reason: s
     return decision
 
 
+def _reject_team_winner(decision: RouterDecision, team: MarketCandidate) -> RouterDecision:
+    team.blocks.append("heuristic_team_market_opposed")
+    team.reason_tags.append("heuristic_team_market_opposed")
+    team.eligible = False
+    if not any(row.key == team.key for row in decision.rejected):
+        decision.rejected.append(team)
+    remaining = [row for row in decision.alternatives if row.eligible and row.key != team.key]
+    if remaining:
+        decision.winner = remaining[0]
+        decision.alternatives = remaining[1:4]
+        decision.reason = (
+            "Узкий командный confidence-рынок отклонён: 1xBet движется против него; "
+            "выбран следующий проходящий рынок Multi."
+        )
+        return decision
+    decision.status = "WAIT"
+    decision.winner = None
+    decision.alternatives = []
+    decision.reason = (
+        "WAIT: единственный лучший командный рынок основан на GOOL confidence, а 1xBet движется против него. "
+        "Без калиброванной вероятности такой узкий исход не отправляем."
+    )
+    return decision
+
+
 def enforce_goal_coverage(decision: RouterDecision, experts: dict[str, Any]) -> RouterDecision:
-    """Do not let a narrower heuristic team-goal market beat calibrated any-goal.
+    """Protect the wider any-goal outcome from narrower heuristic over-ranking.
 
     Team +0.5 is a strict subset of the match's next-goal total: a goal by the
-    opposite side wins `another_goal` but loses the team total.  A heuristic
-    GOOL confidence therefore must not be treated as a calibrated probability
-    and win purely because the bookmaker offers a larger price.
+    opposite side wins `another_goal` but loses the team total. A heuristic GOOL
+    confidence must not be treated as a calibrated probability and win purely
+    because the bookmaker offers a larger price.
 
-    A team market with an actual calibrated probability may still beat the
-    wider market, but only with a material rating and EV advantage.
+    A team market with an actual calibrated probability may still beat the wider
+    market, but only with a material rating and EV advantage. If there is no
+    eligible `another_goal`, a confidence-only team market that is already moving
+    against 1xBet is downgraded to the next candidate or WAIT.
     """
     if decision.status != "BET" or decision.winner is None:
         return decision
     team = decision.winner
     if team.family != "team_total":
         return decision
-    broad = _another_goal_option(decision)
-    if broad is None or broad.key == team.key:
-        return decision
 
     metric = _metric(experts, team.strategy)
-    if metric != "probability":
-        team.reason_tags.append("narrower_heuristic_market")
-        return _replace_winner(
-            decision,
-            broad,
-            "Выбран ЕЩЁ ГОЛ: общий тотал выигрывает от гола любой команды; "
-            "командный рынок уже и основан на GOOL confidence, а не на калиброванной вероятности.",
-        )
+    broad = _another_goal_option(decision)
+    if broad is not None and broad.key != team.key:
+        if metric != "probability":
+            team.reason_tags.append("narrower_heuristic_market")
+            return _replace_winner(
+                decision,
+                broad,
+                "Выбран ЕЩЁ ГОЛ: общий тотал выигрывает от гола любой команды; "
+                "командный рынок уже и основан на GOOL confidence, а не на калиброванной вероятности.",
+            )
 
-    min_rating_adv = float(os.getenv("GOOL_MULTI_TEAM_OVER_ANY_RATING_ADV", "6"))
-    min_roi_adv = float(os.getenv("GOOL_MULTI_TEAM_OVER_ANY_ROI_ADV", "0.10"))
-    rating_adv = float(team.rating) - float(broad.rating)
-    roi_adv = float(team.expected_roi) - float(broad.expected_roi)
-    if rating_adv < min_rating_adv or roi_adv < min_roi_adv:
-        team.reason_tags.append("narrower_market_insufficient_advantage")
-        return _replace_winner(
-            decision,
-            broad,
-            "Выбран ЕЩЁ ГОЛ: командный исход уже общего рынка и не даёт достаточного "
-            "преимущества по рейтингу и EV, чтобы оправдать потерю покрытия.",
-        )
+        min_rating_adv = float(os.getenv("GOOL_MULTI_TEAM_OVER_ANY_RATING_ADV", "6"))
+        min_roi_adv = float(os.getenv("GOOL_MULTI_TEAM_OVER_ANY_ROI_ADV", "0.10"))
+        rating_adv = float(team.rating) - float(broad.rating)
+        roi_adv = float(team.expected_roi) - float(broad.expected_roi)
+        if rating_adv < min_rating_adv or roi_adv < min_roi_adv:
+            team.reason_tags.append("narrower_market_insufficient_advantage")
+            return _replace_winner(
+                decision,
+                broad,
+                "Выбран ЕЩЁ ГОЛ: командный исход уже общего рынка и не даёт достаточного "
+                "преимущества по рейтингу и EV, чтобы оправдать потерю покрытия.",
+            )
+        return decision
+
+    if metric != "probability" and float(team.market_pressure_pp) < 0.0:
+        return _reject_team_winner(decision, team)
     return decision

@@ -115,3 +115,27 @@ def test_first_half_market_wins_only_from_first_half_timeline(tmp_path: Path):
     assert row["result"] == "won"
     assert row["settled_minute"] == 42
     assert row["settled_score"] == [1, 0]
+
+
+def test_first_half_unchanged_score_after_break_is_safe_loss_without_timeline(tmp_path: Path):
+    path = tmp_path / "multi.json"
+    fh = _candidate("first_half_total:0.5", "first_half_total", "goal_before_ht", "1Т ТБ 0.5")
+    assert record_multi_entry(_record(35, (0, 0)), _decision(fh), {}, path, data_quality=0.9)
+
+    settle_multi_journal(_record(55, (0, 0)), path)
+    row = load_signal_journal(path)[0]
+    assert row["result"] == "lost"
+    assert row["settlement_source"] == "no_first_half_goal_score_unchanged"
+    assert row["profit_units"] == -1.0
+
+
+def test_first_half_changed_score_without_timeline_is_void_not_guessed(tmp_path: Path):
+    path = tmp_path / "multi.json"
+    fh = _candidate("first_half_total:0.5", "first_half_total", "goal_before_ht", "1Т ТБ 0.5")
+    assert record_multi_entry(_record(35, (0, 0)), _decision(fh), {}, path, data_quality=0.9)
+
+    settle_multi_journal(_record(55, (1, 0)), path)
+    row = load_signal_journal(path)[0]
+    assert row["result"] == "void"
+    assert row["settlement_source"] == "half_time_score_unavailable"
+    assert row["profit_units"] == 0.0

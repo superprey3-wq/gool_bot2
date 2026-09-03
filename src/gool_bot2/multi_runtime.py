@@ -7,8 +7,9 @@ from typing import Any
 from . import signal_worker_all_cards as cards
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_experts import build_expert_snapshot
+from .multi_goal_coverage import enforce_goal_coverage
 from .multi_journal import settle_multi_journal, sync_multi_journal
-from .multi_shadow import analyze_and_record
+from .multi_shadow import analyze_and_record, append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .shadow_markets import analyze_btts_shadow, side_goal_pressure
 from .xbet_market_pressure import load_market_state
@@ -109,6 +110,20 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     market = _market_row(record)
     quality = _data_quality(record)
     decision = analyze_and_record(record, market, experts, analysis_path, data_quality=quality)
+
+    # Coverage guard: a confidence-only team +0.5 is a narrower outcome than
+    # calibrated `another_goal` and must not win merely because its odds are
+    # larger.  If the winner changes, append the corrected decision immediately
+    # so the online analysis view also shows the same choice that is journaled.
+    before_key = None if decision.winner is None else decision.winner.key
+    decision = enforce_goal_coverage(decision, experts)
+    after_key = None if decision.winner is None else decision.winner.key
+    if before_key != after_key:
+        append_shadow_snapshot(
+            analysis_path,
+            decision_snapshot(record, decision, experts, data_quality=quality, market_row=market),
+        )
+
     _, created = sync_multi_journal(
         record,
         decision,

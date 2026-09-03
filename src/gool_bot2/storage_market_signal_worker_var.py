@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from . import signal_worker_all as base
-from . import signal_worker_all_cards as cards
 from . import storage_market_signal_worker as app
 from .var_settlement_guard import clear_provisional, confirmed_win
 
@@ -51,8 +50,6 @@ def _guard_main(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[d
             _revert(row)
             print(f"VAR_PROVISIONAL_WIN match={row.get('match_id')} head={row.get('head')} score={hs}:{aws} minute={minute}", flush=True)
 
-    # If a provisional goal is cancelled by VAR, the original settlement returns
-    # nothing on the rollback snapshot. Clear the provisional state explicitly.
     for row in journal:
         if str(row.get("match_id") or "") != str(match.get("flashscore_event_id") or ""):
             continue
@@ -99,9 +96,6 @@ def _guard_two(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[di
 
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
-# Card worker captured the previous function in module globals; replace the bound
-# original too so finished reconciliation still goes through our guard while live.
-cards._ORIG_SETTLE_PENDING = _guard_main
 
 
 def main() -> None:

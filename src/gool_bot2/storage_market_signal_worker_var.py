@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import signal_worker as core
 from . import signal_worker_all as base
 from . import storage_market_signal_worker as app
 from .var_settlement_guard import clear_provisional, confirmed_win
@@ -43,7 +44,7 @@ def _guard_main(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[d
             clear_provisional(row)
             kept.append(item)
             continue
-        raw = base._is_won(str(row.get("head") or ""), row.get("score") or [0, 0], minute, hs, aws)
+        raw = core._is_won(str(row.get("head") or ""), row.get("score") or [0, 0], minute, hs, aws)
         if confirmed_win(row, raw_won=raw, minute=minute, home_score=hs, away_score=aws):
             kept.append(dict(row))
         else:
@@ -55,7 +56,7 @@ def _guard_main(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[d
             continue
         if str(row.get("result") or "pending").lower() != "pending":
             continue
-        raw = base._is_won(str(row.get("head") or ""), row.get("score") or [0, 0], minute, hs, aws)
+        raw = core._is_won(str(row.get("head") or ""), row.get("score") or [0, 0], minute, hs, aws)
         if not raw:
             clear_provisional(row)
     return kept

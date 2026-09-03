@@ -17,6 +17,7 @@ from .multi_menu import journal_path as multi_journal_path, reconcile_pending
 from .multi_model_capture import ensure_model_snapshot_capture
 from .multi_product import install_multi_product
 from .multi_runtime import observe_multi_shadow
+from .multi_telegram import silence_legacy_telegram
 from .var_settlement_guard import clear_provisional, confirmed_win
 
 _ORIG_SETTLE = base._settle_pending
@@ -116,7 +117,14 @@ def _ensure_model_with_multi_snapshot(self):
 
 
 def _process_with_multi(self, record: dict[str, Any]):
-    emitted = _ORIG_PROCESS(self, record)
+    # In shadow mode the old Telegram path behaves exactly as before. In active
+    # Multi mode we still execute the full legacy analysis because Multi reuses
+    # its model/prematch/live outputs, but hide the Telegram token only while
+    # that legacy process is running. The token is restored before Multi emits
+    # its one BEST BET/result image, so users never receive duplicate strategy
+    # cards during cutover.
+    with silence_legacy_telegram():
+        emitted = _ORIG_PROCESS(self, record)
     try:
         observe_multi_shadow(self, record)
     except Exception as exc:

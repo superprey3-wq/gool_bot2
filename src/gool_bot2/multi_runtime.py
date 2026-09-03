@@ -113,7 +113,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     # Coverage guard: a confidence-only team +0.5 is a narrower outcome than
     # calibrated `another_goal` and must not win merely because its odds are
-    # larger.  If the winner changes, append the corrected decision immediately
+    # larger. If the winner changes, append the corrected decision immediately
     # so the online analysis view also shows the same choice that is journaled.
     before_key = None if decision.winner is None else decision.winner.key
     decision = enforce_goal_coverage(decision, experts)
@@ -132,7 +132,10 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     if created is not None:
-        emit_multi_signal(record, decision, created)
+        # Use the exact bookmaker snapshot that produced the decision so the
+        # informational total alternatives on the Telegram card keep real odds
+        # from the same score/minute instead of a later refresh.
+        emit_multi_signal(record, decision, created, market_row=market)
 
     winner = None if decision.winner is None else f"{decision.winner.label}@{decision.winner.odd:.2f}"
     source = None if decision.winner is None else (

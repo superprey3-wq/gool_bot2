@@ -81,6 +81,8 @@ def emit_multi_signal(
     record: dict[str, Any],
     decision: RouterDecision,
     entry: dict[str, Any] | None,
+    *,
+    market_row: dict[str, Any] | None = None,
 ) -> int:
     if not is_multi_telegram_active() or entry is None or decision.winner is None:
         return 0
@@ -89,7 +91,10 @@ def emit_multi_signal(
     caption = _signal_caption(active_entry)
     sent = 0
     try:
-        sent = telegram.broadcast_photo(render_multi_card(record, decision, entry=active_entry), caption=caption)
+        sent = telegram.broadcast_photo(
+            render_multi_card(record, decision, entry=active_entry, market_row=market_row),
+            caption=caption,
+        )
     except Exception as exc:
         print(f"GOOL_MULTI_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
     if sent == 0:

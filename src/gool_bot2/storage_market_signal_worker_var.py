@@ -13,6 +13,7 @@ from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
 from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
+from .multi_late_refresh import refresh_late_another_goal_model
 from .multi_menu import journal_path as multi_journal_path, reconcile_pending
 from .multi_model_capture import ensure_model_snapshot_capture
 from .multi_product import install_multi_product
@@ -126,6 +127,10 @@ def _process_with_multi(self, record: dict[str, Any]):
     with silence_legacy_telegram():
         emitted = _ORIG_PROCESS(self, record)
     try:
+        # The legacy worker closes its all-strategy analysis after 75'. Multi keeps
+        # only another_goal alive through 85', so refresh MODEL + LIVE explicitly
+        # for 76-85 instead of reusing the stale 75' snapshot.
+        refresh_late_another_goal_model(self, record)
         observe_multi_shadow(self, record)
     except Exception as exc:
         print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)

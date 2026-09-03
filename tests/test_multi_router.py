@@ -61,7 +61,7 @@ def test_line_optimizer_can_choose_asian_middle_total():
     assert "возврат" in decision.reason.lower()
 
 
-def test_late_router_prefers_one_goal_and_blocks_two_goal_paths():
+def test_late_router_chooses_best_one_goal_market_and_blocks_two_goal_paths():
     match = {"minute": 74, "home_score": 1, "away_score": 2}
 
     decision = analyze_multi_match(match, _market_row(), _experts(), data_quality=0.92)
@@ -69,8 +69,8 @@ def test_late_router_prefers_one_goal_and_blocks_two_goal_paths():
     assert decision.status == "BET"
     assert decision.winner is not None
     assert decision.winner.goals_to_win == 1
-    assert decision.winner.label == "ТБ 3.5"
-    assert "один гол" in decision.reason.lower()
+    assert decision.winner.label == "ИТБ1 1.5"
+    assert decision.winner.family == "team_total"
     late = [row for row in decision.rejected if row.goals_to_win >= 2]
     assert late
     assert all(any(block.startswith("two_goal_window_closed:74>65") for block in row.blocks) for row in late)

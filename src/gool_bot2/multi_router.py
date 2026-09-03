@@ -116,9 +116,15 @@ def _row(rows: list[dict[str, Any]], line: float) -> dict[str, Any] | None:
 
 
 def _pressure(market_row: dict[str, Any], market: str, line: float | None) -> float:
+    """Return signed 1xBet implied-probability movement for the selection.
+
+    Positive values are steam toward the GOOL selection. Negative values mean
+    the bookmaker market is moving against it and must remain visible to the
+    router instead of being silently converted to NEUTRAL.
+    """
     key = f"{market}:{line}"
     try:
-        return max(0.0, float(((market_row.get("pressure") or {}).get(key) or {}).get("prob_delta_pp") or 0.0))
+        return float(((market_row.get("pressure") or {}).get(key) or {}).get("prob_delta_pp") or 0.0)
     except (TypeError, ValueError):
         return 0.0
 
@@ -437,15 +443,18 @@ def score_candidate(candidate: MarketCandidate, minute: int) -> MarketCandidate:
     protected_probability = _clamp(p_win + 0.55 * p_push)
     probability_score = protected_probability * 100.0
     value_score = max(0.0, min(100.0, 50.0 + candidate.value_edge_pp * 3.0))
-    market_score = max(40.0, min(100.0, 50.0 + candidate.market_pressure_pp * 5.0))
+    market_score = max(0.0, min(100.0, 50.0 + candidate.market_pressure_pp * 5.0))
     data_score = candidate.data_quality * 100.0
     override_bonus = 6.0 if candidate.market_override else (4.0 if candidate.value_override else 0.0)
+    opposition_pp = max(0.0, -float(candidate.market_pressure_pp))
+    opposition_penalty = min(12.0, max(0.0, opposition_pp - 3.0) * 2.0)
     candidate.rating = round(
         0.43 * probability_score
         + 0.31 * value_score
         + 0.16 * market_score
         + 0.10 * data_score
-        + override_bonus,
+        + override_bonus
+        - opposition_penalty,
         1,
     )
 
@@ -482,6 +491,10 @@ def score_candidate(candidate: MarketCandidate, minute: int) -> MarketCandidate:
         candidate.reason_tags.append("value")
     if candidate.market_pressure_pp >= 6.0:
         candidate.reason_tags.append("market_steam")
+    elif candidate.market_pressure_pp <= -6.0:
+        candidate.reason_tags.append("strong_market_opposition")
+    elif candidate.market_pressure_pp <= -3.0:
+        candidate.reason_tags.append("market_opposition")
     if candidate.family == "team_total":
         candidate.reason_tags.append("team_specific")
     if candidate.family == "first_half_total":

@@ -135,7 +135,11 @@ def _team(record):
 
 
 def _card(record, analysis):
-    return append_xbet_market_block(_ORIG_CARD(record, analysis), analysis.get("xbet_market") or {})
+    base_png = _ORIG_CARD(record, analysis)
+    info = analysis.get("xbet_market") or {}
+    if isinstance(info, dict) and (info.get("override") or info.get("value_bet")):
+        return base_png
+    return append_xbet_market_block(base_png, info)
 
 
 worker.analyze_btts_shadow = _btts

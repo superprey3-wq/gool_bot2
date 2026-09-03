@@ -5,13 +5,16 @@ from typing import Any
 from . import signal_worker as core
 from . import signal_worker_all as base
 from . import storage_market_signal_worker as app
+from . import storage_signal_worker as storage
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
+from .multi_runtime import observe_multi_shadow
 from .var_settlement_guard import clear_provisional, confirmed_win
 
 _ORIG_SETTLE = base._settle_pending
 _ORIG_TWO = base._settle_two_more
+_ORIG_PROCESS = storage.StorageCardAllMatchSignalWorker._process
 
 
 def _find_row(journal: list[dict[str, Any]], returned: dict[str, Any]) -> dict[str, Any] | None:
@@ -98,8 +101,18 @@ def _guard_two(record: dict[str, Any], journal: list[dict[str, Any]]) -> list[di
     return kept
 
 
+def _process_with_multi(self, record: dict[str, Any]):
+    emitted = _ORIG_PROCESS(self, record)
+    try:
+        observe_multi_shadow(self, record)
+    except Exception as exc:
+        print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return emitted
+
+
 base._settle_pending = _guard_main
 base._settle_two_more = _guard_two
+storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
 
 
 def main() -> None:

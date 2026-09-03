@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from statistics import mean
+from statistics import median
 from typing import Any
 
 from .common import ProviderMatch
@@ -20,6 +20,7 @@ class FootballDataFusion:
 
     @staticmethod
     def _consensus(matches: list[ProviderMatch], key: str) -> tuple[float | None, float | None]:
+        """Robust per-side consensus across Flashscore, FotMob and 365Scores."""
         home_values: list[float] = []
         away_values: list[float] = []
         for match in matches:
@@ -30,7 +31,7 @@ class FootballDataFusion:
             away_values.append(float(away))
         if not home_values:
             return None, None
-        return round(mean(home_values), 4), round(mean(away_values), 4)
+        return round(float(median(home_values)), 4), round(float(median(away_values)), 4)
 
     @staticmethod
     def _spread(matches: list[ProviderMatch], key: str) -> tuple[float | None, float | None]:

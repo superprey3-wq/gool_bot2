@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from statistics import mean
+from statistics import mean, median
 from typing import Any
 
 
@@ -18,8 +18,14 @@ def _pairs(record: dict[str, Any], key: str) -> list[tuple[float, float]]:
     return out
 
 
-def provider_pair(record: dict[str, Any], key: str, mode: str = "mean") -> tuple[float | None, float | None]:
-    """Read a provider-separated cumulative stat without treating missing as zero."""
+def provider_pair(record: dict[str, Any], key: str, mode: str = "consensus") -> tuple[float | None, float | None]:
+    """Read a cumulative stat from all available providers.
+
+    The production collector can attach Flashscore, FotMob and 365Scores. The
+    default consensus is the median per side, so one malformed/outlier provider
+    cannot drag the LIVE picture far away from the other two. With two sources
+    median naturally equals their average; with one source its value is kept.
+    """
     pairs = _pairs(record, key)
     if not pairs:
         return None, None
@@ -27,7 +33,9 @@ def provider_pair(record: dict[str, Any], key: str, mode: str = "mean") -> tuple
     aways = [value[1] for value in pairs]
     if mode == "max":
         return max(homes), max(aways)
-    return mean(homes), mean(aways)
+    if mode == "mean":
+        return mean(homes), mean(aways)
+    return median(homes), median(aways)
 
 
 def provider_count(record: dict[str, Any], key: str | None = None) -> int:
@@ -117,7 +125,7 @@ def live_rich_features(record: dict[str, Any]) -> dict[str, float | None]:
     }
     out: dict[str, float | None] = {}
     for provider_key, (home_key, away_key) in mapping.items():
-        mode = "max" if provider_key in {"red_cards", "yellow_cards"} else "mean"
+        mode = "max" if provider_key in {"red_cards", "yellow_cards"} else "consensus"
         home, away = provider_pair(record, provider_key, mode=mode)
         out[home_key] = home
         out[away_key] = away

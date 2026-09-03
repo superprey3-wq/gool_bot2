@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from gool_bot2.shadow_markets import analyze_btts_shadow, analyze_team_goal_shadow
-from gool_bot2.shadow_market_worker import process_record
+from gool_bot2 import shadow_market_worker as shadow_worker
 
 
 def _provider(stats):
@@ -81,12 +81,17 @@ def test_shadow_team_goal_selects_a_team_without_emitting_active_signal():
     assert result["team"] in {"Home", "Away"}
 
 
-def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Path):
+def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Path, monkeypatch):
+    # Other production-wrapper tests intentionally monkey-patch the module globals.
+    # Restore the base analyzers here so this unit test is independent of collection order.
+    monkeypatch.setattr(shadow_worker, "analyze_btts_shadow", analyze_btts_shadow)
+    monkeypatch.setattr(shadow_worker, "analyze_team_goal_shadow", analyze_team_goal_shadow)
+
     journal = tmp_path / "shadow.json"
     analysis = tmp_path / "shadow.jsonl"
     cards = tmp_path / "cards"
     record = _record((0, 0))
-    created = process_record(record, journal, analysis, cards)
+    created = shadow_worker.process_record(record, journal, analysis, cards)
     assert created >= 1
     assert journal.exists()
     assert analysis.exists()

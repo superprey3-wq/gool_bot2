@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from gool_bot2 import bot_menu, first_half_product, signal_cards, telegram
+from gool_bot2 import bot_menu, first_half_product, signal_cards
 
 
 def test_first_half_strategy_is_first_class_in_report(tmp_path: Path):
@@ -31,7 +31,9 @@ def test_first_half_live_pressure_stays_active_after_25(monkeypatch):
     assert out["pressure_score"] is not None
 
 
-def test_first_half_card_theme_and_menu(monkeypatch, tmp_path: Path):
+def test_first_half_legacy_menu_renderer_still_supports_first_half(monkeypatch, tmp_path: Path):
+    # GOOL MULTI replaces telegram.in_game_sections on the feature branch, but
+    # the old first-half renderer remains valid in isolation until final cutover.
     assert "goal_before_ht" in signal_cards.THEMES
     assert "goal_before_ht" in bot_menu.MAIN_HEADS
 
@@ -48,6 +50,6 @@ def test_first_half_card_theme_and_menu(monkeypatch, tmp_path: Path):
             return {"FH2": {"is_live": True, "is_finished": False}}
 
     monkeypatch.setattr(first_half_product, "FlashscoreProvider", FakeProvider)
-    text = "\n".join(telegram.in_game_sections(journal, analysis))
+    text = "\n".join(first_half_product._render_in_game(journal, analysis))
     assert "ГОЛ ДО ПЕРЕРЫВА" in text
     assert "A — B" in text

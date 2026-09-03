@@ -61,12 +61,99 @@ def context_snapshot(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _market_age_seconds(market_row: dict[str, Any] | None) -> float | None:
+    raw = None if not market_row else market_row.get("captured_at")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds())
+    except Exception:
+        return None
+
+
+def _line_row(rows: list[dict[str, Any]], line: float) -> dict[str, Any] | None:
+    for row in rows or []:
+        try:
+            if abs(float(row.get("line")) - float(line)) < 1e-9:
+                return row
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _target(rows: list[dict[str, Any]], line: float, label: str) -> dict[str, Any]:
+    row = _line_row(rows, line)
+    odd = None
+    if row and row.get("over") is not None:
+        try:
+            odd = float(row.get("over"))
+        except (TypeError, ValueError):
+            odd = None
+    return {"label": label, "line": line, "available": odd is not None, "odd": odd}
+
+
+def market_snapshot(match: dict[str, Any], market_row: dict[str, Any] | None) -> dict[str, Any]:
+    """Compact 1xBet state for explaining why a Multi candidate was not built."""
+    hs = int(match.get("home_score") or 0)
+    aws = int(match.get("away_score") or 0)
+    minute = int(match.get("minute") or 0)
+    total = hs + aws
+    if not market_row:
+        return {
+            "available": False,
+            "reason": "xbet_match_not_mapped_or_state_missing",
+            "targets": {},
+        }
+
+    markets = market_row.get("markets") or {}
+    btts = markets.get("btts") or {}
+    targets: dict[str, dict[str, Any]] = {
+        "another_goal": _target(list(markets.get("match_total") or []), total + 0.5, f"ТБ {total + 0.5:g}"),
+        "two_more_goals": _target(list(markets.get("match_total") or []), total + 1.5, f"ТБ {total + 1.5:g}"),
+        "home_goal": _target(list(markets.get("home_total") or []), hs + 0.5, f"ИТБ1 {hs + 0.5:g}"),
+        "away_goal": _target(list(markets.get("away_total") or []), aws + 0.5, f"ИТБ2 {aws + 0.5:g}"),
+        "btts": {
+            "label": "ОЗ — Да",
+            "available": btts.get("yes") is not None,
+            "odd": None if btts.get("yes") is None else float(btts.get("yes")),
+        },
+    }
+    if 0 < minute <= 45:
+        targets["goal_before_ht"] = _target(
+            list(markets.get("first_half_total") or []), total + 0.5, f"1Т ТБ {total + 0.5:g}"
+        )
+
+    market_score = (
+        int(market_row.get("score_home") or market_row.get("flashscore_score_home") or 0),
+        int(market_row.get("score_away") or market_row.get("flashscore_score_away") or 0),
+    )
+    return {
+        "available": True,
+        "xbet_event_id": market_row.get("xbet_event_id"),
+        "captured_at": market_row.get("captured_at"),
+        "age_seconds": _market_age_seconds(market_row),
+        "score": [market_score[0], market_score[1]],
+        "score_desync": bool(market_score != (hs, aws) or market_row.get("score_desync")),
+        "timeline_score_desync": bool(market_row.get("timeline_score_desync")),
+        "score_verified": market_row.get("score_verified"),
+        "repricing_guard": bool(market_row.get("repricing_guard")),
+        "repricing_guard_reason": market_row.get("repricing_guard_reason"),
+        "seconds_since_event_change": market_row.get("seconds_since_event_change"),
+        "seconds_since_xbet_score_change": market_row.get("seconds_since_xbet_score_change"),
+        "targets": targets,
+    }
+
+
 def decision_snapshot(
     record: dict[str, Any],
     decision: RouterDecision,
     experts: dict[str, Any],
     *,
     data_quality: float,
+    market_row: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     match = record.get("match") or {}
     return {
@@ -80,6 +167,7 @@ def decision_snapshot(
         "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
         "data_quality": float(data_quality),
         "context": context_snapshot(record),
+        "market": market_snapshot(match, market_row),
         "experts": experts,
         "router": decision.to_dict(),
     }
@@ -108,6 +196,6 @@ def analyze_and_record(
     decision = analyze_multi_match(record.get("match") or {}, market_row, experts, data_quality=data_quality)
     append_shadow_snapshot(
         analysis_path,
-        decision_snapshot(record, decision, experts, data_quality=data_quality),
+        decision_snapshot(record, decision, experts, data_quality=data_quality, market_row=market_row),
     )
     return decision

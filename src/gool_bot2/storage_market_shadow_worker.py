@@ -78,12 +78,20 @@ def _team(record):
     result = _ORIG_TEAM(record)
     match = record.get("match") or {}; home = str(match.get("home") or ""); away = str(match.get("away") or "")
     selected = result.get("selected_side")
-    if selected in {"home", "away"}:
-        info = _decorate_value(_eval(record, "team_to_score", selected), result.get("confidence_score"), "gool_team_goal_confidence")
+    home_analysis = result.get("home") or {}
+    away_analysis = result.get("away") or {}
+    home_conf = home_analysis.get("confidence_score")
+    away_conf = away_analysis.get("confidence_score")
+
+    home_info = _decorate_value(_eval(record, "team_to_score", "home"), home_conf, "gool_home_goal_confidence")
+    away_info = _decorate_value(_eval(record, "team_to_score", "away"), away_conf, "gool_away_goal_confidence")
+
+    if selected == "home":
+        info = home_info
+    elif selected == "away":
+        info = away_info
     else:
-        home_info = _decorate_value(_eval(record, "team_to_score", "home"), result.get("confidence_score"), "gool_team_goal_confidence")
-        away_info = _decorate_value(_eval(record, "team_to_score", "away"), result.get("confidence_score"), "gool_team_goal_confidence")
-        candidates = [("home", home_info), ("away", away_info)]
+        candidates = [("home", home_info, home_conf), ("away", away_info, away_conf)]
         candidates.sort(
             key=lambda item: (
                 int(bool(item[1].get("override"))),
@@ -93,7 +101,12 @@ def _team(record):
             ),
             reverse=True,
         )
-        selected, info = candidates[0]
+        selected, info, selected_conf = candidates[0]
+        if info.get("value_override") and selected_conf is not None:
+            result["confidence_score"] = selected_conf
+            side_analysis = home_analysis if selected == "home" else away_analysis
+            result["pressure_score"] = side_analysis.get("pressure_score")
+
     result["xbet_market"] = info
     special_override = bool((info.get("override") or info.get("value_override")) and _window_ok(record))
     if special_override:

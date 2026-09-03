@@ -1,0 +1,53 @@
+name: GOOL LIVE stats audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/gool_bot2/providers/flashscore_stats_guard.py'
+      - 'src/gool_bot2/providers/__init__.py'
+      - 'src/gool_bot2/providers/fusion.py'
+      - 'src/gool_bot2/match_context.py'
+      - 'tests/test_providers.py'
+      - 'scripts/gool_live_stats_audit.py'
+      - '.github/workflows/gool-live-stats-audit.yml'
+  workflow_dispatch:
+
+jobs:
+  live-stats-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install GOOL Bot 2
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Provider regression tests
+        run: pytest -q tests/test_providers.py
+
+      - name: Audit real LIVE cumulative stats across Flashscore FotMob 365Scores
+        run: python scripts/gool_live_stats_audit.py --limit 8 --out artifacts/gool_live_stats_audit/report.json
+
+      - name: Show live audit
+        if: always()
+        run: |
+          if [ -f artifacts/gool_live_stats_audit/report.json ]; then
+            cat artifacts/gool_live_stats_audit/report.json
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-live-stats-audit
+          path: artifacts/gool_live_stats_audit/
+          if-no-files-found: warn
+          retention-days: 7

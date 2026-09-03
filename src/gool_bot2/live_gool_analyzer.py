@@ -47,6 +47,13 @@ def _confidence(score: float | None) -> float | None:
     return float(max(0.50, min(0.95, 0.50 + (float(score) - 0.70) * 0.30)))
 
 
+def _two_more_max_minute() -> int:
+    try:
+        return max(10, min(75, int(os.getenv("GOOL_TWO_MORE_MAX_MINUTE", "65"))))
+    except (TypeError, ValueError):
+        return 65
+
+
 def analyze_two_more_goals(record: dict[str, Any]) -> dict[str, Any]:
     """GOOL LIVE pressure for two additional goals from the current score.
 
@@ -57,6 +64,7 @@ def analyze_two_more_goals(record: dict[str, Any]) -> dict[str, Any]:
     """
     match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
+    max_minute = _two_more_max_minute()
     minimum = float(os.getenv("GOOL_LIVE_TWO_GOAL_MIN_PRESSURE", "1.15"))
     output: dict[str, Any] = {
         "name": "gool_live_two_more_goals",
@@ -65,8 +73,11 @@ def analyze_two_more_goals(record: dict[str, Any]) -> dict[str, Any]:
         "passed": False,
         "confidence_score": None,
         "provider_count": provider_count(record),
+        "max_signal_minute": max_minute,
     }
-    if minute < 10 or minute > 75 or bool(match.get("is_finished")):
+    if minute < 10 or minute > max_minute or bool(match.get("is_finished")):
+        if minute > max_minute:
+            output["hard_time_block"] = f"two_more_window_closed:{minute}>{max_minute}"
         return output
 
     progress = max(0.12, min(1.0, minute / 90.0))

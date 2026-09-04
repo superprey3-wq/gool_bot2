@@ -39,6 +39,8 @@ def finalize_multi_delivery(
         rows[index]["telegram_sent"] = True
         rows[index]["telegram_sent_at"] = _now()
         rows[index]["telegram_delivery_count"] = int(sent)
+        if str(rows[index].get("source") or "").startswith("1xbet:autonomous_steam"):
+            rows[index]["signal_source"] = "STEAM_OVERRIDE"
     else:
         rows.pop(index)
 

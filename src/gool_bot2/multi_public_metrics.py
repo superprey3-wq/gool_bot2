@@ -98,6 +98,18 @@ def _steam_support(winner: Any) -> bool:
     )
 
 
+def _breadth_count(winner: Any) -> int:
+    for tag in list(getattr(winner, "reason_tags", []) or []):
+        raw = str(tag or "")
+        if not raw.startswith("market_breadth:"):
+            continue
+        try:
+            return max(0, int(raw.split(":", 1)[1]))
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
 def confidence_snapshot(
     record: dict[str, Any],
     winner: Any,
@@ -105,11 +117,16 @@ def confidence_snapshot(
     *,
     data_quality: float,
 ) -> dict[str, Any]:
-    football = _expert_strength(experts, str(getattr(winner, "strategy", "") or ""), getattr(winner, "model_probability", None))
+    football = _expert_strength(
+        experts,
+        str(getattr(winner, "strategy", "") or ""),
+        getattr(winner, "model_probability", None),
+    )
     data = _clamp(data_quality)
     momentum = momentum_score(record)
     market = _market_score(getattr(winner, "market_pressure_pp", 0.0))
     steam_strength = _clamp((_number(getattr(winner, "rating", None)) or 70.0) / 100.0)
+    breadth = _breadth_count(winner)
 
     if _is_steam(winner):
         confidence = 0.30 * football + 0.15 * data + 0.15 * momentum + 0.40 * steam_strength
@@ -129,6 +146,8 @@ def confidence_snapshot(
         "market_score": round(market * 100.0, 1),
         "steam_score": round(steam_strength * 100.0, 1) if layer == "STEAM" else None,
         "steam_confirmation": _steam_support(winner),
+        "market_breadth_count": breadth,
+        "multi_market_confirmation": breadth > 0,
         "layer": layer,
         "formula": formula,
     }
@@ -139,9 +158,18 @@ def brief_selection_reason(decision: Any, winner: Any) -> str:
     source = str(getattr(winner, "source", "") or "")
     pressure = _number(getattr(winner, "market_pressure_pp", 0.0)) or 0.0
     supported = _steam_support(winner)
+    breadth = _breadth_count(winner)
 
     if source.startswith("1xbet:autonomous_steam"):
-        return f"Сверхсильный прогруз 1xBet: устойчивое движение {pressure:+.1f} п.п. при допустимом кэфе."
+        if breadth:
+            return (
+                f"Сверхсильный прогруз 1xBet {pressure:+.1f} п.п.; "
+                f"движение подтверждают ещё {breadth} связанн. рынк."
+            )
+        return (
+            f"Экстремальный прогруз 1xBet {pressure:+.1f} п.п.; "
+            "усиленный порог пройден даже без второго рынка."
+        )
 
     if strategy == "another_goal":
         text = "Матч сохраняет голевое давление; общий тотал покрывает следующий гол любой команды."
@@ -161,6 +189,8 @@ def brief_selection_reason(decision: Any, winner: Any) -> str:
 
     if supported:
         text = f"{text} Сильный STEAM 1xBet {pressure:+.1f} п.п. подтверждает вход."
+    if breadth:
+        text = f"{text} Связанных рынков в ту же сторону: {breadth}."
     return text
 
 

@@ -1,50 +1,50 @@
 {
   "events": [
     {
-      "away": "Bolivar",
-      "event_id": "AqdbdZWj",
+      "away": "Kasuka",
+      "event_id": "E5WQz9Ej",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 0,
-          "minute": 90,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 2,
+          "minute": 50,
           "snapshot": 1
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 0,
-          "minute": 90,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 2,
+          "minute": 51,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 0,
-          "minute": 90,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 2,
+          "minute": 52,
           "snapshot": 3
         }
       ],
-      "home": "GV San Jose",
-      "league": "BOLIVIA: Copa Pacena",
+      "home": "Manila Digger",
+      "league": "ASIA: ASEAN Club Championship - Qualification",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "MATCHED_NO_QUOTES"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
@@ -53,33 +53,33 @@
       }
     },
     {
-      "away": "Manta",
-      "event_id": "MwIUDaxe",
+      "away": "Olympic Kingsway",
+      "event_id": "2L1wtbpT",
       "flashscore_states": [
         {
           "away_score": 3,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 4,
-          "minute": 90,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 2,
+          "minute": 45,
           "snapshot": 1
         },
         {
           "away_score": 3,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 4,
-          "minute": 90,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 2,
+          "minute": 45,
           "snapshot": 2
         },
         {
           "away_score": 3,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 4,
-          "minute": 90,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 2,
+          "minute": 45,
           "snapshot": 3
         }
       ],
-      "home": "Macara",
-      "league": "ECUADOR: Liga Pro",
+      "home": "Bayswater",
+      "league": "AUSTRALIA: NPL Western Australia - Play Offs",
       "sources": {
         "bet365": {
           "flashscore_progress": false,
@@ -99,91 +99,39 @@
           "flashscore_progress": false,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
-          "odds_changed": true,
-          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
-        }
-      }
-    },
-    {
-      "away": "Middlesbrough",
-      "event_id": "6sSLWUil",
-      "flashscore_states": [
-        {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 1,
-          "minute": 90,
-          "snapshot": 1
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 1,
-          "minute": 90,
-          "snapshot": 2
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 1,
-          "minute": 90,
-          "snapshot": 3
-        }
-      ],
-      "home": "Burnley",
-      "league": "ENGLAND: Championship",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 1,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 1,
           "odds_changed": false,
           "verdict": "FOUND_NO_CHANGE"
         }
       }
     },
     {
-      "away": "OFI Crete",
-      "event_id": "SzV1mG4F",
+      "away": "Perth Azzurri",
+      "event_id": "bim9zx8j",
       "flashscore_states": [
         {
-          "away_score": 0,
-          "captured_at": "2026-09-02T20:55:41+00:00",
+          "away_score": 1,
+          "captured_at": "2026-09-04T12:08:09+00:00",
           "home_score": 0,
-          "minute": 71,
+          "minute": 51,
           "snapshot": 1
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-09-02T20:56:30+00:00",
+          "away_score": 1,
+          "captured_at": "2026-09-04T12:09:01+00:00",
           "home_score": 0,
-          "minute": 72,
+          "minute": 52,
           "snapshot": 2
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-09-02T20:57:18+00:00",
+          "away_score": 1,
+          "captured_at": "2026-09-04T12:09:54+00:00",
           "home_score": 0,
-          "minute": 72,
+          "minute": 53,
           "snapshot": 3
         }
       ],
-      "home": "PAOK",
-      "league": "GREECE: Greek Cup",
+      "home": "Perth RedStar",
+      "league": "AUSTRALIA: NPL Western Australia - Play Offs",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -209,33 +157,241 @@
       }
     },
     {
-      "away": "Sambenedettese",
-      "event_id": "Ovxznhfm",
+      "away": "Wigan U21",
+      "event_id": "6Dnchnn1",
       "flashscore_states": [
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:55:41+00:00",
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
           "home_score": 2,
-          "minute": 90,
+          "minute": 51,
           "snapshot": 1
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:56:30+00:00",
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
           "home_score": 2,
-          "minute": 90,
+          "minute": 52,
           "snapshot": 2
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:57:18+00:00",
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
           "home_score": 2,
-          "minute": 90,
+          "minute": 53,
           "snapshot": 3
         }
       ],
-      "home": "Altamura",
-      "league": "ITALY: Coppa Italia Serie C",
+      "home": "Sheffield Wed U21",
+      "league": "ENGLAND: Professional Development League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        }
+      }
+    },
+    {
+      "away": "Hapoel Karmiel",
+      "event_id": "jg6EbOjt",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 1,
+          "minute": 24,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 1,
+          "minute": 24,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 1,
+          "minute": 25,
+          "snapshot": 3
+        }
+      ],
+      "home": "Hapoel Ihud Bnei Jatt",
+      "league": "ISRAEL: Liga Alef North",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Tzeirey Tamra",
+      "event_id": "Im6xgKKH",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 1,
+          "minute": 40,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 1,
+          "minute": 40,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 1,
+          "minute": 41,
+          "snapshot": 3
+        }
+      ],
+      "home": "Ironi Nesher",
+      "league": "ISRAEL: Liga Alef North",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Hapoel Hadera",
+      "event_id": "txYPBrCa",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 1,
+          "minute": 77,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 1,
+          "minute": 78,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 1,
+          "minute": 79,
+          "snapshot": 3
+        }
+      ],
+      "home": "H. Marmorek",
+      "league": "ISRAEL: Liga Alef South",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Ramat Hasharon",
+      "event_id": "8OZHD4sm",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "home": "Holon Yermiyahu",
+      "league": "ISRAEL: Liga Alef South",
       "sources": {
         "bet365": {
           "flashscore_progress": false,
@@ -253,152 +409,308 @@
         },
         "kambi_unibet": {
           "flashscore_progress": false,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Jerusalem FC",
+      "event_id": "zJZu80BO",
+      "flashscore_states": [
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 3
+        }
+      ],
+      "home": "Kfar Saba 1928",
+      "league": "ISRAEL: Liga Alef South",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": false,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": false,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": false,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Nizhny Novgorod U19",
+      "event_id": "WU0Wu285",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 7,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 8,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 9,
+          "snapshot": 3
+        }
+      ],
+      "home": "CSKA Moscow U19",
+      "league": "RUSSIA: Youth League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        }
+      }
+    },
+    {
+      "away": "Dynamo Moscow U19",
+      "event_id": "xS3vvtwI",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 9,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 10,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 11,
+          "snapshot": 3
+        }
+      ],
+      "home": "Fakel Voronezh U19",
+      "league": "RUSSIA: Youth League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        }
+      }
+    },
+    {
+      "away": "Seoul E-Land",
+      "event_id": "S4HzFpSk",
+      "flashscore_states": [
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 76,
+          "snapshot": 1
+        },
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 77,
+          "snapshot": 2
+        },
+        {
+          "away_score": 2,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 78,
+          "snapshot": 3
+        }
+      ],
+      "home": "Cheongju",
+      "league": "SOUTH KOREA: K League 2",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
           "odds_changed": true,
-          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
+          "verdict": "PROVEN"
         }
       }
     },
     {
-      "away": "Savoia",
-      "event_id": "KbgIbLKH",
-      "flashscore_states": [
-        {
-          "away_score": 3,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 0,
-          "minute": 90,
-          "snapshot": 1
-        },
-        {
-          "away_score": 3,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 0,
-          "minute": 90,
-          "snapshot": 2
-        },
-        {
-          "away_score": 3,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 0,
-          "minute": 90,
-          "snapshot": 3
-        }
-      ],
-      "home": "Catania",
-      "league": "ITALY: Coppa Italia Serie C",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Boston River",
-      "event_id": "rcQXvyK7",
+      "away": "Daegu",
+      "event_id": "ELFrDOd2",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-09-02T20:55:41+00:00",
+          "captured_at": "2026-09-04T12:08:09+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 80,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-09-02T20:56:30+00:00",
+          "captured_at": "2026-09-04T12:09:01+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 81,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-09-02T20:57:18+00:00",
+          "captured_at": "2026-09-04T12:09:54+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 82,
           "snapshot": 3
         }
       ],
-      "home": "Liverpool M.",
-      "league": "URUGUAY: Copa Uruguay",
+      "home": "Paju Frontier",
+      "league": "SOUTH KOREA: K League 2",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "MATCHED_NO_QUOTES"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
-          "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
+          "odds_changed": true,
+          "verdict": "PROVEN"
         }
       }
     },
     {
-      "away": "Dep. Tachira",
-      "event_id": "pSXdHq1m",
+      "away": "Renown",
+      "event_id": "GOotBJCk",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 0,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 1
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 0,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 0,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 3
         }
       ],
-      "home": "Zamora",
-      "league": "VENEZUELA: Liga FUTVE - Clausura",
+      "home": "Blue Eagles",
+      "league": "SRI LANKA: Super League",
       "sources": {
         "bet365": {
           "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
+          "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
+          "verdict": "NOT_FOUND"
         },
         "betano": {
           "flashscore_progress": false,
@@ -410,40 +722,40 @@
         "kambi_unibet": {
           "flashscore_progress": false,
           "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
           "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
+          "verdict": "NOT_FOUND"
         }
       }
     },
     {
-      "away": "Atletico Barinas",
-      "event_id": "UwObHENE",
+      "away": "Pathum United",
+      "event_id": "CAJZCgt4",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 1,
-          "minute": 71,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 7,
           "snapshot": 1
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 1,
-          "minute": 72,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 8,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 1,
-          "minute": 73,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 9,
           "snapshot": 3
         }
       ],
-      "home": "El Vigia",
-      "league": "VENEZUELA: Liga FUTVE 2",
+      "home": "Pattani",
+      "league": "THAILAND: Thai League 1",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -469,33 +781,85 @@
       }
     },
     {
-      "away": "Zamora 2",
-      "event_id": "xpyDgBV7",
+      "away": "Muang Thong Utd",
+      "event_id": "2NjiPrEp",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:55:41+00:00",
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
           "home_score": 0,
+          "minute": 8,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 9,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 10,
+          "snapshot": 3
+        }
+      ],
+      "home": "Uttaradit",
+      "league": "THAILAND: Thai League 2",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Oleksandriya 2",
+      "event_id": "2gPo4GLt",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 2,
+          "minute": 69,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 2,
           "minute": 70,
-          "snapshot": 1
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 0,
-          "minute": 71,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 0,
-          "minute": 72,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 2,
+          "minute": 71,
           "snapshot": 3
         }
       ],
-      "home": "Frontera",
-      "league": "VENEZUELA: Liga FUTVE 2",
+      "home": "Atlet Kiev",
+      "league": "UKRAINE: Druha Liga",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -521,50 +885,154 @@
       }
     },
     {
-      "away": "Urena",
-      "event_id": "25y6FhhR",
+      "away": "Lokomotyv Kyiv",
+      "event_id": "vwTr3JwP",
       "flashscore_states": [
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:55:41+00:00",
-          "home_score": 2,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 74,
           "snapshot": 1
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:56:30+00:00",
-          "home_score": 2,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 75,
           "snapshot": 2
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-09-02T20:57:18+00:00",
-          "home_score": 2,
-          "minute": 45,
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 76,
           "snapshot": 3
         }
       ],
-      "home": "Yaracuyanos",
-      "league": "VENEZUELA: Liga FUTVE 2",
+      "home": "Kolos Kovalivka 2",
+      "league": "UKRAINE: Persha Liga",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
+          "verdict": "NOT_FOUND"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Livyi Bereg",
+      "event_id": "UFmuARH7",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 72,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 73,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 74,
+          "snapshot": 3
+        }
+      ],
+      "home": "Ch. Odesa",
+      "league": "UKRAINE: Premier League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
+      "away": "Viettel",
+      "event_id": "Wx9T0dCM",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:08:09+00:00",
+          "home_score": 0,
+          "minute": 48,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:01+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-09-04T12:09:54+00:00",
+          "home_score": 0,
+          "minute": 50,
+          "snapshot": 3
+        }
+      ],
+      "home": "Truong Tuoi Dong Nai",
+      "league": "VIETNAM: V.League 1",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
@@ -573,7 +1041,7 @@
       }
     }
   ],
-  "generated_at": "2026-09-02T20:57:21+00:00",
+  "generated_at": "2026-09-04T12:10:00+00:00",
   "snapshot_count": 3,
   "source_diagnostics": {
     "bet365": [
@@ -581,7 +1049,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 22,
+            "candidate_count": 37,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -590,7 +1058,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-09-02T20:55:41+00:00",
+        "captured_at": "2026-09-04T12:08:09+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 1,
         "state": "ok"
@@ -599,7 +1067,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 20,
+            "candidate_count": 35,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -608,7 +1076,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-09-02T20:56:30+00:00",
+        "captured_at": "2026-09-04T12:09:01+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 2,
         "state": "ok"
@@ -617,7 +1085,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 22,
+            "candidate_count": 35,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -626,7 +1094,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-09-02T20:57:18+00:00",
+        "captured_at": "2026-09-04T12:09:54+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 3,
         "state": "ok"
@@ -676,7 +1144,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-09-02T20:55:41+00:00",
+        "captured_at": "2026-09-04T12:08:09+00:00",
         "chosen_url": null,
         "snapshot": 1,
         "state": "error"
@@ -724,7 +1192,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-09-02T20:56:30+00:00",
+        "captured_at": "2026-09-04T12:09:01+00:00",
         "chosen_url": null,
         "snapshot": 2,
         "state": "error"
@@ -772,7 +1240,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-09-02T20:57:18+00:00",
+        "captured_at": "2026-09-04T12:09:54+00:00",
         "chosen_url": null,
         "snapshot": 3,
         "state": "error"
@@ -783,26 +1251,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 126,
+            "candidate_count": 190,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 46,
+            "quoted_candidate_count": 70,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 123,
+            "candidate_count": 179,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 45,
+            "quoted_candidate_count": 65,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-09-02T20:55:41+00:00",
+        "captured_at": "2026-09-04T12:08:09+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 1,
         "state": "ok"
@@ -811,26 +1279,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 126,
+            "candidate_count": 190,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 48,
+            "quoted_candidate_count": 68,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 124,
+            "candidate_count": 177,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 47,
+            "quoted_candidate_count": 63,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-09-02T20:56:30+00:00",
+        "captured_at": "2026-09-04T12:09:01+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 2,
         "state": "ok"
@@ -839,26 +1307,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 121,
+            "candidate_count": 192,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 48,
+            "quoted_candidate_count": 66,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 119,
+            "candidate_count": 180,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 47,
+            "quoted_candidate_count": 62,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-09-02T20:57:18+00:00",
+        "captured_at": "2026-09-04T12:09:54+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 3,
         "state": "ok"
@@ -884,27 +1352,26 @@
   },
   "source_summary": {
     "bet365": {
-      "MATCHED_NO_QUOTES": 10,
-      "NOT_FOUND": 1
+      "MATCHED_NO_QUOTES": 16,
+      "NOT_FOUND": 4
     },
     "betano": {
-      "SOURCE_ERROR": 11
+      "SOURCE_ERROR": 20
     },
     "kambi_unibet": {
-      "FOUND_NO_CHANGE": 3,
-      "NOT_FOUND": 5,
-      "ODDS_CHANGED_NO_FS_PROGRESS": 2,
-      "PROVEN": 1
+      "FOUND_NO_CHANGE": 1,
+      "MATCHED_NO_QUOTES": 3,
+      "NOT_FOUND": 13,
+      "PROVEN": 3
     }
   },
   "strict_quote_evidence": true,
-  "unique_flashscore_live_matches": 11,
+  "unique_flashscore_live_matches": 20,
   "verdict_counts": {
-    "FOUND_NO_CHANGE": 3,
-    "MATCHED_NO_QUOTES": 10,
-    "NOT_FOUND": 6,
-    "ODDS_CHANGED_NO_FS_PROGRESS": 2,
-    "PROVEN": 1,
-    "SOURCE_ERROR": 11
+    "FOUND_NO_CHANGE": 1,
+    "MATCHED_NO_QUOTES": 19,
+    "NOT_FOUND": 17,
+    "PROVEN": 3,
+    "SOURCE_ERROR": 20
   }
 }

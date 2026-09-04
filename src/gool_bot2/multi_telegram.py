@@ -45,6 +45,7 @@ def silence_legacy_telegram() -> Iterator[None]:
 
 
 def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str:
+    """Text fallback used only when Telegram fails to accept the PNG card."""
     title = "🔥 <b>GOOL MULTI · ПРОГРУЗ 1xBET</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
     metric = _gool_metric_text(entry, entry.get("probability"))
     steam = "\n🔥 <b>ПРОГРУЗ 1xBET</b>" if strong_steam else ""
@@ -58,6 +59,7 @@ def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str
 
 
 def _result_caption(row: dict[str, Any]) -> str:
+    """Text fallback used only when Telegram fails to accept the result PNG."""
     result = str(row.get("result") or "void").lower()
     if result == "won":
         icon, label = "✅", "ЗАШЁЛ"
@@ -94,17 +96,18 @@ def emit_multi_signal(
     active_entry = dict(entry)
     active_entry["mode"] = "active"
     strong_steam = is_strong_steam(decision)
-    caption = _signal_caption(active_entry, strong_steam=strong_steam)
+    fallback = _signal_caption(active_entry, strong_steam=strong_steam)
     sent = 0
     try:
+        # The PNG already contains match, score, market, price and strength.
+        # Do not duplicate the same information as a Telegram photo caption.
         sent = telegram.broadcast_photo(
             render_multi_signal_card(record, decision, entry=active_entry, market_row=market_row),
-            caption=caption,
         )
     except Exception as exc:
         print(f"GOOL_MULTI_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
     if sent == 0:
-        sent = telegram.broadcast(caption)
+        sent = telegram.broadcast(fallback)
     print(
         f"GOOL_MULTI_SIGNAL_SENT match={entry.get('match_id')} sent={sent} strong_steam={int(strong_steam)}",
         flush=True,
@@ -117,14 +120,14 @@ def emit_multi_results(record: dict[str, Any], rows: list[dict[str, Any]]) -> in
         return 0
     total = 0
     for row in rows:
-        caption = _result_caption(row)
+        fallback = _result_caption(row)
         sent = 0
         try:
-            sent = telegram.broadcast_photo(render_multi_result_card(row, record), caption=caption)
+            sent = telegram.broadcast_photo(render_multi_result_card(row, record))
         except Exception as exc:
             print(f"GOOL_MULTI_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
         if sent == 0:
-            sent = telegram.broadcast(caption)
+            sent = telegram.broadcast(fallback)
         total += sent
         print(
             f"GOOL_MULTI_RESULT_SENT match={row.get('match_id')} result={row.get('result')} sent={sent}",

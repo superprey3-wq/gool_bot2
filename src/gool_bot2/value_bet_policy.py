@@ -4,7 +4,7 @@ import os
 from typing import Any
 
 VALUE_LEVELS = ("NO_VALUE", "VALUE", "STRONG_VALUE", "VERY_STRONG_VALUE")
-ABSOLUTE_MIN_BET_ODD = 1.40
+ABSOLUTE_MIN_BET_ODD = 1.50
 
 
 def _prob(value: Any) -> float | None:

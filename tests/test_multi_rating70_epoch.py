@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-import monkey_start
+import importlib.util
+from pathlib import Path
 
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
 from gool_bot2.multi_runtime import _enforce_min_rating
+
+
+_SPEC = importlib.util.spec_from_file_location(
+    "monkey_start",
+    Path(__file__).resolve().parents[1] / "monkey_start.py",
+)
+assert _SPEC is not None and _SPEC.loader is not None
+monkey_start = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(monkey_start)
 
 
 def _decision(rating: float) -> RouterDecision:

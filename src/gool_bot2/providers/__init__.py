@@ -2,14 +2,22 @@
 
 from .flashscore import FlashscoreProvider
 from .flashscore_stats_guard import install as install_flashscore_stats_guard
+from .flashscore_incident_guard import install as install_flashscore_incident_guard
 
 # Flashscore publishes cumulative Match stats and period splits under the same
-# stat ids. Install the section-aware parser before any consumer starts reading
-# live stats so 1st/2nd-half rows cannot overwrite the full-match totals.
+# stat ids. Keep the section-aware parser and then install the real incident
+# grammar (IA=side, IE/IK=event type) plus the red-card stat mapping.
 install_flashscore_stats_guard()
+install_flashscore_incident_guard()
 
 from .fotmob import FotMobProvider
 from .scores365 import Scores365Provider
+from .secondary_live_guard import install as install_secondary_live_guard
+
+# FotMob and 365Scores expose useful live data through endpoints that refresh at
+# different speeds. Normalize those endpoints without changing ProviderMatch.
+install_secondary_live_guard()
+
 from .fusion import FootballDataFusion
 
 __all__ = [

@@ -7,6 +7,9 @@ from typing import Any
 from .journal import load_signal_journal, save_signal_journal
 
 
+FINAL_RESULTS = {"won", "lost", "push", "void"}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -63,3 +66,56 @@ def was_publicly_sent(row: dict[str, Any]) -> bool:
         return float(row.get("probability")) >= 0.70
     except (TypeError, ValueError):
         return False
+
+
+def pending_result_notifications(
+    journal_path: Path,
+    *,
+    match_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return newly settled public rows whose result card still needs delivery.
+
+    Only settlements created after the pending-result flag was introduced are
+    eligible. This avoids replaying historical result cards after deployment.
+    """
+    wanted = str(match_id or "")
+    out: list[dict[str, Any]] = []
+    for row in load_signal_journal(journal_path):
+        if not bool(row.get("result_notification_pending")):
+            continue
+        if str(row.get("result") or "").lower() not in FINAL_RESULTS:
+            continue
+        if wanted and str(row.get("match_id") or "") != wanted:
+            continue
+        if not was_publicly_sent(row):
+            continue
+        out.append(dict(row))
+    return out
+
+
+def finalize_result_delivery(
+    journal_path: Path,
+    row: dict[str, Any],
+    sent: int,
+) -> bool:
+    """Mark one result notification delivered; failed sends stay pending for retry."""
+    if int(sent or 0) <= 0:
+        return False
+    entry_key = str(row.get("entry_key") or "")
+    if not entry_key:
+        return False
+
+    rows = load_signal_journal(journal_path)
+    index = next(
+        (i for i, item in enumerate(rows) if str(item.get("entry_key") or "") == entry_key),
+        None,
+    )
+    if index is None:
+        return False
+
+    rows[index]["result_notification_pending"] = False
+    rows[index]["result_telegram_sent"] = True
+    rows[index]["result_telegram_sent_at"] = _now()
+    rows[index]["result_telegram_delivery_count"] = int(sent)
+    save_signal_journal(journal_path, rows)
+    return True

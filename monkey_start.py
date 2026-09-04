@@ -12,6 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
+MULTI_RESET_ID = "rating70_2026_09_04"
 
 
 def load_env(path: Path) -> None:
@@ -30,6 +31,43 @@ def _truthy(name: str, default: bool = False) -> bool:
     if raw is None:
         return bool(default)
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _reset_multi_tracking_once(runtime: Path) -> None:
+    """Start the rating-70 production epoch with a clean Multi journal/bank.
+
+    The marker lives in persistent runtime storage, so only the first boot after
+    this deployment resets history. Later restarts keep all newly collected bets.
+    """
+    live = runtime / "live"
+    live.mkdir(parents=True, exist_ok=True)
+    marker = live / f".gool_multi_reset_{MULTI_RESET_ID}"
+    if marker.exists():
+        return
+
+    journal_raw = os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip()
+    multi_journal = Path(journal_raw) if journal_raw else live / "gool_multi_journal.json"
+    bank_raw = os.getenv("GOOL_MULTI_BANK_STATE_PATH", "").strip()
+    bank_state = Path(bank_raw) if bank_raw else multi_journal.with_name("gool_multi_bank_state.json")
+
+    removed: list[str] = []
+    for path in (multi_journal, bank_state):
+        try:
+            if path.exists():
+                path.unlink()
+                removed.append(str(path))
+        except OSError as exc:
+            raise RuntimeError(f"multi_reset_failed path={path} err={exc}") from exc
+
+    marker.write_text(
+        f"reset_id={MULTI_RESET_ID}\nmin_rating={os.getenv('GOOL_MULTI_MIN_RATING', '70')}\n",
+        "utf-8",
+    )
+    print(
+        f"GOOL_BOOT multi_tracking_reset={MULTI_RESET_ID} "
+        f"removed={len(removed)} journal={multi_journal} bank={bank_state}",
+        flush=True,
+    )
 
 
 def ensure_deps() -> None:
@@ -97,6 +135,7 @@ def main() -> None:
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
+    os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
     # Production cutover: old server env files do not need a new variable.
     # Explicit GOOL_MULTI_TELEGRAM_MODE=shadow still provides an instant rollback.
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
@@ -110,6 +149,7 @@ def main() -> None:
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
 
+    _reset_multi_tracking_once(runtime)
     ensure_deps()
 
     models = {
@@ -130,6 +170,7 @@ def main() -> None:
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
+    print(f"GOOL_BOOT multi_min_rating={os.environ['GOOL_MULTI_MIN_RATING']}", flush=True)
     print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)

@@ -135,12 +135,8 @@ def test_active_mode_delivers_clean_signal_and_result_as_photos(monkeypatch):
     assert sent_result == 1
     assert len(photos) == 2
     assert all(png.startswith(b"\x89PNG") for png, _ in photos)
-    assert "BEST BET" in photos[0][1]
-    assert "ВЕРОЯТНОСТЬ ЗАХОДА 74%" in photos[0][1]
-    assert "rating" not in photos[0][1].lower()
-    assert "roi" not in photos[0][1].lower()
-    assert "value" not in photos[0][1].lower()
-    assert "ЗАШЁЛ" in photos[1][1]
+    assert photos[0][1] == ""
+    assert photos[1][1] == ""
     assert texts == []
 
 

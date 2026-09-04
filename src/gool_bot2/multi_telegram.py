@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from . import telegram
-from .multi_card import render_multi_result_card
+from .multi_card import _gool_metric_text, render_multi_result_card
 from .multi_router import RouterDecision
 from .multi_steam_card import is_strong_steam, render_multi_signal_card
 
@@ -19,13 +19,7 @@ def is_multi_telegram_active() -> bool:
 
 @contextmanager
 def silence_legacy_telegram() -> Iterator[None]:
-    """Prevent old per-strategy cards from reaching Telegram during Multi cutover.
-
-    The legacy worker still runs so GOOL models/prematch/live analyzers are
-    calculated for Multi. Telegram transport reads TELEGRAM_BOT_TOKEN at send
-    time, so hiding it for the duration of the legacy _process call suppresses
-    only legacy delivery. The token is restored before the Multi card is sent.
-    """
+    """Prevent old per-strategy cards from reaching Telegram during Multi cutover."""
     if not is_multi_telegram_active():
         yield
         return
@@ -41,18 +35,16 @@ def silence_legacy_telegram() -> Iterator[None]:
             os.environ.pop("TELEGRAM_BOT_TOKEN", None)
 
 
-def _signal_source(entry: dict[str, Any]) -> str:
-    return str(entry.get("signal_source") or "GOOL")
-
-
 def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str:
-    title = "🔥 <b>GOOL MULTI · СИЛЬНЫЙ ПРОГРУЗ</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
+    title = "🔥 <b>GOOL MULTI · ПРОГРУЗ 1xBET</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
+    metric = _gool_metric_text(entry, entry.get("probability"))
+    steam = "\n🔥 <b>ПРОГРУЗ 1xBET</b>" if strong_steam else ""
     return (
         f"{title}\n"
         f"{entry.get('home','?')} — {entry.get('away','?')}\n"
         f"{int(entry.get('minute') or 0)}' · {int((entry.get('score') or [0,0])[0])}:{int((entry.get('score') or [0,0])[1])}\n"
         f"<b>{entry.get('market','?')} @ {float(entry.get('odd') or 0):.2f}</b>\n"
-        f"GOOL {float(entry.get('probability') or 0)*100:.1f}% · rating {float(entry.get('rating') or 0):.0f}/100 · {_signal_source(entry)}"
+        f"<b>{metric}</b>{steam}"
     )
 
 
@@ -65,17 +57,11 @@ def _result_caption(row: dict[str, Any]) -> str:
     else:
         icon, label = "↩️", "ВОЗВРАТ / VOID"
     score = list(row.get("settled_score") or [0, 0])
-    profit = row.get("virtual_profit_rub")
-    try:
-        pl = float(profit)
-        pl_text = f"{pl:+.0f} ₽"
-    except (TypeError, ValueError):
-        pl_text = "—"
     return (
         f"{icon} <b>{label} · GOOL MULTI</b>\n"
         f"{row.get('home','?')} — {row.get('away','?')}\n"
         f"{row.get('market','?')} @ {float(row.get('odd') or 0):.2f}\n"
-        f"Расчёт {int(row.get('settled_minute') or 0)}' · {int(score[0] or 0)}:{int(score[1] or 0)} · P/L {pl_text}"
+        f"{int(row.get('settled_minute') or 0)}' · {int(score[0] or 0)}:{int(score[1] or 0)}"
     )
 
 

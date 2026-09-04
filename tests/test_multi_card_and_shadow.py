@@ -4,7 +4,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from gool_bot2.multi_card import render_multi_card
+from gool_bot2.multi_card import _gool_metric_text, render_multi_card
 from gool_bot2.multi_experts import build_expert_snapshot
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
 from gool_bot2.multi_shadow import analyze_and_record
@@ -26,10 +26,24 @@ def test_expert_adapter_reuses_current_gool_outputs_without_fabrication():
     assert "away_goal" not in experts
 
 
-def test_multi_card_contains_one_winner_and_renders_png():
+def test_public_metric_uses_probability_word_only_for_calibrated_metric():
+    probability = MarketCandidate(
+        key="match_total:2.5", family="match_total", label="ТБ 2.5", odd=1.70,
+        model_probability=0.74,
+    )
+    confidence = MarketCandidate(
+        key="away_total:1.5", family="team_total", label="ИТБ2 1.5", odd=2.10,
+        model_probability=0.84, reason_tags=["confidence_metric"],
+    )
+
+    assert _gool_metric_text(probability, 0.74) == "ВЕРОЯТНОСТЬ ЗАХОДА 74%"
+    assert _gool_metric_text(confidence, 0.84) == "ОЦЕНКА ЗАХОДА 84/100"
+
+
+def test_multi_card_contains_one_winner_and_renders_compact_png():
     winner = MarketCandidate(
         key="match_total:4.5", family="match_total", strategy="two_more_goals", label="ТБ 4.5", odd=1.60,
-        model_probability=0.55, goals_to_win=2, correlation_key="two_goal_path", data_quality=0.92, rating=87.0,
+        model_probability=0.75, goals_to_win=2, correlation_key="two_goal_path", data_quality=0.92, rating=87.0,
         expected_roi=0.15, value_edge_pp=9.4, market_pressure_pp=6.5,
     )
     alt = MarketCandidate(
@@ -39,7 +53,7 @@ def test_multi_card_contains_one_winner_and_renders_png():
     )
     decision = RouterDecision(
         status="BET", minute=54, score=(1, 2), winner=winner, alternatives=[alt], rejected=[],
-        reason="Лучший баланс VALUE, вероятности и LIVE-рынка.",
+        reason="Internal diagnostic reason must not be printed on the public card.",
     )
     record = {
         "match": {
@@ -59,7 +73,7 @@ def test_multi_card_contains_one_winner_and_renders_png():
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 1260)
+    assert image.size == (1080, 760)
 
 
 def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):

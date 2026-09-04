@@ -133,7 +133,7 @@ def test_regular_pressure_keeps_normal_card(monkeypatch):
     assert png == base
 
 
-def test_telegram_caption_keeps_only_chance_and_steam(monkeypatch):
+def test_telegram_photo_has_no_duplicate_caption(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     photos = []
     monkeypatch.setattr(multi_telegram, "render_multi_signal_card", lambda *args, **kwargs: _blank_png())
@@ -151,12 +151,7 @@ def test_telegram_caption_keeps_only_chance_and_steam(monkeypatch):
     )
 
     assert sent == 1
-    caption = photos[0][1]
-    assert "ПРОГРУЗ 1xBET" in caption
-    assert "ВЕРОЯТНОСТЬ ЗАХОДА 74%" in caption
-    assert "rating" not in caption.lower()
-    assert "value" not in caption.lower()
-    assert "roi" not in caption.lower()
+    assert photos[0][1] == ""
 
 
 def test_public_multi_card_is_suppressed_below_70(monkeypatch):

@@ -20,6 +20,8 @@ _EXPERT_BY_STRATEGY = {
     "steam_btts": "btts",
 }
 
+_STRONG_STEAM_LEVELS = {"STRONG_STEAM", "MULTI_MARKET_STEAM"}
+
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, float(value)))
@@ -88,6 +90,14 @@ def _is_steam(winner: Any) -> bool:
     return str(getattr(winner, "source", "") or "").startswith("1xbet:autonomous_steam")
 
 
+def _steam_support(winner: Any) -> bool:
+    return bool(
+        getattr(winner, "market_override", False)
+        and str(getattr(winner, "market_level", "") or "").upper() in _STRONG_STEAM_LEVELS
+        and (_number(getattr(winner, "market_pressure_pp", 0.0)) or 0.0) > 0.0
+    )
+
+
 def confidence_snapshot(
     record: dict[str, Any],
     winner: Any,
@@ -118,6 +128,7 @@ def confidence_snapshot(
         "momentum_score": round(momentum * 100.0, 1),
         "market_score": round(market * 100.0, 1),
         "steam_score": round(steam_strength * 100.0, 1) if layer == "STEAM" else None,
+        "steam_confirmation": _steam_support(winner),
         "layer": layer,
         "formula": formula,
     }
@@ -127,25 +138,30 @@ def brief_selection_reason(decision: Any, winner: Any) -> str:
     strategy = str(getattr(winner, "strategy", "") or "")
     source = str(getattr(winner, "source", "") or "")
     pressure = _number(getattr(winner, "market_pressure_pp", 0.0)) or 0.0
+    supported = _steam_support(winner)
 
     if source.startswith("1xbet:autonomous_steam"):
         return f"Сверхсильный прогруз 1xBet: устойчивое движение {pressure:+.1f} п.п. при допустимом кэфе."
 
     if strategy == "another_goal":
-        return "Матч сохраняет голевое давление; общий тотал покрывает следующий гол любой команды."
-    if strategy == "goal_before_ht":
-        return "Есть свежая угроза до перерыва; выбран реальный тотал 1-го тайма 1xBet."
-    if strategy == "two_more_goals":
-        return "Сильное LIVE-давление и запас времени поддерживают сценарий ещё двух голов."
-    if strategy == "home_goal":
-        return "Хозяева сильнее по текущему голевому состоянию; их командный тотал оправдан."
-    if strategy == "away_goal":
-        return "Гости сильнее по текущему голевому состоянию; их командный тотал оправдан."
-    if strategy == "both_teams_to_score":
-        return "Команда без гола сохраняет достаточную угрозу; ОЗ лучше всего выражает этот сценарий."
+        text = "Матч сохраняет голевое давление; общий тотал покрывает следующий гол любой команды."
+    elif strategy == "goal_before_ht":
+        text = "Есть свежая угроза до перерыва; выбран реальный тотал 1-го тайма 1xBet."
+    elif strategy == "two_more_goals":
+        text = "Сильное LIVE-давление и запас времени поддерживают сценарий ещё двух голов."
+    elif strategy == "home_goal":
+        text = "Хозяева сильнее по текущему голевому состоянию; их командный тотал оправдан."
+    elif strategy == "away_goal":
+        text = "Гости сильнее по текущему голевому состоянию; их командный тотал оправдан."
+    elif strategy == "both_teams_to_score":
+        text = "Команда без гола сохраняет достаточную угрозу; ОЗ лучше всего выражает этот сценарий."
+    else:
+        fallback = str(getattr(decision, "reason", "") or "").strip()
+        text = fallback[:170] if fallback else "Выбран самый сильный проходящий LIVE-сценарий с реальным рынком 1xBet."
 
-    text = str(getattr(decision, "reason", "") or "").strip()
-    return text[:170] if text else "Выбран самый сильный проходящий LIVE-сценарий с реальным рынком 1xBet."
+    if supported:
+        text = f"{text} Сильный STEAM 1xBet {pressure:+.1f} п.п. подтверждает вход."
+    return text
 
 
 def source_label(value: Any) -> str:

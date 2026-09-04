@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from .journal import load_signal_journal
 from .multi_journal import settle_multi_journal
+from .multi_public_metrics import source_label, strategy_bucket
 from .providers.flashscore import (
     FINISHED_COARSE_STATUS,
     FIRST_HALF_STATUS,
@@ -65,7 +66,11 @@ def _pct(wins: int, losses: int) -> str:
 
 
 def _profit(rows: list[dict[str, Any]]) -> float:
-    return sum(float(row.get("profit_units") or 0.0) for row in rows if str(row.get("result") or "") in {"won", "lost", "push", "void"})
+    return sum(
+        float(row.get("profit_units") or 0.0)
+        for row in rows
+        if str(row.get("result") or "") in {"won", "lost", "push", "void"}
+    )
 
 
 def _roi(rows: list[dict[str, Any]]) -> str:
@@ -128,6 +133,7 @@ def reconcile_pending() -> int:
     except Exception as exc:
         print(f"GOOL_MULTI_MENU_STATE_ERROR {type(exc).__name__}:{exc}", flush=True)
         return 0
+
     changed = 0
     for row in pending:
         mid = str(row.get("match_id") or "")
@@ -149,6 +155,11 @@ def reconcile_pending() -> int:
     return changed
 
 
+def _layer(row: dict[str, Any]) -> str:
+    source = str(row.get("signal_source") or row.get("source") or "GOOL")
+    return "STEAM" if "STEAM" in source.upper() else "GOOL"
+
+
 def report_text(_: Path | None = None, experiment_path: Path | None = None) -> str:
     del experiment_path
     reconcile_pending()
@@ -159,35 +170,43 @@ def report_text(_: Path | None = None, experiment_path: Path | None = None) -> s
         row for row in rows
         if (dt := _parse_dt(row.get("created_at"))) is not None and dt.astimezone(tz).date() == today
     ]
+
     parts = [
         "📊 <b>GOOL MULTI · ЖУРНАЛ</b>",
-        "Один открытый BEST BET на матч; WAIT в статистику ставок не попадает.",
+        "Только реально отправленные BEST BET. WAIT в статистику не попадает.",
         "",
         f"📅 <b>СЕГОДНЯ · {today.strftime('%d.%m.%Y')}</b>",
         _stats_line(today_rows),
         "",
-        "📚 <b>ВСЁ ВРЕМЯ</b>",
+        "📚 <b>ВСЯ НОВАЯ ЭПОХА</b>",
         _stats_line(rows),
     ]
+
     if rows:
-        groups: list[str] = []
         labels = {
             "another_goal": "⚽ Ещё гол",
-            "goal_before_ht": "🟡 Гол до перерыва",
+            "goal_before_ht": "🟡 Гол в 1-м тайме",
             "two_more_goals": "🔥 Ещё +2",
             "home_goal": "🔵 ИТБ1",
             "away_goal": "🔵 ИТБ2",
             "both_teams_to_score": "💜 ОЗ — Да",
         }
-        for strategy, label in labels.items():
-            selected = [row for row in rows if str(row.get("strategy") or "") == strategy]
+        groups: list[str] = []
+        for bucket, label in labels.items():
+            selected = [row for row in rows if strategy_bucket(row.get("strategy")) == bucket]
             if selected:
                 groups.append(f"{label}: {_stats_line(selected)}")
         if groups:
-            parts += ["", "<b>По выбранным рынкам:</b>", *groups]
-        override = sum(1 for row in rows if str(row.get("signal_source") or "") in {"MARKET_OVERRIDE", "VALUE_OVERRIDE"})
-        if override:
-            parts.append(f"Override-входов: <b>{override}</b>")
+            parts += ["", "<b>По событиям:</b>", *groups]
+
+        gool = [row for row in rows if _layer(row) == "GOOL"]
+        steam = [row for row in rows if _layer(row) == "STEAM"]
+        parts += ["", "<b>По слою входа:</b>"]
+        if gool:
+            parts.append(f"🧠 GOOL STATE: {_stats_line(gool)}")
+        if steam:
+            parts.append(f"🔥 1xBet STEAM: {_stats_line(steam)}")
+
     return "\n".join(parts)
 
 
@@ -219,31 +238,51 @@ def _latest_analysis() -> dict[str, dict[str, Any]]:
     return latest
 
 
-def _source_label(row: dict[str, Any]) -> str:
-    source = str(row.get("signal_source") or "GOOL")
-    return {"MARKET_OVERRIDE": "1xBet OVERRIDE", "VALUE_OVERRIDE": "VALUE OVERRIDE"}.get(source, "GOOL")
+def _confidence(row: dict[str, Any]) -> float:
+    try:
+        return float(row.get("confidence_score") or row.get("rating") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _event_score(row: dict[str, Any]) -> float:
+    try:
+        value = row.get("event_score")
+        if value is not None:
+            return float(value)
+        p = float(row.get("probability") or 0.0)
+        return p * 100.0 if p <= 1.0 else p
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def in_game_sections(_: Path | None = None, analysis_path_arg: Path | None = None) -> list[str]:
     del analysis_path_arg
     reconcile_pending()
-    rows = [row for row in load_signal_journal(journal_path()) if str(row.get("result") or "pending").lower() == "pending"]
+    rows = [
+        row for row in load_signal_journal(journal_path())
+        if str(row.get("result") or "pending").lower() == "pending"
+    ]
     rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
     if not rows:
-        return ["🟢 <b>GOOL MULTI · В ИГРЕ</b>\n\nОткрытых Multi-ставок сейчас нет."]
+        return ["🟢 <b>GOOL MULTI · В ИГРЕ</b>\n\nОткрытых ставок сейчас нет."]
+
     states = _latest_analysis()
-    parts = [f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрытых ставок: <b>{len(rows)}</b>"]
+    parts = [f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>{len(rows)}</b>"]
     for index, row in enumerate(rows, 1):
         live = states.get(str(row.get("match_id") or "")) or {}
         live_score = live.get("score") or row.get("score") or [0, 0]
         live_minute = int(live.get("minute") or row.get("minute") or 0)
-        score = row.get("score") or [0, 0]
+        entry_score = row.get("score") or [0, 0]
+        pressure = float(row.get("market_pressure_pp") or 0.0)
+        reason = str(row.get("selection_reason") or row.get("reason") or "")
         block = (
-            f"<b>{index}.</b> {_h(row.get('home'))} — {_h(row.get('away'))}\n"
-            f"сейчас {live_minute}' · {live_score[0]}:{live_score[1]}\n"
-            f"🎯 <b>{_h(row.get('market'))} @ {float(row.get('odd') or 0):.2f}</b> · рейтинг {float(row.get('rating') or 0):.0f}/100\n"
-            f"P {float(row.get('probability') or 0) * 100:.1f}% · value {float(row.get('value_edge_pp') or 0):+.1f} п.п. · {_h(_source_label(row))}\n"
-            f"↳ вход {row.get('minute', 0)}' · {score[0]}:{score[1]}"
+            f"<b>{index}. {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
+            f"сейчас <b>{live_minute}' · {live_score[0]}:{live_score[1]}</b>\n"
+            f"🎯 <b>{_h(row.get('market'))} @ {float(row.get('odd') or 0):.2f}</b>\n"
+            f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence(row):.0f}/100</b> · {_h(source_label(row.get('signal_source')))}\n"
+            f"📈 1xBet {pressure:+.1f} п.п. · вход {row.get('minute', 0)}' {entry_score[0]}:{entry_score[1]}\n"
+            f"↳ {_h(reason)}"
         )
         if len("\n\n".join(parts + [block])) > 3800:
             break
@@ -266,8 +305,8 @@ def _expert_text(experts: dict[str, Any]) -> str:
         value = row.get("probability")
         if value is None:
             continue
-        mark = "✓" if bool(row.get("passed", True)) else "×"
-        out.append(f"{label} {float(value) * 100:.0f}{mark}")
+        state = str(row.get("state") or ("PASS" if row.get("passed") else "WAIT"))
+        out.append(f"{label} {float(value) * 100:.0f} {state}")
     return " · ".join(out) or "нет экспертных оценок"
 
 
@@ -291,19 +330,22 @@ def analysis_text(_: Path | None = None, experiment_path: Path | None = None) ->
     del experiment_path
     states = list(_latest_analysis().values())
     if not states:
-        return "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\nСейчас нет свежих Multi-оценок в рабочем окне до 85'."
-    states.sort(key=lambda row: (str((row.get("router") or {}).get("status") or "") == "BET", float(((row.get("router") or {}).get("winner") or {}).get("rating") or 0)), reverse=True)
-    bets = sum(1 for row in states if str((row.get("router") or {}).get("status") or "") == "BET")
-    overrides = sum(
-        1 for row in states
-        if bool((((row.get("router") or {}).get("winner") or {}).get("market_override")))
-        or bool((((row.get("router") or {}).get("winner") or {}).get("value_override")))
+        return "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\nСейчас нет свежих оценок в рабочем окне до 85'."
+
+    states.sort(
+        key=lambda row: (
+            str((row.get("router") or {}).get("status") or "") == "BET",
+            float(((row.get("router") or {}).get("winner") or {}).get("rating") or 0),
+        ),
+        reverse=True,
     )
+    bets = sum(1 for row in states if str((row.get("router") or {}).get("status") or "") == "BET")
     parts = [
-        "🧠 <b>GOOL MULTI · АНАЛИЗ ОНЛАЙН</b>",
-        "MODEL + PREMATCH + LIVE + 1xBet → один BEST BET / WAIT",
-        f"Матчей: <b>{len(states)}</b> · BET: <b>{bets}</b> · WAIT: <b>{len(states) - bets}</b> · override: <b>{overrides}</b>",
+        "🧠 <b>GOOL GOAL STATE · АНАЛИЗ ОНЛАЙН</b>",
+        "PREMATCH + LIVE + momentum → футбольный сценарий → реальный рынок 1xBet",
+        f"Матчей: <b>{len(states)}</b> · BET: <b>{bets}</b> · WAIT: <b>{len(states) - bets}</b>",
     ]
+
     shown = 0
     for row in states:
         router = row.get("router") or {}
@@ -312,8 +354,11 @@ def analysis_text(_: Path | None = None, experiment_path: Path | None = None) ->
         score = row.get("score") or [0, 0]
         decision = "🔥 BET" if status == "BET" else "⏳ WAIT"
         if winner:
-            market = f"{winner.get('label')} @ {float(winner.get('odd') or 0):.2f} · R {float(winner.get('rating') or 0):.0f}"
-            market += f" · value {float(winner.get('value_edge_pp') or 0):+.1f} п.п. · steam {float(winner.get('market_pressure_pp') or 0):+.1f}"
+            market = (
+                f"{winner.get('label')} @ {float(winner.get('odd') or 0):.2f} · "
+                f"R {float(winner.get('rating') or 0):.0f} · "
+                f"1xBet {float(winner.get('market_pressure_pp') or 0):+.1f}"
+            )
         else:
             rejected = list(router.get("rejected") or [])
             market = "нет проходящего рынка"
@@ -321,6 +366,7 @@ def analysis_text(_: Path | None = None, experiment_path: Path | None = None) ->
                 top = rejected[0]
                 blocks = ", ".join(str(x) for x in (top.get("blocks") or [])[:2])
                 market = f"ближе всего {top.get('label')} · {blocks or 'WAIT'}"
+
         block = (
             f"<b>{_h(row.get('home'))} — {_h(row.get('away'))}</b> · {row.get('minute', 0)}' · {score[0]}:{score[1]} · {decision}\n"
             f"{_h(_expert_text(row.get('experts') or {}))}\n"
@@ -334,6 +380,7 @@ def analysis_text(_: Path | None = None, experiment_path: Path | None = None) ->
         shown += 1
         if shown >= 7:
             break
+
     if shown < len(states):
         parts.append(f"<i>Показано {shown} из {len(states)} матчей.</i>")
     return "\n\n".join(parts)

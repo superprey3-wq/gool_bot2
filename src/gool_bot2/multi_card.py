@@ -90,6 +90,24 @@ def _source(winner: Any) -> str:
     return "GOOL"
 
 
+def _is_confidence_metric(value: Any) -> bool:
+    if isinstance(value, dict):
+        tags = value.get("reason_tags") or []
+    else:
+        tags = getattr(value, "reason_tags", []) or []
+    return "confidence_metric" in {str(tag) for tag in tags}
+
+
+def _gool_metric_text(value: Any, probability: Any) -> str:
+    try:
+        number = float(probability) * 100.0
+    except (TypeError, ValueError):
+        return "GOOL —"
+    if _is_confidence_metric(value):
+        return f"GOOL CONF {number:.1f}/100"
+    return f"GOOL {number:.1f}%"
+
+
 def _league_parts(league: str) -> tuple[str | None, str]:
     raw = str(league or "LIVE FOOTBALL").strip()
     if ":" not in raw:
@@ -261,6 +279,7 @@ def render_multi_card(
     winner = decision.winner
     source = _source(winner)
     mode = str((entry or {}).get("mode") or "shadow").lower()
+    confidence_metric = _is_confidence_metric(winner)
 
     H = 1260
     img = Image.new("RGBA", (W, H), BG + (255,))
@@ -285,7 +304,8 @@ def render_multi_card(
     draw.rounded_rectangle((45, 350, 1035, 530), 24, fill=PANEL2, outline=ACCENT, width=3)
     draw.text((72, 371), "BEST BET", font=sc._font(20, True), fill=ACCENT)
     draw.text((72, 410), winner.label, font=_fit_line(draw, winner.label, 580, 39, True), fill=TEXT)
-    draw.text((72, 463), f"GOOL {winner.model_probability * 100:.1f}%  •  RATING {winner.rating:.0f}/100", font=sc._font(17, True), fill=GOLD)
+    metric_line = f"{_gool_metric_text(winner, winner.model_probability)}  •  RATING {winner.rating:.0f}/100"
+    draw.text((72, 463), metric_line, font=sc._font(17, True), fill=GOLD)
     draw.text((72, 496), source, font=_fit_line(draw, source, 430, 15, True), fill=ACCENT if source == "GOOL" else GOLD)
 
     draw.text((760, 371), "КОЭФФИЦИЕНТ", font=sc._font(13, True), fill=MUTED)
@@ -298,9 +318,11 @@ def render_multi_card(
     _draw_stats(draw, stats, 555)
 
     draw.rounded_rectangle((45, 780, 1035, 885), 18, fill=(8, 20, 31), outline=LINE, width=2)
+    value_text = "—" if confidence_metric else f"{winner.value_edge_pp:+.1f} п.п."
+    roi_text = "—" if confidence_metric else f"{winner.expected_roi * 100:+.1f}%"
     metrics = [
-        ("VALUE", f"{winner.value_edge_pp:+.1f} п.п.", GREEN if winner.value_edge_pp >= 0 else RED),
-        ("ROI MODEL", f"{winner.expected_roi * 100:+.1f}%", TEXT),
+        ("VALUE", value_text, MUTED if confidence_metric else (GREEN if winner.value_edge_pp >= 0 else RED)),
+        ("ROI MODEL", roi_text, MUTED if confidence_metric else TEXT),
         ("DATA", f"{winner.data_quality * 100:.0f}/100", TEXT),
         ("STEAM", _fmt_signed(winner.market_pressure_pp, " п.п."), ACCENT if winner.market_pressure_pp >= 0 else RED),
     ]
@@ -387,7 +409,7 @@ def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None 
 
     draw.rounded_rectangle((55, 425, 1025, 570), 28, fill=PANEL2, outline=accent, width=3)
     sc._center(draw, banner, 460, _fit_line(draw, banner, 850, 40, True), accent)
-    detail = f"{market}  @{_fmt_odd(odd)}  •  GOOL {_fmt_pct(probability, 1)}"
+    detail = f"{market}  @{_fmt_odd(odd)}  •  {_gool_metric_text(row, probability)}"
     sc._center(draw, detail, 522, _fit_line(draw, detail, 900, 21, True), TEXT)
 
     sc._box(draw, (55, 600, 510, 710), "ВХОД", f"{entry_minute}' • {int(entry_score[0])}:{int(entry_score[1])}")

@@ -55,6 +55,39 @@ def _paths() -> tuple[Path, Path]:
     return analysis, journal
 
 
+def _minimum_rating() -> float:
+    try:
+        return max(0.0, min(100.0, float(os.getenv("GOOL_MULTI_MIN_RATING", "70"))))
+    except (TypeError, ValueError):
+        return 70.0
+
+
+def _enforce_min_rating(decision: Any) -> Any:
+    """Final production gate: never journal/send a Multi BET below the floor."""
+    if str(getattr(decision, "status", "")) != "BET" or getattr(decision, "winner", None) is None:
+        return decision
+
+    floor = _minimum_rating()
+    winner = decision.winner
+    if float(getattr(winner, "rating", 0.0) or 0.0) >= floor:
+        return decision
+
+    # Keep the historical block token so the existing short report translates it
+    # to the familiar "сигнал пока слабый" wording.
+    if "router_rating_below_62" not in winner.blocks:
+        winner.blocks.append("router_rating_below_62")
+    winner.reason_tags.append("production_rating_floor")
+    winner.eligible = False
+    if not any(row.key == winner.key for row in decision.rejected):
+        decision.rejected.append(winner)
+
+    decision.status = "WAIT"
+    decision.winner = None
+    decision.alternatives = []
+    decision.reason = f"WAIT: финальный рейтинг ниже {floor:.0f}/100 — реальную ставку не отправляем."
+    return decision
+
+
 def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     """Feed one production snapshot into GOOL MULTI.
 
@@ -113,10 +146,11 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     # Coverage guard: a confidence-only team +0.5 is a narrower outcome than
     # calibrated `another_goal` and must not win merely because its odds are
-    # larger. If the winner changes, append the corrected decision immediately
-    # so the online analysis view also shows the same choice that is journaled.
+    # larger. The final production floor is applied after coverage so a safer
+    # replacement market cannot bypass the 70/100 minimum.
     before_key = None if decision.winner is None else decision.winner.key
     decision = enforce_goal_coverage(decision, experts)
+    decision = _enforce_min_rating(decision)
     after_key = None if decision.winner is None else decision.winner.key
     if before_key != after_key:
         append_shadow_snapshot(

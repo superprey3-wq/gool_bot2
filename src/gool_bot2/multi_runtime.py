@@ -6,6 +6,7 @@ from typing import Any
 
 from . import signal_worker_all_cards as cards
 from .match_context import provider_count, xg_or_proxy_pair
+from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_experts import build_expert_snapshot
 from .multi_goal_coverage import enforce_goal_coverage
 from .multi_journal import settle_multi_journal, sync_multi_journal
@@ -188,19 +189,18 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # halftime 1xBet move to revive a closed first-half bet.
     if bool(match.get("is_halftime")):
         experts.pop("goal_before_ht", None)
-    if not experts:
-        return
 
     market = _market_row(record)
     quality = _data_quality(record)
     decision = analyze_and_record(record, market, experts, analysis_path, data_quality=quality)
 
-    # Coverage guard: a confidence-only team +0.5 is a narrower outcome than
-    # `another_goal` and must not win merely because its odds are larger. The
-    # final production floor is applied after coverage so a safer replacement
-    # market cannot bypass the 70/100 minimum.
+    # First normalize ordinary GOOL candidates. Then let a truly exceptional
+    # 1xBet move act as a separate autonomous layer. It still has its own hard
+    # guards for score epoch, freshness, odds, movement count, time and quality.
     before_key = None if decision.winner is None else decision.winner.key
-    decision = enforce_goal_coverage(decision, experts)
+    if experts:
+        decision = enforce_goal_coverage(decision, experts)
+    decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = _enforce_min_rating(decision)
     after_key = None if decision.winner is None else decision.winner.key
     if before_key != after_key:
@@ -224,7 +224,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     winner = None if decision.winner is None else f"{decision.winner.label}@{decision.winner.odd:.2f}"
     source = None if decision.winner is None else (
-        "MARKET_OVERRIDE" if decision.winner.market_override and not decision.winner.expert_passed
+        "STEAM_OVERRIDE" if str(decision.winner.source).startswith("1xbet:autonomous_steam")
+        else "MARKET_OVERRIDE" if decision.winner.market_override and not decision.winner.expert_passed
         else "VALUE_OVERRIDE" if decision.winner.value_override and not decision.winner.expert_passed
         else "GOOL"
     )

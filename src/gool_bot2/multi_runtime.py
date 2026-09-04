@@ -12,6 +12,7 @@ from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_delivery import finalize_multi_delivery
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
+from .multi_reentry_guard import enforce_reentry_cooldown
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
@@ -151,6 +152,11 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # GOOL state, but only under strict score/freshness/odds/move guards.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = _enforce_min_rating(decision)
+
+    # A settled bet must cool down before the same match can generate another
+    # public entry. This guard is after both selection layers, so even autonomous
+    # steam cannot chase a goal/result immediately.
+    decision = enforce_reentry_cooldown(decision, record, journal_path)
 
     # Persist only the FINAL production view. The old pipeline used to record a
     # pre-policy router snapshot and then sometimes make a different decision.

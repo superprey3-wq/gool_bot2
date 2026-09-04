@@ -156,13 +156,67 @@ class FlashscoreProvider:
         return out
 
     def fetch_goal_timeline(self, event_id: str) -> list[dict[str, Any]]:
-        body = self._feed(f"df_sui_1_{event_id}"); goals: list[dict[str, Any]] = []; last = (0, 0)
-        for chunk in (body or "").split("~III"):
-            if not chunk: continue
-            mm = re.search(r"(?:IB|IBX)(?:÷|¬)(\d{1,3})(?:'|\\')?", chunk); hm = re.search(r"INX(?:÷|¬)(\d+)", chunk); am = re.search(r"IOX(?:÷|¬)(\d+)", chunk)
-            if not mm or (not hm and not am): continue
-            home = int(hm.group(1)) if hm else last[0]; away = int(am.group(1)) if am else last[1]
-            if home > last[0] or away > last[1]: goals.append({"minute": int(mm.group(1)), "side": "home" if home > last[0] else "away", "score": [home, away]}); last = (home, away)
+        """Return only confirmed goal incidents from the Flashscore summary feed.
+
+        `df_sui` also contains cards, substitutions and VAR incidents. Some of
+        those rows carry the *current* INX/IOX scoreboard, so treating every row
+        with a score as a goal can back-date a later goal to an unrelated event
+        minute. That was the source of the Manila Digger result being settled at
+        35' although the second goal arrived in first-half stoppage time.
+        """
+        body = self._feed(f"df_sui_1_{event_id}")
+        incidents: list[dict[str, Any]] = []
+        for order, chunk in enumerate((body or "").split("~III")):
+            if not chunk:
+                continue
+            event_type = re.search(r"(?:^|¬)IA(?:÷|¬)(\d+)", chunk)
+            if not event_type or event_type.group(1) != "1":
+                continue
+            mm = re.search(r"(?:IB|IBX)(?:÷|¬)(\d{1,3})(?:\+(\d{1,2}))?(?:'|\\')?", chunk)
+            hm = re.search(r"INX(?:÷|¬)(\d+)", chunk)
+            am = re.search(r"IOX(?:÷|¬)(\d+)", chunk)
+            if not mm or (not hm and not am):
+                continue
+            base_minute = int(mm.group(1))
+            added = int(mm.group(2) or 0)
+            incidents.append({
+                "minute": base_minute + added,
+                "base_minute": base_minute,
+                "added_time": added,
+                "home": None if hm is None else int(hm.group(1)),
+                "away": None if am is None else int(am.group(1)),
+                "order": order,
+            })
+
+        # The incident feed is not guaranteed to be oldest-first. Reconstruct
+        # cumulative scores chronologically so a later current score cannot be
+        # attached to an earlier event row.
+        incidents.sort(key=lambda row: (int(row["minute"]), int(row["order"])))
+        goals: list[dict[str, Any]] = []
+        last = (0, 0)
+        for item in incidents:
+            home = last[0] if item["home"] is None else int(item["home"])
+            away = last[1] if item["away"] is None else int(item["away"])
+            if home < last[0] or away < last[1]:
+                continue
+            if home == last[0] and away == last[1]:
+                continue
+            # A football goal changes exactly one side by one. Ignore malformed
+            # scoreboard jumps rather than fabricating a goal timestamp.
+            dh, da = home - last[0], away - last[1]
+            if (dh, da) not in {(1, 0), (0, 1)}:
+                continue
+            base = int(item["base_minute"])
+            added = int(item["added_time"])
+            goals.append({
+                "minute": int(item["minute"]),
+                "display_minute": f"{base}+{added}" if added else str(base),
+                "period": "1H" if base <= 45 else "2H",
+                "event_type": "goal",
+                "side": "home" if dh else "away",
+                "score": [home, away],
+            })
+            last = (home, away)
         return goals
 
     @staticmethod

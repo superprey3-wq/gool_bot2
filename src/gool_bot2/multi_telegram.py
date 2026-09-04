@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator
 
 from . import telegram
 from .multi_bank_card_layer import append_bank_strip
 from .multi_card import _gool_metric_text, render_multi_result_card
-from .multi_delivery import was_publicly_sent
+from .multi_delivery import finalize_result_delivery, was_publicly_sent
 from .multi_router import RouterDecision
 from .multi_steam_card import is_strong_steam, render_multi_signal_card
 
@@ -110,7 +111,12 @@ def emit_multi_signal(
     return sent
 
 
-def emit_multi_results(record: dict[str, Any], rows: list[dict[str, Any]]) -> int:
+def emit_multi_results(
+    record: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    journal_path: Path | None = None,
+) -> int:
     if not is_multi_telegram_active() or not rows:
         return 0
     total = 0
@@ -132,8 +138,12 @@ def emit_multi_results(record: dict[str, Any], rows: list[dict[str, Any]]) -> in
         if sent == 0:
             sent = telegram.broadcast(fallback)
         total += sent
+        finalized = False
+        if sent > 0 and journal_path is not None:
+            finalized = finalize_result_delivery(journal_path, row, sent)
         print(
-            f"GOOL_MULTI_RESULT_SENT match={row.get('match_id')} result={row.get('result')} sent={sent}",
+            f"GOOL_MULTI_RESULT_SENT match={row.get('match_id')} result={row.get('result')} "
+            f"sent={sent} finalized={int(finalized)}",
             flush=True,
         )
     return total

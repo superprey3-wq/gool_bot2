@@ -9,6 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
+from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
@@ -152,6 +153,12 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # Ordinary GOOL is football-first: PASS may bet; BORDERLINE/NO_DATA need a
     # verified 1xBet confirmation; HARD_NO cannot be revived by VALUE.
     decision = enforce_goal_state_policy(decision, experts)
+
+    # The production-evening sample showed that broad/1H/+2 products need more
+    # football certainty. This gate is strategy-specific and does not change
+    # the 1.40 bookmaker minimum. Strong verified STEAM can support the idea,
+    # but only with a small relief; it cannot replace weak football evidence.
+    decision = enforce_confidence_gate(decision, experts)
 
     # Second independent layer: an exceptional fresh 1xBet steam can ignore the
     # GOOL state, but only under strict score/freshness/odds/move guards.

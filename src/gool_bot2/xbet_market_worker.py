@@ -4,11 +4,31 @@ import argparse
 import os
 import signal
 from pathlib import Path
+from typing import Any
 
+from .storage_runtime import trim_file_tail
 from .xbet_market_robust import RobustXBetMarketCollector
 from .xbet_robust_event_guard import install as install_robust_event_guard
 from .xbet_score_epoch_guard import install as install_score_epoch_guard
 from .xbet_timeline_score_guard import install as install_timeline_score_guard
+
+
+class BoundedRobustXBetMarketCollector(RobustXBetMarketCollector):
+    """Robust collector with a hard cap on disposable JSONL market history."""
+
+    def collect_once(self) -> dict[str, Any]:
+        state = super().collect_once()
+        keep = max(
+            1024 * 1024,
+            int(os.getenv("XBET_HISTORY_RUNTIME_KEEP_BYTES", str(12 * 1024 * 1024))),
+        )
+        freed = trim_file_tail(self.history_path, keep)
+        if freed:
+            print(
+                f"XBET_HISTORY_TRIM file={self.history_path.name} freed={freed} keep={keep}",
+                flush=True,
+            )
+        return state
 
 
 def main() -> None:
@@ -18,17 +38,16 @@ def main() -> None:
     parser.add_argument("--history", default=os.getenv("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
     parser.add_argument("--interval", type=float, default=float(os.getenv("XBET_MARKET_INTERVAL_SECONDS", "12")))
     args = parser.parse_args()
-    # Keep the legacy guards installed for compatibility with the base collector,
-    # then install the same protections directly on RobustXBetMarketCollector.
     install_score_epoch_guard()
     install_timeline_score_guard()
     install_robust_event_guard()
-    collector = RobustXBetMarketCollector(Path(args.state), Path(args.history))
+    collector = BoundedRobustXBetMarketCollector(Path(args.state), Path(args.history))
     signal.signal(signal.SIGINT, collector.stop)
     signal.signal(signal.SIGTERM, collector.stop)
     print(
         f"XBET_MARKET started interval={args.interval}s state={args.state} "
-        f"collector=merged_roots "
+        f"collector=merged_roots_bounded_history "
+        f"history_keep={os.getenv('XBET_HISTORY_RUNTIME_KEEP_BYTES', str(12 * 1024 * 1024))} "
         f"score_epoch_guard={os.getenv('XBET_SCORE_REPRICE_GUARD_SECONDS', '24')}s "
         f"event_reprice_guard={os.getenv('XBET_EVENT_REPRICE_GUARD_SECONDS', '45')}s "
         f"timeline_epoch_guard={os.getenv('XBET_TIMELINE_REPRICE_GUARD_SECONDS', '45')}s "

@@ -20,13 +20,16 @@ def is_multi_telegram_active() -> bool:
 
 @contextmanager
 def silence_legacy_telegram() -> Iterator[None]:
-    """Prevent old per-strategy cards from reaching Telegram during Multi cutover."""
+    """Prevent old per-strategy cards/journal entries during active Multi cutover."""
     if not is_multi_telegram_active():
         yield
         return
     had_token = "TELEGRAM_BOT_TOKEN" in os.environ
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    had_journal_flag = "GOOL_LEGACY_JOURNAL_SILENT" in os.environ
+    journal_flag = os.environ.get("GOOL_LEGACY_JOURNAL_SILENT", "")
     os.environ["TELEGRAM_BOT_TOKEN"] = ""
+    os.environ["GOOL_LEGACY_JOURNAL_SILENT"] = "1"
     try:
         yield
     finally:
@@ -34,6 +37,10 @@ def silence_legacy_telegram() -> Iterator[None]:
             os.environ["TELEGRAM_BOT_TOKEN"] = token
         else:
             os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+        if had_journal_flag:
+            os.environ["GOOL_LEGACY_JOURNAL_SILENT"] = journal_flag
+        else:
+            os.environ.pop("GOOL_LEGACY_JOURNAL_SILENT", None)
 
 
 def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str:

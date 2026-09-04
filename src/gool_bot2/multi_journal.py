@@ -114,9 +114,20 @@ def _timeline_hit(
     key = str(row.get("market_key") or "")
     line = _line_from_key(key)
     for goal in sorted(timeline, key=lambda item: int(item.get("minute") or 0)):
-        minute = int(goal.get("minute") or 0)
-        if max_minute is not None and minute > max_minute:
+        event_type = str(goal.get("event_type") or "").strip().lower()
+        if event_type and event_type != "goal":
             continue
+        minute = int(goal.get("minute") or 0)
+        if max_minute is not None:
+            period = str(goal.get("period") or "").strip().upper()
+            if max_minute == 45 and period:
+                # 45+N is still first half even though its normalized numeric
+                # minute is greater than 45. New Flashscore timeline rows carry
+                # the period explicitly so stoppage-time goals are not lost.
+                if period != "1H":
+                    continue
+            elif minute > max_minute:
+                continue
         score = goal.get("score") or []
         try:
             hs, aws = int(score[0] or 0), int(score[1] or 0)
@@ -139,8 +150,15 @@ def _half_time_score(timeline: list[dict[str, Any]]) -> list[int] | None:
     seen = False
     score = [0, 0]
     for goal in sorted(timeline, key=lambda item: int(item.get("minute") or 0)):
+        event_type = str(goal.get("event_type") or "").strip().lower()
+        if event_type and event_type != "goal":
+            continue
         minute = int(goal.get("minute") or 0)
-        if minute > 45:
+        period = str(goal.get("period") or "").strip().upper()
+        if period:
+            if period != "1H":
+                continue
+        elif minute > 45:
             continue
         raw = goal.get("score") or []
         try:

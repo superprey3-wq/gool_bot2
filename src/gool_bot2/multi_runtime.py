@@ -88,6 +88,55 @@ def _enforce_min_rating(decision: Any) -> Any:
     return decision
 
 
+def _ensure_any_goal_coverage_proxy(experts: dict[str, Any]) -> None:
+    """Create a conservative broad-goal expert when only a team goal passed.
+
+    A passed team-goal signal implies the broader event "either team scores" is
+    at least as well covered. Previously the router could see ИТБ2 1.5 but not
+    ТБ 2.5 at the same 1:1 score because `another_goal` was absent from the
+    calibrated model snapshot. The card still displayed ТБ 2.5 from raw 1xBet
+    odds, which made the BEST BET look irrational.
+
+    We reuse the strongest *passed* side signal as a lower-bound proxy. Its
+    metric is preserved: heuristic confidence stays confidence (no fake EV),
+    while a calibrated side probability remains a conservative probability.
+    """
+    if experts.get("another_goal"):
+        return
+
+    sides: list[tuple[str, dict[str, Any], float]] = []
+    for key in ("home_goal", "away_goal"):
+        row = dict(experts.get(key) or {})
+        if not row or not bool(row.get("passed")):
+            continue
+        try:
+            value = float(row.get("probability"))
+        except (TypeError, ValueError):
+            continue
+        if not 0.0 <= value <= 1.0:
+            continue
+        sides.append((key, row, value))
+    if not sides:
+        return
+
+    # Do not compare confidence and probability numerically. Prefer a calibrated
+    # side probability when one exists; otherwise use the strongest confidence.
+    calibrated = [item for item in sides if str(item[1].get("metric") or "probability").lower() == "probability"]
+    pool = calibrated or sides
+    key, row, value = max(pool, key=lambda item: item[2])
+    metric = str(row.get("metric") or "probability").strip().lower()
+    source = str(row.get("source") or key)
+    experts["another_goal"] = {
+        "probability": value,
+        "metric": metric,
+        "source": f"coverage_proxy:{key}:{source}",
+        "passed": True,
+        "blocks": [],
+        "coverage_proxy": True,
+        "proxy_from": key,
+    }
+
+
 def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     """Feed one production snapshot into GOOL MULTI.
 
@@ -132,6 +181,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         away_goal_analysis=away_goal,
         btts_analysis=btts,
     )
+    _ensure_any_goal_coverage_proxy(experts)
+
     # A 1st-half market is closed at the interval even though Flashscore reports
     # minute 45. Keep the model in diagnostics before HT, but never allow a
     # halftime 1xBet move to revive a closed first-half bet.
@@ -145,9 +196,9 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     decision = analyze_and_record(record, market, experts, analysis_path, data_quality=quality)
 
     # Coverage guard: a confidence-only team +0.5 is a narrower outcome than
-    # calibrated `another_goal` and must not win merely because its odds are
-    # larger. The final production floor is applied after coverage so a safer
-    # replacement market cannot bypass the 70/100 minimum.
+    # `another_goal` and must not win merely because its odds are larger. The
+    # final production floor is applied after coverage so a safer replacement
+    # market cannot bypass the 70/100 minimum.
     before_key = None if decision.winner is None else decision.winner.key
     decision = enforce_goal_coverage(decision, experts)
     decision = _enforce_min_rating(decision)

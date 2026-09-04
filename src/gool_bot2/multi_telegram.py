@@ -6,24 +6,16 @@ from typing import Any, Iterator
 
 from . import telegram
 from .multi_card import _gool_metric_text, render_multi_result_card
+from .multi_delivery import was_publicly_sent
 from .multi_router import RouterDecision
 from .multi_steam_card import is_strong_steam, render_multi_signal_card
 
 
 ACTIVE_MODE = "active"
-PUBLIC_CARD_MIN_STRENGTH = 0.70
 
 
 def is_multi_telegram_active() -> bool:
     return str(os.getenv("GOOL_MULTI_TELEGRAM_MODE", "shadow")).strip().lower() == ACTIVE_MODE
-
-
-def _public_strength_ok(entry: dict[str, Any]) -> bool:
-    try:
-        floor = max(PUBLIC_CARD_MIN_STRENGTH, float(os.getenv("GOOL_MULTI_PUBLIC_CARD_MIN_STRENGTH", "0.70")))
-        return float(entry.get("probability")) >= floor
-    except (TypeError, ValueError):
-        return False
 
 
 @contextmanager
@@ -46,9 +38,9 @@ def silence_legacy_telegram() -> Iterator[None]:
 
 def _signal_caption(entry: dict[str, Any], *, strong_steam: bool = False) -> str:
     """Text fallback used only when Telegram fails to accept the PNG card."""
-    title = "🔥 <b>GOOL MULTI · ПРОГРУЗ 1xBET</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
+    title = "🔥 <b>GOOL MULTI · ПРОГРУЗ 1xBet</b>" if strong_steam else "🎯 <b>GOOL MULTI · BEST BET</b>"
     metric = _gool_metric_text(entry, entry.get("probability"))
-    steam = "\n🔥 <b>ПРОГРУЗ 1xBET</b>" if strong_steam else ""
+    steam = "\n🔥 <b>ПРОГРУЗ 1xBet</b>" if strong_steam else ""
     return (
         f"{title}\n"
         f"{entry.get('home','?')} — {entry.get('away','?')}\n"
@@ -85,14 +77,10 @@ def emit_multi_signal(
 ) -> int:
     if not is_multi_telegram_active() or entry is None or decision.winner is None:
         return 0
-    if not _public_strength_ok(entry):
-        print(
-            f"GOOL_MULTI_CARD_SUPPRESSED match={entry.get('match_id')} reason=public_strength_below_70 "
-            f"value={entry.get('probability')}",
-            flush=True,
-        )
-        return 0
 
+    # The production decision/rating gate is authoritative. Do not apply a
+    # second hidden "probability >= 70%" gate here: Goal State strength is a
+    # confidence metric, not a calibrated betting probability.
     active_entry = dict(entry)
     active_entry["mode"] = "active"
     strong_steam = is_strong_steam(decision)
@@ -120,6 +108,13 @@ def emit_multi_results(record: dict[str, Any], rows: list[dict[str, Any]]) -> in
         return 0
     total = 0
     for row in rows:
+        if not was_publicly_sent(row):
+            print(
+                f"GOOL_MULTI_RESULT_SUPPRESSED match={row.get('match_id')} "
+                f"result={row.get('result')} reason=signal_was_not_publicly_sent",
+                flush=True,
+            )
+            continue
         fallback = _result_caption(row)
         sent = 0
         try:

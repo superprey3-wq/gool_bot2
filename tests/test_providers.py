@@ -107,3 +107,23 @@ def test_consensus_keeps_provider_disagreement_visible():
     ]
     assert FootballDataFusion._consensus(rows, "xg") == (1.0, 0.4)
     assert FootballDataFusion._spread(rows, "xg") == (0.4, 0.2)
+
+
+def test_flashscore_goal_timeline_ignores_non_goals_and_keeps_added_time(monkeypatch):
+    provider = FlashscoreProvider()
+    # The 35' yellow-card row deliberately carries the *current* 2:0 score.
+    # Old code interpreted it as a goal and back-dated the settlement to 35'.
+    body = (
+        "III÷card¬IA÷2¬IB÷35¬INX÷2¬IOX÷0"
+        "~III÷goal1¬IA÷1¬IB÷26¬INX÷1¬IOX÷0"
+        "~III÷goal2¬IA÷1¬IB÷45+2¬INX÷2¬IOX÷0"
+    )
+    monkeypatch.setattr(provider, "_feed", lambda _path: body)
+
+    rows = provider.fetch_goal_timeline("ABCDEFGH")
+
+    assert [row["minute"] for row in rows] == [26, 47]
+    assert [row["score"] for row in rows] == [[1, 0], [2, 0]]
+    assert rows[1]["display_minute"] == "45+2"
+    assert rows[1]["period"] == "1H"
+    assert all(row["event_type"] == "goal" for row in rows)

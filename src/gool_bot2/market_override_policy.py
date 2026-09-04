@@ -4,6 +4,8 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
+
 OVERRIDE_LEVELS = {"STRONG_STEAM", "MULTI_MARKET_STEAM"}
 
 
@@ -47,7 +49,10 @@ def decorate_market_info(info: dict[str, Any] | None, market_row: dict[str, Any]
     max_age = float(os.getenv("XBET_OVERRIDE_MAX_AGE_SECONDS", "35"))
     min_delta = float(os.getenv("XBET_OVERRIDE_MIN_DELTA_PP", "6"))
     min_moves = int(os.getenv("XBET_OVERRIDE_MIN_ONE_WAY_MOVES", "2"))
-    min_odd = float(os.getenv("XBET_OVERRIDE_MIN_ODD", "1.40"))
+    min_odd = max(
+        ABSOLUTE_MIN_BET_ODD,
+        float(os.getenv("XBET_OVERRIDE_MIN_ODD", str(ABSOLUTE_MIN_BET_ODD))),
+    )
     level = str(out.get("level") or "NO_DATA")
     targets = [x for x in (out.get("targets") or []) if isinstance(x, dict)]
     strongest_delta = max([float(x.get("prob_delta_pp") or 0.0) for x in targets] or [float(out.get("score_pp") or 0.0)])

@@ -280,6 +280,13 @@ def settle_multi_journal(record: dict[str, Any], journal_path: Path) -> list[dic
             if not row.get("flashscore_meta"):
                 row["flashscore_meta"] = flashscore_meta(record)
             apply_settlement_fields(row)
+            # Settlement and Telegram result delivery are separate states. A
+            # menu/report reconciliation may settle a row before the main LIVE
+            # runtime sees it, so keep an explicit pending notification flag.
+            # Existing historical settlements are not backfilled with this flag,
+            # which prevents duplicate result cards after deployment.
+            row["result_notification_pending"] = True
+            row["result_notification_created_at"] = _now()
             changed.append(dict(row))
     if changed or bank_changed:
         save_signal_journal(journal_path, rows)

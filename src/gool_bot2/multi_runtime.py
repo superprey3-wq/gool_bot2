@@ -10,6 +10,7 @@ from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_delivery import finalize_multi_delivery
+from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
@@ -166,6 +167,14 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     if created is not None:
+        created = enrich_multi_entry(
+            journal_path,
+            created,
+            record,
+            decision,
+            experts,
+            data_quality=quality,
+        )
         # Use the exact bookmaker snapshot that produced the decision. In active
         # mode the journal entry is kept only if Telegram really delivered the
         # signal; otherwise it is removed and can never emit a fake result later.
@@ -174,7 +183,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         if str(created.get("mode") or "").lower() == "active":
             print(
                 f"GOOL_MULTI_DELIVERY match={mid} sent={sent} "
-                f"journal={'kept' if sent > 0 else 'discarded'} finalized={int(finalized)}",
+                f"journal={'kept' if sent > 0 else 'discarded'} finalized={int(finalized)} "
+                f"confidence={created.get('confidence_score')} layer={created.get('layer')}",
                 flush=True,
             )
 

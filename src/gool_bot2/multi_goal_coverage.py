@@ -35,11 +35,17 @@ def _all_candidates(decision: RouterDecision) -> list[MarketCandidate]:
 
 
 def _confidence_rating(candidate: MarketCandidate) -> float:
-    """Re-rate a heuristic confidence without pretending it is bet probability."""
+    """Re-rate heuristic confidence without pretending it is bet probability.
+
+    A match-total requiring one more goal gets a small structural coverage bonus:
+    it can be won by either team, while a team total needs one specific side.
+    This bonus is applied only to heuristic-confidence rating, never to EV.
+    """
     strength_score = max(0.0, min(100.0, float(candidate.model_probability) * 100.0))
     market_score = max(0.0, min(100.0, 50.0 + float(candidate.market_pressure_pp) * 5.0))
     data_score = max(0.0, min(100.0, float(candidate.data_quality) * 100.0))
     override_bonus = 6.0 if candidate.market_override else 0.0
+    coverage_bonus = 4.0 if candidate.family == "match_total" and int(candidate.goals_to_win) == 1 else 0.0
     opposition_pp = max(0.0, -float(candidate.market_pressure_pp))
     opposition_penalty = min(12.0, max(0.0, opposition_pp - 3.0) * 2.0)
     return round(
@@ -47,6 +53,7 @@ def _confidence_rating(candidate: MarketCandidate) -> float:
         + 0.20 * market_score
         + 0.25 * data_score
         + override_bonus
+        + coverage_bonus
         - opposition_penalty,
         1,
     )
@@ -74,13 +81,21 @@ def _normalize_confidence_metrics(decision: RouterDecision, experts: dict[str, A
             tag for tag in row.reason_tags
             if tag not in {"strong_value", "value", "value_override"}
         ]
+        if "confidence_metric" not in row.reason_tags:
+            row.reason_tags.append("confidence_metric")
         row.rating = _confidence_rating(row)
 
-        # These two blocks are probability/value-specific and must be rebuilt
-        # after confidence has been separated from probability.
+        # Probability/value rating blocks must be rebuilt after confidence has
+        # been separated from probability. In particular, a candidate that the
+        # legacy EV score put below 62 must be allowed to recover after the
+        # confidence-only re-rate.
         row.blocks = [
             block for block in row.blocks
-            if block not in {"no_positive_value", "gool_wait_without_verified_override"}
+            if block not in {
+                "no_positive_value",
+                "gool_wait_without_verified_override",
+                "router_rating_below_62",
+            }
         ]
         if not row.expert_passed and not row.market_override:
             row.blocks.append("gool_wait_without_verified_override")

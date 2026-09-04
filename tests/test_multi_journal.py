@@ -117,6 +117,29 @@ def test_first_half_market_wins_only_from_first_half_timeline(tmp_path: Path):
     assert row["settled_score"] == [1, 0]
 
 
+def test_first_half_stoppage_goal_counts_and_keeps_real_goal_minute(tmp_path: Path):
+    path = tmp_path / "multi.json"
+    fh = _candidate("first_half_total:1.5", "first_half_total", "goal_before_ht", "1Т ТБ 1.5")
+    assert record_multi_entry(_record(34, (1, 0)), _decision(fh), {}, path, data_quality=0.9)
+
+    settle_multi_journal(
+        _record(
+            45,
+            (2, 0),
+            timeline=[
+                {"minute": 26, "score": [1, 0], "side": "home", "event_type": "goal", "period": "1H"},
+                {"minute": 47, "score": [2, 0], "side": "home", "event_type": "goal", "period": "1H"},
+            ],
+        ),
+        path,
+    )
+    row = load_signal_journal(path)[0]
+    assert row["result"] == "won"
+    assert row["settled_minute"] == 47
+    assert row["settled_score"] == [2, 0]
+    assert row["settlement_source"] == "flashscore_first_half_timeline"
+
+
 def test_first_half_unchanged_score_after_break_is_safe_loss_without_timeline(tmp_path: Path):
     path = tmp_path / "multi.json"
     fh = _candidate("first_half_total:0.5", "first_half_total", "goal_before_ht", "1Т ТБ 0.5")

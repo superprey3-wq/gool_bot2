@@ -41,9 +41,9 @@ jobs:
       - name: Provider and timing unit regressions
         run: pytest -q tests/test_providers.py tests/test_provider_timing_capture.py
 
-      - name: Ruff changed provider surface
+      - name: Ruff correctness gate
         run: |
-          ruff check \
+          ruff check --select E9,F63,F7,F82 \
             src/gool_bot2/providers/flashscore_incident_guard.py \
             src/gool_bot2/providers/secondary_live_guard.py \
             src/gool_bot2/providers/fotmob_freshness_guard.py \

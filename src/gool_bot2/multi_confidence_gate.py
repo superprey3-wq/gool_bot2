@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from .multi_autonomous_steam import _breadth_confirmation
 from .multi_router import MarketCandidate, RouterDecision
 
 
@@ -15,8 +16,15 @@ _EXPERT_BY_STRATEGY = {
     "both_teams_to_score": "btts",
 }
 
-# These are confidence floors, not calibrated probabilities.
-# Strong markets from the first production evening stay at the existing 70 floor.
+_STEAM_STRATEGY = {
+    "another_goal": "steam_another_goal",
+    "two_more_goals": "steam_two_more_goals",
+    "goal_before_ht": "steam_goal_before_ht",
+    "home_goal": "steam_home_goal",
+    "away_goal": "steam_away_goal",
+    "both_teams_to_score": "steam_btts",
+}
+
 _DEFAULT_RATING_FLOORS = {
     "another_goal": 77.0,
     "goal_before_ht": 78.0,
@@ -74,7 +82,48 @@ def _strong_steam_support(row: MarketCandidate) -> bool:
     )
 
 
-def _floors(row: MarketCandidate) -> tuple[float, float, bool]:
+def _target_pressure_key(row: MarketCandidate) -> str:
+    if str(row.strategy or "") == "both_teams_to_score":
+        return "btts_yes:None"
+    return str(row.key or "")
+
+
+def _breadth_count(
+    decision: RouterDecision,
+    row: MarketCandidate,
+    market_row: dict[str, Any] | None,
+) -> int:
+    if not market_row or not _strong_steam_support(row):
+        return 0
+    steam_strategy = _STEAM_STRATEGY.get(str(row.strategy or ""))
+    if not steam_strategy:
+        return 0
+    hs, aws = int(decision.score[0]), int(decision.score[1])
+    result = _breadth_confirmation(
+        row=market_row,
+        strategy=steam_strategy,
+        hs=hs,
+        aws=aws,
+        target_key=_target_pressure_key(row),
+    )
+    try:
+        return max(0, int(result.get("count") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _set_breadth_tags(row: MarketCandidate, count: int) -> None:
+    row.reason_tags = [
+        tag for tag in row.reason_tags
+        if not str(tag).startswith("market_breadth:")
+        and str(tag) != "multi_market_confirmation"
+    ]
+    row.reason_tags.append(f"market_breadth:{max(0, int(count))}")
+    if count > 0:
+        row.reason_tags.append("multi_market_confirmation")
+
+
+def _floors(row: MarketCandidate, breadth_count: int) -> tuple[float, float, bool]:
     strategy = str(row.strategy or "")
     prefix = _ENV_PREFIX.get(strategy)
     rating_default = _DEFAULT_RATING_FLOORS.get(strategy, 70.0)
@@ -88,23 +137,30 @@ def _floors(row: MarketCandidate) -> tuple[float, float, bool]:
 
     steam = _strong_steam_support(row)
     if steam:
-        # STEAM helps a football idea; it never replaces it. Even after the
-        # relief the weak products remain stricter than the old global 70 gate.
         rating_floor -= max(0.0, _f("GOOL_CONFIDENCE_STEAM_RATING_RELIEF", 2.0))
         football_floor -= max(0.0, _f("GOOL_CONFIDENCE_STEAM_FOOTBALL_RELIEF", 0.02))
+        if breadth_count > 0:
+            per_market_rating = max(0.0, _f("GOOL_CONFIDENCE_BREADTH_RATING_RELIEF_PER_MARKET", 1.0))
+            per_market_football = max(0.0, _f("GOOL_CONFIDENCE_BREADTH_FOOTBALL_RELIEF_PER_MARKET", 0.01))
+            rating_floor -= min(2.0, breadth_count * per_market_rating)
+            football_floor -= min(0.02, breadth_count * per_market_football)
 
     return max(70.0, rating_floor), max(0.0, football_floor), steam
 
 
 def _eligible_after_confidence(
+    decision: RouterDecision,
     row: MarketCandidate,
     experts: dict[str, Any],
-) -> tuple[bool, float, float, float, bool]:
-    rating_floor, football_floor, steam = _floors(row)
+    market_row: dict[str, Any] | None,
+) -> tuple[bool, float, float, float, bool, int]:
+    breadth = _breadth_count(decision, row, market_row)
+    _set_breadth_tags(row, breadth)
+    rating_floor, football_floor, steam = _floors(row, breadth)
     football = _football_strength(experts, row)
     rating = float(row.rating or 0.0)
     ok = rating >= rating_floor and football >= football_floor
-    return ok, rating_floor, football_floor, football, steam
+    return ok, rating_floor, football_floor, football, steam, breadth
 
 
 def _mark_rejected(
@@ -127,12 +183,14 @@ def _mark_rejected(
 def enforce_confidence_gate(
     decision: RouterDecision,
     experts: dict[str, Any],
+    *,
+    market_row: dict[str, Any] | None = None,
 ) -> RouterDecision:
     """Demand extra football certainty for historically weaker GOOL products.
 
-    This gate runs after the Goal State policy and before autonomous STEAM.
-    It never changes the bookmaker minimum odd. Strong verified 1xBet steam can
-    provide a small confirmation relief, but cannot resurrect a weak scenario.
+    Strong verified 1xBet steam can support an already-good football idea.
+    Confirmation across related markets adds a little more confidence, but it
+    cannot revive a weak scenario and never changes the bookmaker minimum odd.
     """
     if decision.status != "BET" or decision.winner is None:
         return decision
@@ -145,14 +203,16 @@ def enforce_confidence_gate(
 
     passed: list[MarketCandidate] = []
     failed: list[MarketCandidate] = []
-    steam_supported: set[str] = set()
+    steam_supported: dict[str, int] = {}
 
     for row in rows:
-        ok, rating_floor, football_floor, football, steam = _eligible_after_confidence(row, experts)
+        ok, rating_floor, football_floor, football, steam, breadth = _eligible_after_confidence(
+            decision, row, experts, market_row
+        )
         if ok:
             passed.append(row)
             if steam:
-                steam_supported.add(row.key)
+                steam_supported[row.key] = breadth
             continue
         _mark_rejected(
             row,
@@ -172,7 +232,7 @@ def enforce_confidence_gate(
         decision.alternatives = []
         decision.reason = (
             "WAIT: футбольная уверенность ниже усиленного порога. "
-            "Коэффициент сам по себе не является причиной для входа."
+            "Коэффициент или одиночное движение рынка сами по себе не являются причиной для входа."
         )
         return decision
 
@@ -196,10 +256,17 @@ def enforce_confidence_gate(
             "проходящий вариант с более сильным футбольным подтверждением."
         )
     elif decision.winner.key in steam_supported:
-        decision.reason = (
-            "GOOL Goal State прошёл повышенный порог уверенности; "
-            "сильный свежий STEAM 1xBet дополнительно подтвердил вход."
-        )
+        breadth = steam_supported[decision.winner.key]
+        if breadth > 0:
+            decision.reason = (
+                f"GOOL Goal State прошёл повышенный порог; сильный STEAM 1xBet "
+                f"подтверждён ещё {breadth} связанн. рынк."
+            )
+        else:
+            decision.reason = (
+                "GOOL Goal State прошёл повышенный порог уверенности; "
+                "сильный свежий STEAM 1xBet дополнительно подтвердил вход."
+            )
     else:
         decision.reason = (
             "GOOL Goal State прошёл повышенный порог футбольной уверенности; "

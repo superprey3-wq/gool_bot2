@@ -108,13 +108,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     analysis_path, journal_path = _paths()
 
-    # Settlement runs before a new decision so a real public entry can close
-    # even when model/market data is temporarily unavailable on the final row.
     settled = settle_multi_journal(record, journal_path)
-    # A result may have been settled earlier by /report or /in-game reconciliation.
-    # New settlements carry result_notification_pending, so the LIVE runtime
-    # retries delivery until Telegram accepts the result card. Historical results
-    # without this flag are intentionally not replayed.
     result_rows = pending_result_notifications(journal_path, match_id=mid)
     if result_rows:
         emit_multi_results(record, result_rows, journal_path=journal_path)
@@ -132,9 +126,6 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     two_more = dict(cards._LAST_TWO_MORE.get(mid) or {})
     quality = _data_quality(record)
 
-    # One central football brain. The rich match feed (prematch context, provider
-    # consensus, xG/xG proxy, side pressure and 5m/10m momentum) is the primary
-    # input. Trained models remain weak priors, never the final judge.
     experts = build_goal_state_experts(
         record,
         model_result=model_result,
@@ -142,36 +133,26 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
 
-    # A 1st-half market is closed at the interval even though Flashscore reports
-    # minute 45. Never allow a halftime price to revive a closed first-half bet.
     if bool(match.get("is_halftime")):
         experts.pop("goal_before_ht", None)
 
     market = _market_row(record)
     decision = analyze_multi_match(match, market, experts, data_quality=quality)
 
-    # Ordinary GOOL is football-first: PASS may bet; BORDERLINE/NO_DATA need a
-    # verified 1xBet confirmation; HARD_NO cannot be revived by VALUE.
     decision = enforce_goal_state_policy(decision, experts)
 
-    # The production-evening sample showed that broad/1H/+2 products need more
-    # football certainty. This gate is strategy-specific and does not change
-    # the 1.40 bookmaker minimum. Strong verified STEAM can support the idea,
-    # but only with a small relief; it cannot replace weak football evidence.
-    decision = enforce_confidence_gate(decision, experts)
+    # Strong 1xBet confirmation now includes breadth across related markets.
+    # It may slightly support an already-good GOOL idea, but never replaces
+    # the strategy-specific football confidence floor.
+    decision = enforce_confidence_gate(decision, experts, market_row=market)
 
-    # Second independent layer: an exceptional fresh 1xBet steam can ignore the
-    # GOOL state, but only under strict score/freshness/odds/move guards.
+    # Autonomous STEAM is still a separate exceptional layer. It now requires
+    # related-market breadth unless the target move itself is extreme.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = _enforce_min_rating(decision)
 
-    # A settled bet must cool down before the same match can generate another
-    # public entry. This guard is after both selection layers, so even autonomous
-    # steam cannot chase a goal/result immediately.
     decision = enforce_reentry_cooldown(decision, record, journal_path)
 
-    # Persist only the FINAL production view. The old pipeline used to record a
-    # pre-policy router snapshot and then sometimes make a different decision.
     append_shadow_snapshot(
         analysis_path,
         decision_snapshot(record, decision, experts, data_quality=quality, market_row=market),
@@ -193,9 +174,6 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
             experts,
             data_quality=quality,
         )
-        # Use the exact bookmaker snapshot that produced the decision. In active
-        # mode the journal entry is kept only if Telegram really delivered the
-        # signal; otherwise it is removed and can never emit a fake result later.
         sent = emit_multi_signal(record, decision, created, market_row=market)
         finalized = finalize_multi_delivery(journal_path, created, sent)
         if str(created.get("mode") or "").lower() == "active":

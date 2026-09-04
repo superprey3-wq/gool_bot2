@@ -7,7 +7,17 @@ from pathlib import Path
 from typing import Any
 
 
+def _legacy_journal_silenced() -> bool:
+    return str(os.getenv("GOOL_LEGACY_JOURNAL_SILENT", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_signal_journal(path: Path) -> list[dict[str, Any]]:
+    # In active Multi mode the legacy worker still runs as a hidden analyzer so
+    # GOOL can reuse its model/momentum output. It must not read old signal state
+    # or create/settle phantom legacy bets while its Telegram is intentionally
+    # silenced.
+    if _legacy_journal_silenced():
+        return []
     if not path.exists():
         return []
     try:
@@ -18,6 +28,8 @@ def load_signal_journal(path: Path) -> list[dict[str, Any]]:
 
 
 def save_signal_journal(path: Path, rows: list[dict[str, Any]]) -> None:
+    if _legacy_journal_silenced():
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")

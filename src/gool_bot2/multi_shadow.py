@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .journal import append_analysis
 from .match_context import provider_count, provider_pair, xg_or_proxy_pair
 from .multi_router import RouterDecision, analyze_multi_match
 
@@ -102,11 +102,7 @@ def market_snapshot(match: dict[str, Any], market_row: dict[str, Any] | None) ->
     minute = int(match.get("minute") or 0)
     total = hs + aws
     if not market_row:
-        return {
-            "available": False,
-            "reason": "xbet_match_not_mapped_or_state_missing",
-            "targets": {},
-        }
+        return {"available": False, "reason": "xbet_match_not_mapped_or_state_missing", "targets": {}}
 
     markets = market_row.get("markets") or {}
     btts = markets.get("btts") or {}
@@ -174,9 +170,9 @@ def decision_snapshot(
 
 
 def append_shadow_snapshot(path: Path, snapshot: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")) + "\n")
+    # Reuse the global bounded JSONL writer. Multi diagnostics are disposable
+    # and must never be able to fill a small production disk.
+    append_analysis(path, snapshot)
 
 
 def analyze_and_record(

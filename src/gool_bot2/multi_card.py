@@ -5,6 +5,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from . import signal_cards as sc
+from .multi_public_metrics import ORDINARY_FORMULA, STEAM_FORMULA, source_label
 from .multi_router import RouterDecision
 
 
@@ -30,34 +31,24 @@ def _fmt_odd(value: Any) -> str:
         return "—"
 
 
-def _fmt_pct(value: Any, digits: int = 0) -> str:
-    try:
-        return f"{float(value) * 100:.{digits}f}%"
-    except (TypeError, ValueError):
-        return "—"
-
-
-def _fmt_signed(value: Any, suffix: str = "") -> str:
-    try:
-        return f"{float(value):+.1f}{suffix}"
-    except (TypeError, ValueError):
-        return "—"
-
-
-def _money(value: Any, *, signed: bool = False) -> str:
-    try:
-        amount = int(round(float(value)))
-    except (TypeError, ValueError):
-        return "—"
-    sign = ""
-    if signed:
-        sign = "+" if amount > 0 else ("−" if amount < 0 else "")
-        amount = abs(amount)
-    return f"{sign}{amount:,}".replace(",", " ") + " ₽"
-
-
 def _fit_line(draw: ImageDraw.ImageDraw, text: str, width: int, size: int = 23, bold: bool = False):
     return sc._fit(draw, text, width, size, bold)
+
+
+def _num(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _score100(value: Any, fallback: float = 0.0) -> float:
+    number = _num(value)
+    if number is None:
+        return fallback
+    if 0.0 <= number <= 1.0:
+        number *= 100.0
+    return max(0.0, min(100.0, number))
 
 
 def _is_confidence_metric(value: Any) -> bool:
@@ -69,14 +60,30 @@ def _is_confidence_metric(value: Any) -> bool:
 
 
 def _gool_metric_text(value: Any, probability: Any) -> str:
-    """Public-facing strength text without pretending confidence is probability."""
-    try:
-        number = float(probability) * 100.0
-    except (TypeError, ValueError):
-        return "ОЦЕНКА ЗАХОДА —"
+    score = _score100(probability)
     if _is_confidence_metric(value):
-        return f"ОЦЕНКА ЗАХОДА {number:.0f}/100"
-    return f"ВЕРОЯТНОСТЬ ЗАХОДА {number:.0f}%"
+        return f"ОЦЕНКА СОБЫТИЯ {score:.0f}/100"
+    return f"ВЕРОЯТНОСТЬ СОБЫТИЯ {score:.0f}%"
+
+
+def _event_metric_text(value: Any, probability: Any, event_score: Any = None) -> str:
+    score = _score100(event_score, fallback=_score100(probability))
+    if _is_confidence_metric(value):
+        return f"ОЦЕНКА СОБЫТИЯ {score:.0f}/100"
+    return f"ВЕРОЯТНОСТЬ СОБЫТИЯ {score:.0f}%"
+
+
+def _confidence_text(entry: dict[str, Any] | None, winner: Any) -> str:
+    score = _score100((entry or {}).get("confidence_score"), fallback=_score100(getattr(winner, "rating", 0.0)))
+    return f"УВЕРЕННОСТЬ GOOL {score:.0f}/100"
+
+
+def _formula_text(entry: dict[str, Any] | None) -> str:
+    formula = str((entry or {}).get("formula") or "")
+    if formula:
+        return formula
+    layer = str((entry or {}).get("layer") or "").upper()
+    return STEAM_FORMULA if layer == "STEAM" else ORDINARY_FORMULA
 
 
 def _steam_value(value: Any) -> float:
@@ -89,7 +96,7 @@ def _steam_value(value: Any) -> float:
 def _has_public_steam(winner: Any) -> bool:
     pressure = _steam_value(getattr(winner, "market_pressure_pp", 0.0))
     level = str(getattr(winner, "market_level", "") or "").upper()
-    return pressure >= PUBLIC_STEAM_MIN_PP or level in {"PRESSURE", "STRONG_STEAM"}
+    return pressure >= PUBLIC_STEAM_MIN_PP or level in {"PRESSURE", "STRONG_STEAM", "AUTONOMOUS_STEAM"}
 
 
 def _market_pressure_row(market_row: dict[str, Any] | None, winner: Any) -> dict[str, Any]:
@@ -97,7 +104,7 @@ def _market_pressure_row(market_row: dict[str, Any] | None, winner: Any) -> dict
         return {}
     pressure = market_row.get("pressure") or {}
     keys = [str(getattr(winner, "key", "") or "")]
-    if str(getattr(winner, "strategy", "") or "") == "both_teams_to_score":
+    if str(getattr(winner, "strategy", "") or "") in {"both_teams_to_score", "steam_btts"}:
         keys.extend(("btts_yes:None", "btts_yes"))
     for key in keys:
         row = pressure.get(key)
@@ -106,23 +113,25 @@ def _market_pressure_row(market_row: dict[str, Any] | None, winner: Any) -> dict
     return {}
 
 
-def _steam_text(winner: Any, market_row: dict[str, Any] | None = None) -> str | None:
-    if not _has_public_steam(winner):
-        return None
+def _steam_lines(winner: Any, market_row: dict[str, Any] | None = None) -> tuple[str, str]:
     row = _market_pressure_row(market_row, winner)
     pressure = _steam_value(row.get("prob_delta_pp")) or _steam_value(getattr(winner, "market_pressure_pp", 0.0))
     try:
-        old_odd = float(row.get("old_odd"))
+        moves = int(row.get("one_way_moves") or 0)
     except (TypeError, ValueError):
-        old_odd = None
-    try:
-        new_odd = float(row.get("new_odd"))
-    except (TypeError, ValueError):
-        new_odd = None
-    suffix = ""
-    if old_odd and new_odd and old_odd > 1.0 and new_odd > 1.0:
-        suffix = f"  •  {_fmt_odd(old_odd)} → {_fmt_odd(new_odd)}"
-    return f"🔥 ПРОГРУЗ 1xBET  {pressure:+.1f} п.п.{suffix}"
+        moves = 0
+    old_odd = _num(row.get("old_odd"))
+    new_odd = _num(row.get("new_odd")) or _num(getattr(winner, "odd", None))
+
+    if _has_public_steam(winner):
+        line1 = f"ПРОГРУЗ 1xBet  {pressure:+.1f} п.п. • импульсов {moves}"
+        if old_odd and new_odd and old_odd > 1.0 and new_odd > 1.0:
+            move_pct = (new_odd - old_odd) / old_odd * 100.0
+            line2 = f"КЭФ  {old_odd:.2f} → {new_odd:.2f}  •  Δкэф {move_pct:+.1f}%"
+        else:
+            line2 = f"ТЕКУЩИЙ КЭФ  {_fmt_odd(new_odd)}"
+        return line1, line2
+    return "1xBet: выраженного прогруза нет", f"ТЕКУЩИЙ КЭФ  {_fmt_odd(getattr(winner, 'odd', None))}"
 
 
 def _draw_match_header(
@@ -138,9 +147,10 @@ def _draw_match_header(
     meta: dict[str, Any],
     cards: dict[str, Any],
     accent=ACCENT,
+    title: str = "GOOL MULTI • LIVE",
 ) -> None:
     draw.rounded_rectangle((24, 20, 1056, 76), 18, fill=PANEL, outline=accent, width=2)
-    sc._center(draw, "GOOL MULTI • LIVE", 36, sc._font(19, True), accent)
+    sc._center(draw, title, 36, sc._font(19, True), accent)
 
     sc._badge(image, draw, 175, 177, sc._logo(meta, "home"), home, accent)
     sc._badge(image, draw, 905, 177, sc._logo(meta, "away"), away, accent)
@@ -159,6 +169,89 @@ def _draw_match_header(
     sc._red_card_badge(draw, 905, 338, cards.get("away_red"))
 
 
+def _draw_metric_box(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int, int, int],
+    title: str,
+    value: str,
+    *,
+    accent=GOLD,
+) -> None:
+    x1, y1, x2, y2 = xy
+    draw.rounded_rectangle(xy, 18, fill=PANEL, outline=LINE, width=2)
+    draw.text((x1 + 18, y1 + 12), title, font=sc._font(13, True), fill=MUTED)
+    draw.text((x1 + 18, y1 + 42), value, font=_fit_line(draw, value, x2 - x1 - 36, 26, True), fill=accent)
+
+
+def _momentum_value(momentum: dict[str, Any], key: str, digits: int = 2) -> str:
+    value = _num(momentum.get(key))
+    if value is None:
+        return "—"
+    return f"{value:.{digits}f}"
+
+
+def _draw_stat_grid(
+    draw: ImageDraw.ImageDraw,
+    stats: dict[str, Any],
+    momentum: dict[str, Any],
+    *,
+    top: int,
+) -> None:
+    draw.rounded_rectangle((45, top, 1035, top + 185), 24, fill=PANEL, outline=LINE, width=2)
+    draw.text((70, top + 16), "LIVE • КЛЮЧЕВАЯ СТАТИСТИКА", font=sc._font(15, True), fill=MUTED)
+    items = [
+        ("xG", str(stats.get("xg") or "—")),
+        ("УДАРЫ", str(stats.get("shots") or "—")),
+        ("В СТВОР", str(stats.get("sot") or "—")),
+        ("МОМЕНТЫ", str(stats.get("big_chances") or "—")),
+        ("xG ЗА 5М", _momentum_value(momentum, "xg_total_last_5m")),
+        ("SOT ЗА 10М", _momentum_value(momentum, "sot_total_last_10m", 1)),
+    ]
+    for i, (label, value) in enumerate(items):
+        row, col = divmod(i, 3)
+        x = 70 + col * 320
+        y = top + 55 + row * 60
+        draw.text((x, y), label, font=sc._font(12, True), fill=MUTED)
+        draw.text((x, y + 22), value, font=_fit_line(draw, value, 270, 20, True), fill=TEXT)
+
+
+def _wrap(draw: ImageDraw.ImageDraw, text: str, width: int, font) -> list[str]:
+    words = str(text or "").split()
+    if not words:
+        return ["—"]
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        probe = word if not current else f"{current} {word}"
+        if draw.textbbox((0, 0), probe, font=font)[2] <= width:
+            current = probe
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines[:2]
+
+
+def _draw_reason(
+    draw: ImageDraw.ImageDraw,
+    reason: str,
+    formula: str,
+    *,
+    top: int,
+    accent=ACCENT,
+) -> None:
+    draw.rounded_rectangle((45, top, 1035, top + 125), 24, fill=PANEL2, outline=accent, width=2)
+    draw.text((70, top + 15), "ПОЧЕМУ ЭТА СТАВКА", font=sc._font(14, True), fill=accent)
+    font = sc._font(18, True)
+    lines = _wrap(draw, reason, 920, font)
+    for i, line in enumerate(lines):
+        draw.text((70, top + 47 + i * 25), line, font=font, fill=TEXT)
+    formula_text = f"ФОРМУЛА УВЕРЕННОСТИ: {formula}"
+    draw.text((70, top + 101), formula_text, font=_fit_line(draw, formula_text, 920, 12, False), fill=MUTED)
+
+
 def render_multi_card(
     record: dict[str, Any],
     decision: RouterDecision,
@@ -166,7 +259,6 @@ def render_multi_card(
     entry: dict[str, Any] | None = None,
     market_row: dict[str, Any] | None = None,
 ) -> bytes:
-    """Render a clean public card: market, odds, chance, and optional 1xBet steam."""
     if decision.winner is None:
         raise ValueError("GOOL MULTI card requires a BET decision")
 
@@ -180,9 +272,13 @@ def render_multi_card(
     hs = int(match.get("home_score") if match.get("home_score") is not None else decision.score[0])
     aws = int(match.get("away_score") if match.get("away_score") is not None else decision.score[1])
     winner = decision.winner
-    steam = _steam_text(winner, market_row)
+    entry = dict(entry or {})
+    stats = sc.stats_snapshot(record)
+    momentum = dict(record.get("live_momentum") or {})
+    reason = str(entry.get("selection_reason") or decision.reason or "Выбран лучший проходящий LIVE-сценарий.")
+    steam1, steam2 = _steam_lines(winner, market_row)
 
-    height = 760
+    height = 1120
     image = Image.new("RGBA", (W, height), BG + (255,))
     draw = ImageDraw.Draw(image)
     _draw_match_header(
@@ -198,25 +294,39 @@ def render_multi_card(
         cards=cards,
     )
 
-    draw.rounded_rectangle((45, 382, 1035, 655), 26, fill=PANEL2, outline=ACCENT, width=3)
-    draw.text((75, 407), "BEST BET", font=sc._font(18, True), fill=ACCENT)
-    draw.text((75, 449), winner.label, font=_fit_line(draw, winner.label, 610, 42, True), fill=TEXT)
-    draw.text((760, 407), "КОЭФФИЦИЕНТ", font=sc._font(13, True), fill=MUTED)
-    draw.text((760, 437), _fmt_odd(winner.odd), font=sc._font(49, True), fill=GREEN)
+    draw.rounded_rectangle((45, 382, 1035, 610), 26, fill=PANEL2, outline=ACCENT, width=3)
+    draw.text((75, 405), "BEST BET", font=sc._font(18, True), fill=ACCENT)
+    draw.text((75, 445), winner.label, font=_fit_line(draw, winner.label, 610, 40, True), fill=TEXT)
+    draw.text((760, 405), "КОЭФФИЦИЕНТ 1xBet", font=sc._font(13, True), fill=MUTED)
+    draw.text((760, 438), _fmt_odd(winner.odd), font=sc._font(48, True), fill=GREEN)
 
-    metric = _gool_metric_text(winner, winner.model_probability)
-    draw.text((75, 522), metric, font=_fit_line(draw, metric, 870, 31, True), fill=GOLD)
-    if steam:
-        draw.text((75, 585), steam, font=_fit_line(draw, steam, 900, 21, True), fill=GOLD)
+    event_text = _event_metric_text(winner, winner.model_probability, entry.get("event_score"))
+    confidence_text = _confidence_text(entry, winner)
+    _draw_metric_box(draw, (75, 515, 485, 590), "СИЛА ФУТБОЛЬНОГО СЦЕНАРИЯ", event_text.replace("ОЦЕНКА СОБЫТИЯ ", "").replace("ВЕРОЯТНОСТЬ СОБЫТИЯ ", ""), accent=GOLD)
+    _draw_metric_box(draw, (505, 515, 1005, 590), "ИТОГОВАЯ УВЕРЕННОСТЬ", confidence_text.replace("УВЕРЕННОСТЬ GOOL ", ""), accent=ACCENT)
 
-    footer = "●  BEST BET • LIVE" if str((entry or {}).get("mode") or "shadow").lower() == "active" else "SHADOW • BEST BET PREVIEW"
-    draw.rounded_rectangle((330, 688, 750, 738), 16, fill=ACCENT)
-    sc._center(draw, footer, 701, _fit_line(draw, footer, 380, 16, True), BG)
+    _draw_stat_grid(draw, stats, momentum, top=630)
+
+    market_accent = GOLD if _has_public_steam(winner) else ACCENT
+    draw.rounded_rectangle((45, 835, 1035, 900), 20, fill=PANEL, outline=market_accent, width=2)
+    draw.text((70, 847), steam1, font=_fit_line(draw, steam1, 920, 18, True), fill=market_accent)
+    draw.text((70, 875), steam2, font=_fit_line(draw, steam2, 920, 16, True), fill=TEXT)
+
+    _draw_reason(draw, reason, _formula_text(entry), top=920, accent=market_accent)
+
+    footer = "BEST BET • LIVE • " + source_label(entry.get("signal_source") or winner.source)
+    draw.rounded_rectangle((300, 1060, 780, 1105), 15, fill=market_accent)
+    sc._center(draw, footer, 1072, _fit_line(draw, footer, 440, 14, True), BG)
     return sc._save(image)
 
 
+def _entry_stats(row: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    stats = dict(row.get("stats_snapshot") or {})
+    momentum = dict(row.get("live_momentum_snapshot") or {})
+    return stats, momentum
+
+
 def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None = None) -> bytes:
-    """Render a clean result card without model diagnostics or accounting clutter."""
     record = record or {}
     match = record.get("match") or {}
     result = str(row.get("result") or "void").lower()
@@ -238,41 +348,48 @@ def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None 
     settled_minute = int(row.get("settled_minute") or match.get("minute") or 90)
     market = str(row.get("market") or "BEST BET")
     odd = row.get("odd")
-    probability = row.get("probability")
+    confidence = _score100(row.get("confidence_score"), fallback=_score100(row.get("rating")))
+    event_score = _score100(row.get("event_score"), fallback=_score100(row.get("probability")))
+    reason = str(row.get("selection_reason") or row.get("reason") or "Сигнал был выбран GOOL по LIVE-состоянию матча.")
+    stats, momentum = _entry_stats(row)
 
-    height = 760
+    height = 1040
     image = Image.new("RGBA", (W, height), BG + (255,))
     draw = ImageDraw.Draw(image)
-
-    draw.rounded_rectangle((24, 20, 1056, 76), 18, fill=PANEL, outline=accent, width=2)
-    sc._center(draw, "GOOL MULTI • RESULT", 36, sc._font(19, True), accent)
-    sc._badge(image, draw, 175, 177, sc._logo(meta, "home"), home, accent)
-    sc._badge(image, draw, 905, 177, sc._logo(meta, "away"), away, accent)
-    draw.rounded_rectangle((390, 102, 690, 240), 24, fill=(9, 19, 31), outline=accent, width=3)
-    sc._center(draw, f"{int(settled_score[0])} : {int(settled_score[1])}", 122, sc._font(55, True), TEXT)
-    sc._center(draw, f"{settled_minute}'", 192, sc._font(18, True), accent)
-    sc._center(draw, league, 266, _fit_line(draw, league, 880, 16, True), MUTED)
-    for x, name in ((175, home), (905, away)):
-        font = _fit_line(draw, name, 330, 23, True)
-        box = draw.textbbox((0, 0), name, font=font)
-        draw.text((x - (box[2] - box[0]) / 2, 303), name, font=font, fill=TEXT)
-    sc._red_card_badge(draw, 175, 338, cards.get("home_red"))
-    sc._red_card_badge(draw, 905, 338, cards.get("away_red"))
-
-    draw.rounded_rectangle((45, 382, 1035, 655), 26, fill=PANEL2, outline=accent, width=3)
-    sc._center(draw, banner, 405, _fit_line(draw, banner, 880, 38, True), accent)
-    detail = f"{market}  @{_fmt_odd(odd)}"
-    sc._center(draw, detail, 472, _fit_line(draw, detail, 900, 28, True), TEXT)
-    metric = _gool_metric_text(row, probability)
-    sc._center(draw, metric, 525, _fit_line(draw, metric, 900, 23, True), GOLD)
-    sc._center(
+    _draw_match_header(
+        image,
         draw,
-        f"Вход {entry_minute}' • {int(entry_score[0])}:{int(entry_score[1])}   →   {settled_minute}' • {int(settled_score[0])}:{int(settled_score[1])}",
-        582,
-        sc._font(18, True),
-        MUTED,
+        home=home,
+        away=away,
+        league=league,
+        minute=settled_minute,
+        hs=int(settled_score[0]),
+        aws=int(settled_score[1]),
+        meta=meta,
+        cards=cards,
+        accent=accent,
+        title="GOOL MULTI • RESULT",
     )
 
-    draw.rounded_rectangle((330, 688, 750, 738), 16, fill=accent)
-    sc._center(draw, "GOOL MULTI • VERIFIED", 701, _fit_line(draw, "GOOL MULTI • VERIFIED", 380, 16, True), BG)
+    draw.rounded_rectangle((45, 382, 1035, 610), 26, fill=PANEL2, outline=accent, width=3)
+    sc._center(draw, banner, 405, _fit_line(draw, banner, 880, 36, True), accent)
+    detail = f"{market}  @{_fmt_odd(odd)}"
+    sc._center(draw, detail, 462, _fit_line(draw, detail, 900, 28, True), TEXT)
+
+    _draw_metric_box(draw, (75, 515, 485, 590), "ОЦЕНКА СОБЫТИЯ НА ВХОДЕ", f"{event_score:.0f}/100", accent=GOLD)
+    _draw_metric_box(draw, (505, 515, 1005, 590), "УВЕРЕННОСТЬ НА ВХОДЕ", f"{confidence:.0f}/100", accent=accent)
+
+    _draw_stat_grid(draw, stats, momentum, top=630)
+
+    draw.rounded_rectangle((45, 835, 1035, 950), 24, fill=PANEL2, outline=accent, width=2)
+    entry_line = f"ВХОД {entry_minute}' • {int(entry_score[0])}:{int(entry_score[1])}   →   РЕЗУЛЬТАТ {settled_minute}' • {int(settled_score[0])}:{int(settled_score[1])}"
+    sc._center(draw, entry_line, 850, _fit_line(draw, entry_line, 910, 17, True), MUTED)
+    draw.text((70, 890), "ПОЧЕМУ БЫЛ ВЫБРАН ВХОД", font=sc._font(13, True), fill=accent)
+    font = sc._font(17, True)
+    for i, line in enumerate(_wrap(draw, reason, 920, font)):
+        draw.text((70, 916 + i * 22), line, font=font, fill=TEXT)
+
+    footer = f"GOOL MULTI • VERIFIED • {source_label(row.get('signal_source'))}"
+    draw.rounded_rectangle((300, 975, 780, 1025), 16, fill=accent)
+    sc._center(draw, footer, 988, _fit_line(draw, footer, 440, 14, True), BG)
     return sc._save(image)

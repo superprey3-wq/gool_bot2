@@ -9,7 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
-from .multi_delivery import finalize_multi_delivery
+from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_reentry_guard import enforce_reentry_cooldown
@@ -110,8 +110,13 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # Settlement runs before a new decision so a real public entry can close
     # even when model/market data is temporarily unavailable on the final row.
     settled = settle_multi_journal(record, journal_path)
-    if settled:
-        emit_multi_results(record, settled)
+    # A result may have been settled earlier by /report or /in-game reconciliation.
+    # New settlements carry result_notification_pending, so the LIVE runtime
+    # retries delivery until Telegram accepts the result card. Historical results
+    # without this flag are intentionally not replayed.
+    result_rows = pending_result_notifications(journal_path, match_id=mid)
+    if result_rows:
+        emit_multi_results(record, result_rows, journal_path=journal_path)
     for row in settled:
         print(
             f"GOOL_MULTI_SETTLED match={mid} market={row.get('market')} result={row.get('result')} "

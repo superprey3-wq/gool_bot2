@@ -9,8 +9,10 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
+from .multi_delivery import finalize_multi_delivery
 from .multi_journal import settle_multi_journal, sync_multi_journal
-from .multi_shadow import analyze_and_record, append_shadow_snapshot, decision_snapshot
+from .multi_router import analyze_multi_match
+from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .xbet_market_pressure import load_market_state
 
@@ -89,7 +91,7 @@ def _enforce_min_rating(decision: Any) -> Any:
 def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     """Feed one production snapshot into GOOL MULTI.
 
-    Production now has two deliberately separate layers:
+    Production has two deliberately separate layers:
     1) GOOL Goal State — football-first decision from one coherent LIVE state;
     2) autonomous 1xBet steam — exceptional market-only bypass with hard guards.
 
@@ -103,8 +105,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     analysis_path, journal_path = _paths()
 
-    # Settlement must run even on the final row or when model/market data is
-    # temporarily unavailable; otherwise a valid Multi entry could stay pending.
+    # Settlement runs before a new decision so a real public entry can close
+    # even when model/market data is temporarily unavailable on the final row.
     settled = settle_multi_journal(record, journal_path)
     if settled:
         emit_multi_results(record, settled)
@@ -122,8 +124,9 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     two_more = dict(cards._LAST_TWO_MORE.get(mid) or {})
     quality = _data_quality(record)
 
-    # One central football brain. Legacy trained models are priors only; team
-    # pressure, BTTS, first-half goal and totals are derived from the same state.
+    # One central football brain. The rich match feed (prematch context, provider
+    # consensus, xG/xG proxy, side pressure and 5m/10m momentum) is the primary
+    # input. Trained models remain weak priors, never the final judge.
     experts = build_goal_state_experts(
         record,
         model_result=model_result,
@@ -137,24 +140,23 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         experts.pop("goal_before_ht", None)
 
     market = _market_row(record)
-    decision = analyze_and_record(record, market, experts, analysis_path, data_quality=quality)
+    decision = analyze_multi_match(match, market, experts, data_quality=quality)
 
     # Ordinary GOOL is football-first: PASS may bet; BORDERLINE/NO_DATA need a
     # verified 1xBet confirmation; HARD_NO cannot be revived by VALUE.
-    before_key = None if decision.winner is None else decision.winner.key
     decision = enforce_goal_state_policy(decision, experts)
 
     # Second independent layer: an exceptional fresh 1xBet steam can ignore the
-    # GOOL state, but only under its own strict score/freshness/odds/move guards.
+    # GOOL state, but only under strict score/freshness/odds/move guards.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = _enforce_min_rating(decision)
-    after_key = None if decision.winner is None else decision.winner.key
 
-    if before_key != after_key:
-        append_shadow_snapshot(
-            analysis_path,
-            decision_snapshot(record, decision, experts, data_quality=quality, market_row=market),
-        )
+    # Persist only the FINAL production view. The old pipeline used to record a
+    # pre-policy router snapshot and then sometimes make a different decision.
+    append_shadow_snapshot(
+        analysis_path,
+        decision_snapshot(record, decision, experts, data_quality=quality, market_row=market),
+    )
 
     _, created = sync_multi_journal(
         record,
@@ -164,9 +166,17 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     if created is not None:
-        # Use the exact bookmaker snapshot that produced the decision so the
-        # Telegram card keeps real odds from the same score/minute.
-        emit_multi_signal(record, decision, created, market_row=market)
+        # Use the exact bookmaker snapshot that produced the decision. In active
+        # mode the journal entry is kept only if Telegram really delivered the
+        # signal; otherwise it is removed and can never emit a fake result later.
+        sent = emit_multi_signal(record, decision, created, market_row=market)
+        finalized = finalize_multi_delivery(journal_path, created, sent)
+        if str(created.get("mode") or "").lower() == "active":
+            print(
+                f"GOOL_MULTI_DELIVERY match={mid} sent={sent} "
+                f"journal={'kept' if sent > 0 else 'discarded'} finalized={int(finalized)}",
+                flush=True,
+            )
 
     winner = None if decision.winner is None else f"{decision.winner.label}@{decision.winner.odd:.2f}"
     source = None if decision.winner is None else (

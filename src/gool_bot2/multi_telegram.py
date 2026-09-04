@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from . import telegram
+from .multi_bank_card_layer import append_bank_strip
 from .multi_card import _gool_metric_text, render_multi_result_card
 from .multi_delivery import was_publicly_sent
 from .multi_router import RouterDecision
@@ -95,10 +96,9 @@ def emit_multi_signal(
     sent = 0
     try:
         # The PNG already contains match, score, market, price and strength.
-        # Do not duplicate the same information as a Telegram photo caption.
-        sent = telegram.broadcast_photo(
-            render_multi_signal_card(record, decision, entry=active_entry, market_row=market_row),
-        )
+        # Append the exact bankroll/stake fields stored for this journal entry.
+        png = render_multi_signal_card(record, decision, entry=active_entry, market_row=market_row)
+        sent = telegram.broadcast_photo(append_bank_strip(png, active_entry))
     except Exception as exc:
         print(f"GOOL_MULTI_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
     if sent == 0:
@@ -125,7 +125,8 @@ def emit_multi_results(record: dict[str, Any], rows: list[dict[str, Any]]) -> in
         fallback = _result_caption(row)
         sent = 0
         try:
-            sent = telegram.broadcast_photo(render_multi_result_card(row, record))
+            png = render_multi_result_card(row, record)
+            sent = telegram.broadcast_photo(append_bank_strip(png, row, result=True))
         except Exception as exc:
             print(f"GOOL_MULTI_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
         if sent == 0:

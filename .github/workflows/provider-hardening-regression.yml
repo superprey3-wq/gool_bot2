@@ -1,6 +1,14 @@
 name: provider hardening regression
 
 on:
+  push:
+    paths:
+      - 'src/gool_bot2/providers/**'
+      - 'src/gool_bot2/multi_shadow.py'
+      - 'src/gool_bot2/multi_entry_enrichment.py'
+      - 'tests/test_providers.py'
+      - 'scripts/gool_provider_hardening_probe.py'
+      - '.github/workflows/provider-hardening-regression.yml'
   pull_request:
     paths:
       - 'src/gool_bot2/providers/**'

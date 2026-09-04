@@ -1,8 +1,14 @@
 from gool_bot2.match_context import provider_pair
 from gool_bot2.providers.common import ProviderMatch, pair_score
 from gool_bot2.providers.flashscore import FlashscoreProvider
+from gool_bot2.providers.flashscore_incident_guard import goals_from_incidents, parse_summary_incidents
 from gool_bot2.providers.flashscore_stats_guard import parse_match_stats_body
 from gool_bot2.providers.fusion import FootballDataFusion
+from gool_bot2.providers.secondary_live_guard import (
+    parse_365_goal_timeline,
+    parse_365_stats_payload,
+    parse_fotmob_goal_timeline,
+)
 
 
 def test_pair_score_matches_team_names():
@@ -112,7 +118,7 @@ def test_consensus_keeps_provider_disagreement_visible():
 def test_flashscore_goal_timeline_ignores_non_goals_and_keeps_added_time(monkeypatch):
     provider = FlashscoreProvider()
     # The 35' yellow-card row deliberately carries the *current* 2:0 score.
-    # Old code interpreted it as a goal and back-dated the settlement to 35'.
+    # A legacy fallback is only allowed for chunks explicitly labelled goal.
     body = (
         "III÷card¬IA÷2¬IB÷35¬INX÷2¬IOX÷0"
         "~III÷goal1¬IA÷1¬IB÷26¬INX÷1¬IOX÷0"
@@ -127,3 +133,117 @@ def test_flashscore_goal_timeline_ignores_non_goals_and_keeps_added_time(monkeyp
     assert rows[1]["display_minute"] == "45+2"
     assert rows[1]["period"] == "1H"
     assert all(row["event_type"] == "goal" for row in rows)
+
+
+def test_flashscore_real_ia_ie_grammar_from_leones_atletico():
+    body = (
+        "III÷penalty¬IA÷2¬IB÷3'¬IE÷5¬IK÷Penalty Awarded"
+        "¬IE÷10¬INX÷0¬IOX÷1¬IK÷Penalty¬IF÷Onate A."
+        "~III÷goal¬IA÷2¬IB÷11'¬IE÷3¬INX÷0¬IOX÷2¬IK÷Goal¬IF÷Onate A."
+        "~III÷red¬IA÷1¬IB÷78'¬IE÷2¬IK÷Red Card"
+    )
+    incidents = parse_summary_incidents(body)
+    goals = goals_from_incidents(incidents)
+
+    assert [row["minute"] for row in goals] == [3, 11]
+    assert [row["side"] for row in goals] == ["away", "away"]
+    assert [row["score"] for row in goals] == [[0, 1], [0, 2]]
+    assert goals[0]["goal_kind"] == "penalty"
+    red = [row for row in incidents if row["event_type"] == "red_card"]
+    assert len(red) == 1
+    assert red[0]["minute"] == 78
+    assert red[0]["side"] == "home"
+
+
+def test_flashscore_red_card_stat_id_22_is_cumulative():
+    body = (
+        "SE÷Match~SD÷23¬SG÷Yellow cards¬SH÷4¬SI÷1~SD÷22¬SG÷Red cards¬SH÷1¬SI÷0~"
+        "SE÷2nd Half~SD÷23¬SG÷Yellow cards¬SH÷2¬SI÷1~SD÷22¬SG÷Red cards¬SH÷1¬SI÷0"
+    )
+    stats = parse_match_stats_body(body)
+    assert stats["yellow_cards"] == (4.0, 1.0)
+    assert stats["red_cards"] == (1.0, 0.0)
+
+
+def test_fotmob_lower_coverage_still_provides_goal_timeline():
+    detail = {
+        "content": {
+            "matchFacts": {
+                "events": {
+                    "events": [
+                        {"type": "Goal", "time": 11, "isHome": False, "newScore": [0, 2], "player": {"name": "A"}},
+                        {"type": "Goal", "time": 3, "isHome": False, "newScore": [0, 1], "goalDescription": "Penalty", "player": {"name": "A"}},
+                    ]
+                }
+            },
+            "momentum": False,
+            "lineup": None,
+            "stats": None,
+            "shotmap": {"shots": []},
+        }
+    }
+    goals = parse_fotmob_goal_timeline(detail)
+    assert [row["minute"] for row in goals] == [3, 11]
+    assert [row["score"] for row in goals] == [[0, 1], [0, 2]]
+    assert goals[0]["goal_kind"] == "penalty"
+
+
+def test_365_stats_endpoint_maps_real_cumulative_counters():
+    payload = {
+        "ttl": 10,
+        "lastUpdateId": 5746578588,
+        "statistics": [
+            {"name": "Possession", "competitorId": 9829, "value": "67%"},
+            {"name": "Total Shots", "competitorId": 9829, "value": "16"},
+            {"name": "Shots On Target", "competitorId": 9829, "value": "7"},
+            {"name": "Corners", "competitorId": 9829, "value": "11"},
+            {"name": "Red Cards", "competitorId": 9829, "value": "1"},
+            {"name": "Yellow Cards", "competitorId": 9829, "value": "4"},
+            {"name": "Attacks", "competitorId": 9829, "value": "99"},
+            {"name": "Possession", "competitorId": 10362, "value": "33%"},
+            {"name": "Total Shots", "competitorId": 10362, "value": "6"},
+            {"name": "Shots On Target", "competitorId": 10362, "value": "4"},
+            {"name": "Corners", "competitorId": 10362, "value": "2"},
+            {"name": "Red Cards", "competitorId": 10362, "value": "0"},
+            {"name": "Yellow Cards", "competitorId": 10362, "value": "1"},
+            {"name": "Attacks", "competitorId": 10362, "value": "57"},
+        ],
+    }
+    stats = parse_365_stats_payload(payload, 9829, 10362)
+    assert stats["possession"] == (67.0, 33.0)
+    assert stats["shots"] == (16.0, 6.0)
+    assert stats["shots_on_target"] == (7.0, 4.0)
+    assert stats["corners"] == (11.0, 2.0)
+    assert stats["red_cards"] == (1.0, 0.0)
+    assert stats["yellow_cards"] == (4.0, 1.0)
+    assert stats["attacks"] == (99.0, 57.0)
+
+
+def test_365_goal_timeline_reconstructs_score_from_event_side():
+    game = {
+        "events": [
+            {"competitorId": 10362, "gameTime": 2.0, "order": 2, "gameTimeDisplay": "2'", "eventType": {"id": 1, "name": "Goal", "subTypeName": "Penalty"}},
+            {"competitorId": 10362, "gameTime": 11.0, "order": 3, "gameTimeDisplay": "11'", "eventType": {"id": 1, "name": "Goal", "subTypeName": "Field Goal"}},
+        ]
+    }
+    goals = parse_365_goal_timeline(game, 9829, 10362)
+    assert [row["score"] for row in goals] == [[0, 1], [0, 2]]
+    assert goals[0]["goal_kind"] == "penalty"
+
+
+def test_fusion_uses_secondary_exact_timeline_when_flashscore_is_incomplete():
+    providers = [
+        ProviderMatch("flashscore", "fs", "A", "B", meta={"provider_goal_timeline": []}),
+        ProviderMatch("fotmob", "fm", "A", "B", meta={"provider_goal_timeline": [
+            {"minute": 3, "score": [0, 1]},
+            {"minute": 11, "score": [0, 2]},
+        ]}),
+        ProviderMatch("365scores", "sc", "A", "B", meta={"provider_goal_timeline": [
+            {"minute": 2, "score": [0, 1]},
+        ]}),
+    ]
+    timeline, source, audit = FootballDataFusion._select_goal_timeline(providers, (0, 2))
+    assert source == "fotmob"
+    assert [row["score"] for row in timeline] == [[0, 1], [0, 2]]
+    assert audit["flashscore"]["exact_score_match"] is False
+    assert audit["fotmob"]["exact_score_match"] is True

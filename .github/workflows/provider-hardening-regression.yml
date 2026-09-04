@@ -1,0 +1,35 @@
+name: provider hardening regression
+
+on:
+  pull_request:
+    paths:
+      - 'src/gool_bot2/providers/**'
+      - 'src/gool_bot2/multi_shadow.py'
+      - 'src/gool_bot2/multi_entry_enrichment.py'
+      - 'tests/test_providers.py'
+      - 'scripts/gool_provider_hardening_probe.py'
+      - '.github/workflows/provider-hardening-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  provider-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install GOOL Bot 2
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Provider unit regressions
+        run: pytest -q tests/test_providers.py
+
+      - name: Real Leones provider regression
+        run: python scripts/gool_provider_hardening_probe.py

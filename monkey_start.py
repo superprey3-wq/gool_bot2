@@ -12,7 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
-MULTI_RESET_ID = "rating70_2026_09_04"
+MULTI_RESET_ID = "goalstate_cards_v2_2026_09_04"
 
 
 def load_env(path: Path) -> None:
@@ -34,10 +34,11 @@ def _truthy(name: str, default: bool = False) -> bool:
 
 
 def _reset_multi_tracking_once(runtime: Path) -> None:
-    """Start the rating-70 production epoch with a clean Multi journal/bank.
+    """Start the Goal State public-card epoch with clean Multi tracking.
 
     The marker lives in persistent runtime storage, so only the first boot after
-    this deployment resets history. Later restarts keep all newly collected bets.
+    this deployment resets Multi journal, virtual bank and disposable analysis.
+    Later restarts keep every newly collected public bet.
     """
     live = runtime / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -49,9 +50,11 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     multi_journal = Path(journal_raw) if journal_raw else live / "gool_multi_journal.json"
     bank_raw = os.getenv("GOOL_MULTI_BANK_STATE_PATH", "").strip()
     bank_state = Path(bank_raw) if bank_raw else multi_journal.with_name("gool_multi_bank_state.json")
+    analysis_raw = os.getenv("GOOL_MULTI_ANALYSIS_PATH", "").strip() or os.getenv("GOOL_MULTI_SHADOW_PATH", "").strip()
+    multi_analysis = Path(analysis_raw) if analysis_raw else live / "gool_multi_analysis.jsonl"
 
     removed: list[str] = []
-    for path in (multi_journal, bank_state):
+    for path in (multi_journal, bank_state, multi_analysis):
         try:
             if path.exists():
                 path.unlink()
@@ -65,7 +68,7 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     )
     print(
         f"GOOL_BOOT multi_tracking_reset={MULTI_RESET_ID} "
-        f"removed={len(removed)} journal={multi_journal} bank={bank_state}",
+        f"removed={len(removed)} journal={multi_journal} bank={bank_state} analysis={multi_analysis}",
         flush=True,
     )
 

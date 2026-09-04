@@ -77,28 +77,27 @@ def post_goal_gate(minute: int, last_goal_minute: int | None, cooldown_minutes: 
 
 def model_threshold_gate(head: str, probability: float, score: float) -> GateResult:
     probability_pct = float(probability) * 100.0 if float(probability) <= 1.0 else float(probability)
+    public_floor = max(70.0, float(os.getenv("PUBLIC_SIGNAL_MIN_PROBABILITY", "70")))
+
     if head == "another_goal":
-        # PREMATCH + sustained LIVE are now mandatory, so 75% here was needlessly
-        # rejecting otherwise fully-confirmed matches. 72% keeps the model selective
-        # while allowing the two independent gates to do their job.
         min_score = float(os.getenv("ANOTHER_GOAL_MIN_SCORE", "72"))
-        min_probability = 0.0
+        configured_probability = float(os.getenv("ANOTHER_GOAL_MIN_PROBABILITY", "70"))
     elif head == "goal_before_ht":
-        # A shorter horizon needs its own threshold instead of falling through to
-        # the generic 80/75 gate. 1xBet pressure is required separately in the
-        # market integration layer, so these defaults stay selective without
-        # limiting the strategy to only extreme model readings.
         min_score = float(os.getenv("GOAL_BEFORE_HT_MIN_SCORE", "75"))
-        min_probability = float(os.getenv("GOAL_BEFORE_HT_MIN_PROBABILITY", "68"))
+        configured_probability = float(os.getenv("GOAL_BEFORE_HT_MIN_PROBABILITY", "70"))
     elif head == "over_2_5":
         min_score = float(os.getenv("OVER25_MIN_SCORE", "70"))
-        min_probability = float(os.getenv("OVER25_MIN_PROBABILITY", "70"))
+        configured_probability = float(os.getenv("OVER25_MIN_PROBABILITY", "70"))
     elif head == "both_teams_to_score":
         min_score = float(os.getenv("BTTS_MIN_SCORE", "70"))
-        min_probability = float(os.getenv("BTTS_MIN_PROBABILITY", "70"))
+        configured_probability = float(os.getenv("BTTS_MIN_PROBABILITY", "70"))
     else:
         min_score = 80.0
-        min_probability = 75.0
+        configured_probability = 75.0
+
+    # Public cards must never advertise a trained probability below 70% even if
+    # an older environment value is configured lower.
+    min_probability = max(public_floor, configured_probability)
 
     reasons: list[str] = []
     if float(score) < min_score:

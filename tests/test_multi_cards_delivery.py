@@ -38,50 +38,20 @@ def _decision() -> RouterDecision:
         source="another_goal_model",
         expert_passed=True,
         market_pressure_pp=4.3,
+        market_level="PRESSURE",
         data_quality=0.88,
         rating=82.0,
         expected_roi=0.317,
         value_edge_pp=16.0,
-    )
-    alt = MarketCandidate(
-        key="home_total:1.5",
-        family="team_total",
-        strategy="home_goal",
-        label="ИТБ1 1.5",
-        odd=2.05,
-        model_probability=0.61,
-        goals_to_win=1,
-        correlation_key="home_next_goal",
-        rating=71.0,
-        expected_roi=0.25,
-        value_edge_pp=12.0,
-        data_quality=0.88,
     )
     return RouterDecision(
         status="BET",
         minute=63,
         score=(1, 1),
         winner=winner,
-        alternatives=[alt],
+        alternatives=[],
         rejected=[],
-        reason="GOOL + LIVE + цена 1xBet дают лучший баланс для ещё одного гола.",
-    )
-
-
-def _team_goal_winner(side: int = 2, line: float = 1.5) -> MarketCandidate:
-    return MarketCandidate(
-        key=f"{'away_total' if side == 2 else 'home_total'}:{line:g}",
-        family="team_total",
-        strategy="away_goal" if side == 2 else "home_goal",
-        label=f"ИТБ{side} {line:g}",
-        odd=2.05,
-        model_probability=0.61,
-        goals_to_win=1,
-        correlation_key="away_next_goal" if side == 2 else "home_next_goal",
-        rating=71.0,
-        expected_roi=0.25,
-        value_edge_pp=12.0,
-        data_quality=0.88,
+        reason="Internal diagnostics are deliberately hidden from public cards.",
     )
 
 
@@ -99,10 +69,11 @@ def _entry() -> dict:
         "rating": 82.0,
         "signal_source": "GOOL",
         "virtual_stake_rub": 2000.0,
+        "reason_tags": [],
     }
 
 
-def test_multi_signal_card_is_png_with_team_badges_and_live_layout(monkeypatch):
+def test_multi_signal_card_is_compact_png_with_team_badges(monkeypatch):
     calls = []
 
     def fake_logo(meta, side):
@@ -114,56 +85,11 @@ def test_multi_signal_card_is_png_with_team_badges_and_live_layout(monkeypatch):
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 1260)
+    assert image.size == (1080, 760)
     assert calls == ["home", "away"]
 
 
-def test_country_and_tournament_are_split_for_under_score_header():
-    assert multi_card._league_parts("VENEZUELA: Liga FUTVE - Clausura") == (
-        "VENEZUELA",
-        "Liga FUTVE - Clausura",
-    )
-    assert multi_card._country_code("VENEZUELA") == "ve"
-
-
-def test_team_goal_card_shows_real_nearest_match_totals_at_one_one():
-    market = {
-        "score_home": 1,
-        "score_away": 1,
-        "markets": {
-            "match_total": [
-                {"line": 2.5, "over": 1.57, "under": 2.31},
-                {"line": 3.5, "over": 2.44, "under": 1.52},
-                {"line": 4.5, "over": 4.80, "under": 1.16},
-            ]
-        },
-    }
-    rows = multi_card._market_total_alternatives(market, 1, 1, _team_goal_winner(), limit=2)
-    assert [(row["label"], row["odd"], row["note"]) for row in rows] == [
-        ("ТБ 2.5", 1.57, "ещё 1 гол"),
-        ("ТБ 3.5", 2.44, "ещё 2 гола"),
-    ]
-
-
-def test_team_goal_card_shows_55_and_65_at_two_three():
-    market = {
-        "score_home": 2,
-        "score_away": 3,
-        "markets": {
-            "match_total": [
-                {"line": 5.5, "over": 1.72, "under": 2.05},
-                {"line": 6.5, "over": 3.10, "under": 1.35},
-            ]
-        },
-    }
-    rows = multi_card._market_total_alternatives(market, 2, 3, _team_goal_winner(side=2, line=3.5), limit=2)
-    assert [(row["label"], row["odd"], row["note"]) for row in rows] == [
-        ("ТБ 5.5", 1.72, "ещё 1 гол"),
-        ("ТБ 6.5", 3.10, "ещё 2 гола"),
-    ]
-
-
-def test_multi_result_cards_render_won_lost_and_void(monkeypatch):
+def test_multi_result_cards_render_won_lost_and_void_compact(monkeypatch):
     monkeypatch.setattr(
         multi_card.sc,
         "_logo",
@@ -180,10 +106,10 @@ def test_multi_result_cards_render_won_lost_and_void(monkeypatch):
         png = multi_card.render_multi_result_card(row, _record(71, 2, 1))
         image = Image.open(BytesIO(png))
         assert image.format == "PNG"
-        assert image.size == (1080, 1180)
+        assert image.size == (1080, 760)
 
 
-def test_active_mode_delivers_signal_and_result_as_photos(monkeypatch):
+def test_active_mode_delivers_clean_signal_and_result_as_photos(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     photos = []
     texts = []
@@ -210,6 +136,10 @@ def test_active_mode_delivers_signal_and_result_as_photos(monkeypatch):
     assert len(photos) == 2
     assert all(png.startswith(b"\x89PNG") for png, _ in photos)
     assert "BEST BET" in photos[0][1]
+    assert "ВЕРОЯТНОСТЬ ЗАХОДА 74%" in photos[0][1]
+    assert "rating" not in photos[0][1].lower()
+    assert "roi" not in photos[0][1].lower()
+    assert "value" not in photos[0][1].lower()
     assert "ЗАШЁЛ" in photos[1][1]
     assert texts == []
 

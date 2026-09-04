@@ -1,4 +1,4 @@
-from gool_bot2.signal_policy import market_state_gate, time_gate
+from gool_bot2.signal_policy import market_state_gate, model_threshold_gate, time_gate
 
 
 def test_another_goal_accepts_any_score_state():
@@ -13,6 +13,19 @@ def test_another_goal_live_windows():
     assert time_gate("another_goal", 55).allowed is True
     assert time_gate("another_goal", 75).allowed is True
     assert time_gate("another_goal", 76).allowed is False
+
+
+def test_all_public_trained_probabilities_have_70_percent_floor(monkeypatch):
+    monkeypatch.delenv("PUBLIC_SIGNAL_MIN_PROBABILITY", raising=False)
+    monkeypatch.setenv("ANOTHER_GOAL_MIN_PROBABILITY", "0")
+    monkeypatch.setenv("GOAL_BEFORE_HT_MIN_PROBABILITY", "68")
+
+    assert model_threshold_gate("another_goal", 0.699, 80).allowed is False
+    assert model_threshold_gate("another_goal", 0.70, 80).allowed is True
+    assert model_threshold_gate("goal_before_ht", 0.699, 80).allowed is False
+    assert model_threshold_gate("goal_before_ht", 0.70, 80).allowed is True
+    assert model_threshold_gate("over_2_5", 0.699, 80).allowed is False
+    assert model_threshold_gate("both_teams_to_score", 0.699, 80).allowed is False
 
 
 def test_disabled_legacy_market_intrinsics_remain_consistent():

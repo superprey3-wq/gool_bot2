@@ -8,14 +8,14 @@ from gool_bot2 import multi_steam_card, multi_telegram
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
 
 
-def _decision(pressure: float = 6.4) -> RouterDecision:
+def _decision(pressure: float = 6.4, probability: float = 0.74) -> RouterDecision:
     winner = MarketCandidate(
         key="match_total:2.5",
         family="match_total",
         strategy="another_goal",
         label="ТБ 2.5",
         odd=1.78,
-        model_probability=0.74,
+        model_probability=probability,
         market_probability=0.58,
         goals_to_win=1,
         correlation_key="any_next_goal",
@@ -70,7 +70,7 @@ def _record() -> dict:
     }
 
 
-def _entry() -> dict:
+def _entry(probability: float = 0.74) -> dict:
     return {
         "mode": "active",
         "match_id": "steam-card",
@@ -80,15 +80,16 @@ def _entry() -> dict:
         "score": [1, 1],
         "market": "ТБ 2.5",
         "odd": 1.78,
-        "probability": 0.74,
+        "probability": probability,
         "rating": 82.0,
         "signal_source": "GOOL",
+        "reason_tags": [],
     }
 
 
 def _blank_png() -> bytes:
     out = BytesIO()
-    Image.new("RGBA", (1080, 1260), (8, 16, 28, 255)).save(out, format="PNG")
+    Image.new("RGBA", (1080, 760), (8, 16, 28, 255)).save(out, format="PNG")
     return out.getvalue()
 
 
@@ -102,7 +103,7 @@ def test_strong_steam_snapshot_exposes_real_bookmaker_move():
     assert snap["new_odd"] == 1.78
 
 
-def test_strong_steam_has_dedicated_png_variant(monkeypatch):
+def test_strong_steam_has_dedicated_compact_png_variant(monkeypatch):
     monkeypatch.setattr(multi_steam_card, "render_multi_card", lambda *args, **kwargs: _blank_png())
 
     png = multi_steam_card.render_multi_signal_card(
@@ -114,7 +115,7 @@ def test_strong_steam_has_dedicated_png_variant(monkeypatch):
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 1260)
+    assert image.size == (1080, 760)
     assert png != _blank_png()
 
 
@@ -132,7 +133,7 @@ def test_regular_pressure_keeps_normal_card(monkeypatch):
     assert png == base
 
 
-def test_telegram_caption_marks_strong_steam(monkeypatch):
+def test_telegram_caption_keeps_only_chance_and_steam(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     photos = []
     monkeypatch.setattr(multi_telegram, "render_multi_signal_card", lambda *args, **kwargs: _blank_png())
@@ -150,5 +151,29 @@ def test_telegram_caption_marks_strong_steam(monkeypatch):
     )
 
     assert sent == 1
-    assert len(photos) == 1
-    assert "СИЛЬНЫЙ ПРОГРУЗ" in photos[0][1]
+    caption = photos[0][1]
+    assert "ПРОГРУЗ 1xBET" in caption
+    assert "ВЕРОЯТНОСТЬ ЗАХОДА 74%" in caption
+    assert "rating" not in caption.lower()
+    assert "value" not in caption.lower()
+    assert "roi" not in caption.lower()
+
+
+def test_public_multi_card_is_suppressed_below_70(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
+    photos = []
+    monkeypatch.setattr(
+        multi_telegram.telegram,
+        "broadcast_photo",
+        lambda *args, **kwargs: photos.append(args) or 1,
+    )
+
+    sent = multi_telegram.emit_multi_signal(
+        _record(),
+        _decision(probability=0.699),
+        _entry(probability=0.699),
+        market_row=_market(),
+    )
+
+    assert sent == 0
+    assert photos == []

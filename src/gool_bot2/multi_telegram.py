@@ -11,10 +11,19 @@ from .multi_steam_card import is_strong_steam, render_multi_signal_card
 
 
 ACTIVE_MODE = "active"
+PUBLIC_CARD_MIN_STRENGTH = 0.70
 
 
 def is_multi_telegram_active() -> bool:
     return str(os.getenv("GOOL_MULTI_TELEGRAM_MODE", "shadow")).strip().lower() == ACTIVE_MODE
+
+
+def _public_strength_ok(entry: dict[str, Any]) -> bool:
+    try:
+        floor = max(PUBLIC_CARD_MIN_STRENGTH, float(os.getenv("GOOL_MULTI_PUBLIC_CARD_MIN_STRENGTH", "0.70")))
+        return float(entry.get("probability")) >= floor
+    except (TypeError, ValueError):
+        return False
 
 
 @contextmanager
@@ -74,6 +83,14 @@ def emit_multi_signal(
 ) -> int:
     if not is_multi_telegram_active() or entry is None or decision.winner is None:
         return 0
+    if not _public_strength_ok(entry):
+        print(
+            f"GOOL_MULTI_CARD_SUPPRESSED match={entry.get('match_id')} reason=public_strength_below_70 "
+            f"value={entry.get('probability')}",
+            flush=True,
+        )
+        return 0
+
     active_entry = dict(entry)
     active_entry["mode"] = "active"
     strong_steam = is_strong_steam(decision)

@@ -19,6 +19,35 @@ def _pair_total(record: dict[str, Any], key: str) -> float | None:
     return float(home) + float(away)
 
 
+def _timeline_context(record: dict[str, Any]) -> dict[str, Any]:
+    match = record.get("match") or {}
+    flash_meta = (((record.get("providers") or {}).get("flashscore") or {}).get("meta") or {})
+    timeline = flash_meta.get("goal_timeline") or []
+    incidents = flash_meta.get("incident_timeline") or []
+    last_goal = None
+    for row in timeline:
+        try:
+            minute = int(float(row.get("minute")))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        last_goal = minute if last_goal is None else max(last_goal, minute)
+    minute_now = int(match.get("minute") or 0)
+    last_incident = incidents[-1] if incidents else None
+    return {
+        "source": flash_meta.get("goal_timeline_source") or ((record.get("consensus") or {}).get("goal_timeline_source")),
+        "provider_candidates": dict(flash_meta.get("goal_timeline_candidates") or {}),
+        "goal_count": len(timeline),
+        "last_goal_minute": last_goal,
+        "minutes_since_last_goal": None if last_goal is None else max(0, minute_now - int(last_goal)),
+        "incident_count": len(incidents),
+        "last_incident": None if not isinstance(last_incident, dict) else {
+            "minute": last_incident.get("minute"),
+            "event_type": last_incident.get("event_type"),
+            "side": last_incident.get("side"),
+        },
+    }
+
+
 def context_snapshot(record: dict[str, Any]) -> dict[str, Any]:
     prematch = record.get("prematch_context") or {}
     momentum = record.get("live_momentum") or {}
@@ -57,6 +86,10 @@ def context_snapshot(record: dict[str, Any]) -> dict[str, Any]:
             "shots_10m": momentum.get("shots_total_last_10m"),
             "sot_10m": momentum.get("sot_total_last_10m"),
         },
+        # Observation-only timing data. It is deliberately not part of
+        # data_quality or any BET/WAIT gate yet; first collect a clean sample.
+        "provider_freshness": dict(record.get("provider_freshness") or {}),
+        "timeline": _timeline_context(record),
         "prefilter": dict(record.get("prefilter") or {}),
     }
 

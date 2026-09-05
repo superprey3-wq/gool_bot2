@@ -1,0 +1,40 @@
+name: two-system concept regression
+
+on:
+  push:
+    paths:
+      - "src/gool_bot2/multi_concept.py"
+      - "src/gool_bot2/multi_runtime.py"
+      - "tests/test_multi_two_system_concept.py"
+      - ".github/workflows/two-system-concept-regression.yml"
+  pull_request:
+    paths:
+      - "src/gool_bot2/multi_concept.py"
+      - "src/gool_bot2/multi_runtime.py"
+      - "tests/test_multi_two_system_concept.py"
+      - ".github/workflows/two-system-concept-regression.yml"
+
+jobs:
+  concept:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest ruff
+      - name: Run concept regressions
+        run: |
+          pytest -q \
+            tests/test_multi_two_system_concept.py \
+            tests/test_multi_confidence_trim.py \
+            tests/test_multi_rating70_epoch.py
+      - name: Check changed Python surface
+        run: |
+          ruff check --select E9,F63,F7,F82 \
+            src/gool_bot2/multi_concept.py \
+            src/gool_bot2/multi_runtime.py \
+            tests/test_multi_two_system_concept.py

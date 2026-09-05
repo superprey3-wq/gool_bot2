@@ -17,10 +17,23 @@ def cooldown_minutes() -> int:
         return 10
 
 
-def _latest_settled_minute(rows: list[dict[str, Any]], match_id: str) -> int | None:
+def _strategy_bucket(strategy: Any) -> str:
+    raw = str(strategy or "").strip()
+    if raw.startswith("steam_"):
+        return "steam"
+    return raw
+
+
+def _latest_settled_minute(
+    rows: list[dict[str, Any]],
+    match_id: str,
+    strategy_bucket: str,
+) -> int | None:
     latest: int | None = None
     for row in rows:
         if str(row.get("match_id") or "") != match_id:
+            continue
+        if _strategy_bucket(row.get("strategy")) != strategy_bucket:
             continue
         if str(row.get("result") or "pending").lower() not in FINAL_RESULTS:
             continue
@@ -39,11 +52,13 @@ def enforce_reentry_cooldown(
     record: dict[str, Any],
     journal_path: Path,
 ) -> Any:
-    """Block a new public bet on the same match for N match-minutes after settlement.
+    """Block rapid repeat entries only inside the same public GOOL system.
 
-    The guard is deliberately applied after both GOOL State and autonomous 1xBet
-    steam selection, so neither layer can immediately chase the same match after
-    a previous entry has just been won/lost/voided.
+    The first-half and second-half goal systems are independent. A settled
+    `goal_before_ht` entry at HT must never delay `another_goal`, which is
+    allowed to start immediately at 46'. Autonomous STEAM is also kept in its
+    own cooldown bucket. Repeated entries within the same system still observe
+    the configured match-minute cooldown.
     """
     if str(getattr(decision, "status", "")) != "BET" or getattr(decision, "winner", None) is None:
         return decision
@@ -63,7 +78,16 @@ def enforce_reentry_cooldown(
     if minute <= 0:
         return decision
 
-    latest = _latest_settled_minute(load_signal_journal(journal_path), match_id)
+    winner = decision.winner
+    strategy_bucket = _strategy_bucket(getattr(winner, "strategy", ""))
+    if not strategy_bucket:
+        return decision
+
+    latest = _latest_settled_minute(
+        load_signal_journal(journal_path),
+        match_id,
+        strategy_bucket,
+    )
     if latest is None:
         return decision
 
@@ -71,7 +95,6 @@ def enforce_reentry_cooldown(
     if minute >= next_allowed:
         return decision
 
-    winner = decision.winner
     block = f"reentry_cooldown_{cooldown}m"
     if block not in winner.blocks:
         winner.blocks.append(block)
@@ -85,7 +108,7 @@ def enforce_reentry_cooldown(
     decision.winner = None
     decision.alternatives = []
     decision.reason = (
-        f"WAIT: после предыдущего расчёта по этому матчу действует re-entry cooldown {cooldown} мин. "
-        f"Предыдущий сигнал закрыт на {latest}', новый вход не раньше {next_allowed}'."
+        f"WAIT: для системы {strategy_bucket} действует re-entry cooldown {cooldown} мин. "
+        f"Предыдущий сигнал этой системы закрыт на {latest}', новый вход не раньше {next_allowed}'."
     )
     return decision

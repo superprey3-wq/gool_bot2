@@ -86,8 +86,8 @@ def test_multi_analysis_shows_prematch_live_and_market(tmp_path: Path, monkeypat
     analysis.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
     text = analysis_text()
     assert "PREMATCH + LIVE + momentum" in text
-    assert "AG 66×" in text
+    assert "AG 66 WAIT" in text
     assert "PRE 10/10" in text
     assert "LIVE xG 1.84" in text
     assert "ИТБ1 1.5 @ 4.76" in text
-    assert "override: <b>1</b>" in text
+    assert "override won ranking" in text

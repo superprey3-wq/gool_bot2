@@ -59,30 +59,26 @@ def test_second_half_demand_starts_at_46_and_first_half_runs_through_35(tmp_path
     assert MIN_BET_ODD == 1.50
 
 
-def test_demand_collector_fetches_candidates_top_steam_and_rotating_watch(tmp_path, monkeypatch):
+def test_demand_collector_watches_every_live_match_and_prioritises_brain_demand(tmp_path, monkeypatch):
     collector = xbet_worker.DemandDrivenXBetMarketCollector(
         Path(tmp_path / "state.json"), Path(tmp_path / "history.jsonl")
     )
-    monkeypatch.setenv("XBET_STEAM_WATCH_PER_CYCLE", "1")
     monkeypatch.setattr(xbet_worker, "load_active_demands", lambda: {"demand": {"strategy": "another_goal"}})
 
     matches = [
-        SimpleNamespace(provider_match_id="demand", minute=60, league="Regional League"),
-        SimpleNamespace(provider_match_id="top", minute=33, league="England: Premier League"),
-        SimpleNamespace(provider_match_id="rotate-a", minute=55, league="Regional League"),
-        SimpleNamespace(provider_match_id="rotate-b", minute=65, league="Regional League"),
-        SimpleNamespace(provider_match_id="closed-1h", minute=36, league="Premier League"),
-        SimpleNamespace(provider_match_id="closed-2h", minute=76, league="Premier League"),
+        SimpleNamespace(provider_match_id="demand", minute=89, league="Regional League", is_finished=False),
+        SimpleNamespace(provider_match_id="m1", minute=3, league="League A", is_finished=False),
+        SimpleNamespace(provider_match_id="m2", minute=36, league="League B", is_finished=False),
+        SimpleNamespace(provider_match_id="m3", minute=76, league="League C", is_finished=False),
+        SimpleNamespace(provider_match_id="m4", minute=95, league="League D", is_finished=False),
+        SimpleNamespace(provider_match_id="done", minute=90, league="League E", is_finished=True),
     ]
     selected, stats = collector._select_matches(matches)
-    ids = {str(row.provider_match_id) for row in selected}
-    assert "demand" in ids
-    assert "top" in ids
-    assert len(ids & {"rotate-a", "rotate-b"}) == 1
-    assert "closed-1h" not in ids
-    assert "closed-2h" not in ids
+    ids = [str(row.provider_match_id) for row in selected]
+    assert ids == ["demand", "m1", "m2", "m3", "m4"]
     assert stats["demanded"] == 1
-    assert stats["top_steam_watch"] == 1
+    assert stats["live_watch"] == 5
+    assert stats["background"] == 4
 
 
 def test_first_half_can_pass_before_10_only_with_real_live_evidence(monkeypatch):

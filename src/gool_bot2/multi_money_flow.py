@@ -221,7 +221,12 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
     if strategy is None:
         return {"eligible": False, "reason": "money_flow_match_not_live"}
     exchange = record.get("matchbook_exchange") or {}
-    context = ((exchange.get("systems") or {}).get(strategy) or {})
+    systems = exchange.get("systems") or {}
+    context = dict(systems.get(strategy) or {})
+    if not context:
+        minute = int((record.get("match") or {}).get("minute") or 0)
+        legacy_key = "goal_before_ht" if minute <= 45 else "another_goal"
+        context = dict(systems.get(legacy_key) or {})
     period = str(context.get("period") or "FT")
     family = "first_half_total" if period == "1H" else "match_total"
     if not bool(exchange.get("available")) or not bool(context.get("available")):

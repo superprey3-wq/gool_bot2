@@ -3,8 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from gool_bot2.multi_router import MarketCandidate, RouterDecision
-from gool_bot2.multi_runtime import _enforce_min_rating
+import gool_bot2.multi_runtime as multi_runtime
 
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -16,51 +15,8 @@ monkey_start = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(monkey_start)
 
 
-def _decision(rating: float) -> RouterDecision:
-    winner = MarketCandidate(
-        key="home_total:1.5",
-        family="team_total",
-        strategy="home_goal",
-        label="ИТБ1 1.5",
-        odd=2.10,
-        model_probability=0.61,
-        rating=rating,
-        eligible=True,
-    )
-    return RouterDecision(
-        status="BET",
-        minute=57,
-        score=(1, 0),
-        winner=winner,
-        alternatives=[],
-        rejected=[],
-        reason="test",
-    )
-
-
-def test_final_multi_rating_floor_rejects_69_9(monkeypatch):
-    monkeypatch.delenv("GOOL_MULTI_MIN_RATING", raising=False)
-    decision = _decision(69.9)
-
-    result = _enforce_min_rating(decision)
-
-    assert result.status == "WAIT"
-    assert result.winner is None
-    assert result.alternatives == []
-    assert result.rejected
-    assert "production_rating_floor" in result.rejected[0].reason_tags
-    assert "70/100" in result.reason
-
-
-def test_final_multi_rating_floor_accepts_70(monkeypatch):
-    monkeypatch.delenv("GOOL_MULTI_MIN_RATING", raising=False)
-    decision = _decision(70.0)
-
-    result = _enforce_min_rating(decision)
-
-    assert result.status == "BET"
-    assert result.winner is not None
-    assert result.winner.rating == 70.0
+def test_runtime_has_no_second_final_rating_brain():
+    assert not hasattr(multi_runtime, "_enforce_min_rating")
 
 
 def test_rating70_epoch_reset_clears_multi_tracking_only_once(tmp_path, monkeypatch):

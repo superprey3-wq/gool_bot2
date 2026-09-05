@@ -7,6 +7,7 @@ from gool_bot2.multi_autonomous_steam import build_autonomous_steam_candidates
 from gool_bot2.multi_concept import enforce_entry_cutoff
 from gool_bot2.multi_money_flow import evaluate_money_flow
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
+from gool_bot2.storage_live_collector import StorageLiveSnapshotCollector
 from gool_bot2.xbet_market_worker import DemandDrivenXBetMarketCollector
 
 
@@ -172,3 +173,12 @@ def test_runtime_has_no_duplicate_confidence_brain():
     text = __import__("pathlib").Path("src/gool_bot2/multi_runtime.py").read_text()
     assert "enforce_confidence_gate" not in text
     assert "_enforce_min_rating" not in text
+
+
+def test_storage_collector_keeps_ordinary_windows_separate_from_market_watch():
+    assert StorageLiveSnapshotCollector._entry_window(35)
+    assert not StorageLiveSnapshotCollector._entry_window(36)
+    assert StorageLiveSnapshotCollector._entry_window(46)
+    assert StorageLiveSnapshotCollector._entry_window(75)
+    assert not StorageLiveSnapshotCollector._entry_window(76)
+    # Market hunters are intentionally tested separately above at 89/90/95.

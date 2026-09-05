@@ -89,12 +89,12 @@ def test_global_cutoff_blocks_ordinary_entry_after_75() -> None:
     assert "concept_entry_after_75" in decision.rejected[0].blocks
 
 
-def test_global_cutoff_also_blocks_autonomous_steam_after_75() -> None:
-    decision = enforce_entry_cutoff(_decision(76, source="1xbet:autonomous_steam"))
-    assert decision.status == "WAIT"
-    assert decision.winner is None
-    assert decision.rejected
-    assert decision.rejected[0].source == "1xbet:autonomous_steam"
+def test_global_cutoff_never_blocks_autonomous_steam_after_75() -> None:
+    for minute in (76, 89, 90, 95):
+        decision = enforce_entry_cutoff(_decision(minute, source="1xbet:autonomous_steam"))
+        assert decision.status == "BET"
+        assert decision.winner is not None
+        assert decision.winner.source == "1xbet:autonomous_steam"
 
 
 def test_finished_match_routes_no_ordinary_system() -> None:

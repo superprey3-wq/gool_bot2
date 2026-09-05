@@ -224,8 +224,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # before autonomous STEAM so the separate steam system keeps its own guards.
     decision = enforce_match_suitability(decision, record)
 
-    # Autonomous STEAM remains a separate exceptional layer, but the concept's
-    # global 75' entry deadline is applied immediately after it.
+    # Autonomous STEAM is a separate all-LIVE market hunter. The cutoff below
+    # applies only to ordinary GOOL; enforce_entry_cutoff explicitly bypasses STEAM.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = enforce_entry_cutoff(decision)
 

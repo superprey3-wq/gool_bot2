@@ -26,7 +26,7 @@ def test_expert_adapter_reuses_current_gool_outputs_without_fabrication():
     assert "away_goal" not in experts
 
 
-def test_public_metric_uses_probability_word_only_for_calibrated_metric():
+def test_public_metric_distinguishes_probability_from_confidence():
     probability = MarketCandidate(
         key="match_total:2.5", family="match_total", label="ТБ 2.5", odd=1.70,
         model_probability=0.74,
@@ -36,18 +36,18 @@ def test_public_metric_uses_probability_word_only_for_calibrated_metric():
         model_probability=0.84, reason_tags=["confidence_metric"],
     )
 
-    assert _gool_metric_text(probability, 0.74) == "ВЕРОЯТНОСТЬ ЗАХОДА 74%"
-    assert _gool_metric_text(confidence, 0.84) == "ОЦЕНКА ЗАХОДА 84/100"
+    assert _gool_metric_text(probability, 0.74) == "ВЕРОЯТНОСТЬ СОБЫТИЯ 74%"
+    assert _gool_metric_text(confidence, 0.84) == "ОЦЕНКА СОБЫТИЯ 84/100"
 
 
-def test_multi_card_contains_one_winner_and_renders_compact_png():
+def test_multi_card_contains_one_winner_and_renders_current_png():
     winner = MarketCandidate(
         key="match_total:4.5", family="match_total", strategy="two_more_goals", label="ТБ 4.5", odd=1.60,
         model_probability=0.75, goals_to_win=2, correlation_key="two_goal_path", data_quality=0.92, rating=87.0,
         expected_roi=0.15, value_edge_pp=9.4, market_pressure_pp=6.5,
     )
     alt = MarketCandidate(
-        key="match_total:3.5", family="match_total", strategy="another_goal", label="ТБ 3.5", odd=1.40,
+        key="match_total:3.5", family="match_total", strategy="another_goal", label="ТБ 3.5", odd=1.50,
         model_probability=0.82, goals_to_win=1, correlation_key="any_next_goal",
         data_quality=0.92, rating=79.0, expected_roi=0.06, value_edge_pp=5.1,
     )
@@ -73,7 +73,7 @@ def test_multi_card_contains_one_winner_and_renders_compact_png():
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 760)
+    assert image.size == (1080, 1120)
 
 
 def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):
@@ -93,7 +93,7 @@ def test_shadow_analyzer_writes_decision_without_telegram(tmp_path):
         "score_away": 2,
         "markets": {
             "match_total": [
-                {"line": 3.5, "over": 1.40, "under": 3.00},
+                {"line": 3.5, "over": 1.50, "under": 3.00},
                 {"line": 4.5, "over": 2.00, "under": 1.75},
             ],
             "first_half_total": [],

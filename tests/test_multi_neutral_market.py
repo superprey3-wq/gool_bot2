@@ -9,7 +9,7 @@ def _fresh() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _market(odd: float = 1.45, under: float = 2.70) -> dict:
+def _market(odd: float = 1.55, under: float = 2.70) -> dict:
     return {
         "score_home": 0,
         "score_away": 0,

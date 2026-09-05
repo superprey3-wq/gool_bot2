@@ -8,7 +8,7 @@ from gool_bot2.journal import save_signal_journal
 from gool_bot2.multi_menu import analysis_text, report_text
 
 
-def test_multi_report_counts_only_multi_entries(tmp_path: Path, monkeypatch):
+def test_multi_report_keeps_current_public_system_layout(tmp_path: Path, monkeypatch):
     journal = tmp_path / "multi.json"
     analysis = tmp_path / "multi.jsonl"
     monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(journal))
@@ -39,10 +39,16 @@ def test_multi_report_counts_only_multi_entries(tmp_path: Path, monkeypatch):
     assert "GOOL MULTI · ЖУРНАЛ" in text
     assert "P/L <b>-0.20u</b>" in text
     assert "проход <b>50.0%</b>" in text
-    assert "Override-входов: <b>1</b>" in text
+    assert "Две основные системы:" in text
+    assert "Гол в 1-м тайме" in text
+    assert "Ещё гол" in text
+    assert "1xBet STEAM" in text
+    # Legacy override counters/categories were intentionally removed from the
+    # new two-system public journal.
+    assert "Override-входов" not in text
 
 
-def test_multi_analysis_shows_model_prematch_live_and_market(tmp_path: Path, monkeypatch):
+def test_multi_analysis_shows_prematch_live_and_market(tmp_path: Path, monkeypatch):
     journal = tmp_path / "multi.json"
     analysis = tmp_path / "multi.jsonl"
     monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(journal))
@@ -79,9 +85,9 @@ def test_multi_analysis_shows_model_prematch_live_and_market(tmp_path: Path, mon
     }
     analysis.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
     text = analysis_text()
-    assert "MODEL + PREMATCH + LIVE + 1xBet" in text
-    assert "AG 66×" in text
+    assert "PREMATCH + LIVE + momentum" in text
+    assert "AG 66 WAIT" in text
     assert "PRE 10/10" in text
     assert "LIVE xG 1.84" in text
     assert "ИТБ1 1.5 @ 4.76" in text
-    assert "override: <b>1</b>" in text
+    assert "override won ranking" in text

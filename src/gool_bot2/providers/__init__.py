@@ -14,6 +14,7 @@ from .fotmob import FotMobProvider
 from .scores365 import Scores365Provider
 from .secondary_live_guard import install as install_secondary_live_guard
 from .fotmob_freshness_guard import install as install_fotmob_freshness_guard
+from .fotmob_lineup_guard import install as install_fotmob_lineup_guard
 from .scores365_prematch_guard import install as install_scores365_prematch_guard
 
 # FotMob and 365Scores expose useful live data through endpoints that refresh at
@@ -25,6 +26,10 @@ install_scores365_prematch_guard()
 # The daily FotMob list is deliberately cached for discovery. Timing must come
 # from the faster matchDetails header, not that slower discovery snapshot.
 install_fotmob_freshness_guard()
+# Keep the final enrich wrapper last: it reads the already cached matchDetails
+# response and exposes structured starters/unavailable/formation context without
+# adding another network request.
+install_fotmob_lineup_guard()
 
 from .fusion import FootballDataFusion
 

@@ -15,10 +15,13 @@ from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
+from .multi_lineup_context import apply_lineup_context
+from .multi_match_intelligence import apply_match_intelligence, enforce_match_suitability
 from .multi_reentry_guard import enforce_reentry_cooldown
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
+from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -94,6 +97,35 @@ def _enforce_min_rating(decision: Any) -> Any:
     return decision
 
 
+def _ensure_any_goal_coverage_proxy(experts: dict[str, Any]) -> None:
+    """Backwards-compatible coverage proxy used only when broad any-goal is absent.
+
+    The current Goal State engine normally emits `another_goal` directly. Older
+    or partial expert payloads can contain only a passed home/away goal expert;
+    preserve that historical fallback without replacing a calibrated broad model.
+    """
+    if "another_goal" in experts:
+        return
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for key in ("home_goal", "away_goal"):
+        row = experts.get(key)
+        if not isinstance(row, dict) or not bool(row.get("passed")):
+            continue
+        try:
+            probability = float(row.get("probability"))
+        except (TypeError, ValueError):
+            continue
+        candidates.append((key, {**row, "probability": probability}))
+    if not candidates:
+        return
+    key, selected = max(candidates, key=lambda item: float(item[1].get("probability") or 0.0))
+    experts["another_goal"] = {
+        **selected,
+        "coverage_proxy": True,
+        "proxy_from": key,
+    }
+
+
 def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     """Feed one production snapshot into GOOL MULTI.
 
@@ -137,6 +169,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         two_more_analysis=two_more,
         data_quality=quality,
     )
+    _ensure_any_goal_coverage_proxy(experts)
+
     half_profile = apply_half_goal_prior(record, experts)
     active_prior = half_profile.get("active") or {}
     if active_prior.get("available"):
@@ -152,6 +186,31 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     market = _market_row(record)
     record["xbet_live_1x2"] = live_1x2_context(market)
+    intelligence = apply_match_intelligence(
+        record,
+        experts,
+        market,
+        data_quality=quality,
+    )
+    true_prematch = apply_true_prematch_market(record, experts)
+    lineup = apply_lineup_context(record, experts)
+    if true_prematch or lineup:
+        intelligence = record.get("match_intelligence") or intelligence
+
+    suitability = intelligence.get("suitability") or {}
+    epoch = intelligence.get("score_epoch") or {}
+    chance = intelligence.get("chance_quality") or {}
+    adjustment = intelligence.get("probability_adjustment") or {}
+    kickoff = intelligence.get("kickoff_market") or {}
+    lineup_risk = suitability.get("lineup_risk") or "unknown"
+    print(
+        f"GOOL_MATCH_INTELLIGENCE match={mid} suitability={float(suitability.get('score') or 0):.2f} "
+        f"epoch={epoch.get('identity') or '-'} epoch_min={epoch.get('minutes')} "
+        f"chance={float(chance.get('score') or 0.5):.2f} adjust_pp={float(adjustment.get('total_pp') or 0):+.1f} "
+        f"kickoff={kickoff.get('quality') or 'none'} lineup={lineup_risk}",
+        flush=True,
+    )
+
     ordinary_experts = routing_experts(match, experts)
     decision = analyze_multi_match(match, market, ordinary_experts, data_quality=quality)
 
@@ -163,9 +222,12 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     # Do not chase a just-realized goal. For tied/high-scoring states, live 1X2
     # draw repricing is explicit opposition unless football + total market are
-    # both unusually strong. Autonomous STEAM remains independent and is applied
-    # afterwards as a separate exceptional system.
+    # both unusually strong.
     decision = enforce_another_goal_context(decision, record, experts, market)
+
+    # Ordinary GOOL must also pass whole-match suitability. This gate is placed
+    # before autonomous STEAM so the separate steam system keeps its own guards.
+    decision = enforce_match_suitability(decision, record)
 
     # Autonomous STEAM remains a separate exceptional layer, but the concept's
     # global 75' entry deadline is applied immediately after it.

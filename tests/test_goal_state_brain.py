@@ -105,8 +105,8 @@ def test_hard_no_cannot_be_revived_by_normal_market_override():
     assert "goal_state_hard_no" in row.blocks
 
 
-def test_borderline_needs_market_confirmation_and_min_odd_140():
-    row = _candidate(odd=1.40, pressure=7.0, override=True)
+def test_borderline_needs_market_confirmation_and_min_odd_150():
+    row = _candidate(odd=1.50, pressure=7.0, override=True)
     decision = RouterDecision(
         status="BET",
         minute=50,
@@ -129,11 +129,11 @@ def test_borderline_needs_market_confirmation_and_min_odd_140():
 
     assert final.status == "BET"
     assert final.winner is row
-    assert row.odd == 1.40
+    assert row.odd == 1.50
     assert row.expected_roi == 0.0
     assert row.value_edge_pp == 0.0
 
-    low = _candidate(odd=1.39, pressure=9.0, override=True)
+    low = _candidate(odd=1.49, pressure=9.0, override=True)
     low_decision = RouterDecision(
         status="BET",
         minute=50,

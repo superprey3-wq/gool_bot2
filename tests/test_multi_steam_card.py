@@ -154,15 +154,19 @@ def test_telegram_photo_has_no_duplicate_caption(monkeypatch):
     assert photos[0][1] == ""
 
 
-def test_public_multi_card_is_suppressed_below_70(monkeypatch):
+def test_delivery_does_not_add_hidden_probability_floor(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     photos = []
+    monkeypatch.setattr(multi_telegram, "render_multi_signal_card", lambda *args, **kwargs: _blank_png())
     monkeypatch.setattr(
         multi_telegram.telegram,
         "broadcast_photo",
         lambda *args, **kwargs: photos.append(args) or 1,
     )
 
+    # Production eligibility is decided by the router/rating gates before the
+    # delivery layer. Goal State strength is not always a calibrated probability,
+    # so Telegram must not silently reintroduce the removed >=70% probability gate.
     sent = multi_telegram.emit_multi_signal(
         _record(),
         _decision(probability=0.699),
@@ -170,5 +174,5 @@ def test_public_multi_card_is_suppressed_below_70(monkeypatch):
         market_row=_market(),
     )
 
-    assert sent == 0
-    assert photos == []
+    assert sent == 1
+    assert len(photos) == 1

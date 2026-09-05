@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from io import BytesIO
+
+from PIL import Image
 
 from gool_bot2 import multi_telegram
 from gool_bot2.multi_autonomous_steam import apply_autonomous_steam
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
+
+
+def _blank_png() -> bytes:
+    # Match the production card width so the bank-strip wrapper is exercised too.
+    image = Image.new("RGB", (1080, 760))
+    out = BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
 
 
 def _wait() -> RouterDecision:
@@ -53,8 +64,10 @@ def _market(odd: float = 1.55) -> dict:
         },
         "pressure": {
             "match_total:0.5": {
-                "prob_delta_pp": 9.5,
-                "one_way_moves": 3,
+                # With no related-market breadth, autonomous STEAM deliberately
+                # requires the extreme single-market path: >=12pp and >=4 moves.
+                "prob_delta_pp": 12.5,
+                "one_way_moves": 4,
                 "old_odd": 1.78,
             },
         },
@@ -107,7 +120,7 @@ def _winner() -> MarketCandidate:
         odd=1.55,
         model_probability=0.80,
         rating=80.0,
-        market_pressure_pp=9.0,
+        market_pressure_pp=12.5,
         market_level="AUTONOMOUS_STEAM",
         source="1xbet:autonomous_steam",
         reason_tags=["confidence_metric", "autonomous_steam"],
@@ -124,7 +137,7 @@ def test_multi_signal_photo_has_no_duplicate_caption(monkeypatch) -> None:
         return 1
 
     monkeypatch.setattr(multi_telegram.telegram, "broadcast_photo", fake_photo)
-    monkeypatch.setattr(multi_telegram, "render_multi_signal_card", lambda *a, **k: b"png")
+    monkeypatch.setattr(multi_telegram, "render_multi_signal_card", lambda *a, **k: _blank_png())
     monkeypatch.setattr(
         multi_telegram.telegram,
         "broadcast",
@@ -164,7 +177,7 @@ def test_multi_result_photo_has_no_duplicate_caption(monkeypatch) -> None:
         return 1
 
     monkeypatch.setattr(multi_telegram.telegram, "broadcast_photo", fake_photo)
-    monkeypatch.setattr(multi_telegram, "render_multi_result_card", lambda *a, **k: b"png")
+    monkeypatch.setattr(multi_telegram, "render_multi_result_card", lambda *a, **k: _blank_png())
     monkeypatch.setattr(
         multi_telegram.telegram,
         "broadcast",
@@ -176,6 +189,9 @@ def test_multi_result_photo_has_no_duplicate_caption(monkeypatch) -> None:
         "away": "Away",
         "market": "ТБ 0.5",
         "odd": 1.55,
+        "probability": 0.80,
+        "mode": "active",
+        "telegram_sent": True,
         "result": "won",
         "settled_minute": 63,
         "settled_score": [1, 0],

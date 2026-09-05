@@ -1,0 +1,40 @@
+name: multi VAR settlement regression
+
+on:
+  push:
+    paths:
+      - "src/gool_bot2/multi_journal.py"
+      - "src/gool_bot2/providers/flashscore_incident_guard.py"
+      - "tests/test_multi_var_settlement.py"
+      - ".github/workflows/multi-var-settlement-regression.yml"
+  pull_request:
+    paths:
+      - "src/gool_bot2/multi_journal.py"
+      - "src/gool_bot2/providers/flashscore_incident_guard.py"
+      - "tests/test_multi_var_settlement.py"
+      - ".github/workflows/multi-var-settlement-regression.yml"
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest ruff
+      - name: Run VAR settlement regressions
+        run: |
+          pytest -q \
+            tests/test_multi_var_settlement.py \
+            tests/test_multi_journal.py \
+            tests/test_providers.py
+      - name: Ruff changed Python surface
+        run: |
+          ruff check --select E9,F63,F7,F82 \
+            src/gool_bot2/multi_journal.py \
+            src/gool_bot2/providers/flashscore_incident_guard.py \
+            tests/test_multi_var_settlement.py

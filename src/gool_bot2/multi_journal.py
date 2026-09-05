@@ -8,7 +8,9 @@ from typing import Any
 from .journal import load_signal_journal, save_signal_journal
 from .multi_bank import apply_settlement_fields, attach_entry_fields, ensure_bank_fields
 from .multi_router import RouterDecision
+from .providers.flashscore import FIRST_HALF_STATUS
 from .signal_cards import flashscore_meta, stats_snapshot
+from .var_settlement_guard import clear_provisional, confirmed_win
 
 
 def _now() -> str:
@@ -24,6 +26,16 @@ def _timeline(record: dict[str, Any]) -> list[dict[str, Any]]:
     return list(
         ((((record.get("providers") or {}).get("flashscore") or {}).get("meta") or {}).get("goal_timeline") or [])
     )
+
+
+def _status_code(record: dict[str, Any]) -> str:
+    match = record.get("match") or {}
+    direct = str(match.get("status_code") or "").strip()
+    if direct:
+        return direct
+    meta = (((record.get("providers") or {}).get("flashscore") or {}).get("meta") or {})
+    master = ((meta.get("endpoints") or {}).get("master") or {})
+    return str(master.get("status_code") or "").strip()
 
 
 def _line_from_key(key: str) -> float | None:
@@ -121,9 +133,6 @@ def _timeline_hit(
         if max_minute is not None:
             period = str(goal.get("period") or "").strip().upper()
             if max_minute == 45 and period:
-                # 45+N is still first half even though its normalized numeric
-                # minute is greater than 45. New Flashscore timeline rows carry
-                # the period explicitly so stoppage-time goals are not lost.
                 if period != "1H":
                     continue
             elif minute > max_minute:
@@ -169,6 +178,58 @@ def _half_time_score(timeline: list[dict[str, Any]]) -> list[int] | None:
     return score if seen else ([0, 0] if timeline else None)
 
 
+def _timeline_final_score(timeline: list[dict[str, Any]]) -> list[int]:
+    score = [0, 0]
+    for goal in sorted(timeline, key=lambda item: int(item.get("minute") or 0)):
+        raw = goal.get("score") or []
+        try:
+            if len(raw) >= 2:
+                score = [int(raw[0] or 0), int(raw[1] or 0)]
+        except Exception:
+            continue
+    return score
+
+
+def _wins_at_score(row: dict[str, Any], hs: int, aws: int) -> bool:
+    family = str(row.get("market_family") or "")
+    key = str(row.get("market_key") or "")
+    line = _line_from_key(key)
+    if family in {"match_total", "first_half_total"} and line is not None:
+        return hs + aws > line
+    if family == "team_total" and line is not None:
+        return (hs if key.startswith("home_total:") else aws) > line
+    if family == "btts":
+        return hs > 0 and aws > 0
+    return False
+
+
+def _authoritative_first_half_score(record: dict[str, Any]) -> tuple[list[int] | None, str]:
+    match = record.get("match") or {}
+    hs, aws = _score(record)
+    if bool(match.get("is_halftime")):
+        return [hs, aws], "flashscore_halftime_master"
+
+    # While Flashscore still says 1H, never use a goal timeline as a final
+    # settlement source. A provisional goal can still be cancelled by VAR.
+    if _status_code(record) == FIRST_HALF_STATUS:
+        return None, "first_half_still_live"
+
+    timeline = _timeline(record)
+    if not timeline:
+        return None, "first_half_timeline_missing"
+
+    # After the break, accept the first-half reconstruction only when the whole
+    # timeline exactly explains the current authoritative Flashscore score. This
+    # rejects stale/provisional 2:2 timelines after the master score rolls back
+    # to 2:1, which is the failure mode seen in Wuhan Three Towns - Qingdao.
+    if _timeline_final_score(timeline) != [hs, aws]:
+        return None, "first_half_timeline_score_desync"
+    ht_score = _half_time_score(timeline)
+    if ht_score is None:
+        return None, "first_half_score_unavailable"
+    return ht_score, "flashscore_verified_first_half_timeline"
+
+
 def _finish_row(
     row: dict[str, Any],
     *,
@@ -191,6 +252,45 @@ def _finish_row(
     )
 
 
+def _reconcile_final_first_half(row: dict[str, Any], record: dict[str, Any]) -> bool:
+    if str(row.get("market_family") or "") != "first_half_total":
+        return False
+    current = str(row.get("result") or "pending").lower()
+    if current == "pending":
+        return False
+    match = record.get("match") or {}
+    if str(row.get("match_id") or "") != str(match.get("flashscore_event_id") or ""):
+        return False
+
+    ht_score, source = _authoritative_first_half_score(record)
+    line = _line_from_key(str(row.get("market_key") or ""))
+    if ht_score is None or line is None:
+        return False
+    desired = "won" if sum(ht_score) > line else "lost"
+    if desired == current:
+        return False
+
+    previous = {
+        "result": current,
+        "settled_at": row.get("settled_at"),
+        "settled_minute": row.get("settled_minute"),
+        "settled_score": list(row.get("settled_score") or []),
+        "settlement_source": row.get("settlement_source"),
+    }
+    _finish_row(
+        row,
+        result=desired,
+        minute=45,
+        score=ht_score,
+        reason=f"{source}_var_correction",
+    )
+    row["settlement_corrected"] = True
+    row["settlement_correction"] = previous
+    row["settlement_correction_reason"] = "authoritative_first_half_score"
+    clear_provisional(row)
+    return True
+
+
 def settle_entry(row: dict[str, Any], record: dict[str, Any]) -> bool:
     if str(row.get("result") or "pending").lower() != "pending":
         return False
@@ -202,67 +302,70 @@ def settle_entry(row: dict[str, Any], record: dict[str, Any]) -> bool:
     finished = bool(match.get("is_finished"))
     is_halftime = bool(match.get("is_halftime"))
     hs, aws = _score(record)
-    timeline = _timeline(record)
     family = str(row.get("market_family") or "")
     key = str(row.get("market_key") or "")
     line = _line_from_key(key)
 
     if family == "first_half_total":
-        hit = _timeline_hit(row, timeline, max_minute=45)
-        if hit is not None:
-            hit_minute, hit_score = hit
-            _finish_row(row, result="won", minute=hit_minute, score=hit_score, reason="flashscore_first_half_timeline")
-            return True
-        if not is_halftime and minute <= 45 and not finished:
-            if line is not None and hs + aws > line:
-                _finish_row(row, result="won", minute=minute, score=[hs, aws], reason="live_first_half_score")
-                return True
+        # Never publish a first-half win while 1H is still live. Flashscore can
+        # show a provisional goal for tens of seconds before a VAR/offside
+        # rollback. The final 1H product is settled from the authoritative score
+        # at halftime, not from the first appearance of a goal incident.
+        status = _status_code(record)
+        if not is_halftime and not finished and (status == FIRST_HALF_STATUS or (not status and minute <= 45)):
+            clear_provisional(row)
             return False
 
-        ht_score = _half_time_score(timeline)
+        ht_score, source = _authoritative_first_half_score(record)
         if ht_score is None:
-            if is_halftime:
-                ht_score = [hs, aws]
-            else:
-                entry_score = list(row.get("score") or [0, 0])
-                if [hs, aws] == [int(entry_score[0] or 0), int(entry_score[1] or 0)]:
-                    _finish_row(
-                        row,
-                        result="lost",
-                        minute=45,
-                        score=[hs, aws],
-                        reason="no_first_half_goal_score_unchanged",
-                    )
-                    return True
+            entry_score = list(row.get("score") or [0, 0])
+            if [hs, aws] == [int(entry_score[0] or 0), int(entry_score[1] or 0)]:
                 _finish_row(
                     row,
-                    result="void",
+                    result="lost",
                     minute=45,
-                    score=[int(entry_score[0] or 0), int(entry_score[1] or 0)],
-                    reason="half_time_score_unavailable",
+                    score=[hs, aws],
+                    reason="no_first_half_goal_score_unchanged",
                 )
                 return True
+            _finish_row(
+                row,
+                result="void",
+                minute=45,
+                score=[int(entry_score[0] or 0), int(entry_score[1] or 0)],
+                reason=source or "half_time_score_unavailable",
+            )
+            return True
+
         result = "won" if line is not None and sum(ht_score) > line else "lost"
-        _finish_row(row, result=result, minute=45, score=ht_score, reason="flashscore_first_half_close")
+        _finish_row(row, result=result, minute=45, score=ht_score, reason=source)
+        clear_provisional(row)
         return True
 
-    hit = _timeline_hit(row, timeline)
-    if hit is not None:
-        hit_minute, hit_score = hit
-        _finish_row(row, result="won", minute=hit_minute, score=hit_score, reason="flashscore_goal_timeline")
-        return True
-
-    won_now = False
-    if family == "match_total" and line is not None:
-        won_now = hs + aws > line
-    elif family == "team_total" and line is not None:
-        team_goals = hs if key.startswith("home_total:") else aws
-        won_now = team_goals > line
-    elif family == "btts":
-        won_now = hs > 0 and aws > 0
+    # All full-match/team/BTTS products are decided from the authoritative
+    # current score, not from an incident timeline. A live win must survive the
+    # shared VAR confirmation window before it can settle and produce a card.
+    won_now = _wins_at_score(row, hs, aws)
     if won_now:
-        _finish_row(row, result="won", minute=minute, score=[hs, aws], reason="live_score")
-        return True
+        if finished or confirmed_win(
+            row,
+            raw_won=True,
+            minute=minute,
+            home_score=hs,
+            away_score=aws,
+        ):
+            _finish_row(
+                row,
+                result="won",
+                minute=minute,
+                score=[hs, aws],
+                reason="flashscore_finished" if finished else "flashscore_var_confirmed_live_score",
+            )
+            clear_provisional(row)
+            return True
+        return False
+
+    clear_provisional(row)
     if finished:
         _finish_row(row, result="lost", minute=90, score=[hs, aws], reason="flashscore_finished")
         return True
@@ -274,17 +377,14 @@ def settle_multi_journal(record: dict[str, Any], journal_path: Path) -> list[dic
     bank_changed = ensure_bank_fields(rows, journal_path)
     changed: list[dict[str, Any]] = []
     for row in rows:
-        if settle_entry(row, record):
+        corrected = _reconcile_final_first_half(row, record)
+        settled = False if corrected else settle_entry(row, record)
+        if corrected or settled:
             row["settled_stats_snapshot"] = stats_snapshot(record)
             row["settled_cards"] = dict(record.get("cards") or {})
             if not row.get("flashscore_meta"):
                 row["flashscore_meta"] = flashscore_meta(record)
             apply_settlement_fields(row)
-            # Settlement and Telegram result delivery are separate states. A
-            # menu/report reconciliation may settle a row before the main LIVE
-            # runtime sees it, so keep an explicit pending notification flag.
-            # Existing historical settlements are not backfilled with this flag,
-            # which prevents duplicate result cards after deployment.
             row["result_notification_pending"] = True
             row["result_notification_created_at"] = _now()
             changed.append(dict(row))

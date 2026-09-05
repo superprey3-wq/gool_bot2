@@ -1,0 +1,39 @@
+name: Multi result reconciliation regression
+
+on:
+  push:
+    paths:
+      - "src/gool_bot2/multi_result_reconcile.py"
+      - "src/gool_bot2/multi_product.py"
+      - "tests/test_multi_result_reconcile.py"
+      - ".github/workflows/multi-result-reconcile-regression.yml"
+  pull_request:
+    paths:
+      - "src/gool_bot2/multi_result_reconcile.py"
+      - "src/gool_bot2/multi_product.py"
+      - "tests/test_multi_result_reconcile.py"
+      - ".github/workflows/multi-result-reconcile-regression.yml"
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest ruff
+      - name: Run correction regressions
+        run: |
+          pytest -q \
+            tests/test_multi_result_reconcile.py \
+            tests/test_multi_var_settlement.py
+      - name: Ruff changed Python surface
+        run: |
+          ruff check --select E9,F63,F7,F82 \
+            src/gool_bot2/multi_result_reconcile.py \
+            src/gool_bot2/multi_product.py \
+            tests/test_multi_result_reconcile.py

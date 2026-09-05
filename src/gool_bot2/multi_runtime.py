@@ -9,6 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
+from .multi_concept import routing_experts
 from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
@@ -95,8 +96,9 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     """Feed one production snapshot into GOOL MULTI.
 
     Production has two deliberately separate layers:
-    1) GOOL Goal State — football-first decision from one coherent LIVE state;
-    2) autonomous 1xBet steam — exceptional market-only bypass with hard guards.
+    1) ordinary GOOL: goal before HT in the first half, another goal in the
+       second half through 75';
+    2) autonomous 1xBet steam: exceptional market-only bypass with hard guards.
 
     The bookmaker remains mandatory for the actual tradable market and price.
     """
@@ -137,17 +139,17 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         experts.pop("goal_before_ht", None)
 
     market = _market_row(record)
-    decision = analyze_multi_match(match, market, experts, data_quality=quality)
+    ordinary_experts = routing_experts(match, experts)
+    decision = analyze_multi_match(match, market, ordinary_experts, data_quality=quality)
 
     decision = enforce_goal_state_policy(decision, experts)
 
-    # Strong 1xBet confirmation now includes breadth across related markets.
-    # It may slightly support an already-good GOOL idea, but never replaces
-    # the strategy-specific football confidence floor.
+    # Strong 1xBet confirmation may support only the active ordinary concept
+    # candidate. Other football products are no longer exposed to the router.
     decision = enforce_confidence_gate(decision, experts, market_row=market)
 
-    # Autonomous STEAM is still a separate exceptional layer. It now requires
-    # related-market breadth unless the target move itself is extreme.
+    # Autonomous STEAM remains a separate exceptional layer and is deliberately
+    # not restricted by the two ordinary GOOL systems.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = _enforce_min_rating(decision)
 

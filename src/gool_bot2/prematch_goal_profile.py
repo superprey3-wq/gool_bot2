@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import math
+import os
+import time
+from datetime import datetime, timezone
 from typing import Any
 
+from .providers import Scores365Provider
 from .providers.common import pair_score
 
 
 TOTAL_LINES = (0.5, 1.5, 2.5, 3.5, 4.5)
+_HISTORY_BUCKETS = ("home_recent", "away_recent", "home_at_home", "away_away", "h2h")
+_HALF_CONTEXT_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_HALF_PROVIDER: Scores365Provider | None = None
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -58,31 +65,54 @@ def _half_score(row: dict[str, Any], period: str) -> tuple[int, int] | None:
     return final[0] - ht[0], final[1] - ht[1]
 
 
+def _timestamp_day(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        number = float(raw)
+        if number > 10_000_000_000:
+            number /= 1000.0
+        return datetime.fromtimestamp(number, tz=timezone.utc).date().isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
+        pass
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date().isoformat()
+    except (TypeError, ValueError):
+        return raw[:10]
+
+
+def _history_identity(row: dict[str, Any]) -> tuple[Any, ...]:
+    home = str(row.get("home") or "").casefold().strip()
+    away = str(row.get("away") or "").casefold().strip()
+    day = _timestamp_day(row.get("timestamp"))
+    home_score = int(_number(row.get("home_score")) or 0)
+    away_score = int(_number(row.get("away_score")) or 0)
+    if home and away and day:
+        return ("match", home, away, day, home_score, away_score)
+    event_id = str(row.get("event_id") or "").strip()
+    if event_id:
+        return ("event", str(row.get("source") or ""), event_id)
+    return ("fallback", home, away, home_score, away_score)
+
+
 def _dedupe(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected: dict[tuple[Any, ...], dict[str, Any]] = {}
+    order: list[tuple[Any, ...]] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        event_id = str(row.get("event_id") or "").strip()
-        if event_id:
-            key: tuple[Any, ...] = ("event", event_id)
-        else:
-            key = (
-                str(row.get("home") or "").casefold().strip(),
-                str(row.get("away") or "").casefold().strip(),
-                str(row.get("timestamp") or "")[:10],
-                int(_number(row.get("home_score")) or 0),
-                int(_number(row.get("away_score")) or 0),
-            )
+        key = _history_identity(row)
         old = selected.get(key)
         if old is None:
             selected[key] = row
+            order.append(key)
             continue
         old_half = _half_score(old, "1H") is not None
         new_half = _half_score(row, "1H") is not None
         if new_half and not old_half:
             selected[key] = row
-    return list(selected.values())
+    return [selected[key] for key in order]
 
 
 def _team_profile(rows: list[dict[str, Any]], team: str, period: str) -> dict[str, Any]:
@@ -345,14 +375,111 @@ def build_prematch_goal_profile(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def apply_half_goal_prior(record: dict[str, Any], experts: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Blend the half-specific prematch prior into GOOL without overriding LIVE.
+def _provider() -> Scores365Provider:
+    global _HALF_PROVIDER
+    if _HALF_PROVIDER is None:
+        _HALF_PROVIDER = Scores365Provider()
+    return _HALF_PROVIDER
 
-    LIVE remains dominant and the expert state is never promoted here. The prior
-    can only move the probability modestly, so history/H2H cannot manufacture a
-    PASS when current football is weak.
+
+def _merge_half_context(record: dict[str, Any], extra: dict[str, Any], limit: int) -> None:
+    current = dict(record.get("prematch_context") or {})
+    for bucket in _HISTORY_BUCKETS:
+        rows = [
+            *[dict(row) for row in (extra.get(bucket) or []) if isinstance(row, dict)],
+            *[dict(row) for row in (current.get(bucket) or []) if isinstance(row, dict)],
+        ]
+        current[bucket] = _dedupe(rows)[:limit]
+
+    sources = list(current.get("sources") or [])
+    extra_sources = list(extra.get("sources") or [])
+    source = str(extra.get("source") or "")
+    if source and source != "none":
+        extra_sources.append(source)
+    current["sources"] = list(dict.fromkeys([*sources, *extra_sources]))
+    current["source"] = "+".join(current["sources"]) if current["sources"] else str(current.get("source") or "none")
+    current["half_score_matches"] = max(
+        int(current.get("half_score_matches") or 0),
+        int(extra.get("half_score_matches") or 0),
+    )
+    for key in ("has_trends", "has_top_trends", "has_previous_meetings", "has_recent_matches"):
+        current[key] = bool(current.get(key) or extra.get(key))
+    record["prematch_context"] = current
+
+
+def _active_strategy(record: dict[str, Any]) -> tuple[str | None, str | None]:
+    match = record.get("match") or {}
+    minute = int(match.get("minute") or 0)
+    if bool(match.get("is_halftime")):
+        return None, None
+    if 1 <= minute <= 45:
+        return "goal_before_ht", "1H"
+    if 46 <= minute <= 75:
+        return "another_goal", "2H"
+    return None, None
+
+
+def _maybe_load_half_history(
+    record: dict[str, Any],
+    experts: dict[str, dict[str, Any]],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    strategy, period = _active_strategy(record)
+    if strategy is None or period is None:
+        return profile
+    expert = experts.get(strategy) or {}
+    if str(expert.get("state") or "") not in {"PASS", "BORDERLINE"}:
+        return profile
+
+    period_profile = profile.get("first_half") if period == "1H" else profile.get("second_half")
+    if int((period_profile or {}).get("pair_sample") or 0) >= 3:
+        return profile
+
+    match = record.get("match") or {}
+    home = str(match.get("home") or "").strip()
+    away = str(match.get("away") or "").strip()
+    match_id = str(match.get("flashscore_event_id") or "").strip()
+    if not home or not away:
+        return profile
+    cache_key = match_id or f"{home.casefold()}::{away.casefold()}"
+    ttl = max(300.0, float(os.getenv("GOOL_HALF_PREMATCH_CACHE_SECONDS", "3600")))
+    now = time.time()
+    cached = _HALF_CONTEXT_CACHE.get(cache_key)
+    if cached and now - cached[0] < ttl:
+        extra = cached[1]
+    else:
+        try:
+            limit = max(3, min(10, int(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"))))
+            method = getattr(_provider(), "half_prematch_context", None)
+            extra = method(home, away, limit=limit) if callable(method) else None
+        except Exception as exc:
+            print(
+                f"GOOL_HALF_PREMATCH_FETCH_ERROR match={cache_key} error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+            extra = None
+        _HALF_CONTEXT_CACHE[cache_key] = (now, extra if isinstance(extra, dict) else None)
+
+    if isinstance(extra, dict):
+        limit = max(3, min(10, int(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"))))
+        _merge_half_context(record, extra, limit)
+        rebuilt = build_prematch_goal_profile(record)
+        rebuilt["lazy_365_loaded"] = True
+        return rebuilt
+    profile["lazy_365_loaded"] = False
+    return profile
+
+
+def apply_half_goal_prior(record: dict[str, Any], experts: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Blend half-specific history into GOOL while keeping LIVE dominant.
+
+    Historical HT/FT requests are intentionally lazy: 365Scores fan-out is only
+    executed when the active LIVE expert is already PASS/BORDERLINE and local
+    context does not yet contain a useful half sample. History can therefore
+    confirm or modestly weaken a football idea, but never manufacture PASS.
     """
     profile = build_prematch_goal_profile(record)
+    profile = _maybe_load_half_history(record, experts, profile)
     record["prematch_goal_profile"] = profile
     active = profile.get("active") or {}
     if not active.get("available"):
@@ -382,6 +509,8 @@ def apply_half_goal_prior(record: dict[str, Any], experts: dict[str, dict[str, A
         "weight": round(weight, 4),
         "pair_sample": sample,
         "h2h_sample": int(active.get("h2h_sample") or 0),
+        "lazy_365_loaded": bool(profile.get("lazy_365_loaded")),
+        "scores365_has_trends": bool((profile.get("scores365_trend_flags") or {}).get("has_trends")),
     }
     expert["diagnostics"] = diagnostics
     return profile

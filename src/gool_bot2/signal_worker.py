@@ -407,7 +407,16 @@ class SignalWorker:
                         except json.JSONDecodeError:
                             continue
                         if isinstance(record, dict):
-                            emitted += self._process(record)
+                            try:
+                                emitted += self._process(record)
+                            except Exception as exc:
+                                match = record.get("match") or {}
+                                mid = str(match.get("flashscore_event_id") or "-")
+                                print(
+                                    f"SIGNAL_RECORD_ERROR file={path.name} match={mid} "
+                                    f"error={type(exc).__name__}:{exc}",
+                                    flush=True,
+                                )
                     self._offsets[key] = handle.tell()
             except FileNotFoundError:
                 continue

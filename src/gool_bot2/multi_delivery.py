@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,20 @@ def was_publicly_sent(row: dict[str, Any]) -> bool:
         return False
 
 
+def _retry_due(row: dict[str, Any]) -> bool:
+    raw = str(row.get("result_notification_last_attempt_at") or "").strip()
+    if not raw:
+        return True
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        elapsed = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()
+        return elapsed >= max(15.0, float(os.getenv("GOOL_RESULT_RETRY_SECONDS", "60")))
+    except Exception:
+        return True
+
+
 def pending_result_notifications(
     journal_path: Path,
     *,
@@ -89,6 +104,8 @@ def pending_result_notifications(
             continue
         if not was_publicly_sent(row):
             continue
+        if not _retry_due(row):
+            continue
         out.append(dict(row))
     return out
 
@@ -99,8 +116,6 @@ def finalize_result_delivery(
     sent: int,
 ) -> bool:
     """Mark one result notification delivered; failed sends stay pending for retry."""
-    if int(sent or 0) <= 0:
-        return False
     entry_key = str(row.get("entry_key") or "")
     if not entry_key:
         return False
@@ -113,9 +128,12 @@ def finalize_result_delivery(
     if index is None:
         return False
 
-    rows[index]["result_notification_pending"] = False
-    rows[index]["result_telegram_sent"] = True
-    rows[index]["result_telegram_sent_at"] = _now()
-    rows[index]["result_telegram_delivery_count"] = int(sent)
+    rows[index]["result_notification_last_attempt_at"] = _now()
+    rows[index]["result_notification_attempts"] = int(rows[index].get("result_notification_attempts") or 0) + 1
+    if int(sent or 0) > 0:
+        rows[index]["result_notification_pending"] = False
+        rows[index]["result_telegram_sent"] = True
+        rows[index]["result_telegram_sent_at"] = _now()
+        rows[index]["result_telegram_delivery_count"] = int(sent)
     save_signal_journal(journal_path, rows)
-    return True
+    return int(sent or 0) > 0

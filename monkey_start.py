@@ -63,7 +63,7 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
             raise RuntimeError(f"multi_reset_failed path={path} err={exc}") from exc
 
     marker.write_text(
-        f"reset_id={MULTI_RESET_ID}\nmin_rating={os.getenv('GOOL_MULTI_MIN_RATING', '70')}\n",
+        f"reset_id={MULTI_RESET_ID}\narchitecture=one_brain_all_live_market_hunters\n",
         "utf-8",
     )
     print(
@@ -130,19 +130,28 @@ def main() -> None:
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
     os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
 
-    # The collector writes a new LIVE snapshot once per minute. Polling the same
-    # raw files every 3 seconds adds needless process wakeups on a small VPS.
-    os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
+    # Market hunters need a fast master-score heartbeat, while expensive
+    # football detail remains throttled separately. This prevents a 60s ceiling
+    # on STEAM/FLOW reaction without multiplying FotMob/365/detail load.
+    os.environ.setdefault("LIVE_INTERVAL_SECONDS", "15")
+    os.environ.setdefault("LIVE_DETAIL_INTERVAL_SECONDS", "60")
+    os.environ.setdefault("STORAGE_CLEANUP_EVERY_CYCLES", "20")
+    os.environ.setdefault("SIGNAL_WORKER_SLEEP", "3")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     # Both market collectors stay inside the live router freshness window while
     # remaining light enough for the small VPS.
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("MATCHBOOK_MIN_MARKET_VOLUME", "50")
+    os.environ.setdefault("MATCHBOOK_MAX_STATE_AGE_SECONDS", "45")
+    os.environ.setdefault("MATCHBOOK_PAGE_TIMEOUT_SECONDS", "8")
+    os.environ.setdefault("TELEGRAM_API_TIMEOUT_SECONDS", "8")
+    os.environ.setdefault("TELEGRAM_PHOTO_TIMEOUT_SECONDS", "10")
+    os.environ.setdefault("TELEGRAM_NETWORK_BACKOFF_SECONDS", "30")
+    os.environ.setdefault("GOOL_RESULT_RETRY_SECONDS", "60")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
-    os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
     # Production cutover: old server env files do not need a new variable.
     # Explicit GOOL_MULTI_TELEGRAM_MODE=shadow still provides an instant rollback.
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
@@ -178,7 +187,6 @@ def main() -> None:
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
-    print(f"GOOL_BOOT multi_min_rating={os.environ['GOOL_MULTI_MIN_RATING']}", flush=True)
     print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
@@ -188,7 +196,11 @@ def main() -> None:
         f"min_market_volume={os.environ['MATCHBOOK_MIN_MARKET_VOLUME']}",
         flush=True,
     )
-    print(f"GOOL_BOOT worker_sleep={os.environ['SIGNAL_WORKER_SLEEP']}s", flush=True)
+    print(
+        f"GOOL_BOOT collector heartbeat={os.environ['LIVE_INTERVAL_SECONDS']}s "
+        f"detail={os.environ['LIVE_DETAIL_INTERVAL_SECONDS']}s worker_sleep={os.environ['SIGNAL_WORKER_SLEEP']}s",
+        flush=True,
+    )
     print(f"GOOL_BOOT var_guard seconds={os.environ['VAR_WIN_CONFIRM_SECONDS']} snapshots={os.environ['VAR_WIN_CONFIRM_SNAPSHOTS']}", flush=True)
 
     cleanup_env = os.environ.copy()
@@ -208,7 +220,7 @@ def main() -> None:
     collector = subprocess.Popen([
         sys.executable, "-m", "gool_bot2.storage_live_collector",
         "--data-dir", str(raw_live),
-        "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60"),
+        "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "15"),
     ], env=env)
     xbet = subprocess.Popen([
         sys.executable, "-m", "gool_bot2.xbet_market_worker",

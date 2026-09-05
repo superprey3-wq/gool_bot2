@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
@@ -17,6 +18,16 @@ from .journal import load_signal_journal, mark_in_game, save_signal_journal
 from .providers.flashscore import FlashscoreProvider
 
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
+_TELEGRAM_UNAVAILABLE_UNTIL=0.0
+
+def _telegram_circuit_open()->bool:
+ return time.monotonic() < _TELEGRAM_UNAVAILABLE_UNTIL
+
+def _trip_telegram_circuit()->None:
+ global _TELEGRAM_UNAVAILABLE_UNTIL
+ try:cooldown=max(5.0,float(os.getenv("TELEGRAM_NETWORK_BACKOFF_SECONDS","30")))
+ except Exception:cooldown=30.0
+ _TELEGRAM_UNAVAILABLE_UNTIL=max(_TELEGRAM_UNAVAILABLE_UNTIL,time.monotonic()+cooldown)
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
     "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"
@@ -67,18 +78,26 @@ def subscribe(chat_id:str|int)->bool:
  chat_id=str(chat_id).strip();rows=_read_saved();before=len(rows);rows.add(chat_id);_write_saved(rows);stopped=_read_stopped();was_stopped=chat_id in stopped;stopped.discard(chat_id);_write_stopped(stopped);return len(rows)>before or was_stopped
 def unsubscribe(chat_id:str|int)->bool:
  chat_id=str(chat_id).strip();rows=_read_saved();existed=chat_id in rows;rows.discard(chat_id);_write_saved(rows);stopped=_read_stopped();already=chat_id in stopped;stopped.add(chat_id);_write_stopped(stopped);return existed or not already
-def _api_call(method:str,payload:dict[str,Any],timeout:int=15)->dict[str,Any]|None:
+def _api_call(method:str,payload:dict[str,Any],timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if _telegram_circuit_open():return None
+ if timeout is None:
+  try:timeout=max(3,int(float(os.getenv("TELEGRAM_API_TIMEOUT_SECONDS","8"))))
+  except Exception:timeout=8
  req=Request(f"https://api.telegram.org/bot{token}/{method}",data=json.dumps(payload).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
  try:
   with urlopen(req,timeout=timeout) as response:
    body=json.loads(response.read().decode("utf-8"));return body if isinstance(body,dict) else None
  except Exception as exc:
-  print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
-def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int=25)->dict[str,Any]|None:
+  _trip_telegram_circuit();print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
+def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if _telegram_circuit_open():return None
+ if timeout is None:
+  try:timeout=max(4,int(float(os.getenv("TELEGRAM_PHOTO_TIMEOUT_SECONDS","10"))))
+  except Exception:timeout=10
  boundary=f"----GOOL{uuid.uuid4().hex}";body=bytearray()
  for key,value in fields.items():
   body.extend(f"--{boundary}\r\n".encode());body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode());body.extend(str(value).encode("utf-8"));body.extend(b"\r\n")
@@ -92,7 +111,7 @@ def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,
   except Exception:detail=""
   print(f"telegram_photo_http_error code={exc.code} detail={detail}",flush=True);return None
  except Exception as exc:
-  print(f"telegram_photo_error error={type(exc).__name__}:{exc}",flush=True);return None
+  _trip_telegram_circuit();print(f"telegram_photo_error error={type(exc).__name__}:{exc}",flush=True);return None
 def signal_keyboard(match_id:str,head:str,entered:bool=False)->dict[str,Any]:
  code=HEAD_TO_CODE.get(head,"AG");text="✅ В игре" if entered else "🎯 В игре";return {"inline_keyboard":[[{"text":text,"callback_data":f"ig:{code}:{match_id}"}]]}
 def send_message(chat_id:str|int,text:str,parse_mode:str="HTML",reply_markup:dict[str,Any]|None=None)->bool:

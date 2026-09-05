@@ -21,6 +21,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _state_age_seconds(payload: dict[str, Any]) -> float | None:
+    raw = str(payload.get("captured_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds())
+    except Exception:
+        return None
+
+
 def _number(value: Any) -> float | None:
     try:
         if value in (None, "", "-"):
@@ -422,6 +435,21 @@ def _target_context(event: dict[str, Any], period: str, line: float) -> dict[str
 
 def matchbook_context(record: dict[str, Any], state: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = state if isinstance(state, dict) else load_matchbook_state()
+    age = _state_age_seconds(payload)
+    max_age = max(15.0, float(os.getenv("MATCHBOOK_MAX_STATE_AGE_SECONDS", "45")))
+    # Production state files always carry captured_at. Explicit in-memory states
+    # without a timestamp remain useful for deterministic tests, but any state
+    # that does expose an age is rejected once it exceeds the freshness window.
+    missing_timestamp_in_production = state is None and age is None
+    if missing_timestamp_in_production or (age is not None and age > max_age):
+        return {
+            "available": False,
+            "source": "matchbook",
+            "captured_at": payload.get("captured_at"),
+            "age_seconds": None if age is None else round(age, 3),
+            "stale": True,
+            "reason": "matchbook_state_stale" if age is not None else "matchbook_timestamp_missing",
+        }
     event, score = _best_event(record, payload)
     if event is None:
         return {"available": False, "match_score": round(score, 4), "source": "matchbook"}
@@ -446,6 +474,8 @@ def matchbook_context(record: dict[str, Any], state: dict[str, Any] | None = Non
         "available": True,
         "source": "matchbook",
         "captured_at": payload.get("captured_at"),
+        "age_seconds": None if age is None else round(age, 3),
+        "stale": False,
         "match_score": round(score, 4),
         "event": {
             "id": event.get("event_id"),

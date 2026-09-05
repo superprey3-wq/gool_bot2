@@ -17,6 +17,37 @@ from .signal_cards import flashscore_meta, stats_snapshot
 
 
 FINAL_RESULTS = {"won", "lost", "push", "void"}
+_FLOW_SCORE_STATE: dict[str, dict[str, Any]] = {}
+
+
+def _flow_now(record: dict[str, Any]) -> float:
+    parsed = _parse_dt(record.get("captured_at"))
+    return (parsed or datetime.now(timezone.utc)).timestamp()
+
+
+def _score_epoch_reset_age(record: dict[str, Any]) -> float | None:
+    match = record.get("match") or {}
+    mid = str(match.get("flashscore_event_id") or "")
+    if not mid:
+        return None
+    if bool(match.get("is_finished")):
+        _FLOW_SCORE_STATE.pop(mid, None)
+        return None
+    score = (int(match.get("home_score") or 0), int(match.get("away_score") or 0))
+    now = _flow_now(record)
+    state = _FLOW_SCORE_STATE.get(mid)
+    if state is None:
+        _FLOW_SCORE_STATE[mid] = {"score": score, "changed_at": None}
+        return None
+    previous = tuple(state.get("score") or score)
+    if previous != score:
+        state["score"] = score
+        state["changed_at"] = now
+        return 0.0
+    changed_at = state.get("changed_at")
+    if changed_at is None:
+        return None
+    return max(0.0, now - float(changed_at))
 
 
 def _now() -> str:
@@ -239,8 +270,16 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
 
     match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
-    last_goal = _last_goal_minute(record)
     reset_minutes = int(_threshold("MATCHBOOK_FLOW_POST_GOAL_RESET_MINUTES", 3))
+    score_reset_age = _score_epoch_reset_age(record)
+    if score_reset_age is not None and score_reset_age < reset_minutes * 60.0:
+        return {
+            "eligible": False,
+            "reason": "post_goal_exchange_reset",
+            "score_epoch_reset": True,
+            "seconds_since_score_change": round(score_reset_age, 1),
+        }
+    last_goal = _last_goal_minute(record)
     if last_goal is not None and minute - last_goal < reset_minutes:
         return {"eligible": False, "reason": "post_goal_exchange_reset", "last_goal_minute": last_goal}
 
@@ -436,6 +475,14 @@ def _result_text(row: dict[str, Any]) -> str:
     )
 
 
+def _result_retry_due(row: dict[str, Any]) -> bool:
+    last = _parse_dt(row.get("result_notification_last_attempt_at"))
+    if last is None:
+        return True
+    elapsed = (datetime.now(timezone.utc) - last.astimezone(timezone.utc)).total_seconds()
+    return elapsed >= max(15.0, _number(os.getenv("GOOL_RESULT_RETRY_SECONDS", "60"), 60.0))
+
+
 def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
     rows = load_signal_journal(path)
     bank_changed = _ensure_bank_fields(rows)
@@ -451,6 +498,7 @@ def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
             str(row.get("result") or "").lower() in FINAL_RESULTS
             and bool(row.get("telegram_sent"))
             and not bool(row.get("result_telegram_sent"))
+            and _result_retry_due(row)
         ):
             sent = 0
             try:
@@ -460,11 +508,13 @@ def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
                 print(f"GOOL_MONEY_FLOW_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
             if sent <= 0:
                 sent = telegram.broadcast(_result_text(row))
+            row["result_notification_last_attempt_at"] = _now()
+            row["result_notification_attempts"] = int(row.get("result_notification_attempts") or 0) + 1
+            changed = True
             if sent > 0:
                 row["result_telegram_sent"] = True
                 row["result_telegram_sent_at"] = _now()
                 row["result_telegram_delivery_count"] = int(sent)
-                changed = True
     if changed:
         save_signal_journal(path, rows)
 

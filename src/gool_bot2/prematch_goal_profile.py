@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,6 +14,8 @@ from .providers.common import pair_score
 TOTAL_LINES = (0.5, 1.5, 2.5, 3.5, 4.5)
 _HISTORY_BUCKETS = ("home_recent", "away_recent", "home_at_home", "away_away", "h2h")
 _HALF_CONTEXT_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_HALF_CONTEXT_FUTURES: dict[str, Future[Any]] = {}
+_HALF_CONTEXT_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gool-half-history")
 _HALF_PROVIDER: Scores365Provider | None = None
 
 
@@ -445,20 +448,38 @@ def _maybe_load_half_history(
     ttl = max(300.0, float(os.getenv("GOOL_HALF_PREMATCH_CACHE_SECONDS", "3600")))
     now = time.time()
     cached = _HALF_CONTEXT_CACHE.get(cache_key)
+    extra: dict[str, Any] | None = None
     if cached and now - cached[0] < ttl:
         extra = cached[1]
     else:
-        try:
+        future = _HALF_CONTEXT_FUTURES.get(cache_key)
+        if future is not None and future.done():
+            try:
+                result = future.result()
+                extra = result if isinstance(result, dict) else None
+            except Exception as exc:
+                print(
+                    f"GOOL_HALF_PREMATCH_FETCH_ERROR match={cache_key} error={type(exc).__name__}:{exc}",
+                    flush=True,
+                )
+                extra = None
+            _HALF_CONTEXT_FUTURES.pop(cache_key, None)
+            _HALF_CONTEXT_CACHE[cache_key] = (now, extra)
+        elif future is None:
             limit = max(3, min(10, int(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"))))
-            method = getattr(_provider(), "half_prematch_context", None)
-            extra = method(home, away, limit=limit) if callable(method) else None
-        except Exception as exc:
-            print(
-                f"GOOL_HALF_PREMATCH_FETCH_ERROR match={cache_key} error={type(exc).__name__}:{exc}",
-                flush=True,
-            )
-            extra = None
-        _HALF_CONTEXT_CACHE[cache_key] = (now, extra if isinstance(extra, dict) else None)
+
+            def task() -> dict[str, Any] | None:
+                method = getattr(_provider(), "half_prematch_context", None)
+                return method(home, away, limit=limit) if callable(method) else None
+
+            _HALF_CONTEXT_FUTURES[cache_key] = _HALF_CONTEXT_POOL.submit(task)
+            profile["lazy_365_pending"] = True
+            profile["lazy_365_loaded"] = False
+            return profile
+        else:
+            profile["lazy_365_pending"] = True
+            profile["lazy_365_loaded"] = False
+            return profile
 
     if isinstance(extra, dict):
         limit = max(3, min(10, int(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"))))

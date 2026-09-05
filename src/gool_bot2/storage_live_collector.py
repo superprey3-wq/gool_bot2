@@ -46,6 +46,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         self._detail_pool = ThreadPoolExecutor(max_workers=detail_workers, thread_name_prefix="gool-detail")
         self._history_pool = ThreadPoolExecutor(max_workers=history_workers, thread_name_prefix="gool-history")
         self._history_futures: dict[str, Future[Any]] = {}
+        self._last_detail_at: dict[str, float] = {}
         runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
         self._health_path = Path(os.getenv("LIVE_COVERAGE_HEALTH_PATH", str(runtime / "live" / "collector_health.json")))
         self._detail_workers = detail_workers
@@ -121,6 +122,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         mid = str(match.provider_match_id)
         record: dict[str, Any] = {
             "schema_version": 1,
+            "runtime_scope": "market_only",
             "captured_at": now.isoformat(),
             "source_observed_at": now.isoformat(),
             "ingested_at": datetime.now(timezone.utc).isoformat(),
@@ -170,6 +172,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         pref = football_prefilter(fs_stats, minute, threshold=self.prefilter_threshold)
         record: dict[str, Any] = {
             "schema_version": 1,
+            "runtime_scope": "full",
             "captured_at": now.isoformat(),
             "source_observed_at": now.isoformat(),
             "ingested_at": datetime.now(timezone.utc).isoformat(),
@@ -237,17 +240,25 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         matches = self.flashscore.live_matches()
         current_ids = {str(m.provider_match_id) for m in matches}
         active = [m for m in matches if self._entry_window(int(m.minute or 0)) and not m.is_halftime]
-        active_ids = {str(m.provider_match_id) for m in active}
-        market_watch = [
-            m for m in matches
-            if int(m.minute or 0) > 0 and str(m.provider_match_id) not in active_ids
-        ]
+        market_watch = [m for m in matches if int(m.minute or 0) > 0]
         halftime = [m for m in market_watch if bool(m.is_halftime)]
         dead_first_half = [m for m in market_watch if 36 <= int(m.minute or 0) <= 45 and not m.is_halftime]
+
+        detail_interval = max(15.0, float(os.getenv("LIVE_DETAIL_INTERVAL_SECONDS", "60")))
+        active_due = []
+        for match in active:
+            mid = str(match.provider_match_id)
+            previous = self._last_detail_at.get(mid)
+            if previous is None or started - previous >= detail_interval:
+                active_due.append(match)
+                # Throttle retries too: one bad provider must not be hammered every
+                # 15 seconds while market-only heartbeat remains healthy.
+                self._last_detail_at[mid] = started
 
         counters: dict[str, Any] = {
             "live": len(matches),
             "entry_window": len(active),
+            "detail_due": len(active_due),
             "detail": 0,
             "appended": 0,
             "candidate": 0,
@@ -262,6 +273,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         }
         top_live = sum(1 for m in matches if self._top_league(m.league))
         top_active = sum(1 for m in active if self._top_league(m.league))
+        top_due = sum(1 for m in active_due if self._top_league(m.league))
         top_detail = 0
 
         for match in matches:
@@ -273,12 +285,27 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                 "meta": dict(match.meta or {}),
             }
 
-        # Use the otherwise dead 36-45/HT window to warm PREMATCH in the background
-        # for the second-half system without delaying score snapshots.
+        # The market heartbeat is intentionally written before any expensive
+        # detail futures are awaited. STEAM/FLOW can therefore react even when a
+        # statistics provider is slow or unavailable.
+        for match in market_watch:
+            try:
+                self._append(self._cheap_record(match, now), now)
+                counters["appended"] += 1
+                counters["settlement_only"] += 1
+            except Exception as exc:
+                counters["errors"] += 1
+                print(
+                    f"LIVE_MARKET_WATCH_SNAPSHOT_ERROR match={match.provider_match_id} "
+                    f"error={type(exc).__name__}:{exc}",
+                    flush=True,
+                )
+
+        # Use 36-45/HT to warm PREMATCH asynchronously for the second half.
         for match in dead_first_half + halftime:
             self._schedule_history(match)
 
-        futures = {self._detail_pool.submit(self._active_record, match, now): match for match in active}
+        futures = {self._detail_pool.submit(self._active_record, match, now): match for match in active_due}
         for future in as_completed(futures):
             match = futures[future]
             try:
@@ -299,18 +326,6 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                     flush=True,
                 )
 
-        # Every non-ordinary LIVE minute still gets a cheap snapshot. This keeps
-        # autonomous 1xBet STEAM and Matchbook MONEY FLOW alive at 36-45, HT,
-        # 76-89 and 90+ without spending expensive football-detail calls there.
-        for match in market_watch:
-            try:
-                self._append(self._cheap_record(match, now), now)
-                counters["appended"] += 1
-                counters["settlement_only"] += 1
-            except Exception as exc:
-                counters["errors"] += 1
-                print(f"LIVE_MARKET_WATCH_SNAPSHOT_ERROR match={match.provider_match_id} error={type(exc).__name__}:{exc}", flush=True)
-
         missing = set(self._tracked_matches) - current_ids
         if missing:
             try:
@@ -329,12 +344,13 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                     self._prematch_context.pop(mid, None)
                     self._prematch_last_attempt.pop(mid, None)
                     self._history_futures.pop(mid, None)
+                    self._last_detail_at.pop(mid, None)
             except Exception as exc:
                 counters["errors"] += 1
                 print(f"final_state_error={type(exc).__name__}:{exc}", flush=True)
 
         elapsed = time.monotonic() - started
-        coverage = (float(counters["detail"]) / len(active) * 100.0) if active else 100.0
+        coverage = (float(counters["detail"]) / len(active_due) * 100.0) if active_due else 100.0
         counters["cycle_ms"] = int(round(elapsed * 1000.0))
         counters["entry_window_coverage_pct"] = round(coverage, 1)
         counters["top_league_live"] = top_live
@@ -343,16 +359,17 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         self._write_health({
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "collector": counters,
-            "top_league_coverage_ok": top_detail == top_active,
+            "top_league_coverage_ok": top_detail == top_due,
         })
         print(
-            f"LIVE_COVERAGE live={len(matches)} active={len(active)} detail={counters['detail']} "
-            f"coverage={coverage:.1f}% top={top_detail}/{top_active} cycle={elapsed:.1f}s errors={counters['errors']}",
+            f"LIVE_COVERAGE live={len(matches)} active={len(active)} due={len(active_due)} detail={counters['detail']} "
+            f"market={len(market_watch)} coverage={coverage:.1f}% top={top_detail}/{top_due} "
+            f"cycle={elapsed:.1f}s errors={counters['errors']}",
             flush=True,
         )
 
         self._cleanup_cycles += 1
-        if self._cleanup_cycles >= max(1, int(os.getenv("STORAGE_CLEANUP_EVERY_CYCLES", "5"))):
+        if self._cleanup_cycles >= max(1, int(os.getenv("STORAGE_CLEANUP_EVERY_CYCLES", "20"))):
             self._cleanup_cycles = 0
             result = runtime_cleanup()
             if any(int(v or 0) for v in result.values()):
@@ -368,7 +385,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Collect GOOL live football snapshots with bounded storage")
     parser.add_argument("--data-dir", default=os.getenv("RUNTIME_DATA_DIR", "data") + "/raw/live")
-    parser.add_argument("--interval", type=int, default=int(os.getenv("LIVE_INTERVAL_SECONDS", "60")))
+    parser.add_argument("--interval", type=int, default=int(os.getenv("LIVE_INTERVAL_SECONDS", "15")))
     parser.add_argument("--prefilter", type=float, default=float(os.getenv("CORE_ANALYSIS_PREFILTER", "50")))
     parser.add_argument("--secondary-interval", type=int, default=int(os.getenv("SECONDARY_PROVIDER_INTERVAL_MINUTES", "3")))
     args = parser.parse_args()

@@ -94,6 +94,56 @@ def test_bad_record_does_not_stop_following_matches_and_market_recheck_is_score_
     assert worker.calls[-1] == ("good", True, 21)
 
 
+def test_unread_backlog_keeps_only_latest_snapshot_per_match(tmp_path: Path, monkeypatch, capsys):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    path = raw / "2026-09-06-01.jsonl"
+    rows = [
+        _record("m1", minute=10),
+        _record("m2", minute=11),
+        _record("m1", minute=12),
+        _record("m1", minute=13),
+        _record("m2", minute=14),
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    monkeypatch.setattr(xbet, "load_market_state", lambda path=None: {"matches": {}})
+    worker = _DummyWorker()
+    worker._runtime_last_market_recheck = time.monotonic()
+
+    emitted = hardening.hardened_run_once(worker, raw)
+
+    assert emitted == 2
+    assert len(worker.calls) == 2
+    assert {mid: minute for mid, is_recheck, minute in worker.calls if not is_recheck} == {"m1": 13, "m2": 14}
+    assert worker._offsets[str(path)] == path.stat().st_size
+    output = capsys.readouterr().out
+    assert "SIGNAL_BACKLOG_COALESCE read=5 latest=2 dropped_stale=3" in output
+
+    # No historical rows are revisited on the next loop.
+    worker._runtime_last_market_recheck = time.monotonic()
+    assert hardening.hardened_run_once(worker, raw) == 0
+    assert len(worker.calls) == 2
+
+
+def test_backlog_coalescing_preserves_latest_finished_state(tmp_path: Path, monkeypatch):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    path = raw / "2026-09-06-02.jsonl"
+    live = _record("done", minute=88, score=(1, 1))
+    finished = _record("done", minute=90, score=(2, 1))
+    finished["match"]["is_finished"] = True
+    path.write_text(json.dumps(live) + "\n" + json.dumps(finished) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(xbet, "load_market_state", lambda path=None: {"matches": {}})
+    worker = _DummyWorker()
+    worker._runtime_last_market_recheck = time.monotonic()
+
+    assert hardening.hardened_run_once(worker, raw) == 1
+    assert worker.calls == [("done", False, 90)]
+    assert "done" not in getattr(worker, "_runtime_latest_records", {})
+
+
 def test_stale_matchbook_state_is_never_actionable(monkeypatch):
     original = lambda record, payload: {"available": True, "captured_at": payload.get("captured_at")}
     monkeypatch.setattr(hardening, "_ORIGINAL_MATCHBOOK_CONTEXT", original)

@@ -58,7 +58,7 @@ jobs:
           assert decoded, 'Matchbook returned no football events'
 
           live = FlashscoreProvider().live_matches()
-          active = [m for m in live if 1 <= int(m.minute or 0) <= 30 or 46 <= int(m.minute or 0) <= 75]
+          active = [m for m in live if 1 <= int(m.minute or 0) <= 35 or 46 <= int(m.minute or 0) <= 75]
           print(f'FLASHSCORE_COVERAGE live={len(live)} production_window={len(active)}')
           assert live, 'Flashscore master feed returned no live matches'
           PY

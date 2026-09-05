@@ -8,6 +8,7 @@ from . import signal_worker_all_cards as cards
 from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
+from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_concept import enforce_entry_cutoff, routing_experts
 from .multi_confidence_gate import enforce_confidence_gate
@@ -19,7 +20,7 @@ from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .prematch_goal_profile import apply_half_goal_prior
-from .xbet_market_pressure import load_market_state
+from .xbet_market_pressure import live_1x2_context, load_market_state
 
 
 def _data_quality(record: dict[str, Any]) -> float:
@@ -150,6 +151,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         experts.pop("goal_before_ht", None)
 
     market = _market_row(record)
+    record["xbet_live_1x2"] = live_1x2_context(market)
     ordinary_experts = routing_experts(match, experts)
     decision = analyze_multi_match(match, market, ordinary_experts, data_quality=quality)
 
@@ -158,6 +160,12 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # Strong 1xBet confirmation may support only the active ordinary concept
     # candidate. Other football products are no longer exposed to the router.
     decision = enforce_confidence_gate(decision, experts, market_row=market)
+
+    # Do not chase a just-realized goal. For tied/high-scoring states, live 1X2
+    # draw repricing is explicit opposition unless football + total market are
+    # both unusually strong. Autonomous STEAM remains independent and is applied
+    # afterwards as a separate exceptional system.
+    decision = enforce_another_goal_context(decision, record, experts, market)
 
     # Autonomous STEAM remains a separate exceptional layer, but the concept's
     # global 75' entry deadline is applied immediately after it.

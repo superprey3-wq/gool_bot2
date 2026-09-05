@@ -53,7 +53,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
 
     @staticmethod
     def _entry_window(minute: int) -> bool:
-        return 1 <= int(minute) <= 30 or 46 <= int(minute) <= 75
+        return 1 <= int(minute) <= 35 or 46 <= int(minute) <= 75
 
     @staticmethod
     def _top_league(league: Any) -> bool:
@@ -239,7 +239,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         active = [m for m in matches if int(m.minute or 0) < 90 and self._entry_window(int(m.minute or 0)) and not m.is_halftime]
         halftime = [m for m in matches if bool(m.is_halftime)]
         late_settlement = [m for m in matches if 76 <= int(m.minute or 0) < 90 and not m.is_halftime]
-        dead_first_half = [m for m in matches if 31 <= int(m.minute or 0) <= 45 and not m.is_halftime]
+        dead_first_half = [m for m in matches if 36 <= int(m.minute or 0) <= 45 and not m.is_halftime]
 
         counters: dict[str, Any] = {
             "live": len(matches),
@@ -268,7 +268,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                 "meta": dict(match.meta or {}),
             }
 
-        # Use the otherwise dead 31-45/HT window to warm PREMATCH in the background
+        # Use the otherwise dead 36-45/HT window to warm PREMATCH in the background
         # for the second-half system without delaying score snapshots.
         for match in dead_first_half + halftime:
             self._schedule_history(match)

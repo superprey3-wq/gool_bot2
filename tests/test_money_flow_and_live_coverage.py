@@ -150,7 +150,8 @@ def test_money_flow_open_section_contains_pending_bet(tmp_path, monkeypatch):
 def test_production_detail_windows_and_top_leagues():
     assert StorageLiveSnapshotCollector._entry_window(1)
     assert StorageLiveSnapshotCollector._entry_window(30)
-    assert not StorageLiveSnapshotCollector._entry_window(31)
+    assert StorageLiveSnapshotCollector._entry_window(35)
+    assert not StorageLiveSnapshotCollector._entry_window(36)
     assert not StorageLiveSnapshotCollector._entry_window(45)
     assert StorageLiveSnapshotCollector._entry_window(46)
     assert StorageLiveSnapshotCollector._entry_window(75)

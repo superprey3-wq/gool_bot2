@@ -431,7 +431,7 @@ def matchbook_context(record: dict[str, Any], state: dict[str, Any] | None = Non
     aws = int(match.get("away_score") or 0)
     total = hs + aws
     systems = {
-        "goal_before_ht": _target_context(event, "1H", total + 0.5) if 1 <= minute <= 30 else {"available": False},
+        "goal_before_ht": _target_context(event, "1H", total + 0.5) if 1 <= minute <= 35 else {"available": False},
         "another_goal": _target_context(event, "FT", total + 0.5) if 46 <= minute <= 75 else {"available": False},
     }
     return {

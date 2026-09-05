@@ -70,6 +70,8 @@ def minute_hazard(minute: int) -> dict[str, Any]:
         return {"period": "1H", "bucket": "11-20", "factor": 0.98}
     if 21 <= minute <= 30:
         return {"period": "1H", "bucket": "21-30", "factor": 1.08}
+    if 31 <= minute <= 35:
+        return {"period": "1H", "bucket": "31-35", "factor": 1.12}
     if 46 <= minute <= 55:
         return {"period": "2H", "bucket": "46-55", "factor": 0.92}
     if 56 <= minute <= 65:
@@ -497,7 +499,7 @@ def apply_match_intelligence(
     lineup = lineup_context(record)
     red_cards = red_card_context(record)
 
-    active_strategy = "goal_before_ht" if 1 <= minute <= 30 else ("another_goal" if 46 <= minute <= 75 else None)
+    active_strategy = "goal_before_ht" if 1 <= minute <= 35 else ("another_goal" if 46 <= minute <= 75 else None)
     adjustment = {
         "strategy": active_strategy,
         "before": None,

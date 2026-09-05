@@ -25,6 +25,7 @@ from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
+from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
 
@@ -183,6 +184,14 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
             flush=True,
         )
 
+    demand = request_live_market(record, experts)
+    if demand is not None:
+        print(
+            f"XBET_DEMAND_REQUEST match={mid} minute={minute} strategy={demand.get('strategy')} "
+            f"state={demand.get('football_state')} p={float(demand.get('football_probability') or 0):.3f}",
+            flush=True,
+        )
+
     if bool(match.get("is_halftime")):
         experts.pop("goal_before_ht", None)
 
@@ -215,7 +224,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     )
 
     exchange = record.get("matchbook_exchange") or {}
-    active_strategy = "goal_before_ht" if 1 <= minute <= 30 else "another_goal" if 46 <= minute <= 75 else ""
+    active_strategy = "goal_before_ht" if 1 <= minute <= 35 else "another_goal" if 46 <= minute <= 75 else ""
     exchange_active = ((exchange.get("systems") or {}).get(active_strategy) or {}) if active_strategy else {}
     if exchange.get("available"):
         print(

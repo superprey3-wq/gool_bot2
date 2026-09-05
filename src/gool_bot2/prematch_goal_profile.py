@@ -317,7 +317,7 @@ def _active_profile(record: dict[str, Any], first_half: dict[str, Any], second_h
     minute = int(match.get("minute") or 0)
     home_score = int(match.get("home_score") or 0)
     away_score = int(match.get("away_score") or 0)
-    if 1 <= minute <= 45 and not bool(match.get("is_halftime")):
+    if 1 <= minute <= 35 and not bool(match.get("is_halftime")):
         period = "1H"
         period_profile = first_half
         half_goals = home_score + away_score
@@ -412,7 +412,7 @@ def _active_strategy(record: dict[str, Any]) -> tuple[str | None, str | None]:
     minute = int(match.get("minute") or 0)
     if bool(match.get("is_halftime")):
         return None, None
-    if 1 <= minute <= 45:
+    if 1 <= minute <= 35:
         return "goal_before_ht", "1H"
     if 46 <= minute <= 75:
         return "another_goal", "2H"

@@ -204,7 +204,7 @@ def _last_goal_minute(record: dict[str, Any]) -> int | None:
 def _active_system(record: dict[str, Any]) -> tuple[str, str, str] | None:
     match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
-    if 1 <= minute <= 30:
+    if 1 <= minute <= 35:
         return "goal_before_ht", "1H", "first_half_total"
     if 46 <= minute <= 75:
         return "another_goal", "FT", "match_total"

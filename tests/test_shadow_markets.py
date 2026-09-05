@@ -82,6 +82,20 @@ def test_shadow_team_goal_selects_a_team_without_emitting_active_signal():
     assert result["team"] in {"Home", "Away"}
 
 
+def test_shadow_market_tolerates_none_home_recent():
+    record = _record((0, 0))
+    record["prematch_context"]["home_recent"] = None
+
+    result = analyze_team_goal_shadow(record)
+
+    assert result["home"]["prematch"] == {
+        "matches": 0,
+        "scored_rate": None,
+        "avg_goals_for": None,
+    }
+    assert "side_prematch_scoring_profile_low" in result["home"]["blocks"]
+
+
 def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Path, monkeypatch):
     # Other production-wrapper tests intentionally monkey-patch these globals.
     # Restore the base functions so this unit test is independent of collection order.

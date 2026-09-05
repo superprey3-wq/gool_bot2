@@ -169,6 +169,12 @@ storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
 base.poll_telegram_updates = _poll_with_multi_bank
 install_multi_product()
 
+# Runtime resilience is installed only after all legacy/Multi monkey patches above
+# are in place, so it can wrap the final production methods instead of a stale base.
+from .runtime_hardening import install_runtime_hardening
+
+install_runtime_hardening()
+
 
 def main() -> None:
     app.main()

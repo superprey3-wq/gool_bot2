@@ -1,0 +1,39 @@
+name: two-system journal epoch
+
+on:
+  push:
+    paths:
+      - "monkey_start.py"
+      - "src/gool_bot2/multi_public_metrics.py"
+      - "tests/test_two_system_journal_epoch.py"
+      - ".github/workflows/two-system-journal-epoch.yml"
+  pull_request:
+    paths:
+      - "monkey_start.py"
+      - "src/gool_bot2/multi_public_metrics.py"
+      - "tests/test_two_system_journal_epoch.py"
+      - ".github/workflows/two-system-journal-epoch.yml"
+
+jobs:
+  journal-epoch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest ruff
+      - name: Run journal regressions
+        run: |
+          pytest -q \
+            tests/test_two_system_journal_epoch.py \
+            tests/test_multi_two_system_concept.py
+      - name: Check changed Python surface
+        run: |
+          ruff check --select E9,F63,F7,F82 \
+            monkey_start.py \
+            src/gool_bot2/multi_public_metrics.py \
+            tests/test_two_system_journal_epoch.py

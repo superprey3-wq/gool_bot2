@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.request import Request, urlopen
 
 from . import signal_worker as core
 from . import signal_worker_all as base
@@ -33,6 +36,10 @@ _ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
 _LAST_BANK_REPORT_ATTEMPT = 0.0
 _INLINE_TELEGRAM_OFFSET = 0
 _LAST_INLINE_TELEGRAM_POLL = 0.0
+_DIRECT_TELEGRAM_OFFSET = 0
+_TELEGRAM_RESPONDER_THREAD: threading.Thread | None = None
+_TELEGRAM_RESPONDER_STOP = threading.Event()
+_TELEGRAM_OFFSET_LOCK = threading.Lock()
 
 
 def _telegram_journal_path() -> Path:
@@ -43,17 +50,193 @@ def _telegram_journal_path() -> Path:
     return runtime / "live" / "signal_journal.json"
 
 
-def _poll_inline_telegram(*, force: bool = False) -> int:
-    """Service Telegram commands between expensive match evaluations.
+def _background_responder_alive() -> bool:
+    thread = _TELEGRAM_RESPONDER_THREAD
+    return bool(thread is not None and thread.is_alive())
 
-    The production worker historically polled Telegram only after an entire
-    ``run_once`` batch. A busy raw backlog can keep that batch running for minutes,
-    making reply-keyboard buttons look dead even though Telegram delivered them.
-    Reuse the same getUpdates cursor between the inline poll and the normal loop so
-    each command is handled exactly once.
-    """
+
+def _direct_bot_api(token: str, method: str, payload: dict[str, Any], timeout: int = 8) -> dict[str, Any] | None:
+    if not token:
+        return None
+    request = Request(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            return body if isinstance(body, dict) else None
+    except Exception as exc:
+        print(f"GOOL_TELEGRAM_DIRECT_API_ERROR method={method} error={type(exc).__name__}:{exc}", flush=True)
+        return None
+
+
+def _direct_send_message(
+    token: str,
+    chat_id: str | int,
+    text: str,
+    reply_markup: dict[str, Any] | None = None,
+) -> bool:
+    payload: dict[str, Any] = {
+        "chat_id": str(chat_id),
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    result = _direct_bot_api(token, "sendMessage", payload)
+    return bool(result and result.get("ok"))
+
+
+def _direct_answer_callback(token: str, callback_query_id: str, text: str) -> bool:
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+    result = _direct_bot_api(token, "answerCallbackQuery", payload)
+    return bool(result and result.get("ok"))
+
+
+def _direct_edit_reply_markup(
+    token: str,
+    chat_id: str | int,
+    message_id: int,
+    reply_markup: dict[str, Any],
+) -> bool:
+    result = _direct_bot_api(
+        token,
+        "editMessageReplyMarkup",
+        {"chat_id": str(chat_id), "message_id": int(message_id), "reply_markup": reply_markup},
+    )
+    return bool(result and result.get("ok"))
+
+
+def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[str, Any]) -> int:
+    changed = 0
+    message = update.get("message") or {}
+    raw_text = str(message.get("text") or "").strip()
+    text = raw_text.split("@", 1)[0].lower()
+    chat_id = (message.get("chat") or {}).get("id")
+
+    if chat_id is not None and text == "/stop":
+        telegram_mod.unsubscribe(chat_id)
+        if _direct_send_message(token, chat_id, telegram_mod.STOP_TEXT):
+            changed += 1
+        return changed
+
+    if chat_id is not None and text in {"/start", "📊 отчёт", "📊 отчет", "🟢 в игре", "🧠 анализ"}:
+        try:
+            if text == "/start":
+                telegram_mod.subscribe(chat_id)
+                replies = [telegram_mod.START_TEXT]
+            elif text in {"📊 отчёт", "📊 отчет"}:
+                telegram_mod._force_reconcile_pending(journal_path)
+                replies = [telegram_mod.report_text(journal_path)]
+            elif text == "🟢 в игре":
+                telegram_mod._force_reconcile_pending(journal_path)
+                replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))
+            else:
+                replies = [telegram_mod.analysis_text(telegram_mod._analysis_path(journal_path))]
+        except Exception as exc:
+            print(f"GOOL_TELEGRAM_MENU_ERROR command={text!r} error={type(exc).__name__}:{exc}", flush=True)
+            replies = ["⚠️ <b>GOOL MULTI</b>\n\nНе удалось подготовить ответ. Бот продолжает работать."]
+
+        for reply in replies:
+            if _direct_send_message(token, chat_id, reply, reply_markup=telegram_mod.MENU_KEYBOARD):
+                changed += 1
+        return changed
+
+    callback = update.get("callback_query") or {}
+    data = str(callback.get("data") or "")
+    if not data.startswith("ig:"):
+        return changed
+    parts = data.split(":", 2)
+    if len(parts) != 3:
+        return changed
+    _, code, match_id = parts
+    head = telegram_mod.CODE_TO_HEAD.get(code)
+    if head is None:
+        return changed
+    callback_message = callback.get("message") or {}
+    callback_chat_id = (callback_message.get("chat") or {}).get("id")
+    message_id = callback_message.get("message_id")
+    callback_id = str(callback.get("id") or "")
+    if telegram_mod.mark_in_game(journal_path, match_id, head, chat_id=callback_chat_id):
+        changed += 1
+        if callback_chat_id is not None and message_id is not None:
+            _direct_edit_reply_markup(
+                token,
+                callback_chat_id,
+                int(message_id),
+                telegram_mod.signal_keyboard(match_id, head, entered=True),
+            )
+        _direct_answer_callback(token, callback_id, "Отмечено: в игре")
+    else:
+        _direct_answer_callback(token, callback_id, "Сигнал уже отмечен или не найден")
+    return changed
+
+
+def _telegram_responder_loop(token: str) -> None:
+    global _DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET
+    journal_path = _telegram_journal_path()
+    print("GOOL_TELEGRAM_RESPONDER started mode=background", flush=True)
+    _TELEGRAM_RESPONDER_STOP.wait(0.8)
+    while not _TELEGRAM_RESPONDER_STOP.is_set():
+        with _TELEGRAM_OFFSET_LOCK:
+            offset = max(_DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET)
+        result = _direct_bot_api(
+            token,
+            "getUpdates",
+            {"offset": offset, "timeout": 2, "allowed_updates": ["message", "callback_query"]},
+            timeout=6,
+        )
+        if not result or not result.get("ok"):
+            _TELEGRAM_RESPONDER_STOP.wait(1.0)
+            continue
+        for update in result.get("result") or []:
+            try:
+                update_id = int(update.get("update_id") or 0)
+            except (TypeError, ValueError):
+                update_id = 0
+            with _TELEGRAM_OFFSET_LOCK:
+                _DIRECT_TELEGRAM_OFFSET = max(_DIRECT_TELEGRAM_OFFSET, update_id + 1)
+                _INLINE_TELEGRAM_OFFSET = max(_INLINE_TELEGRAM_OFFSET, _DIRECT_TELEGRAM_OFFSET)
+            actions = _handle_direct_telegram_update(token, journal_path, update)
+            if actions:
+                print(
+                    f"GOOL_TELEGRAM_BACKGROUND actions={actions} offset={_DIRECT_TELEGRAM_OFFSET}",
+                    flush=True,
+                )
+        _TELEGRAM_RESPONDER_STOP.wait(0.1)
+
+
+def _start_telegram_responder() -> None:
+    global _TELEGRAM_RESPONDER_THREAD
+    if _background_responder_alive():
+        return
+    token = telegram_mod._token()
+    if not token:
+        print("GOOL_TELEGRAM_RESPONDER disabled reason=no_token", flush=True)
+        return
+    _TELEGRAM_RESPONDER_STOP.clear()
+    thread = threading.Thread(
+        target=_telegram_responder_loop,
+        args=(token,),
+        name="gool-telegram-responder",
+        daemon=True,
+    )
+    _TELEGRAM_RESPONDER_THREAD = thread
+    thread.start()
+
+
+def _poll_inline_telegram(*, force: bool = False) -> int:
+    """Fallback Telegram polling used only if the background responder is unavailable."""
     global _INLINE_TELEGRAM_OFFSET, _LAST_INLINE_TELEGRAM_POLL
 
+    if _background_responder_alive():
+        return 0
     now_mono = time.monotonic()
     if not force and now_mono - _LAST_INLINE_TELEGRAM_POLL < 0.5:
         return 0
@@ -79,16 +262,12 @@ def _poll_inline_telegram(*, force: bool = False) -> int:
 
 @contextmanager
 def silence_legacy_telegram() -> Iterator[None]:
-    # Poll before the legacy analyzer temporarily hides the Telegram token. This
-    # keeps menu commands responsive without allowing duplicate legacy cards.
     _poll_inline_telegram()
     with _silence_legacy_telegram():
         yield
 
 
 def maybe_emit_money_flow(record: dict[str, Any]):
-    # Market rechecks skip ``silence_legacy_telegram``; poll again after FLOW so
-    # those fast rechecks cannot starve Telegram either.
     try:
         return _maybe_emit_money_flow(record)
     finally:
@@ -184,20 +363,11 @@ def _ensure_model_with_multi_snapshot(self):
 
 
 def _process_with_multi(self, record: dict[str, Any]):
-    # In shadow mode the old Telegram path behaves exactly as before. In active
-    # Multi mode we still execute the full legacy analysis because Multi reuses
-    # its model/prematch/live outputs, but hide the Telegram token only while
-    # that legacy process is running. The token is restored before Multi emits
-    # its one BEST BET/result image, so users never receive duplicate strategy
-    # cards during cutover.
     with silence_legacy_telegram():
         emitted = _ORIG_PROCESS(self, record)
     try:
         refresh_late_another_goal_model(self, record)
         observe_multi_shadow(self, record)
-        # MONEY FLOW is intentionally independent from ordinary GOOL and STEAM.
-        # It uses its own journal, so an open exchange-flow bet can never block
-        # goal_before_ht/another_goal re-entry on the same match.
         maybe_emit_money_flow(record)
     except Exception as exc:
         print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)
@@ -207,18 +377,23 @@ def _process_with_multi(self, record: dict[str, Any]):
 def _poll_with_multi_bank(journal_path, offset: int = 0, timeout: int = 0):
     global _LAST_BANK_REPORT_ATTEMPT, _INLINE_TELEGRAM_OFFSET
 
-    effective_offset = max(int(offset or 0), _INLINE_TELEGRAM_OFFSET)
-    try:
-        next_offset, actions = _ORIG_POLL(
-            journal_path,
-            offset=effective_offset,
-            timeout=timeout,
-        )
-        _INLINE_TELEGRAM_OFFSET = max(_INLINE_TELEGRAM_OFFSET, int(next_offset or 0))
-        next_offset = max(int(next_offset or 0), _INLINE_TELEGRAM_OFFSET)
-    except Exception as exc:
-        print(f"GOOL_TELEGRAM_POLL_ERROR {type(exc).__name__}:{exc}", flush=True)
-        next_offset, actions = effective_offset, 0
+    if _background_responder_alive():
+        with _TELEGRAM_OFFSET_LOCK:
+            next_offset = max(int(offset or 0), _INLINE_TELEGRAM_OFFSET, _DIRECT_TELEGRAM_OFFSET)
+        actions = 0
+    else:
+        effective_offset = max(int(offset or 0), _INLINE_TELEGRAM_OFFSET)
+        try:
+            next_offset, actions = _ORIG_POLL(
+                journal_path,
+                offset=effective_offset,
+                timeout=timeout,
+            )
+            _INLINE_TELEGRAM_OFFSET = max(_INLINE_TELEGRAM_OFFSET, int(next_offset or 0))
+            next_offset = max(int(next_offset or 0), _INLINE_TELEGRAM_OFFSET)
+        except Exception as exc:
+            print(f"GOOL_TELEGRAM_POLL_ERROR {type(exc).__name__}:{exc}", flush=True)
+            next_offset, actions = effective_offset, 0
 
     try:
         multi_path = multi_journal_path()
@@ -247,14 +422,13 @@ storage.StorageCardAllMatchSignalWorker._process = _process_with_multi
 base.poll_telegram_updates = _poll_with_multi_bank
 install_multi_product()
 
-# Runtime resilience is installed only after all legacy/Multi monkey patches above
-# are in place, so it can wrap the final production methods instead of a stale base.
 from .runtime_hardening import install_runtime_hardening
 
 install_runtime_hardening()
 
 
 def main() -> None:
+    _start_telegram_responder()
     app.main()
 
 

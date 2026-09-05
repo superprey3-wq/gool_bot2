@@ -114,6 +114,7 @@ def main() -> None:
     prematch_cache = Path(os.environ.get("PREMATCH_CACHE_DIR", str(runtime / "live" / "prematch_cache")))
     xbet_state = Path(os.environ.get("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     xbet_history = Path(os.environ.get("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
+    matchbook_state = Path(os.environ.get("MATCHBOOK_MARKET_STATE", str(runtime / "live" / "matchbook_market_state.json")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["RAW_LIVE_DIR"] = str(raw_live)
@@ -127,14 +128,17 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
+    os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
 
     # The collector writes a new LIVE snapshot once per minute. Polling the same
     # raw files every 3 seconds adds needless process wakeups on a small VPS.
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
-    # 15s still stays comfortably inside the router's default 35s market-age
-    # guard while reducing 1xBet JSON parsing/network work by ~20% vs 12s.
+    # Both market collectors stay inside the live router freshness window while
+    # remaining light enough for the small VPS.
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
+    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")
+    os.environ.setdefault("MATCHBOOK_MIN_MARKET_VOLUME", "50")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
@@ -151,6 +155,7 @@ def main() -> None:
     shadow_cards.mkdir(parents=True, exist_ok=True)
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
+    matchbook_state.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
     ensure_deps()
@@ -178,6 +183,11 @@ def main() -> None:
     print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
     print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
     print(f"GOOL_BOOT xbet state={xbet_state} interval={os.environ['XBET_MARKET_INTERVAL_SECONDS']} required={os.environ['XBET_MARKET_REQUIRED']}", flush=True)
+    print(
+        f"GOOL_BOOT matchbook state={matchbook_state} interval={os.environ['MATCHBOOK_MARKET_INTERVAL_SECONDS']} "
+        f"min_market_volume={os.environ['MATCHBOOK_MIN_MARKET_VOLUME']}",
+        flush=True,
+    )
     print(f"GOOL_BOOT worker_sleep={os.environ['SIGNAL_WORKER_SLEEP']}s", flush=True)
     print(f"GOOL_BOOT var_guard seconds={os.environ['VAR_WIN_CONFIRM_SECONDS']} snapshots={os.environ['VAR_WIN_CONFIRM_SNAPSHOTS']}", flush=True)
 
@@ -205,6 +215,11 @@ def main() -> None:
         "--state", str(xbet_state),
         "--history", str(xbet_history),
         "--interval", os.getenv("XBET_MARKET_INTERVAL_SECONDS", "15"),
+    ], env=env)
+    matchbook = subprocess.Popen([
+        sys.executable, "-m", "gool_bot2.matchbook_market_worker",
+        "--state", str(matchbook_state),
+        "--interval", os.getenv("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15"),
     ], env=env)
     worker = subprocess.Popen([
         sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var",
@@ -235,6 +250,7 @@ def main() -> None:
     procs: list[tuple[str, subprocess.Popen]] = [
         ("collector", collector),
         ("xbet", xbet),
+        ("matchbook", matchbook),
         ("worker", worker),
     ]
     if shadow is not None:
@@ -242,7 +258,8 @@ def main() -> None:
 
     print(
         f"GOOL_BOOT running collector_pid={collector.pid} xbet_pid={xbet.pid} "
-        f"worker_pid={worker.pid} shadow_pid={shadow.pid if shadow is not None else '-'}",
+        f"matchbook_pid={matchbook.pid} worker_pid={worker.pid} "
+        f"shadow_pid={shadow.pid if shadow is not None else '-'}",
         flush=True,
     )
     try:

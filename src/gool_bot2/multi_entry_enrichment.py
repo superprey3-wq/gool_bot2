@@ -64,6 +64,7 @@ def enrich_multi_entry(
         "confidence_formula_version": 2,
         "live_momentum_snapshot": dict(record.get("live_momentum") or {}),
         "xbet_live_1x2": dict(record.get("xbet_live_1x2") or {}),
+        "matchbook_exchange": dict(record.get("matchbook_exchange") or {}),
         "match_intelligence": dict(record.get("match_intelligence") or {}),
         "calibration": calibration_snapshot(calibration_input, record),
         # Shadow-first timing input for Entry Quality analysis. Together with

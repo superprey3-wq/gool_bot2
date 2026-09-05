@@ -8,12 +8,14 @@ from . import signal_worker_all_cards as cards
 from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
+from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_concept import enforce_entry_cutoff, routing_experts
 from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
+from .multi_exchange_confirmation import apply_matchbook_confirmation
 from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_lineup_context import apply_lineup_context
 from .multi_match_intelligence import apply_match_intelligence, enforce_match_suitability
@@ -186,6 +188,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     market = _market_row(record)
     record["xbet_live_1x2"] = live_1x2_context(market)
+    record["matchbook_exchange"] = matchbook_context(record)
     intelligence = apply_match_intelligence(
         record,
         experts,
@@ -211,10 +214,27 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         flush=True,
     )
 
+    exchange = record.get("matchbook_exchange") or {}
+    active_strategy = "goal_before_ht" if 1 <= minute <= 30 else "another_goal" if 46 <= minute <= 75 else ""
+    exchange_active = ((exchange.get("systems") or {}).get(active_strategy) or {}) if active_strategy else {}
+    if exchange.get("available"):
+        print(
+            f"GOOL_MATCHBOOK match={mid} mapped={float(exchange.get('match_score') or 0):.2f} "
+            f"event={((exchange.get('event') or {}).get('id') or '-')} strategy={active_strategy or '-'} "
+            f"line={exchange_active.get('line')} level={exchange_active.get('level') or 'NO_MARKET'} "
+            f"volume={float(exchange_active.get('volume') or 0):.0f} "
+            f"delta_pp={float(((exchange_active.get('flow') or {}).get('direction_pp')) or 0):+.2f}",
+            flush=True,
+        )
+
     ordinary_experts = routing_experts(match, experts)
     decision = analyze_multi_match(match, market, ordinary_experts, data_quality=quality)
 
     decision = enforce_goal_state_policy(decision, experts)
+
+    # Matchbook cannot manufacture a BET. It only adjusts the rating of an
+    # already-created ordinary candidate before the normal confidence gate.
+    decision = apply_matchbook_confirmation(decision, record)
 
     # Strong 1xBet confirmation may support only the active ordinary concept
     # candidate. Other football products are no longer exposed to the router.

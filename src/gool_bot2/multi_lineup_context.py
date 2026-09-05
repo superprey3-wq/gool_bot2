@@ -82,7 +82,11 @@ def apply_lineup_context(record: dict[str, Any], experts: dict[str, Any]) -> dic
             components["lineup"] = component
             score = float(suitability.get("score") or 0.0) + (component - old_component) * 0.03
             suitability["score"] = round(max(0.0, min(1.0, score)), 4)
-            suitability["lineup_risk"] = "high" if multiplier < 0.75 else ("medium" if multiplier < 1.0 else "normal")
+            # Six unavailable players already shrink the historical contribution
+            # materially (to 60%), but with a complete starting XI this is still
+            # medium uncertainty rather than a high-risk lineup state. Reserve
+            # HIGH for the severe >=8 unavailable bucket (45% history weight).
+            suitability["lineup_risk"] = "high" if multiplier < 0.60 else ("medium" if multiplier < 1.0 else "normal")
 
     if multiplier < 1.0:
         minute = int((record.get("match") or {}).get("minute") or 0)

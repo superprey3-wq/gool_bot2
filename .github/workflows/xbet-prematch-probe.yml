@@ -1,0 +1,26 @@
+name: xbet prematch probe
+
+on:
+  push:
+    branches:
+      - feature/match-selection-intelligence
+    paths:
+      - 'scripts/gool_xbet_prematch_probe.py'
+      - '.github/workflows/xbet-prematch-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Probe prematch LineFeed
+        run: python scripts/gool_xbet_prematch_probe.py

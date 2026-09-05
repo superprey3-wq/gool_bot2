@@ -16,6 +16,7 @@ from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_da
 from .multi_late_refresh import refresh_late_another_goal_model
 from .multi_menu import journal_path as multi_journal_path, reconcile_pending
 from .multi_model_capture import ensure_model_snapshot_capture
+from .multi_money_flow import maybe_emit_money_flow
 from .multi_product import install_multi_product
 from .multi_runtime import observe_multi_shadow
 from .multi_telegram import silence_legacy_telegram
@@ -127,11 +128,12 @@ def _process_with_multi(self, record: dict[str, Any]):
     with silence_legacy_telegram():
         emitted = _ORIG_PROCESS(self, record)
     try:
-        # The legacy worker closes its all-strategy analysis after 75'. Multi keeps
-        # only another_goal alive through 85', so refresh MODEL + LIVE explicitly
-        # for 76-85 instead of reusing the stale 75' snapshot.
         refresh_late_another_goal_model(self, record)
         observe_multi_shadow(self, record)
+        # MONEY FLOW is intentionally independent from ordinary GOOL and STEAM.
+        # It uses its own journal, so an open exchange-flow bet can never block
+        # goal_before_ht/another_goal re-entry on the same match.
+        maybe_emit_money_flow(record)
     except Exception as exc:
         print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)
     return emitted

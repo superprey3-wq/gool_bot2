@@ -6,6 +6,7 @@ from . import telegram
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections, journal_path, reconcile_pending, report_text
+from .multi_money_flow import money_flow_report_line
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 
@@ -14,8 +15,14 @@ def _report_text_with_bank(*args, **kwargs) -> str:
     path = journal_path()
     reconcile_finalized_first_half(path)
     text = report_text(*args, **kwargs)
+    flow = money_flow_report_line()
     bank = "\n".join(current_bank_summary(path))
-    return f"{text}\n\n{bank}"
+    return (
+        f"{text}\n\n"
+        "<b>Отдельная система денежного потока:</b>\n"
+        f"{flow}\n\n"
+        f"{bank}"
+    )
 
 
 def _analysis_text_safe(*args, **kwargs) -> str:
@@ -39,10 +46,10 @@ def install_multi_product() -> None:
     if is_multi_telegram_active():
         telegram.START_TEXT = (
             "🟢 <b>GOOL MULTI работает</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet\n"
-            "Один лучший рынок на матч: BEST BET или WAIT.\n"
-            "Сигнал и результат приходят одной Multi-карточкой с эмблемами и LIVE-статистикой.\n\n"
-            "📊 Отчёт — статистика Multi + виртуальный банк\n"
+            "MODEL + PREMATCH + LIVE + 1xBet + Matchbook\n"
+            "Две основные GOOL-системы + отдельные STEAM и MONEY FLOW.\n"
+            "Обычный GOOL по-прежнему выбирает один лучший рынок или WAIT.\n\n"
+            "📊 Отчёт — GOOL + STEAM + отдельная статистика MONEY FLOW\n"
             "🟢 В игре — открытые BEST BET\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
             "💰 Дневной отчёт банка — автоматически в 23:59"
@@ -50,9 +57,9 @@ def install_multi_product() -> None:
     else:
         telegram.START_TEXT = (
             "🟢 <b>GOOL MULTI работает в shadow</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet\n"
+            "MODEL + PREMATCH + LIVE + 1xBet + Matchbook\n"
             "Один лучший рынок на матч: BEST BET или WAIT.\n\n"
-            "📊 Отчёт — статистика выбранных Multi-ставок + виртуальный банк\n"
+            "📊 Отчёт — статистика выбранных Multi-ставок + MONEY FLOW\n"
             "🟢 В игре — открытые Multi-ставки\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
             "💰 Виртуальный банк — дневной отчёт автоматически в 23:59\n\n"

@@ -78,7 +78,9 @@ def test_settlement_persists_final_stats_and_cards(tmp_path, monkeypatch):
     path = tmp_path / "multi.json"
     save_signal_journal(path, [row])
 
-    settled = settle_multi_journal(_record(40, 1, 0), path)
+    # Live wins now wait for the shared VAR confirmation window. A finished
+    # Flashscore state is authoritative and may settle immediately.
+    settled = settle_multi_journal(_record(90, 1, 0, finished=True), path)
 
     assert len(settled) == 1
     assert settled[0]["result"] == "won"

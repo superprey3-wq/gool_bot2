@@ -12,7 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
-MULTI_RESET_ID = "goalstate_cards_v2_2026_09_04"
+MULTI_RESET_ID = "two_system_goal_epoch_v1_2026_09_05"
 
 
 def load_env(path: Path) -> None:
@@ -34,7 +34,7 @@ def _truthy(name: str, default: bool = False) -> bool:
 
 
 def _reset_multi_tracking_once(runtime: Path) -> None:
-    """Start the Goal State public-card epoch with clean Multi tracking.
+    """Start the two-system public epoch with clean Multi tracking.
 
     The marker lives in persistent runtime storage, so only the first boot after
     this deployment resets Multi journal, virtual bank and disposable analysis.

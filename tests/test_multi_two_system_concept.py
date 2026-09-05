@@ -42,10 +42,18 @@ def _decision(minute: int, *, source: str = "gool") -> RouterDecision:
     )
 
 
-def test_first_half_routes_only_goal_before_ht() -> None:
-    match = {"minute": 30, "is_halftime": False, "is_finished": False}
-    assert ordinary_strategy(match) == FIRST_HALF_STRATEGY
-    assert set(routing_experts(match, _experts())) == {"goal_before_ht"}
+def test_first_half_routes_only_goal_before_ht_through_30() -> None:
+    for minute in (1, 15, 30):
+        match = {"minute": minute, "is_halftime": False, "is_finished": False}
+        assert ordinary_strategy(match) == FIRST_HALF_STRATEGY
+        assert set(routing_experts(match, _experts())) == {"goal_before_ht"}
+
+
+def test_first_half_has_no_new_ordinary_entry_after_30() -> None:
+    for minute in (31, 40, 45):
+        match = {"minute": minute, "is_halftime": False, "is_finished": False}
+        assert ordinary_strategy(match) is None
+        assert routing_experts(match, _experts()) == {}
 
 
 def test_halftime_routes_no_ordinary_system() -> None:
@@ -54,7 +62,7 @@ def test_halftime_routes_no_ordinary_system() -> None:
     assert routing_experts(match, _experts()) == {}
 
 
-def test_second_half_routes_only_another_goal_through_75() -> None:
+def test_second_half_routes_only_another_goal_from_46_through_75() -> None:
     for minute in (46, 60, 75):
         match = {"minute": minute, "is_halftime": False, "is_finished": False}
         assert ordinary_strategy(match) == SECOND_HALF_STRATEGY

@@ -43,7 +43,8 @@ def _team_scoring_profile(record: dict[str, Any], side: str) -> dict[str, Any]:
     match = record.get("match") or {}
     ctx = record.get("prematch_context") or {}
     team = str(match.get("home") if side == "home" else match.get("away") or "").casefold().strip()
-    rows = list(ctx.get("home_recent") if side == "home" else ctx.get("away_recent") or [])
+    raw_rows = ctx.get("home_recent") if side == "home" else ctx.get("away_recent")
+    rows = list(raw_rows or [])
     scored = 0
     goals = 0
     used = 0

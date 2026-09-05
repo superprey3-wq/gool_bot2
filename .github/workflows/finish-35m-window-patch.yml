@@ -1,0 +1,45 @@
+name: finish-35m-window-patch
+
+on:
+  push:
+    branches:
+      - feature/demand-driven-xbet-35m-window
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[finish-35m]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/demand-driven-xbet-35m-window
+          fetch-depth: 0
+      - name: Align remaining half-profile windows
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/gool_bot2/prematch_goal_profile.py')
+          s = p.read_text()
+          pairs = [
+              ('if 1 <= minute <= 45 and not bool(match.get("is_halftime")):', 'if 1 <= minute <= 35 and not bool(match.get("is_halftime")):'),
+              ('    if 1 <= minute <= 45:\n        return "goal_before_ht", "1H"', '    if 1 <= minute <= 35:\n        return "goal_before_ht", "1H"'),
+          ]
+          for old, new in pairs:
+              if old not in s:
+                  raise SystemExit(f'missing expected prematch text: {old!r}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          echo '--- remaining likely 30-minute production literals ---'
+          grep -RInE 'minute.*<= *30|<= *30.*minute|through 30|1-30|1–30' src/gool_bot2 tests || true
+      - name: Commit final window alignment
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gool_bot2/prematch_goal_profile.py
+          git commit -m "Align prematch half profile with 35m window [finish-35m]"
+          git push origin HEAD:feature/demand-driven-xbet-35m-window

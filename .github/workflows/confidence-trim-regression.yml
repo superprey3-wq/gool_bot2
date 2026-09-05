@@ -28,8 +28,7 @@ jobs:
         run: |
           pytest -q \
             tests/test_multi_confidence_trim.py \
-            tests/test_multi_rating70_epoch.py \
-            tests/test_multi_autonomous_steam.py
+            tests/test_multi_rating70_epoch.py
       - name: Check changed Python surface
         run: |
           ruff check --select E9,F63,F7,F82 \

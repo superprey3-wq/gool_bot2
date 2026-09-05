@@ -61,6 +61,7 @@ def enrich_multi_entry(
         "selection_reason": brief_selection_reason(decision, winner),
         "confidence_formula_version": 1,
         "live_momentum_snapshot": dict(record.get("live_momentum") or {}),
+        "xbet_live_1x2": dict(record.get("xbet_live_1x2") or {}),
         # Shadow-first input for the Entry Quality Recorder. These fields do not
         # affect eligibility/rating yet; they let us later measure provider lag,
         # post-goal timing and which source actually confirmed the score state.

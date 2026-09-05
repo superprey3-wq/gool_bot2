@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from gool_bot2 import matchbook_pagination
-from gool_bot2.multi_money_flow import evaluate_money_flow
+from gool_bot2.journal import save_signal_journal
+from gool_bot2.multi_money_flow import (
+    _apply_bank_settlement,
+    _attach_bank_fields,
+    _entry,
+    evaluate_money_flow,
+    money_flow_open_section,
+    money_flow_report_line,
+)
+from gool_bot2.multi_money_flow_card import render_money_flow_result_card, render_money_flow_signal_card
 from gool_bot2.storage_live_collector import StorageLiveSnapshotCollector
 
 
@@ -82,6 +89,62 @@ def test_money_flow_rejects_small_or_unready_move():
     flow["window_ready_60s"] = False
     unready = evaluate_money_flow(record)
     assert unready["eligible"] is False
+
+
+def test_money_flow_has_png_cards_and_independent_bank(tmp_path, monkeypatch):
+    journal = tmp_path / "flow.json"
+    bank_state = tmp_path / "flow_bank.json"
+    monkeypatch.setenv("GOOL_MONEY_FLOW_JOURNAL_PATH", str(journal))
+    monkeypatch.setenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", str(bank_state))
+    monkeypatch.setenv("GOOL_MONEY_FLOW_BANK_INITIAL_RUB", "100000")
+    monkeypatch.setenv("GOOL_MONEY_FLOW_BANK_STAKE_PCT", "0.02")
+
+    record = _record(delta=900.0, pp=5.0)
+    info = evaluate_money_flow(record)
+    row = _entry(record, info)
+    _attach_bank_fields(row, [])
+
+    assert row["virtual_bank_before_rub"] == 100000.0
+    assert row["virtual_stake_rub"] == 2000.0
+    assert row["virtual_stake_pct"] == 0.02
+    signal_png = render_money_flow_signal_card(record, row)
+    assert signal_png.startswith(b"\x89PNG\r\n\x1a\n")
+
+    row.update(
+        {
+            "result": "won",
+            "profit_units": 0.70,
+            "settled_at": "2026-09-05T20:00:00+00:00",
+            "settled_minute": 66,
+            "settled_score": [2, 1],
+        }
+    )
+    assert _apply_bank_settlement(row) is True
+    assert row["virtual_profit_rub"] == 1400.0
+    result_png = render_money_flow_result_card(row, record)
+    assert result_png.startswith(b"\x89PNG\r\n\x1a\n")
+
+    save_signal_journal(journal, [row])
+    report = money_flow_report_line(journal)
+    assert "Matchbook MONEY FLOW" in report
+    assert "101,400" in report
+
+
+def test_money_flow_open_section_contains_pending_bet(tmp_path, monkeypatch):
+    journal = tmp_path / "flow.json"
+    bank_state = tmp_path / "flow_bank.json"
+    monkeypatch.setenv("GOOL_MONEY_FLOW_JOURNAL_PATH", str(journal))
+    monkeypatch.setenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", str(bank_state))
+
+    record = _record(delta=900.0, pp=5.0)
+    row = _entry(record, evaluate_money_flow(record))
+    _attach_bank_fields(row, [])
+    save_signal_journal(journal, [row])
+    section = money_flow_open_section(journal)
+    assert section is not None
+    assert "MONEY FLOW · В ИГРЕ" in section
+    assert "Arsenal" in section
+    assert "2,000 ₽" in section
 
 
 def test_production_detail_windows_and_top_leagues():

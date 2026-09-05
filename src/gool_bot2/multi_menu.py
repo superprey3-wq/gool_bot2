@@ -171,6 +171,16 @@ def report_text(_: Path | None = None, experiment_path: Path | None = None) -> s
         if (dt := _parse_dt(row.get("created_at"))) is not None and dt.astimezone(tz).date() == today
     ]
 
+    goal_before_ht = [
+        row for row in rows
+        if strategy_bucket(row.get("strategy")) == "goal_before_ht"
+    ]
+    another_goal = [
+        row for row in rows
+        if strategy_bucket(row.get("strategy")) == "another_goal"
+    ]
+    steam = [row for row in rows if _layer(row) == "STEAM"]
+
     parts = [
         "📊 <b>GOOL MULTI · ЖУРНАЛ</b>",
         "Только реально отправленные BEST BET. WAIT в статистику не попадает.",
@@ -180,32 +190,14 @@ def report_text(_: Path | None = None, experiment_path: Path | None = None) -> s
         "",
         "📚 <b>ВСЯ НОВАЯ ЭПОХА</b>",
         _stats_line(rows),
+        "",
+        "<b>Две основные системы:</b>",
+        f"🟡 Гол в 1-м тайме: {_stats_line(goal_before_ht)}",
+        f"⚽ Ещё гол: {_stats_line(another_goal)}",
+        "",
+        "<b>Отдельная система прогруза:</b>",
+        f"🔥 1xBet STEAM: {_stats_line(steam)}",
     ]
-
-    if rows:
-        labels = {
-            "another_goal": "⚽ Ещё гол",
-            "goal_before_ht": "🟡 Гол в 1-м тайме",
-            "two_more_goals": "🔥 Ещё +2",
-            "home_goal": "🔵 ИТБ1",
-            "away_goal": "🔵 ИТБ2",
-            "both_teams_to_score": "💜 ОЗ — Да",
-        }
-        groups: list[str] = []
-        for bucket, label in labels.items():
-            selected = [row for row in rows if strategy_bucket(row.get("strategy")) == bucket]
-            if selected:
-                groups.append(f"{label}: {_stats_line(selected)}")
-        if groups:
-            parts += ["", "<b>По событиям:</b>", *groups]
-
-        gool = [row for row in rows if _layer(row) == "GOOL"]
-        steam = [row for row in rows if _layer(row) == "STEAM"]
-        parts += ["", "<b>По слою входа:</b>"]
-        if gool:
-            parts.append(f"🧠 GOOL STATE: {_stats_line(gool)}")
-        if steam:
-            parts.append(f"🔥 1xBet STEAM: {_stats_line(steam)}")
 
     return "\n".join(parts)
 

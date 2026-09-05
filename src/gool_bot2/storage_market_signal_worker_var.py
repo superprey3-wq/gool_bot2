@@ -119,23 +119,34 @@ def _ensure_model_with_multi_snapshot(self):
 
 
 def _process_with_multi(self, record: dict[str, Any]):
-    # In shadow mode the old Telegram path behaves exactly as before. In active
-    # Multi mode we still execute the full legacy analysis because Multi reuses
-    # its model/prematch/live outputs, but hide the Telegram token only while
-    # that legacy process is running. The token is restored before Multi emits
-    # its one BEST BET/result image, so users never receive duplicate strategy
-    # cards during cutover.
-    with silence_legacy_telegram():
-        emitted = _ORIG_PROCESS(self, record)
+    market_only = str(record.get("runtime_scope") or "").strip().lower() == "market_only"
+    emitted = 0
+
+    # Market heartbeat must not pay for the hidden legacy analyzer. Full detail
+    # snapshots still feed it for model diagnostics used by ordinary GOOL.
+    if not market_only:
+        try:
+            with silence_legacy_telegram():
+                emitted = _ORIG_PROCESS(self, record)
+        except Exception as exc:
+            print(f"GOOL_LEGACY_ANALYZER_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+        try:
+            refresh_late_another_goal_model(self, record)
+        except Exception as exc:
+            print(f"GOOL_LATE_REFRESH_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+    # Each public system has its own failure domain. A malformed football record
+    # may not suppress exchange flow, and a Matchbook error may not suppress GOOL.
     try:
-        refresh_late_another_goal_model(self, record)
         observe_multi_shadow(self, record)
-        # MONEY FLOW is intentionally independent from ordinary GOOL and STEAM.
-        # It uses its own journal, so an open exchange-flow bet can never block
-        # goal_before_ht/another_goal re-entry on the same match.
+    except Exception as exc:
+        print(f"GOOL_MULTI_RUNTIME_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+    try:
         maybe_emit_money_flow(record)
     except Exception as exc:
-        print(f"GOOL_MULTI_SHADOW_ERROR {type(exc).__name__}:{exc}", flush=True)
+        print(f"GOOL_MONEY_FLOW_RUNTIME_ERROR {type(exc).__name__}:{exc}", flush=True)
     return emitted
 
 

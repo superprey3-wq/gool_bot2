@@ -19,7 +19,7 @@ from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_lineup_context import apply_lineup_context
 from .multi_match_intelligence import apply_match_intelligence, enforce_match_suitability
 from .multi_reentry_guard import enforce_reentry_cooldown
-from .multi_router import analyze_multi_match
+from .multi_router import RouterDecision, analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .multi_true_prematch import apply_true_prematch_market
@@ -130,6 +130,50 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         )
 
     if minute <= 0 or bool(match.get("is_finished")):
+        return
+
+    market_only = str(record.get("runtime_scope") or "").strip().lower() == "market_only"
+    if market_only:
+        quality = _data_quality(record)
+        market = _market_row(record)
+        record["xbet_live_1x2"] = live_1x2_context(market)
+        record["matchbook_exchange"] = matchbook_context(record)
+        decision = RouterDecision(
+            status="WAIT",
+            minute=minute,
+            score=(int(match.get("home_score") or 0), int(match.get("away_score") or 0)),
+            winner=None,
+            alternatives=[],
+            rejected=[],
+            reason="MARKET_ONLY heartbeat: ordinary GOOL Brain intentionally skipped.",
+        )
+        decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
+        decision = enforce_entry_cutoff(decision)
+        if decision.status != "BET" or decision.winner is None:
+            return
+        decision = enforce_reentry_cooldown(decision, record, journal_path)
+        if decision.status != "BET" or decision.winner is None:
+            return
+        # Persist diagnostics only when the fast heartbeat actually found a BET;
+        # otherwise hundreds of 15s heartbeats would bloat analysis JSONL.
+        append_shadow_snapshot(
+            analysis_path,
+            decision_snapshot(record, decision, {}, data_quality=quality, market_row=market),
+        )
+        _, created = sync_multi_journal(
+            record, decision, {}, journal_path, data_quality=quality
+        )
+        if created is not None:
+            created = enrich_multi_entry(
+                journal_path, created, record, decision, {}, data_quality=quality
+            )
+            sent = emit_multi_signal(record, decision, created, market_row=market)
+            finalized = finalize_multi_delivery(journal_path, created, sent)
+            print(
+                f"GOOL_MARKET_HEARTBEAT_BET match={mid} minute={minute} "
+                f"sent={sent} finalized={int(finalized)} source={created.get('source')}",
+                flush=True,
+            )
         return
 
     model_result = dict(getattr(worker, "_diag_model_result", {}) or {})

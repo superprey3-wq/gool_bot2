@@ -37,10 +37,25 @@ def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkey
     assert journal.exists()
 
 
-def test_public_event_buckets_keep_only_ordinary_systems_and_separate_steam() -> None:
+def test_public_event_buckets_keep_only_two_systems_and_separate_steam() -> None:
     assert strategy_bucket("goal_before_ht") == "goal_before_ht"
     assert strategy_bucket("another_goal") == "another_goal"
-    assert strategy_bucket("steam_another_goal") == "steam"
-    assert strategy_bucket("steam_goal_before_ht") == "steam"
-    assert strategy_bucket("steam_btts") == "steam"
-    assert strategy_bucket("steam_home_goal") == "steam"
+
+    for strategy in (
+        "two_more_goals",
+        "home_goal",
+        "away_goal",
+        "both_teams_to_score",
+        "btts",
+    ):
+        assert strategy_bucket(strategy) == "other"
+
+    for strategy in (
+        "steam_another_goal",
+        "steam_goal_before_ht",
+        "steam_two_more_goals",
+        "steam_btts",
+        "steam_home_goal",
+        "steam_away_goal",
+    ):
+        assert strategy_bucket(strategy) == "steam"

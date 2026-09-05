@@ -205,17 +205,13 @@ def source_label(value: Any) -> str:
 
 def strategy_bucket(strategy: Any) -> str:
     raw = str(strategy or "")
-    # Autonomous STEAM stays a separate system in the public journal. It must
-    # not be mixed into the two ordinary event buckets even when it trades a
-    # related goal/BTTS/team-total market.
+    # Public event statistics intentionally expose only the two new ordinary
+    # systems. Autonomous STEAM is reported by the separate STEAM layer, while
+    # legacy/diagnostic strategies cannot reappear as event rows.
     if raw.startswith("steam_"):
         return "steam"
-    return {
-        "another_goal": "another_goal",
-        "two_more_goals": "two_more_goals",
-        "goal_before_ht": "goal_before_ht",
-        "home_goal": "home_goal",
-        "away_goal": "away_goal",
-        "both_teams_to_score": "both_teams_to_score",
-        "btts": "both_teams_to_score",
-    }.get(raw, raw)
+    if raw == "goal_before_ht":
+        return "goal_before_ht"
+    if raw == "another_goal":
+        return "another_goal"
+    return "other"

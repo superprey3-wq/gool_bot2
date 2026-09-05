@@ -44,6 +44,11 @@ def _number(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
+def _flag(name: str, default: bool = True) -> bool:
+    fallback = "1" if default else "0"
+    return str(os.getenv(name, fallback)).strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _parse_dt(value: Any) -> datetime | None:
     raw = str(value or "").strip()
     if not raw:
@@ -246,6 +251,24 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
 
     flow = context.get("flow") or {}
     market_volume = _number(context.get("volume"))
+    if (
+        _flag("MATCHBOOK_FLOW_ORDERBOOK_GATE", True)
+        and bool(flow.get("orderbook_ready"))
+        and not bool(flow.get("orderbook_confirmed"))
+    ):
+        if bool(flow.get("transient_liquidity_spike")):
+            reason = "money_flow_transient_liquidity_spike"
+        elif bool(flow.get("liquidity_pull")):
+            reason = "money_flow_liquidity_pulled"
+        else:
+            reason = "money_flow_orderbook_unconfirmed"
+        return {
+            "eligible": False,
+            "reason": reason,
+            "market_volume": market_volume,
+            "flow": flow,
+        }
+
     fair_over = _number(context.get("fair_over"), -1.0)
     over = context.get("over") or {}
     best_back = _number((over.get("best_back") or {}).get("odds"))
@@ -294,6 +317,11 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
             "flow": flow,
         }
 
+    back_wom = _number(flow.get("back_wom"), 0.5)
+    orderflow_imbalance = _number(flow.get("orderflow_imbalance"))
+    orderbook_streak = int(_number(flow.get("orderbook_support_streak")))
+    orderbook_confirmations = int(_number(flow.get("orderbook_confirmation_count")))
+
     extreme_delta = _threshold("MATCHBOOK_FLOW_BET_EXTREME_DELTA", 750.0)
     extreme_pp = _threshold("MATCHBOOK_FLOW_BET_EXTREME_FAIR_PP", 3.5)
     level = (
@@ -306,7 +334,10 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
         76.0
         + min(10.0, chosen["fair_delta_pp"] * 1.8)
         + min(8.0, chosen["relative_pct"] * 0.35)
-        + min(5.0, chosen["volume_delta"] / 250.0),
+        + min(5.0, chosen["volume_delta"] / 250.0)
+        + min(3.0, max(0.0, back_wom - 0.50) * 15.0)
+        + min(3.0, max(0.0, orderflow_imbalance) * 3.0)
+        + min(2.0, max(0, orderbook_streak - 1) * 0.75),
     )
     if level == "EXTREME_FLOW":
         score = max(score, 90.0)
@@ -330,6 +361,15 @@ def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
         "market_id": context.get("market_id"),
         "market_name": context.get("market_name"),
         "matchbook_event_id": ((exchange.get("event") or {}).get("id")),
+        "orderbook_ready": bool(flow.get("orderbook_ready")),
+        "orderbook_confirmed": bool(flow.get("orderbook_confirmed")),
+        "orderbook_confirmations": orderbook_confirmations,
+        "back_wom": back_wom,
+        "book_imbalance": _number(flow.get("book_imbalance")),
+        "orderflow_imbalance": orderflow_imbalance,
+        "orderbook_support_streak": orderbook_streak,
+        "back_depth_weighted": _number(flow.get("back_depth_weighted")),
+        "lay_depth_weighted": _number(flow.get("lay_depth_weighted")),
         **chosen,
     }
 
@@ -351,6 +391,18 @@ def _entry(record: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
     fair = float(info.get("fair_over") or 0.0)
     period_label = "1Т " if str(info.get("period")) == "1H" else ""
     market = f"{period_label}ТБ{line:g}"
+    tags = [
+        "matchbook_money_flow",
+        f"flow_window:{info.get('window')}",
+        f"flow_level:{info.get('level')}",
+    ]
+    if bool(info.get("orderbook_confirmed")):
+        tags.extend(
+            [
+                "matchbook_orderbook_confirmed",
+                f"orderbook_confirmations:{int(info.get('orderbook_confirmations') or 0)}",
+            ]
+        )
     return {
         "created_at": _now(),
         "mode": "active",
@@ -378,12 +430,8 @@ def _entry(record: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
         "signal_source": "MATCHBOOK_FLOW",
         "source": "matchbook:money_flow",
         "data_quality": None,
-        "reason": "Аномальный проторгованный объём Matchbook подтверждён движением fair probability в сторону следующего гола.",
-        "reason_tags": [
-            "matchbook_money_flow",
-            f"flow_window:{info.get('window')}",
-            f"flow_level:{info.get('level')}",
-        ],
+        "reason": "Аномальный проторгованный объём Matchbook подтверждён движением fair probability и устойчивым давлением стакана в сторону следующего гола.",
+        "reason_tags": tags,
         "expert_passed": False,
         "expert_blocks": [],
         "experts": {},
@@ -404,6 +452,13 @@ def _signal_text(row: dict[str, Any]) -> str:
     line = float(flow.get("line") or 0.0)
     prior = float(flow.get("previous_fair_over") or 0.0) * 100.0
     current = float(flow.get("fair_over") or 0.0) * 100.0
+    book_line = ""
+    if bool(flow.get("orderbook_ready")):
+        book_line = (
+            f"\n📖 стакан: WoM <b>{float(flow.get('back_wom') or 0.0) * 100:.0f}%</b> · "
+            f"OFI {float(flow.get('orderflow_imbalance') or 0.0):+.2f} · "
+            f"устойчивость {int(flow.get('orderbook_support_streak') or 0)}×"
+        )
     return (
         f"💸 <b>GOOL · MONEY FLOW</b> {icon}\n"
         f"{html.escape(str(row.get('home') or '?'))} — {html.escape(str(row.get('away') or '?'))}\n"
@@ -414,7 +469,8 @@ def _signal_text(row: dict[str, Any]) -> str:
         f"📈 fair Over: {prior:.1f}% → <b>{current:.1f}%</b> "
         f"({float(flow.get('fair_delta_pp') or 0):+.1f} п.п.)\n"
         f"📚 объём рынка: £{float(flow.get('market_volume') or 0):,.0f} · "
-        f"LAY {float(flow.get('lay_odd') or 0):.2f}\n"
+        f"LAY {float(flow.get('lay_odd') or 0):.2f}"
+        f"{book_line}\n"
         f"{icon} <b>{flow.get('level')}</b> · flow score {float(row.get('rating') or 0):.0f}/100"
     )
 
@@ -515,7 +571,9 @@ def maybe_emit_money_flow(record: dict[str, Any]) -> dict[str, Any] | None:
         f"GOOL_MONEY_FLOW_BET match={candidate['match_id']} minute={candidate['minute']} "
         f"market={candidate['market']} odd={candidate['odd']:.2f} level={info.get('level')} "
         f"delta=£{float(info.get('volume_delta') or 0):.0f}/{info.get('window')} "
-        f"fair_pp={float(info.get('fair_delta_pp') or 0):+.2f} stake={candidate['virtual_stake_rub']:.0f}rub",
+        f"fair_pp={float(info.get('fair_delta_pp') or 0):+.2f} "
+        f"wom={float(info.get('back_wom') or 0):.3f} ofi={float(info.get('orderflow_imbalance') or 0):+.3f} "
+        f"stake={candidate['virtual_stake_rub']:.0f}rub",
         flush=True,
     )
     return candidate

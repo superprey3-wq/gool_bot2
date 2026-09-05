@@ -12,6 +12,7 @@ from .providers.common import UA
 
 def _page_payload(page: int, per_page: int) -> dict[str, Any]:
     offset = max(0, (int(page) - 1) * int(per_page))
+    orderbook_depth = max(3, min(10, int(os.getenv("MATCHBOOK_ORDERBOOK_DEPTH", "5"))))
     params = urllib.parse.urlencode(
         {
             "tag-url-names": "soccer",
@@ -19,7 +20,7 @@ def _page_payload(page: int, per_page: int) -> dict[str, Any]:
             "exchange-type": "back-lay",
             "odds-type": "DECIMAL",
             "include-prices": "true",
-            "price-depth": 3,
+            "price-depth": orderbook_depth,
             "price-mode": "expanded",
             "currency": "GBP",
             "minimum-liquidity": 1,

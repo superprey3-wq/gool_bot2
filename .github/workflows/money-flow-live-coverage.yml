@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'src/gool_bot2/storage_live_collector.py'
+      - 'src/gool_bot2/matchbook_exchange.py'
       - 'src/gool_bot2/matchbook_pagination.py'
       - 'src/gool_bot2/matchbook_market_worker.py'
       - 'src/gool_bot2/multi_money_flow.py'
       - 'src/gool_bot2/storage_market_signal_worker_var.py'
       - 'src/gool_bot2/multi_product.py'
       - 'tests/test_money_flow_and_live_coverage.py'
+      - 'tests/test_matchbook_exchange.py'
       - '.github/workflows/money-flow-live-coverage.yml'
   workflow_dispatch:
 
@@ -31,12 +33,14 @@ jobs:
         run: >-
           ruff check --select E9,F63,F7,F82
           src/gool_bot2/storage_live_collector.py
+          src/gool_bot2/matchbook_exchange.py
           src/gool_bot2/matchbook_pagination.py
           src/gool_bot2/matchbook_market_worker.py
           src/gool_bot2/multi_money_flow.py
           src/gool_bot2/storage_market_signal_worker_var.py
           src/gool_bot2/multi_product.py
           tests/test_money_flow_and_live_coverage.py
+          tests/test_matchbook_exchange.py
       - name: Real provider coverage probe
         env:
           MATCHBOOK_MAX_PAGES: '3'

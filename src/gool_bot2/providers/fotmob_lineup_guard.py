@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from .fotmob import FotMobProvider
 
 
-_ORIGINAL_ENRICH = FotMobProvider.enrich
+_ORIGINAL_ENRICH: Callable[..., Any] | None = None
 _INSTALLED = False
 
 
@@ -90,10 +90,14 @@ def lineup_summary(detail: dict[str, Any]) -> dict[str, Any]:
 
 
 def _enrich_with_lineup(self: FotMobProvider, home: str, away: str):
+    if _ORIGINAL_ENRICH is None:
+        return None
     result = _ORIGINAL_ENRICH(self, home, away)
     if result is None:
         return None
     try:
+        # `_detail` is already warm from the wrapped enrich path; this reads the
+        # cache and does not add a second network request.
         detail = self._detail(str(result.provider_match_id))
         summary = lineup_summary(detail)
     except Exception:
@@ -106,9 +110,13 @@ def _enrich_with_lineup(self: FotMobProvider, home: str, away: str):
 
 
 def install() -> None:
-    global _INSTALLED
+    global _INSTALLED, _ORIGINAL_ENRICH
     if _INSTALLED:
         return
+    # Capture the method at install time, after secondary/freshness guards have
+    # installed their wrappers. This prevents lineup enrichment from bypassing
+    # the fast live-clock/fresh-detail path.
+    _ORIGINAL_ENRICH = FotMobProvider.enrich
     FotMobProvider.enrich = _enrich_with_lineup
     _INSTALLED = True
 

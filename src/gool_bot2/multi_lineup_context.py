@@ -90,7 +90,7 @@ def apply_lineup_context(record: dict[str, Any], experts: dict[str, Any]) -> dic
 
     if multiplier < 1.0:
         minute = int((record.get("match") or {}).get("minute") or 0)
-        strategy = "goal_before_ht" if 1 <= minute <= 30 else ("another_goal" if 46 <= minute <= 75 else None)
+        strategy = "goal_before_ht" if 1 <= minute <= 35 else ("another_goal" if 46 <= minute <= 75 else None)
         expert = experts.get(strategy) if strategy else None
         if isinstance(expert, dict):
             diagnostics = dict(expert.get("diagnostics") or {})

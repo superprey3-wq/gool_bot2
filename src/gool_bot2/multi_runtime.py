@@ -18,6 +18,7 @@ from .multi_reentry_guard import enforce_reentry_cooldown
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
+from .prematch_goal_profile import apply_half_goal_prior
 from .xbet_market_pressure import load_market_state
 
 
@@ -135,6 +136,15 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         two_more_analysis=two_more,
         data_quality=quality,
     )
+    half_profile = apply_half_goal_prior(record, experts)
+    active_prior = half_profile.get("active") or {}
+    if active_prior.get("available"):
+        print(
+            f"GOOL_HALF_PREMATCH match={mid} period={active_prior.get('period')} "
+            f"line={active_prior.get('next_total_line')} p_next={active_prior.get('one_more_probability')} "
+            f"sample={active_prior.get('pair_sample')} h2h={active_prior.get('h2h_sample')}",
+            flush=True,
+        )
 
     if bool(match.get("is_halftime")):
         experts.pop("goal_before_ht", None)

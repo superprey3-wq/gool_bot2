@@ -236,10 +236,14 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         now = datetime.now(timezone.utc)
         matches = self.flashscore.live_matches()
         current_ids = {str(m.provider_match_id) for m in matches}
-        active = [m for m in matches if int(m.minute or 0) < 90 and self._entry_window(int(m.minute or 0)) and not m.is_halftime]
-        halftime = [m for m in matches if bool(m.is_halftime)]
-        late_settlement = [m for m in matches if 76 <= int(m.minute or 0) < 90 and not m.is_halftime]
-        dead_first_half = [m for m in matches if 36 <= int(m.minute or 0) <= 45 and not m.is_halftime]
+        active = [m for m in matches if self._entry_window(int(m.minute or 0)) and not m.is_halftime]
+        active_ids = {str(m.provider_match_id) for m in active}
+        market_watch = [
+            m for m in matches
+            if int(m.minute or 0) > 0 and str(m.provider_match_id) not in active_ids
+        ]
+        halftime = [m for m in market_watch if bool(m.is_halftime)]
+        dead_first_half = [m for m in market_watch if 36 <= int(m.minute or 0) <= 45 and not m.is_halftime]
 
         counters: dict[str, Any] = {
             "live": len(matches),
@@ -249,6 +253,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
             "candidate": 0,
             "secondary": 0,
             "settlement_only": 0,
+            "market_watch": len(market_watch),
             "skipped_dead_window": len(dead_first_half),
             "final": 0,
             "errors": 0,
@@ -294,16 +299,17 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                     flush=True,
                 )
 
-        # Halftime and 76-89' are needed for settlement, but do not deserve expensive
-        # provider calls because no new ordinary GOOL entry can be created there.
-        for match in halftime + late_settlement:
+        # Every non-ordinary LIVE minute still gets a cheap snapshot. This keeps
+        # autonomous 1xBet STEAM and Matchbook MONEY FLOW alive at 36-45, HT,
+        # 76-89 and 90+ without spending expensive football-detail calls there.
+        for match in market_watch:
             try:
                 self._append(self._cheap_record(match, now), now)
                 counters["appended"] += 1
                 counters["settlement_only"] += 1
             except Exception as exc:
                 counters["errors"] += 1
-                print(f"LIVE_SETTLEMENT_SNAPSHOT_ERROR match={match.provider_match_id} error={type(exc).__name__}:{exc}", flush=True)
+                print(f"LIVE_MARKET_WATCH_SNAPSHOT_ERROR match={match.provider_match_id} error={type(exc).__name__}:{exc}", flush=True)
 
         missing = set(self._tracked_matches) - current_ids
         if missing:

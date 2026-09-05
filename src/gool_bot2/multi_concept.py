@@ -19,8 +19,8 @@ def ordinary_strategy(match: dict[str, Any]) -> str | None:
     Production concept:
     - first half: goal before half-time only, entries through 35';
     - second half: one more goal only, from 46' through 75';
-    - autonomous 1xBet STEAM remains separate, but the final 75' entry cutoff
-      applies to every production BET.
+    - autonomous 1xBet STEAM is a separate market system and has no minute cap
+      while the match and its market are genuinely LIVE.
     """
     if bool(match.get("is_finished")) or bool(match.get("is_halftime")):
         return None
@@ -51,13 +51,16 @@ def routing_experts(match: dict[str, Any], experts: dict[str, Any]) -> dict[str,
 
 
 def enforce_entry_cutoff(decision: RouterDecision) -> RouterDecision:
-    """Block every production entry after 75', including autonomous STEAM."""
+    """Keep the 75' cutoff for ordinary GOOL, never for autonomous STEAM."""
     if decision.status != "BET" or decision.winner is None:
+        return decision
+
+    winner = decision.winner
+    if str(getattr(winner, "source", "")).startswith("1xbet:autonomous_steam"):
         return decision
     if int(decision.minute) <= SECOND_HALF_MAX_MINUTE:
         return decision
 
-    winner = decision.winner
     if "concept_entry_after_75" not in winner.blocks:
         winner.blocks.append("concept_entry_after_75")
     winner.eligible = False
@@ -66,5 +69,5 @@ def enforce_entry_cutoff(decision: RouterDecision) -> RouterDecision:
     decision.status = "WAIT"
     decision.winner = None
     decision.alternatives = []
-    decision.reason = "WAIT: новая концепция запрещает любые входы после 75-й минуты."
+    decision.reason = "WAIT: обычный GOOL запрещает новые входы после 75-й минуты."
     return decision

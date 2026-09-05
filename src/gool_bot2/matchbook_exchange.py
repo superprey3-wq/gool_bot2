@@ -430,9 +430,17 @@ def matchbook_context(record: dict[str, Any], state: dict[str, Any] | None = Non
     hs = int(match.get("home_score") or 0)
     aws = int(match.get("away_score") or 0)
     total = hs + aws
+    money_flow = {"available": False}
+    if minute > 0 and not bool(match.get("is_finished")) and bool(event.get("in_running")):
+        flow_period = "1H" if not bool(match.get("is_halftime")) and minute <= 45 else "FT"
+        money_flow = _target_context(event, flow_period, total + 0.5)
+        if flow_period == "1H" and not bool(money_flow.get("available")):
+            money_flow = _target_context(event, "FT", total + 0.5)
+
     systems = {
         "goal_before_ht": _target_context(event, "1H", total + 0.5) if 1 <= minute <= 35 else {"available": False},
         "another_goal": _target_context(event, "FT", total + 0.5) if 46 <= minute <= 75 else {"available": False},
+        "money_flow": money_flow,
     }
     return {
         "available": True,

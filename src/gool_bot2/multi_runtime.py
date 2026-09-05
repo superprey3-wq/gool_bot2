@@ -12,7 +12,6 @@ from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_concept import enforce_entry_cutoff, routing_experts
-from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_exchange_confirmation import apply_matchbook_confirmation
@@ -69,36 +68,6 @@ def _paths() -> tuple[Path, Path]:
     return analysis, journal
 
 
-def _minimum_rating() -> float:
-    try:
-        return max(0.0, min(100.0, float(os.getenv("GOOL_MULTI_MIN_RATING", "70"))))
-    except (TypeError, ValueError):
-        return 70.0
-
-
-def _enforce_min_rating(decision: Any) -> Any:
-    """Final production gate: never journal/send a Multi BET below the floor."""
-    if str(getattr(decision, "status", "")) != "BET" or getattr(decision, "winner", None) is None:
-        return decision
-
-    floor = _minimum_rating()
-    winner = decision.winner
-    if float(getattr(winner, "rating", 0.0) or 0.0) >= floor:
-        return decision
-
-    if "goal_state_rating_below_70" not in winner.blocks:
-        winner.blocks.append("goal_state_rating_below_70")
-    winner.reason_tags.append("production_rating_floor")
-    winner.eligible = False
-    if not any(row.key == winner.key for row in decision.rejected):
-        decision.rejected.append(winner)
-
-    decision.status = "WAIT"
-    decision.winner = None
-    decision.alternatives = []
-    decision.reason = f"WAIT: финальный рейтинг ниже {floor:.0f}/100 — реальную ставку не отправляем."
-    return decision
-
 
 def _ensure_any_goal_coverage_proxy(experts: dict[str, Any]) -> None:
     """Backwards-compatible coverage proxy used only when broad any-goal is absent.
@@ -137,7 +106,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
        second half through 75';
     2) autonomous 1xBet steam: exceptional market-only bypass with hard guards.
 
-    Every production entry, including STEAM, is finally closed after 75'.
+    Only ordinary GOOL uses the 35'/75' entry windows; autonomous market
+    systems remain live for the whole match while their markets are tradable.
     The bookmaker remains mandatory for the actual tradable market and price.
     """
     match = record.get("match") or {}
@@ -241,13 +211,9 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     decision = enforce_goal_state_policy(decision, experts)
 
-    # Matchbook cannot manufacture a BET. It only adjusts the rating of an
-    # already-created ordinary candidate before the normal confidence gate.
+    # Matchbook cannot manufacture an ordinary GOOL BET. It can only annotate
+    # or modestly adjust a candidate that the single football Brain already chose.
     decision = apply_matchbook_confirmation(decision, record)
-
-    # Strong 1xBet confirmation may support only the active ordinary concept
-    # candidate. Other football products are no longer exposed to the router.
-    decision = enforce_confidence_gate(decision, experts, market_row=market)
 
     # Do not chase a just-realized goal. For tied/high-scoring states, live 1X2
     # draw repricing is explicit opposition unless football + total market are
@@ -258,11 +224,10 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # before autonomous STEAM so the separate steam system keeps its own guards.
     decision = enforce_match_suitability(decision, record)
 
-    # Autonomous STEAM remains a separate exceptional layer, but the concept's
-    # global 75' entry deadline is applied immediately after it.
+    # Autonomous STEAM is a separate all-LIVE market hunter. The cutoff below
+    # applies only to ordinary GOOL; enforce_entry_cutoff explicitly bypasses STEAM.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = enforce_entry_cutoff(decision)
-    decision = _enforce_min_rating(decision)
 
     decision = enforce_reentry_cooldown(decision, record, journal_path)
 

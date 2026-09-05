@@ -33,7 +33,8 @@ def _page_payload(page: int, per_page: int) -> dict[str, Any]:
         f"{MATCHBOOK_EVENTS_URL}?{params}",
         headers={"User-Agent": UA, "Accept": "application/json,*/*"},
     )
-    with urllib.request.urlopen(req, timeout=20) as response:
+    timeout = max(3.0, min(20.0, float(os.getenv("MATCHBOOK_PAGE_TIMEOUT_SECONDS", "8"))))
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload if isinstance(payload, dict) else {}
 
@@ -46,7 +47,17 @@ def fetch_events_paginated() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
     for page in range(1, max_pages + 1):
-        payload = _page_payload(page, per_page)
+        try:
+            payload = _page_payload(page, per_page)
+        except Exception as exc:
+            print(
+                f"MATCHBOOK_PAGE_ERROR page={page} collected={len(rows)} "
+                f"error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+            if page == 1:
+                raise
+            break
         events = [row for row in (payload.get("events") or []) if isinstance(row, dict)]
         if not events:
             break

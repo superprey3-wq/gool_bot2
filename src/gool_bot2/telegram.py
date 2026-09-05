@@ -67,18 +67,24 @@ def subscribe(chat_id:str|int)->bool:
  chat_id=str(chat_id).strip();rows=_read_saved();before=len(rows);rows.add(chat_id);_write_saved(rows);stopped=_read_stopped();was_stopped=chat_id in stopped;stopped.discard(chat_id);_write_stopped(stopped);return len(rows)>before or was_stopped
 def unsubscribe(chat_id:str|int)->bool:
  chat_id=str(chat_id).strip();rows=_read_saved();existed=chat_id in rows;rows.discard(chat_id);_write_saved(rows);stopped=_read_stopped();already=chat_id in stopped;stopped.add(chat_id);_write_stopped(stopped);return existed or not already
-def _api_call(method:str,payload:dict[str,Any],timeout:int=15)->dict[str,Any]|None:
+def _api_call(method:str,payload:dict[str,Any],timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if timeout is None:
+  try:timeout=max(3,int(float(os.getenv("TELEGRAM_API_TIMEOUT_SECONDS","8"))))
+  except Exception:timeout=8
  req=Request(f"https://api.telegram.org/bot{token}/{method}",data=json.dumps(payload).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
  try:
   with urlopen(req,timeout=timeout) as response:
    body=json.loads(response.read().decode("utf-8"));return body if isinstance(body,dict) else None
  except Exception as exc:
   print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
-def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int=25)->dict[str,Any]|None:
+def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if timeout is None:
+  try:timeout=max(4,int(float(os.getenv("TELEGRAM_PHOTO_TIMEOUT_SECONDS","10"))))
+  except Exception:timeout=10
  boundary=f"----GOOL{uuid.uuid4().hex}";body=bytearray()
  for key,value in fields.items():
   body.extend(f"--{boundary}\r\n".encode());body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode());body.extend(str(value).encode("utf-8"));body.extend(b"\r\n")

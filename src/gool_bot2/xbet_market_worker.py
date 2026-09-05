@@ -35,35 +35,35 @@ class BoundedRobustXBetMarketCollector(RobustXBetMarketCollector):
 
 
 class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
-    """Monitor every active GOOL-window match while prioritising Brain demand.
+    """Monitor every LIVE match while prioritising an ordinary GOOL Brain demand.
 
     Ordinary GOOL writes a short-lived demand only after the football Brain
-    reaches PASS/BORDERLINE. That demand does not exclude any other game: it
-    merely moves the selected match to the front of the same cycle so the Brain
-    gets the freshest possible quote. Autonomous 1xBet STEAM continuously sees
-    every LIVE match in the production windows with no league privileges,
-    rotation, or per-cycle watch cap.
+    reaches PASS/BORDERLINE. That demand never excludes another game: it only
+    moves the selected match to the front of the same cycle so the Brain gets
+    the freshest possible quote. Autonomous 1xBet STEAM continuously watches
+    every LIVE match from kickoff until the match is finished, including
+    half-time and added time, with no league priority, rotation or minute cap.
     """
 
     @staticmethod
-    def _entry_window(match: Any) -> bool:
+    def _market_watch_live(match: Any) -> bool:
         try:
             minute = int(match.minute or 0)
         except (TypeError, ValueError):
             return False
-        return 1 <= minute <= 35 or 46 <= minute <= 75
+        return minute > 0 and not bool(getattr(match, "is_finished", False))
 
     def _select_matches(self, matches: list[Any]) -> tuple[list[Any], dict[str, int]]:
-        active = [match for match in matches if self._entry_window(match)]
+        live_watch = [match for match in matches if self._market_watch_live(match)]
         demand_ids = set(load_active_demands())
 
-        demanded = [match for match in active if str(match.provider_match_id) in demand_ids]
-        background = [match for match in active if str(match.provider_match_id) not in demand_ids]
+        demanded = [match for match in live_watch if str(match.provider_match_id) in demand_ids]
+        background = [match for match in live_watch if str(match.provider_match_id) not in demand_ids]
         selected = [*demanded, *background]
 
         return selected, {
             "live": len(matches),
-            "active_window": len(active),
+            "live_watch": len(live_watch),
             "demanded": len(demanded),
             "background": len(background),
             "selected": len(selected),
@@ -71,7 +71,7 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
 
     def collect_once(self) -> dict[str, Any]:
         # Existing robust score/VAR/red-card guards are preserved by calling the
-        # normal collector with the complete active production-window set.
+        # normal collector with the complete LIVE market-watch set.
         all_matches = list(self.flashscore.live_matches())
         selected, stats = self._select_matches(all_matches)
         original_live_matches = self.flashscore.live_matches
@@ -82,7 +82,7 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
             self.flashscore.live_matches = original_live_matches  # type: ignore[method-assign]
         print(
             "XBET_ALL_MARKETS "
-            f"live={stats['live']} active={stats['active_window']} demanded={stats['demanded']} "
+            f"live={stats['live']} watched={stats['live_watch']} demanded={stats['demanded']} "
             f"background={stats['background']} selected={stats['selected']} "
             f"fetched={len((state.get('matches') or {}))}",
             flush=True,
@@ -92,7 +92,7 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
 
 def main() -> None:
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
-    parser = argparse.ArgumentParser(description="GOOL 1xBet all-active market-pressure collector")
+    parser = argparse.ArgumentParser(description="GOOL 1xBet all-LIVE market-pressure collector")
     parser.add_argument("--state", default=os.getenv("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     parser.add_argument("--history", default=os.getenv("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
     parser.add_argument("--interval", type=float, default=float(os.getenv("XBET_MARKET_INTERVAL_SECONDS", "12")))
@@ -122,7 +122,7 @@ def main() -> None:
     prematch_thread.start()
     print(
         f"XBET_MARKET started interval={args.interval}s state={args.state} "
-        f"collector=all_active_robust workers={os.getenv('XBET_GAME_WORKERS', '24')} "
+        f"collector=all_live_robust workers={os.getenv('XBET_GAME_WORKERS', '24')} "
         f"demand_priority=on demand_ttl={os.getenv('XBET_MARKET_DEMAND_TTL_SECONDS', '90')}s "
         f"history_keep={os.getenv('XBET_HISTORY_RUNTIME_KEEP_BYTES', str(12 * 1024 * 1024))} "
         f"score_epoch_guard={os.getenv('XBET_SCORE_REPRICE_GUARD_SECONDS', '24')}s "

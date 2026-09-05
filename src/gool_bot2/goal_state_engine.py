@@ -127,7 +127,7 @@ def _side_state(record: dict[str, Any], side: str) -> dict[str, Any]:
     if finished or minute <= 0:
         state = HARD_NO
         blocks = ["match_not_live"]
-    elif minute < 10 or evidence < min_evidence or confidence is None:
+    elif evidence < min_evidence or confidence is None:
         state = NO_DATA
         blocks = ["side_not_enough_live_evidence"]
     elif bool(raw.get("passed")) and strength >= pass_min:
@@ -345,10 +345,6 @@ def build_goal_state_experts(
         fh_state = HARD_NO
         fh_strength = 0.0
         fh_blocks = ["first_half_closed"]
-    elif minute < 10:
-        fh_state = NO_DATA
-        fh_strength = _blend([(any_strength, 0.65), (first_half_prior, 0.35)])
-        fh_blocks = ["first_half_warmup"]
     else:
         fh_strength = _blend([(any_strength, 0.65), (first_half_prior, 0.35)])
         if minute > 25:

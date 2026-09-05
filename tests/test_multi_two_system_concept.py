@@ -42,15 +42,15 @@ def _decision(minute: int, *, source: str = "gool") -> RouterDecision:
     )
 
 
-def test_first_half_routes_only_goal_before_ht_through_30() -> None:
-    for minute in (1, 15, 30):
+def test_first_half_routes_only_goal_before_ht_through_35() -> None:
+    for minute in (1, 15, 30, 35):
         match = {"minute": minute, "is_halftime": False, "is_finished": False}
         assert ordinary_strategy(match) == FIRST_HALF_STRATEGY
         assert set(routing_experts(match, _experts())) == {"goal_before_ht"}
 
 
-def test_first_half_has_no_new_ordinary_entry_after_30() -> None:
-    for minute in (31, 40, 45):
+def test_first_half_has_no_new_ordinary_entry_after_35() -> None:
+    for minute in (36, 40, 45):
         match = {"minute": minute, "is_halftime": False, "is_finished": False}
         assert ordinary_strategy(match) is None
         assert routing_experts(match, _experts()) == {}

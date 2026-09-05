@@ -54,6 +54,17 @@ _ENV_PREFIX = {
 
 _STRONG_STEAM_LEVELS = {"STRONG_STEAM", "MULTI_MARKET_STEAM"}
 
+# These products need football to lead the decision. A bookmaker move may
+# confirm them, but it must not lower the minimum football probability.
+# A small rating relief is allowed only when at least one related market
+# confirms the same direction.
+_FOOTBALL_FIRST_STRATEGIES = {
+    "another_goal",
+    "goal_before_ht",
+    "two_more_goals",
+    "home_goal",
+}
+
 
 def _f(name: str, default: float) -> float:
     try:
@@ -135,8 +146,30 @@ def _floors(row: MarketCandidate, breadth_count: int) -> tuple[float, float, boo
         rating_floor = _f(f"GOOL_CONFIDENCE_{prefix}_MIN_RATING", rating_default)
         football_floor = _f(f"GOOL_CONFIDENCE_{prefix}_MIN_FOOTBALL", football_default)
 
+    base_rating_floor = rating_floor
+    base_football_floor = football_floor
     steam = _strong_steam_support(row)
-    if steam:
+
+    if steam and strategy in _FOOTBALL_FIRST_STRATEGIES:
+        # Football-first trim: a single bookmaker move is not enough to make a
+        # marginal football scenario a BEST BET. Related-market breadth can
+        # relax rating a little, but never the football probability floor.
+        if breadth_count > 0:
+            steam_relief = max(0.0, _f("GOOL_CONFIDENCE_STEAM_RATING_RELIEF", 2.0))
+            per_market_rating = max(
+                0.0,
+                _f("GOOL_CONFIDENCE_BREADTH_RATING_RELIEF_PER_MARKET", 1.0),
+            )
+            max_relief = max(
+                0.0,
+                _f("GOOL_CONFIDENCE_FOOTBALL_FIRST_MAX_RATING_RELIEF", 2.0),
+            )
+            rating_floor -= min(
+                max_relief,
+                steam_relief + breadth_count * per_market_rating,
+            )
+        football_floor = base_football_floor
+    elif steam:
         rating_floor -= max(0.0, _f("GOOL_CONFIDENCE_STEAM_RATING_RELIEF", 2.0))
         football_floor -= max(0.0, _f("GOOL_CONFIDENCE_STEAM_FOOTBALL_RELIEF", 0.02))
         if breadth_count > 0:
@@ -188,9 +221,9 @@ def enforce_confidence_gate(
 ) -> RouterDecision:
     """Demand extra football certainty for historically weaker GOOL products.
 
-    Strong verified 1xBet steam can support an already-good football idea.
-    Confirmation across related markets adds a little more confidence, but it
-    cannot revive a weak scenario and never changes the bookmaker minimum odd.
+    Football-first products keep a hard football floor. Strong verified 1xBet
+    steam can support an already-good football idea, and related-market breadth
+    may slightly relax rating, but market movement cannot revive weak football.
     """
     if decision.status != "BET" or decision.winner is None:
         return decision
@@ -264,7 +297,7 @@ def enforce_confidence_gate(
             )
         else:
             decision.reason = (
-                "GOOL Goal State прошёл повышенный порог уверенности; "
+                "GOOL Goal State прошёл повышенный порог футбольной уверенности; "
                 "сильный свежий STEAM 1xBet дополнительно подтвердил вход."
             )
     else:

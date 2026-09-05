@@ -1,0 +1,25 @@
+name: 365Scores trends raw probe
+
+on:
+  push:
+    branches:
+      - audit/365-trends-raw
+    paths:
+      - "scripts/scores365_trends_raw_probe.py"
+      - ".github/workflows/scores365-trends-raw-probe.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Probe 365Scores raw trends and H2H
+        run: python scripts/scores365_trends_raw_probe.py | tee scores365-trends-raw.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scores365-trends-raw
+          path: scores365-trends-raw.log

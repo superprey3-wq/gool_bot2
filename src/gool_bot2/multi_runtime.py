@@ -9,7 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .multi_autonomous_steam import apply_autonomous_steam
-from .multi_concept import routing_experts
+from .multi_concept import enforce_entry_cutoff, routing_experts
 from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
@@ -100,6 +100,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
        second half through 75';
     2) autonomous 1xBet steam: exceptional market-only bypass with hard guards.
 
+    Every production entry, including STEAM, is finally closed after 75'.
     The bookmaker remains mandatory for the actual tradable market and price.
     """
     match = record.get("match") or {}
@@ -148,9 +149,10 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # candidate. Other football products are no longer exposed to the router.
     decision = enforce_confidence_gate(decision, experts, market_row=market)
 
-    # Autonomous STEAM remains a separate exceptional layer and is deliberately
-    # not restricted by the two ordinary GOOL systems.
+    # Autonomous STEAM remains a separate exceptional layer, but the concept's
+    # global 75' entry deadline is applied immediately after it.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
+    decision = enforce_entry_cutoff(decision)
     decision = _enforce_min_rating(decision)
 
     decision = enforce_reentry_cooldown(decision, record, journal_path)

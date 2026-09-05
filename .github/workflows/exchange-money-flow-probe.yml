@@ -1,0 +1,21 @@
+name: exchange money flow probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/exchange_money_flow_probe.py'
+      - '.github/workflows/exchange-money-flow-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Probe exchange market-data endpoints
+        run: python scripts/exchange_money_flow_probe.py

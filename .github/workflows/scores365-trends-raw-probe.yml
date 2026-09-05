@@ -6,6 +6,7 @@ on:
       - audit/365-trends-raw
     paths:
       - "scripts/scores365_trends_raw_probe.py"
+      - "scripts/scores365_history_endpoint_probe.py"
       - ".github/workflows/scores365-trends-raw-probe.yml"
   workflow_dispatch:
 
@@ -19,7 +20,11 @@ jobs:
           python-version: "3.11"
       - name: Probe 365Scores raw trends and H2H
         run: python scripts/scores365_trends_raw_probe.py | tee scores365-trends-raw.log
+      - name: Probe 365Scores history and hidden endpoints
+        run: python scripts/scores365_history_endpoint_probe.py | tee scores365-history-endpoints.log
       - uses: actions/upload-artifact@v4
         with:
           name: scores365-trends-raw
-          path: scores365-trends-raw.log
+          path: |
+            scores365-trends-raw.log
+            scores365-history-endpoints.log

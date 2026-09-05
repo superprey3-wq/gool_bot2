@@ -11,6 +11,7 @@ from .providers.common import UA
 
 
 def _page_payload(page: int, per_page: int) -> dict[str, Any]:
+    offset = max(0, (int(page) - 1) * int(per_page))
     params = urllib.parse.urlencode(
         {
             "tag-url-names": "soccer",
@@ -25,7 +26,7 @@ def _page_payload(page: int, per_page: int) -> dict[str, Any]:
             "include-event-participants": "true",
             "markets-limit": 40,
             "per-page": per_page,
-            "page": page,
+            "offset": offset,
         }
     )
     req = urllib.request.Request(
@@ -62,10 +63,11 @@ def fetch_events_paginated() -> list[dict[str, Any]]:
             rows.append(decoded)
             added += 1
         print(
-            f"MATCHBOOK_PAGE page={page} raw={len(events)} added={added} total={len(rows)}",
+            f"MATCHBOOK_PAGE page={page} offset={(page - 1) * per_page} raw={len(events)} "
+            f"added={added} total={len(rows)}",
             flush=True,
         )
-        if len(events) < per_page:
+        if len(events) < per_page or added == 0:
             break
 
     return rows

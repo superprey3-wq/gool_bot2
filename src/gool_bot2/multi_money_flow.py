@@ -475,6 +475,14 @@ def _result_text(row: dict[str, Any]) -> str:
     )
 
 
+def _result_retry_due(row: dict[str, Any]) -> bool:
+    last = _parse_dt(row.get("result_notification_last_attempt_at"))
+    if last is None:
+        return True
+    elapsed = (datetime.now(timezone.utc) - last.astimezone(timezone.utc)).total_seconds()
+    return elapsed >= max(15.0, _number(os.getenv("GOOL_RESULT_RETRY_SECONDS", "60"), 60.0))
+
+
 def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
     rows = load_signal_journal(path)
     bank_changed = _ensure_bank_fields(rows)
@@ -490,6 +498,7 @@ def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
             str(row.get("result") or "").lower() in FINAL_RESULTS
             and bool(row.get("telegram_sent"))
             and not bool(row.get("result_telegram_sent"))
+            and _result_retry_due(row)
         ):
             sent = 0
             try:
@@ -499,11 +508,13 @@ def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
                 print(f"GOOL_MONEY_FLOW_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
             if sent <= 0:
                 sent = telegram.broadcast(_result_text(row))
+            row["result_notification_last_attempt_at"] = _now()
+            row["result_notification_attempts"] = int(row.get("result_notification_attempts") or 0) + 1
+            changed = True
             if sent > 0:
                 row["result_telegram_sent"] = True
                 row["result_telegram_sent_at"] = _now()
                 row["result_telegram_delivery_count"] = int(sent)
-                changed = True
     if changed:
         save_signal_journal(path, rows)
 

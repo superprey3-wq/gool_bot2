@@ -147,6 +147,8 @@ def main() -> None:
     os.environ.setdefault("MATCHBOOK_PAGE_TIMEOUT_SECONDS", "8")
     os.environ.setdefault("TELEGRAM_API_TIMEOUT_SECONDS", "8")
     os.environ.setdefault("TELEGRAM_PHOTO_TIMEOUT_SECONDS", "10")
+    os.environ.setdefault("TELEGRAM_NETWORK_BACKOFF_SECONDS", "30")
+    os.environ.setdefault("GOOL_RESULT_RETRY_SECONDS", "60")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")

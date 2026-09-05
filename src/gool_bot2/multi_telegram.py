@@ -139,7 +139,7 @@ def emit_multi_results(
             sent = telegram.broadcast(fallback)
         total += sent
         finalized = False
-        if sent > 0 and journal_path is not None:
+        if journal_path is not None:
             finalized = finalize_result_delivery(journal_path, row, sent)
         print(
             f"GOOL_MULTI_RESULT_SENT match={row.get('match_id')} result={row.get('result')} "

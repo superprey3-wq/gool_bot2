@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
@@ -17,6 +18,16 @@ from .journal import load_signal_journal, mark_in_game, save_signal_journal
 from .providers.flashscore import FlashscoreProvider
 
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
+_TELEGRAM_UNAVAILABLE_UNTIL=0.0
+
+def _telegram_circuit_open()->bool:
+ return time.monotonic() < _TELEGRAM_UNAVAILABLE_UNTIL
+
+def _trip_telegram_circuit()->None:
+ global _TELEGRAM_UNAVAILABLE_UNTIL
+ try:cooldown=max(5.0,float(os.getenv("TELEGRAM_NETWORK_BACKOFF_SECONDS","30")))
+ except Exception:cooldown=30.0
+ _TELEGRAM_UNAVAILABLE_UNTIL=max(_TELEGRAM_UNAVAILABLE_UNTIL,time.monotonic()+cooldown)
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
     "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"
@@ -70,6 +81,7 @@ def unsubscribe(chat_id:str|int)->bool:
 def _api_call(method:str,payload:dict[str,Any],timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if _telegram_circuit_open():return None
  if timeout is None:
   try:timeout=max(3,int(float(os.getenv("TELEGRAM_API_TIMEOUT_SECONDS","8"))))
   except Exception:timeout=8
@@ -78,10 +90,11 @@ def _api_call(method:str,payload:dict[str,Any],timeout:int|None=None)->dict[str,
   with urlopen(req,timeout=timeout) as response:
    body=json.loads(response.read().decode("utf-8"));return body if isinstance(body,dict) else None
  except Exception as exc:
-  print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
+  _trip_telegram_circuit();print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
 def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int|None=None)->dict[str,Any]|None:
  token=_token()
  if not token:return None
+ if _telegram_circuit_open():return None
  if timeout is None:
   try:timeout=max(4,int(float(os.getenv("TELEGRAM_PHOTO_TIMEOUT_SECONDS","10"))))
   except Exception:timeout=10
@@ -98,7 +111,7 @@ def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,
   except Exception:detail=""
   print(f"telegram_photo_http_error code={exc.code} detail={detail}",flush=True);return None
  except Exception as exc:
-  print(f"telegram_photo_error error={type(exc).__name__}:{exc}",flush=True);return None
+  _trip_telegram_circuit();print(f"telegram_photo_error error={type(exc).__name__}:{exc}",flush=True);return None
 def signal_keyboard(match_id:str,head:str,entered:bool=False)->dict[str,Any]:
  code=HEAD_TO_CODE.get(head,"AG");text="✅ В игре" if entered else "🎯 В игре";return {"inline_keyboard":[[{"text":text,"callback_data":f"ig:{code}:{match_id}"}]]}
 def send_message(chat_id:str|int,text:str,parse_mode:str="HTML",reply_markup:dict[str,Any]|None=None)->bool:

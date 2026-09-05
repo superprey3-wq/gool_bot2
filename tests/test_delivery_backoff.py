@@ -6,6 +6,9 @@ import gool_bot2.multi_delivery as delivery
 import gool_bot2.telegram as telegram
 from gool_bot2.journal import save_signal_journal, load_signal_journal
 
+# Regression contract: a Telegram outage must not turn a 15-second market
+# heartbeat into repeated blocking network calls or duplicate result attempts.
+
 
 def test_failed_result_attempt_gets_backoff(tmp_path, monkeypatch):
     path = tmp_path / "journal.json"

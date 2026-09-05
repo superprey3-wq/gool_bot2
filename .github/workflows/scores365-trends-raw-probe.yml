@@ -8,6 +8,7 @@ on:
       - "scripts/scores365_trends_raw_probe.py"
       - "scripts/scores365_history_endpoint_probe.py"
       - "scripts/scores365_web_bundle_probe.py"
+      - "scripts/scores365_pregame_trends_probe.py"
       - ".github/workflows/scores365-trends-raw-probe.yml"
   workflow_dispatch:
 
@@ -26,6 +27,8 @@ jobs:
         run: python scripts/scores365_history_endpoint_probe.py | tee scores365-history-endpoints.log
       - name: Inspect web bundles for Trends route
         run: python scripts/scores365_web_bundle_probe.py | tee scores365-web-bundles.log
+      - name: Probe pregame statistics and H2H routes
+        run: python scripts/scores365_pregame_trends_probe.py | tee scores365-pregame-trends.log
       - uses: actions/upload-artifact@v4
         with:
           name: scores365-trends-raw
@@ -33,3 +36,4 @@ jobs:
             scores365-trends-raw.log
             scores365-history-endpoints.log
             scores365-web-bundles.log
+            scores365-pregame-trends.log

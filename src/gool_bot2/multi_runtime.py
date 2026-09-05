@@ -28,6 +28,182 @@ from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
 
+def _live_only() -> bool:
+    """Keep PREMATCH collection/diagnostics but exclude it from GOOL decisions by default."""
+    raw = str(os.getenv("GOOL_LIVE_ONLY", "1")).strip().casefold()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _live_only_brain_inputs(
+    record: dict[str, Any],
+    model_result: dict[str, Any],
+    two_more: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return a decision-only view with historical/prematch priors removed.
+
+    The original record is deliberately left untouched so PREMATCH data can still
+    be collected, displayed and written to diagnostics. The Goal State brain sees
+    only LIVE football state plus the dedicated live-pressure model.
+    """
+    if not _live_only():
+        return record, model_result, two_more
+
+    live_record = dict(record)
+    live_record["prematch_context"] = {}
+    live_record["prematch_goal_profile"] = {}
+    live_record.pop("xbet_prematch_market", None)
+
+    live_model = dict(model_result)
+    live_model.pop("trained_probability", None)
+    live_model.pop("direct", None)
+
+    # The ordinary production concept no longer routes the legacy +2 head, but
+    # clearing it here also prevents a historical helper from leaking into the
+    # unified Goal State diagnostics.
+    return live_record, live_model, {}
+
+
+def _expert_probabilities(experts: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for key, row in experts.items():
+        if not isinstance(row, dict):
+            continue
+        try:
+            out[str(key)] = float(row.get("probability"))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _restore_live_only_brain(
+    record: dict[str, Any],
+    experts: dict[str, Any],
+    intelligence: dict[str, Any],
+    live_probabilities: dict[str, float],
+) -> dict[str, Any]:
+    """Remove every PREMATCH/lineup probability and suitability contribution.
+
+    PREMATCH enrichers still run before this function so their snapshots remain
+    available for Telegram diagnostics and later research. Immediately before
+    routing, the active expert and match-suitability score are rebuilt only from
+    LIVE inputs.
+    """
+    if not _live_only():
+        return intelligence
+
+    adjustment = intelligence.get("probability_adjustment") or {}
+    strategy = str(adjustment.get("strategy") or "")
+    live_before = live_probabilities.get(strategy)
+    expert = experts.get(strategy) if strategy else None
+
+    if live_before is not None and isinstance(expert, dict):
+        try:
+            hazard_pp = float(adjustment.get("hazard_pp") or 0.0)
+        except (TypeError, ValueError):
+            hazard_pp = 0.0
+        try:
+            chance_pp = float(adjustment.get("chance_quality_pp") or 0.0)
+        except (TypeError, ValueError):
+            chance_pp = 0.0
+
+        # Preserve the same global adjustment cap as Match Intelligence, but only
+        # LIVE minute-hazard and LIVE chance quality are allowed to contribute.
+        total_pp = max(-4.0, min(4.0, hazard_pp + chance_pp))
+        adjusted = max(0.01, min(0.99, float(live_before) + total_pp / 100.0))
+        expert["probability"] = round(adjusted, 4)
+
+        adjustment.update({
+            "before": round(float(live_before), 4),
+            "after": round(adjusted, 4),
+            "kickoff_total_pp": 0.0,
+            "lineup_pp": 0.0,
+            "total_pp": round(total_pp, 2),
+            "prematch_decision_enabled": False,
+            "decision_mode": "live_only",
+        })
+
+        diagnostics = dict(expert.get("diagnostics") or {})
+        diagnostics["live_only_brain"] = {
+            "enabled": True,
+            "live_probability_before": round(float(live_before), 4),
+            "live_probability_after": round(adjusted, 4),
+            "hazard_pp": round(hazard_pp, 2),
+            "chance_quality_pp": round(chance_pp, 2),
+            "prematch_probability_contribution_pp": 0.0,
+            "kickoff_probability_contribution_pp": 0.0,
+            "lineup_probability_contribution_pp": 0.0,
+        }
+        if isinstance(diagnostics.get("half_prematch_prior"), dict):
+            diagnostics["half_prematch_prior"]["decision_enabled"] = False
+        match_intel_diag = dict(diagnostics.get("match_intelligence") or {})
+        if match_intel_diag:
+            match_intel_diag["kickoff_prior_used"] = False
+            match_intel_diag["prematch_decision_enabled"] = False
+            match_intel_diag["probability_before"] = round(float(live_before), 4)
+            match_intel_diag["probability_after"] = round(adjusted, 4)
+            match_intel_diag["delta_pp"] = round(total_pp, 2)
+            diagnostics["match_intelligence"] = match_intel_diag
+        expert["diagnostics"] = diagnostics
+
+    suitability = intelligence.get("suitability") or {}
+    components = suitability.get("components") or {}
+    if isinstance(components, dict):
+        # Preserve the relative weights of the four existing LIVE components:
+        # 0.22 integrity, 0.18 provider data, 0.18 live market, 0.16 epoch.
+        # Their original total is 0.74, so normalize them to 1.0 rather than
+        # inventing a looser threshold.
+        base_weights = {
+            "integrity": 0.22,
+            "provider_data": 0.18,
+            "market": 0.18,
+            "epoch_evidence": 0.16,
+        }
+        total_weight = sum(base_weights.values())
+        live_weights = {key: value / total_weight for key, value in base_weights.items()}
+
+        score = 0.0
+        for key, weight in live_weights.items():
+            try:
+                component = float(components.get(key) or 0.0)
+            except (TypeError, ValueError):
+                component = 0.0
+            score += max(0.0, min(1.0, component)) * weight
+
+        suitability["score"] = round(max(0.0, min(1.0, score)), 4)
+        suitability["decision_mode"] = "live_only"
+        suitability["decision_weights"] = {key: round(value, 4) for key, value in live_weights.items()}
+        suitability["disabled_decision_components"] = ["history", "kickoff", "lineup"]
+
+    intelligence["probability_adjustment"] = adjustment
+    intelligence["suitability"] = suitability
+    intelligence["decision_mode"] = "live_only"
+    intelligence["prematch_decision_enabled"] = False
+    record["match_intelligence"] = intelligence
+    return intelligence
+
+
+def _enforce_another_goal_context_for_mode(
+    decision: Any,
+    record: dict[str, Any],
+    experts: dict[str, Any],
+    market: dict[str, Any] | None,
+) -> Any:
+    """Run the live guard while hiding historical half-profile in LIVE-only mode."""
+    if not _live_only():
+        return enforce_another_goal_context(decision, record, experts, market)
+
+    sentinel = object()
+    saved = record.get("prematch_goal_profile", sentinel)
+    record["prematch_goal_profile"] = {}
+    try:
+        return enforce_another_goal_context(decision, record, experts, market)
+    finally:
+        if saved is sentinel:
+            record.pop("prematch_goal_profile", None)
+        else:
+            record["prematch_goal_profile"] = saved
+
+
 def _data_quality(record: dict[str, Any]) -> float:
     providers = min(3, provider_count(record))
     provider_score = providers / 3.0
@@ -66,7 +242,6 @@ def _paths() -> tuple[Path, Path]:
     journal_raw = os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip()
     journal = Path(journal_raw) if journal_raw else runtime / "live" / "gool_multi_journal.json"
     return analysis, journal
-
 
 
 def _ensure_any_goal_coverage_proxy(experts: dict[str, Any]) -> None:
@@ -109,6 +284,10 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     Only ordinary GOOL uses the 35'/75' entry windows; autonomous market
     systems remain live for the whole match while their markets are tradable.
     The bookmaker remains mandatory for the actual tradable market and price.
+
+    With GOOL_LIVE_ONLY=1 (the default), all PREMATCH/history/lineup/kickoff
+    context is collected for diagnostics only and cannot alter an ordinary
+    GOOL BET/WAIT decision.
     """
     match = record.get("match") or {}
     mid = str(match.get("flashscore_event_id") or "")
@@ -136,21 +315,31 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     two_more = dict(cards._LAST_TWO_MORE.get(mid) or {})
     quality = _data_quality(record)
 
-    experts = build_goal_state_experts(
+    brain_record, brain_model_result, brain_two_more = _live_only_brain_inputs(
         record,
-        model_result=model_result,
-        two_more_analysis=two_more,
+        model_result,
+        two_more,
+    )
+    experts = build_goal_state_experts(
+        brain_record,
+        model_result=brain_model_result,
+        two_more_analysis=brain_two_more,
         data_quality=quality,
     )
     _ensure_any_goal_coverage_proxy(experts)
+    live_probabilities = _expert_probabilities(experts)
 
+    # Keep PREMATCH in the bot for collection, research and diagnostics. In
+    # LIVE-only mode any probability changes made by these enrichers are reset
+    # immediately before routing.
     half_profile = apply_half_goal_prior(record, experts)
     active_prior = half_profile.get("active") or {}
     if active_prior.get("available"):
         print(
             f"GOOL_HALF_PREMATCH match={mid} period={active_prior.get('period')} "
             f"line={active_prior.get('next_total_line')} p_next={active_prior.get('one_more_probability')} "
-            f"sample={active_prior.get('pair_sample')} h2h={active_prior.get('h2h_sample')}",
+            f"sample={active_prior.get('pair_sample')} h2h={active_prior.get('h2h_sample')} "
+            f"decision={'off' if _live_only() else 'on'}",
             flush=True,
         )
 
@@ -179,6 +368,13 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     if true_prematch or lineup:
         intelligence = record.get("match_intelligence") or intelligence
 
+    intelligence = _restore_live_only_brain(
+        record,
+        experts,
+        intelligence,
+        live_probabilities,
+    )
+
     suitability = intelligence.get("suitability") or {}
     epoch = intelligence.get("score_epoch") or {}
     chance = intelligence.get("chance_quality") or {}
@@ -189,7 +385,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         f"GOOL_MATCH_INTELLIGENCE match={mid} suitability={float(suitability.get('score') or 0):.2f} "
         f"epoch={epoch.get('identity') or '-'} epoch_min={epoch.get('minutes')} "
         f"chance={float(chance.get('score') or 0.5):.2f} adjust_pp={float(adjustment.get('total_pp') or 0):+.1f} "
-        f"kickoff={kickoff.get('quality') or 'none'} lineup={lineup_risk}",
+        f"kickoff={kickoff.get('quality') or 'none'} lineup={lineup_risk} "
+        f"brain={'LIVE_ONLY' if _live_only() else 'HYBRID'}",
         flush=True,
     )
 
@@ -215,13 +412,14 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # or modestly adjust a candidate that the single football Brain already chose.
     decision = apply_matchbook_confirmation(decision, record)
 
-    # Do not chase a just-realized goal. For tied/high-scoring states, live 1X2
-    # draw repricing is explicit opposition unless football + total market are
-    # both unusually strong.
-    decision = enforce_another_goal_context(decision, record, experts, market)
+    # Do not chase a just-realized goal. LIVE 1X2 remains valid opposition.
+    # In LIVE-only mode the historical second-half total saturation branch is
+    # deliberately hidden from this guard.
+    decision = _enforce_another_goal_context_for_mode(decision, record, experts, market)
 
-    # Ordinary GOOL must also pass whole-match suitability. This gate is placed
-    # before autonomous STEAM so the separate steam system keeps its own guards.
+    # Ordinary GOOL must also pass whole-match suitability. In LIVE-only mode
+    # this score has already been rebuilt from integrity/provider/LIVE-market/
+    # score-epoch evidence only.
     decision = enforce_match_suitability(decision, record)
 
     # Autonomous STEAM is a separate all-LIVE market hunter. The cutoff below
@@ -271,6 +469,6 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     print(
         f"GOOL_MULTI_SHADOW match={mid} minute={minute} score={match.get('home_score',0)}:{match.get('away_score',0)} "
         f"decision={decision.status} best={winner or '-'} source={source or '-'} quality={quality:.2f} "
-        f"journal_entry={'yes' if created else 'no'}",
+        f"journal_entry={'yes' if created else 'no'} brain={'LIVE_ONLY' if _live_only() else 'HYBRID'}",
         flush=True,
     )

@@ -92,6 +92,37 @@ def _btts(nodes: list[dict[str, Any]]) -> dict[str, float | None]:
     return out
 
 
+def _match_1x2(nodes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Decode the main live P1/X/P2 group verified against real GetGameZip rows.
+
+    Live probe confirmed group G=1 with T=1/2/3 as home/draw/away. The fair
+    probabilities are normalized across all three outcomes so bookmaker margin
+    is not mistaken for football probability.
+    """
+    odds: dict[str, float] = {}
+    names = {1: "home", 2: "draw", 3: "away"}
+    for node in nodes:
+        if node.get("sub") or node.get("P") is not None:
+            continue
+        if int(node.get("G") or -1) != 1:
+            continue
+        name = names.get(int(node.get("T") or -1))
+        if name and name not in odds:
+            odds[name] = float(node["C"])
+    if not all(name in odds for name in ("home", "draw", "away")):
+        return {"home": None, "draw": None, "away": None, "fair": {}, "overround": None}
+    raw = {name: 1.0 / odds[name] for name in ("home", "draw", "away")}
+    total = sum(raw.values())
+    fair = {name: raw[name] / total for name in raw} if total > 0 else {}
+    return {
+        "home": odds["home"],
+        "draw": odds["draw"],
+        "away": odds["away"],
+        "fair": {name: round(prob, 6) for name, prob in fair.items()},
+        "overround": round(total - 1.0, 6),
+    }
+
+
 def decode_markets(game: dict[str, Any]) -> dict[str, Any]:
     nodes = _nodes(game)
     return {
@@ -99,6 +130,7 @@ def decode_markets(game: dict[str, Any]) -> dict[str, Any]:
         "home_total": _pairs(nodes, 11, 12, 5),
         "away_total": _pairs(nodes, 13, 14, 6),
         "btts": _btts(nodes),
+        "match_1x2": _match_1x2(nodes),
     }
 
 
@@ -193,6 +225,29 @@ def evaluate_system(market_row: dict[str, Any] | None, head: str, score_home: in
     return {"available": True, "confirmed": confirmed, "level": level, "score_pp": round(score, 2), "line_move": line_move, "targets": parts, "head": head, "reason": f"1xBet {level} · Δp={score:.1f} п.п."}
 
 
+def live_1x2_context(market_row: dict[str, Any] | None) -> dict[str, Any]:
+    """Return current live 1X2 odds, de-vigged probabilities and score-epoch movement."""
+    if not market_row:
+        return {"available": False}
+    market = ((market_row.get("markets") or {}).get("match_1x2") or {})
+    fair = dict(market.get("fair") or {})
+    if not all(market.get(name) for name in ("home", "draw", "away")) or not fair:
+        return {"available": False}
+    pressure = market_row.get("pressure") or {}
+    deltas = {
+        name: float((pressure.get(f"match_1x2:{name}") or {}).get("prob_delta_pp") or 0.0)
+        for name in ("home", "draw", "away")
+    }
+    return {
+        "available": True,
+        "odds": {name: float(market[name]) for name in ("home", "draw", "away")},
+        "fair": {name: float(fair.get(name) or 0.0) for name in ("home", "draw", "away")},
+        "overround": market.get("overround"),
+        "delta_pp": deltas,
+        "captured_at": market_row.get("captured_at"),
+    }
+
+
 class XBetMarketCollector:
     def __init__(self, state_path: Path, history_path: Path) -> None:
         self.state_path = state_path; self.history_path = history_path
@@ -255,6 +310,11 @@ class XBetMarketCollector:
         b = markets.get("btts") or {}
         if b.get("yes"):
             out["btts_yes:None"] = {"odd": float(b["yes"]), "prob": _norm_probability(float(b["yes"]), None if b.get("no") is None else float(b["no"]))}
+        one_x_two = markets.get("match_1x2") or {}
+        fair = one_x_two.get("fair") or {}
+        for name in ("home", "draw", "away"):
+            if one_x_two.get(name) and fair.get(name) is not None:
+                out[f"match_1x2:{name}"] = {"odd": float(one_x_two[name]), "prob": float(fair[name])}
         return out
 
     def _pressure(self, fsid: str, score: tuple[int, int], now: float, markets: dict[str, Any]) -> dict[str, Any]:

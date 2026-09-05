@@ -1,0 +1,26 @@
+name: xbet 1x2 probe
+
+on:
+  push:
+    branches:
+      - fix/two-system-entry-windows
+    paths:
+      - 'scripts/gool_xbet_1x2_probe.py'
+      - '.github/workflows/xbet-1x2-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Probe live 1xBet 1X2 outcomes
+        run: python scripts/gool_xbet_1x2_probe.py

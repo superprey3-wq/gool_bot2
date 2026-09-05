@@ -59,18 +59,27 @@ def _same_score(record: dict[str, Any], market_row: dict[str, Any]) -> bool:
 
 
 def hardened_run_once(self: Any, raw_dir: Path) -> int:
-    """Consume new raw rows and safely re-evaluate the latest row on fresh markets.
+    """Consume only the newest unread snapshot for each match, then recheck markets.
 
-    Football snapshots remain minute-scale and expensive. 1xBet/Matchbook update
-    much faster. Re-running the latest football row every few seconds closes that
-    latency gap without fabricating a new score: a market recheck is allowed only
-    while the fresh 1xBet snapshot reports the same Flashscore score epoch.
+    The collector can append one row per LIVE match every minute while model and
+    provider work is slower than that under load. Processing every historical row
+    makes the worker chase an ever-growing backlog and the Telegram analysis view
+    ends up showing only whichever matches happened to be processed recently.
+
+    For an unread backlog, older snapshots of the same match are stale by definition:
+    sending a signal from one of them would be unsafe. Advance every file cursor to
+    EOF, keep only the newest row per match, and evaluate those fresh states once.
+    Finished rows are naturally preserved when they are the newest state, so journal
+    settlement is not lost. Fresh 1xBet/Matchbook rechecks remain score-epoch safe.
     """
     from . import xbet_market_pressure as xbet
 
     emitted = 0
     latest: dict[str, dict[str, Any]] = getattr(self, "_runtime_latest_records", {})
     new_ids: set[str] = set()
+    pending_by_match: dict[str, dict[str, Any]] = {}
+    pending_without_id: list[dict[str, Any]] = []
+    parsed_rows = 0
 
     for path in sorted(Path(raw_dir).glob("*.jsonl")):
         key = str(path)
@@ -85,30 +94,59 @@ def hardened_run_once(self: Any, raw_dir: Path) -> int:
                         continue
                     if not isinstance(record, dict):
                         continue
+                    parsed_rows += 1
                     mid = _match_id(record)
                     if mid:
-                        new_ids.add(mid)
-                    try:
-                        emitted += int(self._process(record) or 0)
-                    except Exception as exc:
-                        print(
-                            f"SIGNAL_RECORD_ERROR match={mid or '-'} "
-                            f"error={type(exc).__name__}:{exc}",
-                            flush=True,
-                        )
-                    finished = bool((record.get("match") or {}).get("is_finished"))
-                    if mid and finished:
-                        latest.pop(mid, None)
-                    elif mid:
-                        # Cache the record after normal processing so the fast
-                        # market recheck reuses live_momentum and other context
-                        # already derived for this exact football snapshot.
-                        latest[mid] = copy.deepcopy(record)
+                        # Files are read in chronological name order and rows are
+                        # append ordered, so replacement leaves the newest unread
+                        # state for this match even across an hourly file boundary.
+                        pending_by_match[mid] = record
+                    else:
+                        # Preserve legacy behavior for unusual non-match records.
+                        pending_without_id.append(record)
                 self._offsets[key] = handle.tell()
         except FileNotFoundError:
             continue
         except Exception as exc:
             print(f"SIGNAL_FILE_ERROR file={path.name} error={type(exc).__name__}:{exc}", flush=True)
+
+    pending_records = pending_without_id + list(pending_by_match.values())
+    dropped_rows = max(0, parsed_rows - len(pending_records))
+    if dropped_rows:
+        print(
+            f"SIGNAL_BACKLOG_COALESCE read={parsed_rows} latest={len(pending_records)} "
+            f"dropped_stale={dropped_rows}",
+            flush=True,
+        )
+
+    # Process the freshest snapshots first. If the batch itself is large, Telegram
+    # analysis starts becoming current immediately instead of waiting behind older
+    # records from another match.
+    def freshness(record: dict[str, Any]) -> float:
+        age = _timestamp_age_seconds(record.get("captured_at"))
+        return age if age is not None else float("inf")
+
+    pending_records.sort(key=freshness)
+
+    for record in pending_records:
+        mid = _match_id(record)
+        if mid:
+            new_ids.add(mid)
+        try:
+            emitted += int(self._process(record) or 0)
+        except Exception as exc:
+            print(
+                f"SIGNAL_RECORD_ERROR match={mid or '-'} "
+                f"error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+        finished = bool((record.get("match") or {}).get("is_finished"))
+        if mid and finished:
+            latest.pop(mid, None)
+        elif mid:
+            # Cache only the newest processed state so fast market rechecks never
+            # replay a stale football snapshot after backlog coalescing.
+            latest[mid] = copy.deepcopy(record)
 
     self._runtime_latest_records = latest
 

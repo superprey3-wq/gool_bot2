@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
-from gool_bot2.matchbook_exchange import decode_event, matchbook_context
+from gool_bot2.matchbook_exchange import MatchbookExchangeCollector, decode_event, matchbook_context
 from gool_bot2.multi_exchange_confirmation import apply_matchbook_confirmation
 
 
@@ -95,6 +96,31 @@ def test_matchbook_context_selects_exact_next_goal_line() -> None:
     assert active["liquid"] is True
     assert active["level"] == "SUPPORT"
     assert active["support"] is True
+
+
+def test_flow_waits_for_real_30_and_60_second_windows() -> None:
+    collector = MatchbookExchangeCollector(Path("unused.json"))
+    base = {"fair_over": 0.50, "volume": 100.0}
+    first = collector._flow("1", "FT:2.5", base, 100.0)
+    assert first["window_ready_15s"] is False
+    assert first["window_ready_30s"] is False
+    assert first["window_ready_60s"] is False
+
+    second = collector._flow("1", "FT:2.5", {"fair_over": 0.54, "volume": 150.0}, 116.0)
+    assert second["window_ready_15s"] is True
+    assert second["window_ready_30s"] is False
+    assert second["window_ready_60s"] is False
+    assert second["level"] == "NEUTRAL"
+
+    third = collector._flow("1", "FT:2.5", {"fair_over": 0.55, "volume": 190.0}, 131.0)
+    assert third["window_ready_30s"] is True
+    assert third["window_ready_60s"] is False
+    assert third["volume_delta_30s"] == 90.0
+    assert third["fair_over_delta_pp_30s"] == 5.0
+    assert third["level"] == "STRONG_SUPPORT"
+
+    fourth = collector._flow("1", "FT:2.5", {"fair_over": 0.56, "volume": 230.0}, 161.0)
+    assert fourth["window_ready_60s"] is True
 
 
 def test_matchbook_never_manufactures_bet_from_wait() -> None:

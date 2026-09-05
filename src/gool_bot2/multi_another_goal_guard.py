@@ -47,7 +47,13 @@ def _line_probability(record: dict[str, Any]) -> float | None:
     active = profile.get("active") or {}
     if str(active.get("period") or "") != "2H":
         return None
-    value = active.get("line_probability")
+    try:
+        half_goals = int(active.get("current_half_goals") or 0)
+    except (TypeError, ValueError):
+        return None
+    line = float(half_goals) + 0.5
+    second_half = profile.get("second_half") or {}
+    value = (second_half.get("over") or {}).get(f"{line:.1f}")
     try:
         return None if value is None else max(0.0, min(1.0, float(value)))
     except (TypeError, ValueError):

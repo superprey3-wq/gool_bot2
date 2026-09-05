@@ -1,0 +1,60 @@
+name: half prematch H2H regression
+
+on:
+  push:
+    branches:
+      - feature/halftime-prematch-h2h-trends
+    paths:
+      - 'src/gool_bot2/prematch_goal_profile.py'
+      - 'src/gool_bot2/providers/scores365_prematch_guard.py'
+      - 'src/gool_bot2/providers/__init__.py'
+      - 'src/gool_bot2/live_collector.py'
+      - 'src/gool_bot2/multi_runtime.py'
+      - 'tests/test_prematch_goal_profile.py'
+      - 'tests/test_scores365_prematch_guard.py'
+      - 'scripts/gool_half_profile_probe.py'
+      - '.github/workflows/half-prematch-h2h-regression.yml'
+  pull_request:
+    paths:
+      - 'src/gool_bot2/prematch_goal_profile.py'
+      - 'src/gool_bot2/providers/scores365_prematch_guard.py'
+      - 'src/gool_bot2/providers/__init__.py'
+      - 'src/gool_bot2/live_collector.py'
+      - 'src/gool_bot2/multi_runtime.py'
+      - 'tests/test_prematch_goal_profile.py'
+      - 'tests/test_scores365_prematch_guard.py'
+      - 'scripts/gool_half_profile_probe.py'
+      - '.github/workflows/half-prematch-h2h-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  half-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install GOOL Bot 2
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: Half profile unit regressions
+        run: pytest -q tests/test_prematch_goal_profile.py tests/test_scores365_prematch_guard.py
+      - name: Ruff correctness gate
+        run: |
+          ruff check --select E9,F63,F7,F82 \
+            src/gool_bot2/prematch_goal_profile.py \
+            src/gool_bot2/providers/scores365_prematch_guard.py \
+            src/gool_bot2/providers/__init__.py \
+            src/gool_bot2/live_collector.py \
+            src/gool_bot2/multi_runtime.py \
+            tests/test_prematch_goal_profile.py \
+            tests/test_scores365_prematch_guard.py \
+            scripts/gool_half_profile_probe.py
+      - name: Real 365Scores halftime-history probe
+        env:
+          SCORES365_HALF_HISTORY_MATCHES: '4'
+        run: python scripts/gool_half_profile_probe.py

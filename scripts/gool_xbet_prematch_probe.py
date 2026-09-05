@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 
-from gool_bot2.xbet_market_pressure import HEADERS, decode_markets, _http_json
+from gool_bot2.xbet_market_pressure import decode_markets, _http_json
 
 
 ROOTS = (
@@ -42,7 +42,6 @@ def _game(root: str, event_id: str):
 
 
 def main() -> None:
-    del HEADERS  # import verifies the same client surface is available
     for root in ROOTS:
         rows = _index(root)
         if not rows:

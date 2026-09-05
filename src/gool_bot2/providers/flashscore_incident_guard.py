@@ -16,6 +16,16 @@ _EVENT_KIND = {
     "10": "penalty",
 }
 
+_GOAL_DISALLOWED_MARKERS = (
+    "goal disallowed",
+    "disallowed goal",
+    "goal cancelled",
+    "goal canceled",
+    "goal ruled out",
+    "no goal",
+    "offside",
+)
+
 
 def _as_int(value: Any) -> int | None:
     try:
@@ -35,8 +45,21 @@ def _minute(value: str) -> tuple[int, int, int] | None:
     return base + added, base, added
 
 
+def _is_disallowed_goal(code: str, normalized: str) -> bool:
+    if not normalized:
+        return False
+    if "goal" not in normalized and code != "3":
+        return False
+    return any(marker in normalized for marker in _GOAL_DISALLOWED_MARKERS)
+
+
 def _event_type(code: str, label: str, home_score: int | None, away_score: int | None) -> str:
     normalized = str(label or "").strip().casefold()
+    # A Flashscore goal row can be followed by a VAR/offside row for the same
+    # minute. Mark that row explicitly so goals_from_incidents can remove the
+    # provisional score instead of treating it as a real goal forever.
+    if _is_disallowed_goal(code, normalized):
+        return "goal_disallowed"
     if code == "3" or normalized == "goal":
         return "goal"
     # Flashscore uses IE=10 for the converted penalty row. The preceding IE=5
@@ -133,8 +156,25 @@ def parse_summary_incidents(body: str) -> list[dict[str, Any]]:
 def goals_from_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     goals: list[dict[str, Any]] = []
     last = (0, 0)
+
+    disallowed: list[tuple[int, str]] = []
     for item in incidents:
-        if str(item.get("event_type") or "") != "goal":
+        if str(item.get("event_type") or "") != "goal_disallowed":
+            continue
+        disallowed.append((int(item.get("minute") or 0), str(item.get("side") or "")))
+
+    def invalidated(item: dict[str, Any]) -> bool:
+        minute = int(item.get("minute") or 0)
+        side = str(item.get("side") or "")
+        for bad_minute, bad_side in disallowed:
+            if minute != bad_minute:
+                continue
+            if not bad_side or not side or bad_side == side:
+                return True
+        return False
+
+    for item in incidents:
+        if str(item.get("event_type") or "") != "goal" or invalidated(item):
             continue
         home = item.get("home")
         away = item.get("away")

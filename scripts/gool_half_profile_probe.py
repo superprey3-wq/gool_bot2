@@ -17,7 +17,10 @@ def main() -> None:
         away = str((hit.get("awayCompetitor") or {}).get("name") or "")
         if not home or not away:
             continue
-        context = provider.prematch_context(home, away, limit=8)
+        method = getattr(provider, "half_prematch_context", None)
+        if not callable(method):
+            raise SystemExit("Scores365Provider.half_prematch_context is not installed")
+        context = method(home, away, limit=8)
         half_rows = [
             row for row in [*(context.get("home_recent") or []), *(context.get("away_recent") or [])]
             if row.get("halftime_home_score") is not None and row.get("halftime_away_score") is not None

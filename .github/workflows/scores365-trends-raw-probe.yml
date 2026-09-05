@@ -7,12 +7,14 @@ on:
     paths:
       - "scripts/scores365_trends_raw_probe.py"
       - "scripts/scores365_history_endpoint_probe.py"
+      - "scripts/scores365_web_bundle_probe.py"
       - ".github/workflows/scores365-trends-raw-probe.yml"
   workflow_dispatch:
 
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,9 +24,12 @@ jobs:
         run: python scripts/scores365_trends_raw_probe.py | tee scores365-trends-raw.log
       - name: Probe 365Scores history and hidden endpoints
         run: python scripts/scores365_history_endpoint_probe.py | tee scores365-history-endpoints.log
+      - name: Inspect web bundles for Trends route
+        run: python scripts/scores365_web_bundle_probe.py | tee scores365-web-bundles.log
       - uses: actions/upload-artifact@v4
         with:
           name: scores365-trends-raw
           path: |
             scores365-trends-raw.log
             scores365-history-endpoints.log
+            scores365-web-bundles.log

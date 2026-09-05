@@ -136,7 +136,15 @@ def side_goal_pressure(record: dict[str, Any], side: str) -> dict[str, Any]:
     minimum = float(os.getenv("SHADOW_TEAM_GOAL_MIN_PRESSURE", "0.92"))
     min_profile = float(os.getenv("SHADOW_TEAM_GOAL_MIN_SCORED_RATE", "0.55"))
     min_evidence = int(os.getenv("SHADOW_TEAM_GOAL_MIN_EVIDENCE", "3"))
-    profile_ok = scored_rate is not None and float(scored_rate) >= min_profile
+
+    # PREMATCH history is useful context, but it is optional. The production
+    # collector intentionally hydrates non-top-league history in the background;
+    # treating a still-missing history sample as a failed scoring profile made
+    # strong LIVE states impossible to PASS in many lower leagues. Only a real,
+    # observed weak history is a negative gate. Missing history stays neutral.
+    profile_available = scored_rate is not None
+    profile_ok = (not profile_available) or float(scored_rate) >= min_profile
+
     passed = bool(
         score is not None
         and score >= minimum
@@ -154,7 +162,7 @@ def side_goal_pressure(record: dict[str, Any], side: str) -> dict[str, Any]:
         blocks.append("side_no_recent_threat")
     if not quality_threat:
         blocks.append("side_no_quality_threat")
-    if not profile_ok:
+    if profile_available and not profile_ok:
         blocks.append("side_prematch_scoring_profile_low")
     confidence = None if score is None else max(0.50, min(0.94, 0.50 + (score - 0.65) * 0.30))
     return {
@@ -166,6 +174,7 @@ def side_goal_pressure(record: dict[str, Any], side: str) -> dict[str, Any]:
         "recent_threat": recent_threat,
         "quality_threat": quality_threat,
         "prematch": profile,
+        "prematch_available": profile_available,
         "prematch_min_scored_rate": min_profile,
         "confidence_score": confidence,
         "passed": passed,

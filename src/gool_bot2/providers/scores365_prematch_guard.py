@@ -9,6 +9,7 @@ from .scores365 import Scores365Provider
 
 
 HISTORY_TTL_SECONDS = 6 * 60 * 60
+HALF_CONTEXT_TTL_SECONDS = 45 * 60
 
 
 def _number(value: Any) -> int | None:
@@ -176,6 +177,15 @@ def _merge_rows(primary: list[dict[str, Any]], fallback: list[dict[str, Any]], l
     return out
 
 
+def _trend_flags(detail: dict[str, Any]) -> dict[str, bool]:
+    return {
+        "has_trends": bool(detail.get("hasTrends")),
+        "has_top_trends": bool(detail.get("hasTopTrends")),
+        "has_previous_meetings": bool(detail.get("hasPreviousMeetings")),
+        "has_recent_matches": bool(detail.get("hasRecentMatches")),
+    }
+
+
 def install() -> None:
     if getattr(Scores365Provider, "_prematch_half_guard_installed", False):
         return
@@ -184,20 +194,46 @@ def install() -> None:
     original_enrich = Scores365Provider.enrich
 
     def prematch_context(self: Scores365Provider, home: str, away: str, limit: int = 10) -> dict[str, Any]:
+        """Cheap context used by the collector for every live match.
+
+        We intentionally do not fan out into each recentMatches id here. A busy
+        football slate can contain 200+ live games, so eager HT/FT history would
+        create thousands of requests. The expensive half history is fetched only
+        later for a GOOL PASS/BORDERLINE candidate.
+        """
         base = original_context(self, home, away, limit)
         hit, score = self.find_match(home, away)
         if not isinstance(hit, dict) or not hit.get("id"):
             return base
+        detail = self._detail(str(hit.get("id")))
+        return {
+            **base,
+            "match_score": round(float(score or 0.0), 3),
+            **_trend_flags(detail),
+        }
+
+    def half_prematch_context(self: Scores365Provider, home: str, away: str, limit: int = 10) -> dict[str, Any]:
+        """Fetch real historical HT/FT splits on demand for one plausible match."""
+        if not hasattr(self, "_half_context_cache"):
+            self._half_context_cache = {}
+        key = (home.casefold().strip(), away.casefold().strip(), int(limit))
+        now = time.time()
+        cached = self._half_context_cache.get(key)
+        if cached and now - cached[0] < HALF_CONTEXT_TTL_SECONDS:
+            return dict(cached[1])
+
+        base = prematch_context(self, home, away, limit)
+        hit, score = self.find_match(home, away)
+        if not isinstance(hit, dict) or not hit.get("id"):
+            self._half_context_cache[key] = (now, dict(base))
+            return base
+
         detail = self._detail(str(hit.get("id")))
         home_node = detail.get("homeCompetitor") or hit.get("homeCompetitor") or {}
         away_node = detail.get("awayCompetitor") or hit.get("awayCompetitor") or {}
         half_limit = max(3, min(limit, int(os.getenv("SCORES365_HALF_HISTORY_MATCHES", "6"))))
         home_rows = _recent_rows(self, list(home_node.get("recentMatches") or []), half_limit)
         away_rows = _recent_rows(self, list(away_node.get("recentMatches") or []), half_limit)
-        if not home_rows and not away_rows:
-            base["has_trends"] = bool(detail.get("hasTrends"))
-            base["has_top_trends"] = bool(detail.get("hasTopTrends"))
-            return base
 
         base_home = [dict(row) for row in (base.get("home_recent") or []) if isinstance(row, dict)]
         base_away = [dict(row) for row in (base.get("away_recent") or []) if isinstance(row, dict)]
@@ -207,7 +243,7 @@ def install() -> None:
         h2h_half = [row for row in all_rows if _has_team(row, home) and _has_team(row, away)]
         base_h2h = [dict(row) for row in (base.get("h2h") or []) if isinstance(row, dict)]
 
-        return {
+        context = {
             **base,
             "source": "365scores_recent_halves",
             "match_score": round(float(score or 0.0), 3),
@@ -217,11 +253,10 @@ def install() -> None:
             "away_away": [row for row in merged_away if _similar(str(row.get("away") or ""), away)][:limit],
             "h2h": _merge_rows(h2h_half, base_h2h, limit),
             "half_score_matches": len(home_rows) + len(away_rows),
-            "has_trends": bool(detail.get("hasTrends")),
-            "has_top_trends": bool(detail.get("hasTopTrends")),
-            "has_previous_meetings": bool(detail.get("hasPreviousMeetings")),
-            "has_recent_matches": bool(detail.get("hasRecentMatches")),
+            **_trend_flags(detail),
         }
+        self._half_context_cache[key] = (now, dict(context))
+        return context
 
     def enrich(self: Scores365Provider, home: str, away: str):
         result = original_enrich(self, home, away)
@@ -232,14 +267,12 @@ def install() -> None:
         meta = dict(result.meta or {})
         meta.update({
             "halftime_score": None if halftime is None else list(halftime),
-            "has_trends": bool(game.get("hasTrends")),
-            "has_top_trends": bool(game.get("hasTopTrends")),
-            "has_previous_meetings": bool(game.get("hasPreviousMeetings")),
-            "has_recent_matches": bool(game.get("hasRecentMatches")),
+            **_trend_flags(game),
         })
         return type(result)(**{**result.__dict__, "meta": meta})
 
     Scores365Provider.prematch_context = prematch_context
+    Scores365Provider.half_prematch_context = half_prematch_context
     Scores365Provider.enrich = enrich
     Scores365Provider._prematch_half_guard_installed = True
 

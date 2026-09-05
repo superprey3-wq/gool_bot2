@@ -11,7 +11,8 @@ from gool_bot2.multi_router import MarketCandidate, RouterDecision
 
 
 def _blank_png() -> bytes:
-    image = Image.new("RGB", (32, 32))
+    # Match the production card width so the bank-strip wrapper is exercised too.
+    image = Image.new("RGB", (1080, 760))
     out = BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()

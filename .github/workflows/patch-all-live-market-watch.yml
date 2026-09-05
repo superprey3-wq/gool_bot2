@@ -1,0 +1,37 @@
+name: patch-all-live-market-watch
+
+on:
+  push:
+    branches:
+      - feature/all-market-watch-one-brain
+    paths:
+      - 'scripts/patch_all_live_market_watch.py'
+      - '.github/workflows/patch-all-live-market-watch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[all-live-patched]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/all-market-watch-one-brain
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply deterministic production patch
+        run: python scripts/patch_all_live_market_watch.py
+      - name: Remove temporary patch machinery and commit
+        run: |
+          rm scripts/patch_all_live_market_watch.py
+          rm .github/workflows/patch-all-live-market-watch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Make market hunters all-LIVE and keep one GOOL Brain [all-live-patched]"
+          git push origin HEAD:feature/all-market-watch-one-brain

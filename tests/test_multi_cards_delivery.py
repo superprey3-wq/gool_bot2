@@ -73,7 +73,7 @@ def _entry() -> dict:
     }
 
 
-def test_multi_signal_card_is_compact_png_with_team_badges(monkeypatch):
+def test_multi_signal_card_is_current_png_with_team_badges(monkeypatch):
     calls = []
 
     def fake_logo(meta, side):
@@ -85,11 +85,11 @@ def test_multi_signal_card_is_compact_png_with_team_badges(monkeypatch):
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 760)
+    assert image.size == (1080, 1120)
     assert calls == ["home", "away"]
 
 
-def test_multi_result_cards_render_won_lost_and_void_compact(monkeypatch):
+def test_multi_result_cards_render_won_lost_and_void_current(monkeypatch):
     monkeypatch.setattr(
         multi_card.sc,
         "_logo",
@@ -106,7 +106,7 @@ def test_multi_result_cards_render_won_lost_and_void_compact(monkeypatch):
         png = multi_card.render_multi_result_card(row, _record(71, 2, 1))
         image = Image.open(BytesIO(png))
         assert image.format == "PNG"
-        assert image.size == (1080, 760)
+        assert image.size == (1080, 1040)
 
 
 def test_active_mode_delivers_clean_signal_and_result_as_photos(monkeypatch):

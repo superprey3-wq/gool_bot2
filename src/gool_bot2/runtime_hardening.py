@@ -44,8 +44,16 @@ def _same_score(record: dict[str, Any], market_row: dict[str, Any]) -> bool:
     match = record.get("match") or {}
     raw_score = (int(match.get("home_score") or 0), int(match.get("away_score") or 0))
     market_score = (
-        int(market_row.get("flashscore_score_home") if market_row.get("flashscore_score_home") is not None else market_row.get("score_home") or 0),
-        int(market_row.get("flashscore_score_away") if market_row.get("flashscore_score_away") is not None else market_row.get("score_away") or 0),
+        int(
+            market_row.get("flashscore_score_home")
+            if market_row.get("flashscore_score_home") is not None
+            else market_row.get("score_home") or 0
+        ),
+        int(
+            market_row.get("flashscore_score_away")
+            if market_row.get("flashscore_score_away") is not None
+            else market_row.get("score_away") or 0
+        ),
     )
     return raw_score == market_score
 
@@ -79,7 +87,6 @@ def hardened_run_once(self: Any, raw_dir: Path) -> int:
                         continue
                     mid = _match_id(record)
                     if mid:
-                        latest[mid] = copy.deepcopy(record)
                         new_ids.add(mid)
                     try:
                         emitted += int(self._process(record) or 0)
@@ -89,8 +96,14 @@ def hardened_run_once(self: Any, raw_dir: Path) -> int:
                             f"error={type(exc).__name__}:{exc}",
                             flush=True,
                         )
-                    if bool((record.get("match") or {}).get("is_finished")) and mid:
+                    finished = bool((record.get("match") or {}).get("is_finished"))
+                    if mid and finished:
                         latest.pop(mid, None)
+                    elif mid:
+                        # Cache the record after normal processing so the fast
+                        # market recheck reuses live_momentum and other context
+                        # already derived for this exact football snapshot.
+                        latest[mid] = copy.deepcopy(record)
                 self._offsets[key] = handle.tell()
         except FileNotFoundError:
             continue
@@ -216,7 +229,9 @@ def _safe_process(self: Any, record: dict[str, Any]) -> int:
     return emitted
 
 
-def _async_half_history(record: dict[str, Any], experts: dict[str, dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
+def _async_half_history(
+    record: dict[str, Any], experts: dict[str, dict[str, Any]], profile: dict[str, Any]
+) -> dict[str, Any]:
     """Hydrate 365 half-history in background; never block the signal worker."""
     from . import prematch_goal_profile as prematch
 
@@ -249,7 +264,10 @@ def _async_half_history(record: dict[str, Any], experts: dict[str, dict[str, Any
     else:
         future = _HALF_FUTURES.get(cache_key)
         if future is None:
-            limit = max(3, min(10, int(_number(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"), 6))))
+            limit = max(
+                3,
+                min(10, int(_number(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"), 6))),
+            )
 
             def load() -> dict[str, Any] | None:
                 try:
@@ -283,7 +301,10 @@ def _async_half_history(record: dict[str, Any], experts: dict[str, dict[str, Any
         prematch._HALF_CONTEXT_CACHE[cache_key] = (now, extra)
 
     if isinstance(extra, dict):
-        limit = max(3, min(10, int(_number(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"), 6))))
+        limit = max(
+            3,
+            min(10, int(_number(os.getenv("GOOL_HALF_PREMATCH_HISTORY_MATCHES", "6"), 6))),
+        )
         prematch._merge_half_context(record, extra, limit)
         rebuilt = prematch.build_prematch_goal_profile(record)
         rebuilt["lazy_365_loaded"] = True
@@ -328,7 +349,10 @@ def _flow_score_epoch_guard(record: dict[str, Any]) -> dict[str, Any] | None:
 
     score = (int(match.get("home_score") or 0), int(match.get("away_score") or 0))
     now = time.monotonic()
-    reset_seconds = max(0.0, _number(os.getenv("MATCHBOOK_FLOW_SCORE_EPOCH_RESET_SECONDS", "180"), 180.0))
+    reset_seconds = max(
+        0.0,
+        _number(os.getenv("MATCHBOOK_FLOW_SCORE_EPOCH_RESET_SECONDS", "180"), 180.0),
+    )
     state = _FLOW_SCORE_EPOCHS.get(mid)
     if state is None:
         _FLOW_SCORE_EPOCHS[mid] = {"score": score, "changed_at": None}

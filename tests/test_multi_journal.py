@@ -5,6 +5,7 @@ from pathlib import Path
 from gool_bot2.journal import load_signal_journal
 from gool_bot2.multi_journal import record_multi_entry, settle_multi_journal
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
+import gool_bot2.var_settlement_guard as var_guard
 
 
 def _decision(candidate: MarketCandidate) -> RouterDecision:
@@ -51,7 +52,7 @@ def _record(minute: int, score: tuple[int, int], *, finished: bool = False, half
     }
 
 
-def test_one_open_multi_exposure_and_score_epoch_dedupe(tmp_path: Path):
+def test_one_open_multi_exposure_and_score_epoch_dedupe(tmp_path: Path, monkeypatch):
     path = tmp_path / "multi.json"
     first = _candidate("match_total:0.5", "match_total", "another_goal", "ТБ 0.5")
     second = _candidate("home_total:0.5", "team_total", "home_goal", "ИТБ1 0.5")
@@ -61,6 +62,19 @@ def test_one_open_multi_exposure_and_score_epoch_dedupe(tmp_path: Path):
     assert record_multi_entry(_record(35, (0, 0)), _decision(second), {}, path, data_quality=0.8) is None
     assert len(load_signal_journal(path)) == 1
 
+    monkeypatch.setenv("VAR_WIN_CONFIRM_SECONDS", "12")
+    monkeypatch.setenv("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
+    now = {"value": 100.0}
+    monkeypatch.setattr(var_guard.time, "time", lambda: now["value"])
+
+    settle_multi_journal(
+        _record(40, (1, 0), timeline=[{"minute": 40, "score": [1, 0], "side": "home"}]),
+        path,
+    )
+    rows = load_signal_journal(path)
+    assert rows[0]["result"] == "pending"
+
+    now["value"] = 113.0
     settle_multi_journal(
         _record(40, (1, 0), timeline=[{"minute": 40, "score": [1, 0], "side": "home"}]),
         path,
@@ -97,7 +111,7 @@ def test_first_half_market_does_not_use_second_half_goal(tmp_path: Path):
     assert row["profit_units"] == -1.0
 
 
-def test_first_half_market_wins_only_from_first_half_timeline(tmp_path: Path):
+def test_first_half_market_wins_from_authoritative_halftime_score(tmp_path: Path):
     path = tmp_path / "multi.json"
     fh = _candidate("first_half_total:0.5", "first_half_total", "goal_before_ht", "1Т ТБ 0.5")
     assert record_multi_entry(_record(30, (0, 0)), _decision(fh), {}, path, data_quality=0.9)
@@ -113,31 +127,29 @@ def test_first_half_market_wins_only_from_first_half_timeline(tmp_path: Path):
     )
     row = load_signal_journal(path)[0]
     assert row["result"] == "won"
-    assert row["settled_minute"] == 42
+    assert row["settled_minute"] == 45
     assert row["settled_score"] == [1, 0]
+    assert row["settlement_source"] == "flashscore_halftime_master"
 
 
-def test_first_half_stoppage_goal_counts_and_keeps_real_goal_minute(tmp_path: Path):
+def test_first_half_stoppage_goal_waits_for_halftime_confirmation(tmp_path: Path):
     path = tmp_path / "multi.json"
     fh = _candidate("first_half_total:1.5", "first_half_total", "goal_before_ht", "1Т ТБ 1.5")
     assert record_multi_entry(_record(34, (1, 0)), _decision(fh), {}, path, data_quality=0.9)
 
-    settle_multi_journal(
-        _record(
-            45,
-            (2, 0),
-            timeline=[
-                {"minute": 26, "score": [1, 0], "side": "home", "event_type": "goal", "period": "1H"},
-                {"minute": 47, "score": [2, 0], "side": "home", "event_type": "goal", "period": "1H"},
-            ],
-        ),
-        path,
-    )
+    timeline = [
+        {"minute": 26, "score": [1, 0], "side": "home", "event_type": "goal", "period": "1H"},
+        {"minute": 47, "score": [2, 0], "side": "home", "event_type": "goal", "period": "1H"},
+    ]
+    settle_multi_journal(_record(45, (2, 0), timeline=timeline), path)
+    assert load_signal_journal(path)[0]["result"] == "pending"
+
+    settle_multi_journal(_record(45, (2, 0), halftime=True, timeline=timeline), path)
     row = load_signal_journal(path)[0]
     assert row["result"] == "won"
-    assert row["settled_minute"] == 47
+    assert row["settled_minute"] == 45
     assert row["settled_score"] == [2, 0]
-    assert row["settlement_source"] == "flashscore_first_half_timeline"
+    assert row["settlement_source"] == "flashscore_halftime_master"
 
 
 def test_first_half_unchanged_score_after_break_is_safe_loss_without_timeline(tmp_path: Path):
@@ -160,5 +172,5 @@ def test_first_half_changed_score_without_timeline_is_void_not_guessed(tmp_path:
     settle_multi_journal(_record(55, (1, 0)), path)
     row = load_signal_journal(path)[0]
     assert row["result"] == "void"
-    assert row["settlement_source"] == "half_time_score_unavailable"
+    assert row["settlement_source"] == "first_half_timeline_missing"
     assert row["profit_units"] == 0.0

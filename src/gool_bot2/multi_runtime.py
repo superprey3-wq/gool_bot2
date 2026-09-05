@@ -20,6 +20,7 @@ from .multi_reentry_guard import enforce_reentry_cooldown
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
+from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -190,14 +191,20 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         market,
         data_quality=quality,
     )
+    true_prematch = apply_true_prematch_market(record, experts)
+    if true_prematch:
+        intelligence = record.get("match_intelligence") or intelligence
+
     suitability = intelligence.get("suitability") or {}
     epoch = intelligence.get("score_epoch") or {}
     chance = intelligence.get("chance_quality") or {}
     adjustment = intelligence.get("probability_adjustment") or {}
+    kickoff = intelligence.get("kickoff_market") or {}
     print(
         f"GOOL_MATCH_INTELLIGENCE match={mid} suitability={float(suitability.get('score') or 0):.2f} "
         f"epoch={epoch.get('identity') or '-'} epoch_min={epoch.get('minutes')} "
-        f"chance={float(chance.get('score') or 0.5):.2f} adjust_pp={float(adjustment.get('total_pp') or 0):+.1f}",
+        f"chance={float(chance.get('score') or 0.5):.2f} adjust_pp={float(adjustment.get('total_pp') or 0):+.1f} "
+        f"kickoff={kickoff.get('quality') or 'none'}",
         flush=True,
     )
 

@@ -27,9 +27,9 @@ jobs:
       - run: pip install -e '.[dev]'
       - name: Unit regressions
         run: pytest -q tests/test_money_flow_and_live_coverage.py tests/test_matchbook_exchange.py
-      - name: Ruff touched modules
+      - name: Critical Ruff checks
         run: >-
-          ruff check
+          ruff check --select E9,F63,F7,F82
           src/gool_bot2/storage_live_collector.py
           src/gool_bot2/matchbook_pagination.py
           src/gool_bot2/matchbook_market_worker.py

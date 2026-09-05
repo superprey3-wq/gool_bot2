@@ -30,6 +30,21 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _orderbook_depth() -> int:
+    try:
+        value = int(os.getenv("MATCHBOOK_ORDERBOOK_DEPTH", "5"))
+    except (TypeError, ValueError):
+        value = 5
+    return max(3, min(10, value))
+
+
 def _best_prices(runner: dict[str, Any]) -> dict[str, Any]:
     backs: list[dict[str, float]] = []
     lays: list[dict[str, float]] = []
@@ -48,6 +63,7 @@ def _best_prices(runner: dict[str, Any]) -> dict[str, Any]:
             lays.append(row)
     backs.sort(key=lambda row: row["odds"], reverse=True)
     lays.sort(key=lambda row: row["odds"])
+    depth = _orderbook_depth()
     best_back = backs[0] if backs else None
     best_lay = lays[0] if lays else None
     return {
@@ -56,12 +72,12 @@ def _best_prices(runner: dict[str, Any]) -> dict[str, Any]:
         "volume": float(_number(runner.get("volume")) or 0.0),
         "best_back": best_back,
         "best_lay": best_lay,
-        "back_depth": round(sum(row["available"] for row in backs[:3]), 4),
-        "lay_depth": round(sum(row["available"] for row in lays[:3]), 4),
+        "back_depth": round(sum(row["available"] for row in backs[:depth]), 4),
+        "lay_depth": round(sum(row["available"] for row in lays[:depth]), 4),
         "prices": [
-            {"side": "back", **row} for row in backs[:3]
+            {"side": "back", **row} for row in backs[:depth]
         ] + [
-            {"side": "lay", **row} for row in lays[:3]
+            {"side": "lay", **row} for row in lays[:depth]
         ],
     }
 
@@ -106,6 +122,39 @@ def _fair_over(over: dict[str, Any], under: dict[str, Any]) -> float | None:
     if po is None or pu is None or po + pu <= 0:
         return None
     return po / (po + pu)
+
+
+def _weighted_depth(runner: dict[str, Any], side: str) -> float:
+    rows = [
+        row
+        for row in (runner.get("prices") or [])
+        if isinstance(row, dict) and str(row.get("side") or "").lower() == side
+    ]
+    total = 0.0
+    for index, row in enumerate(rows[: _orderbook_depth()]):
+        amount = float(_number(row.get("available")) or 0.0)
+        total += amount * (0.60**index)
+    return total
+
+
+def _orderbook_snapshot(market: dict[str, Any]) -> dict[str, float]:
+    over = dict(market.get("over") or {})
+    back_weighted = _weighted_depth(over, "back")
+    lay_weighted = _weighted_depth(over, "lay")
+    total_weighted = back_weighted + lay_weighted
+    back_wom = back_weighted / total_weighted if total_weighted > 0.0 else 0.5
+    imbalance = (back_weighted - lay_weighted) / total_weighted if total_weighted > 0.0 else 0.0
+    best_back = float(_number((over.get("best_back") or {}).get("odds")) or 0.0)
+    best_lay = float(_number((over.get("best_lay") or {}).get("odds")) or 0.0)
+    return {
+        "book_back_weighted": back_weighted,
+        "book_lay_weighted": lay_weighted,
+        "book_total_weighted": total_weighted,
+        "back_wom": back_wom,
+        "book_imbalance": imbalance,
+        "best_back": best_back,
+        "best_lay": best_lay,
+    }
 
 
 def _event_teams(event: dict[str, Any]) -> tuple[str, str]:
@@ -194,7 +243,7 @@ def _fetch_events() -> list[dict[str, Any]]:
             "exchange-type": "back-lay",
             "odds-type": "DECIMAL",
             "include-prices": "true",
-            "price-depth": 3,
+            "price-depth": _orderbook_depth(),
             "price-mode": "expanded",
             "currency": "GBP",
             "minimum-liquidity": 1,
@@ -242,8 +291,14 @@ class MatchbookExchangeCollector:
     def _flow(self, event_id: str, key: str, market: dict[str, Any], now: float) -> dict[str, Any]:
         fair = _number(market.get("fair_over"))
         volume = float(_number(market.get("volume")) or 0.0)
+        book = _orderbook_snapshot(market)
         hist = self._history[self._hist_key(event_id, key)]
-        current = {"ts": now, "fair": float(fair) if fair is not None else math.nan, "volume": volume}
+        current = {
+            "ts": now,
+            "fair": float(fair) if fair is not None else math.nan,
+            "volume": volume,
+            **book,
+        }
 
         def prior(seconds: float) -> dict[str, float] | None:
             candidates = [row for row in hist if now - float(row["ts"]) >= seconds]
@@ -258,6 +313,9 @@ class MatchbookExchangeCollector:
             if old is None:
                 out[f"volume_delta_{label}"] = 0.0
                 out[f"fair_over_delta_pp_{label}"] = 0.0
+                out[f"back_depth_delta_{label}"] = 0.0
+                out[f"lay_depth_delta_{label}"] = 0.0
+                out[f"orderflow_imbalance_{label}"] = 0.0
                 continue
             out[f"volume_delta_{label}"] = round(max(0.0, volume - float(old["volume"])), 4)
             old_fair = float(old["fair"])
@@ -266,6 +324,51 @@ class MatchbookExchangeCollector:
             else:
                 delta_pp = (float(fair) - old_fair) * 100.0
             out[f"fair_over_delta_pp_{label}"] = round(delta_pp, 3)
+
+            back_delta = float(book["book_back_weighted"]) - float(old.get("book_back_weighted") or 0.0)
+            lay_delta = float(book["book_lay_weighted"]) - float(old.get("book_lay_weighted") or 0.0)
+            denom = abs(back_delta) + abs(lay_delta)
+            ofi = (back_delta - lay_delta) / denom if denom > 0.0 else 0.0
+            out[f"back_depth_delta_{label}"] = round(back_delta, 4)
+            out[f"lay_depth_delta_{label}"] = round(lay_delta, 4)
+            out[f"orderflow_imbalance_{label}"] = round(max(-1.0, min(1.0, ofi)), 4)
+
+        wom_min = max(0.5, min(0.95, _env_float("MATCHBOOK_FLOW_WOM_MIN", 0.54)))
+        samples = [*hist, current]
+        support_streak = 0
+        for row in reversed(samples):
+            if float(row.get("book_total_weighted") or 0.0) <= 0.0:
+                break
+            if float(row.get("back_wom") or 0.5) < wom_min:
+                break
+            support_streak += 1
+
+        previous = hist[-1] if hist else None
+        matched_15s = float(out.get("volume_delta_15s") or 0.0)
+        transient_spike = False
+        liquidity_pull = False
+        if previous is not None:
+            previous_back = float(previous.get("book_back_weighted") or 0.0)
+            current_back = float(book["book_back_weighted"])
+            back_jump = max(0.0, current_back - previous_back)
+            spike_multiplier = max(1.25, _env_float("MATCHBOOK_FLOW_SPOOF_SPIKE_MULTIPLIER", 2.5))
+            spike_abs = max(1.0, _env_float("MATCHBOOK_FLOW_SPOOF_SPIKE_ABS_GBP", 250.0))
+            matched_ratio = max(0.0, _env_float("MATCHBOOK_FLOW_SPOOF_MATCHED_RATIO", 0.25))
+            transient_spike = bool(
+                back_jump >= spike_abs
+                and current_back >= max(previous_back * spike_multiplier, previous_back + spike_abs)
+                and float(book["back_wom"]) >= max(wom_min, 0.70)
+                and support_streak < 2
+                and matched_15s < back_jump * matched_ratio
+            )
+            pulled = max(0.0, previous_back - current_back)
+            liquidity_pull = bool(
+                previous_back >= spike_abs
+                and current_back <= previous_back * 0.50
+                and pulled >= spike_abs
+                and matched_15s < pulled * matched_ratio
+            )
+
         hist.append(current)
 
         usable_windows = [label for label in ("30s", "60s") if ready.get(label)]
@@ -288,11 +391,50 @@ class MatchbookExchangeCollector:
             level = "OPPOSITION"
         else:
             level = "NEUTRAL"
-        out.update({
-            "level": level,
-            "direction_pp": round(delta_pp, 3),
-            "activity_volume": round(volume_delta, 4),
-        })
+
+        ofi_candidates = [
+            float(out.get(f"orderflow_imbalance_{label}") or 0.0)
+            for label in ("15s", "30s")
+            if ready.get(label)
+        ]
+        orderflow_imbalance = max(ofi_candidates, default=0.0)
+        ofi_min = max(0.0, min(1.0, _env_float("MATCHBOOK_FLOW_OFI_MIN", 0.10)))
+        persistence_min = max(1, int(_env_float("MATCHBOOK_FLOW_PERSISTENCE_SNAPSHOTS", 2)))
+        confirmations = {
+            "wom": float(book["back_wom"]) >= wom_min,
+            "ofi": orderflow_imbalance >= ofi_min,
+            "persistence": support_streak >= persistence_min,
+        }
+        confirmation_count = sum(1 for value in confirmations.values() if value)
+        min_confirmations = max(1, min(3, int(_env_float("MATCHBOOK_FLOW_ORDERBOOK_MIN_CONFIRMATIONS", 2))))
+        orderbook_ready = bool(ready.get("15s") and float(book["book_total_weighted"]) > 0.0)
+        orderbook_confirmed = bool(
+            orderbook_ready
+            and confirmation_count >= min_confirmations
+            and not transient_spike
+            and not liquidity_pull
+        )
+
+        out.update(
+            {
+                "level": level,
+                "direction_pp": round(delta_pp, 3),
+                "activity_volume": round(volume_delta, 4),
+                "orderbook_ready": orderbook_ready,
+                "orderbook_confirmed": orderbook_confirmed,
+                "orderbook_confirmation_count": confirmation_count,
+                "orderbook_confirmation_required": min_confirmations,
+                "back_wom": round(float(book["back_wom"]), 4),
+                "book_imbalance": round(float(book["book_imbalance"]), 4),
+                "orderflow_imbalance": round(orderflow_imbalance, 4),
+                "orderbook_support_streak": support_streak,
+                "back_depth_weighted": round(float(book["book_back_weighted"]), 4),
+                "lay_depth_weighted": round(float(book["book_lay_weighted"]), 4),
+                "transient_liquidity_spike": transient_spike,
+                "liquidity_pull": liquidity_pull,
+                "orderbook_confirmations": confirmations,
+            }
+        )
         return out
 
     def collect_once(self) -> dict[str, Any]:

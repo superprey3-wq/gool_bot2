@@ -5,7 +5,7 @@ import os
 import signal
 from pathlib import Path
 
-from .matchbook_exchange import MatchbookExchangeCollector
+from .matchbook_sustained_flow import SustainedMatchbookExchangeCollector
 
 
 def main() -> None:
@@ -22,12 +22,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    collector = MatchbookExchangeCollector(Path(args.state))
+    collector = SustainedMatchbookExchangeCollector(Path(args.state))
     signal.signal(signal.SIGINT, collector.stop)
     signal.signal(signal.SIGTERM, collector.stop)
     print(
         f"MATCHBOOK_EXCHANGE started interval={max(8.0, args.interval):.0f}s "
-        f"state={args.state} min_market_volume={os.getenv('MATCHBOOK_MIN_MARKET_VOLUME', '50')}",
+        f"state={args.state} min_market_volume={os.getenv('MATCHBOOK_MIN_MARKET_VOLUME', '50')} "
+        "flow_windows=15/30/60/120/180s",
         flush=True,
     )
     collector.run(args.interval)

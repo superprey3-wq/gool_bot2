@@ -1,0 +1,64 @@
+name: money-flow-live-coverage
+
+on:
+  pull_request:
+    paths:
+      - 'src/gool_bot2/storage_live_collector.py'
+      - 'src/gool_bot2/matchbook_pagination.py'
+      - 'src/gool_bot2/matchbook_market_worker.py'
+      - 'src/gool_bot2/multi_money_flow.py'
+      - 'src/gool_bot2/storage_market_signal_worker_var.py'
+      - 'src/gool_bot2/multi_product.py'
+      - 'tests/test_money_flow_and_live_coverage.py'
+      - '.github/workflows/money-flow-live-coverage.yml'
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - name: Unit regressions
+        run: pytest -q tests/test_money_flow_and_live_coverage.py tests/test_matchbook_exchange.py
+      - name: Ruff touched modules
+        run: >-
+          ruff check
+          src/gool_bot2/storage_live_collector.py
+          src/gool_bot2/matchbook_pagination.py
+          src/gool_bot2/matchbook_market_worker.py
+          src/gool_bot2/multi_money_flow.py
+          src/gool_bot2/storage_market_signal_worker_var.py
+          src/gool_bot2/multi_product.py
+          tests/test_money_flow_and_live_coverage.py
+      - name: Real provider coverage probe
+        env:
+          MATCHBOOK_MAX_PAGES: '3'
+          MATCHBOOK_EVENTS_PER_PAGE: '100'
+        run: |
+          python - <<'PY'
+          from gool_bot2.matchbook_pagination import _page_payload, fetch_events_paginated
+          from gool_bot2.providers.flashscore import FlashscoreProvider
+
+          first = _page_payload(1, 100).get('events') or []
+          second = _page_payload(2, 100).get('events') or []
+          first_ids = {str(x.get('id')) for x in first if isinstance(x, dict)}
+          second_ids = {str(x.get('id')) for x in second if isinstance(x, dict)}
+          print(f'MATCHBOOK_RAW page1={len(first)} page2={len(second)} overlap={len(first_ids & second_ids)}')
+          if second:
+              assert not (first_ids & second_ids), 'Matchbook offset page repeated first page'
+          decoded = fetch_events_paginated()
+          print(f'MATCHBOOK_PAGINATED decoded={len(decoded)}')
+          assert decoded, 'Matchbook returned no football events'
+
+          live = FlashscoreProvider().live_matches()
+          active = [m for m in live if 1 <= int(m.minute or 0) <= 30 or 46 <= int(m.minute or 0) <= 75]
+          print(f'FLASHSCORE_COVERAGE live={len(live)} production_window={len(active)}')
+          assert live, 'Flashscore master feed returned no live matches'
+          PY

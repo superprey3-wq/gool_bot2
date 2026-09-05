@@ -1,0 +1,35 @@
+name: apply-demand-window-patch
+
+on:
+  push:
+    branches:
+      - feature/demand-driven-xbet-35m-window
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[auto-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/demand-driven-xbet-35m-window
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply deterministic source patch
+        run: python scripts/apply_demand_window_patch.py
+      - name: Commit patched production files
+        run: |
+          if git diff --quiet; then
+            echo "No patch changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gool_bot2 tests
+          git commit -m "Apply 35m window and football-first xBet demand [auto-patch]"
+          git push origin HEAD:feature/demand-driven-xbet-35m-window

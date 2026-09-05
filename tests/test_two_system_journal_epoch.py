@@ -1,6 +1,7 @@
 from pathlib import Path
 import runpy
 
+from gool_bot2.multi_menu import report_text
 from gool_bot2.multi_public_metrics import strategy_bucket
 
 
@@ -64,3 +65,14 @@ def test_public_event_buckets_keep_only_two_systems_and_separate_steam() -> None
         "steam_away_goal",
     ):
         assert strategy_bucket(strategy) == "steam"
+
+
+def test_zero_journal_still_shows_all_three_public_system_rows(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("RUNTIME_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("GOOL_MULTI_JOURNAL_PATH", raising=False)
+
+    text = report_text()
+
+    assert "🟡 Гол в 1-м тайме: ✅ <b>0</b> · ❌ <b>0</b>" in text
+    assert "⚽ Ещё гол: ✅ <b>0</b> · ❌ <b>0</b>" in text
+    assert "🔥 1xBet STEAM: ✅ <b>0</b> · ❌ <b>0</b>" in text

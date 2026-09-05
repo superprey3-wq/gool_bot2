@@ -15,6 +15,7 @@ from .multi_confidence_gate import enforce_confidence_gate
 from .multi_delivery import finalize_multi_delivery, pending_result_notifications
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_journal import settle_multi_journal, sync_multi_journal
+from .multi_lineup_context import apply_lineup_context
 from .multi_match_intelligence import apply_match_intelligence, enforce_match_suitability
 from .multi_reentry_guard import enforce_reentry_cooldown
 from .multi_router import analyze_multi_match
@@ -192,7 +193,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     true_prematch = apply_true_prematch_market(record, experts)
-    if true_prematch:
+    lineup = apply_lineup_context(record, experts)
+    if true_prematch or lineup:
         intelligence = record.get("match_intelligence") or intelligence
 
     suitability = intelligence.get("suitability") or {}
@@ -200,11 +202,12 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     chance = intelligence.get("chance_quality") or {}
     adjustment = intelligence.get("probability_adjustment") or {}
     kickoff = intelligence.get("kickoff_market") or {}
+    lineup_risk = suitability.get("lineup_risk") or "unknown"
     print(
         f"GOOL_MATCH_INTELLIGENCE match={mid} suitability={float(suitability.get('score') or 0):.2f} "
         f"epoch={epoch.get('identity') or '-'} epoch_min={epoch.get('minutes')} "
         f"chance={float(chance.get('score') or 0.5):.2f} adjust_pp={float(adjustment.get('total_pp') or 0):+.1f} "
-        f"kickoff={kickoff.get('quality') or 'none'}",
+        f"kickoff={kickoff.get('quality') or 'none'} lineup={lineup_risk}",
         flush=True,
     )
 

@@ -205,8 +205,11 @@ def source_label(value: Any) -> str:
 
 def strategy_bucket(strategy: Any) -> str:
     raw = str(strategy or "")
+    # Autonomous STEAM stays a separate system in the public journal. It must
+    # not be mixed into the two ordinary event buckets even when it trades a
+    # related goal/BTTS/team-total market.
     if raw.startswith("steam_"):
-        raw = raw[6:]
+        return "steam"
     return {
         "another_goal": "another_goal",
         "two_more_goals": "two_more_goals",

@@ -6,12 +6,15 @@ from . import telegram
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections, journal_path, reconcile_pending, report_text
+from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 
 
 def _report_text_with_bank(*args, **kwargs) -> str:
+    path = journal_path()
+    reconcile_finalized_first_half(path)
     text = report_text(*args, **kwargs)
-    bank = "\n".join(current_bank_summary(journal_path()))
+    bank = "\n".join(current_bank_summary(path))
     return f"{text}\n\n{bank}"
 
 
@@ -28,7 +31,9 @@ def install_multi_product() -> None:
     telegram.analysis_text = _analysis_text_safe
 
     def _reconcile(_: Path) -> int:
-        return reconcile_pending()
+        path = journal_path()
+        corrected = reconcile_finalized_first_half(path)
+        return corrected + reconcile_pending()
 
     telegram._force_reconcile_pending = _reconcile
     if is_multi_telegram_active():

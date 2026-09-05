@@ -201,14 +201,12 @@ def _last_goal_minute(record: dict[str, Any]) -> int | None:
     return max(minutes) if minutes else None
 
 
-def _active_system(record: dict[str, Any]) -> tuple[str, str, str] | None:
+def _active_system(record: dict[str, Any]) -> str | None:
     match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
-    if 1 <= minute <= 35:
-        return "goal_before_ht", "1H", "first_half_total"
-    if 46 <= minute <= 75:
-        return "another_goal", "FT", "match_total"
-    return None
+    if minute <= 0 or bool(match.get("is_finished")):
+        return None
+    return "money_flow"
 
 
 def _threshold(name: str, default: float) -> float:
@@ -219,12 +217,13 @@ def _threshold(name: str, default: float) -> float:
 
 
 def evaluate_money_flow(record: dict[str, Any]) -> dict[str, Any]:
-    active = _active_system(record)
-    if active is None:
-        return {"eligible": False, "reason": "outside_money_flow_window"}
-    strategy, period, family = active
+    strategy = _active_system(record)
+    if strategy is None:
+        return {"eligible": False, "reason": "money_flow_match_not_live"}
     exchange = record.get("matchbook_exchange") or {}
     context = ((exchange.get("systems") or {}).get(strategy) or {})
+    period = str(context.get("period") or "FT")
+    family = "first_half_total" if period == "1H" else "match_total"
     if not bool(exchange.get("available")) or not bool(context.get("available")):
         return {"eligible": False, "reason": "matchbook_market_unavailable"}
     if not bool(context.get("liquid")):

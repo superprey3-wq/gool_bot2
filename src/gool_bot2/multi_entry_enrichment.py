@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import load_signal_journal, save_signal_journal
+from .multi_match_intelligence import calibration_snapshot
 from .multi_public_metrics import brief_selection_reason, confidence_snapshot
 
 
@@ -56,15 +57,18 @@ def enrich_multi_entry(
         experts,
         data_quality=data_quality,
     )
+    calibration_input = {**entry, "model_probability": entry.get("probability")}
     payload = {
         **metrics,
         "selection_reason": brief_selection_reason(decision, winner),
-        "confidence_formula_version": 1,
+        "confidence_formula_version": 2,
         "live_momentum_snapshot": dict(record.get("live_momentum") or {}),
         "xbet_live_1x2": dict(record.get("xbet_live_1x2") or {}),
-        # Shadow-first input for the Entry Quality Recorder. These fields do not
-        # affect eligibility/rating yet; they let us later measure provider lag,
-        # post-goal timing and which source actually confirmed the score state.
+        "match_intelligence": dict(record.get("match_intelligence") or {}),
+        "calibration": calibration_snapshot(calibration_input, record),
+        # Shadow-first timing input for Entry Quality analysis. Together with
+        # `match_intelligence.score_epoch`, this distinguishes pressure that
+        # existed before the current score from football created afterwards.
         "entry_timing": _entry_timing_snapshot(record),
     }
     if str(getattr(winner, "source", "") or "").startswith("1xbet:autonomous_steam"):

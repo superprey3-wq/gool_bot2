@@ -82,7 +82,7 @@ def test_shadow_team_goal_selects_a_team_without_emitting_active_signal():
     assert result["team"] in {"Home", "Away"}
 
 
-def test_shadow_market_tolerates_none_home_recent():
+def test_missing_prematch_history_is_neutral_when_live_pressure_is_strong():
     record = _record((0, 0))
     record["prematch_context"]["home_recent"] = None
 
@@ -93,7 +93,24 @@ def test_shadow_market_tolerates_none_home_recent():
         "scored_rate": None,
         "avg_goals_for": None,
     }
+    assert result["home"]["prematch_available"] is False
+    assert "side_prematch_scoring_profile_low" not in result["home"]["blocks"]
+    assert result["home"]["passed"] is True
+
+
+def test_real_weak_prematch_history_still_blocks_live_side():
+    record = _record((0, 0))
+    record["prematch_context"]["home_recent"] = _history(
+        "Home",
+        "X",
+        [(0, 1), (0, 0), (0, 2), (0, 1), (1, 1), (0, 2)],
+    )
+
+    result = analyze_team_goal_shadow(record)
+
+    assert result["home"]["prematch_available"] is True
     assert "side_prematch_scoring_profile_low" in result["home"]["blocks"]
+    assert result["home"]["passed"] is False
 
 
 def test_shadow_worker_uses_separate_journal_and_settles_team_goal(tmp_path: Path, monkeypatch):

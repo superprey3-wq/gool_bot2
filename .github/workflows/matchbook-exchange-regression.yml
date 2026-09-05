@@ -1,0 +1,52 @@
+name: Matchbook exchange regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/gool_bot2/matchbook_exchange.py'
+      - 'src/gool_bot2/matchbook_market_worker.py'
+      - 'src/gool_bot2/multi_exchange_confirmation.py'
+      - 'src/gool_bot2/multi_runtime.py'
+      - 'src/gool_bot2/multi_entry_enrichment.py'
+      - 'monkey_start.py'
+      - 'tests/test_matchbook_exchange.py'
+      - '.github/workflows/matchbook-exchange-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: python -m pip install -e . pytest
+      - name: Unit regressions
+        run: pytest -q tests/test_matchbook_exchange.py
+      - name: Real Matchbook public football probe
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tempfile
+          from gool_bot2.matchbook_exchange import MatchbookExchangeCollector
+
+          with tempfile.TemporaryDirectory() as td:
+              state = Path(td) / 'matchbook.json'
+              collector = MatchbookExchangeCollector(state)
+              first = collector.collect_once()
+              events = first.get('events') or []
+              live = [row for row in events if row.get('in_running')]
+              totals = [m for row in events for m in (row.get('totals') or {}).values()]
+              liquid = [m for m in totals if float(m.get('volume') or 0) >= 50]
+              print(f'MATCHBOOK_REAL events={len(events)} live={len(live)} totals={len(totals)} liquid50={len(liquid)}')
+              if not events:
+                  raise SystemExit('no Matchbook football events returned')
+              if not totals:
+                  raise SystemExit('no Matchbook football total markets returned')
+              sample = max(totals, key=lambda row: float(row.get('volume') or 0))
+              print('MATCHBOOK_SAMPLE', sample.get('period'), sample.get('line'), sample.get('volume'), sample.get('fair_over'))
+          PY

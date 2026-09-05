@@ -1,0 +1,33 @@
+name: patch-runtime-stall-hardening
+on:
+  push:
+    branches: [fix/runtime-stall-hardening-20260905]
+    paths:
+      - 'scripts/patch_runtime_stall_hardening.py'
+      - '.github/workflows/patch-runtime-stall-hardening.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/runtime-stall-hardening-20260905
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply runtime hardening
+        run: python scripts/patch_runtime_stall_hardening.py
+      - name: Remove temporary patch machinery and commit
+        run: |
+          rm scripts/patch_runtime_stall_hardening.py
+          rm .github/workflows/patch-runtime-stall-hardening.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Harden runtime heartbeat and fault isolation'
+          git push origin HEAD:fix/runtime-stall-hardening-20260905

@@ -247,11 +247,14 @@ class MatchbookExchangeCollector:
 
         def prior(seconds: float) -> dict[str, float] | None:
             candidates = [row for row in hist if now - float(row["ts"]) >= seconds]
-            return candidates[-1] if candidates else (hist[0] if hist else None)
+            return candidates[-1] if candidates else None
 
         out: dict[str, Any] = {}
+        ready: dict[str, bool] = {}
         for seconds, label in ((15.0, "15s"), (30.0, "30s"), (60.0, "60s")):
             old = prior(seconds)
+            ready[label] = old is not None
+            out[f"window_ready_{label}"] = ready[label]
             if old is None:
                 out[f"volume_delta_{label}"] = 0.0
                 out[f"fair_over_delta_pp_{label}"] = 0.0
@@ -265,12 +268,13 @@ class MatchbookExchangeCollector:
             out[f"fair_over_delta_pp_{label}"] = round(delta_pp, 3)
         hist.append(current)
 
+        usable_windows = [label for label in ("30s", "60s") if ready.get(label)]
         volume_delta = max(
-            float(out.get("volume_delta_30s") or 0.0),
-            float(out.get("volume_delta_60s") or 0.0),
+            (float(out.get(f"volume_delta_{label}") or 0.0) for label in usable_windows),
+            default=0.0,
         )
-        delta_pp = float(out.get("fair_over_delta_pp_30s") or 0.0)
-        if abs(delta_pp) < 0.25:
+        delta_pp = float(out.get("fair_over_delta_pp_30s") or 0.0) if ready.get("30s") else 0.0
+        if abs(delta_pp) < 0.25 and ready.get("60s"):
             delta_pp = float(out.get("fair_over_delta_pp_60s") or 0.0)
         min_volume = max(0.0, float(os.getenv("MATCHBOOK_FLOW_MIN_VOLUME_DELTA", "20")))
         strong_volume = max(min_volume, float(os.getenv("MATCHBOOK_FLOW_STRONG_VOLUME_DELTA", "75")))

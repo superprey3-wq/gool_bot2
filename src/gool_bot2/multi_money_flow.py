@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 from collections import Counter
 from datetime import datetime, timezone
@@ -9,7 +10,9 @@ from typing import Any
 
 from . import telegram
 from .journal import load_signal_journal, save_signal_journal
+from .multi_bank_card_layer import append_bank_strip
 from .multi_journal import settle_entry
+from .multi_money_flow_card import render_money_flow_result_card, render_money_flow_signal_card
 from .signal_cards import flashscore_meta, stats_snapshot
 
 
@@ -29,11 +32,160 @@ def money_flow_journal_path() -> Path:
     return Path(raw) if raw else _runtime() / "live" / "gool_money_flow_journal.json"
 
 
+def money_flow_bank_state_path() -> Path:
+    raw = os.getenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", "").strip()
+    return Path(raw) if raw else money_flow_journal_path().with_name("gool_money_flow_bank_state.json")
+
+
 def _number(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _bank_initial_env() -> float:
+    return max(0.0, _number(os.getenv("GOOL_MONEY_FLOW_BANK_INITIAL_RUB", "100000"), 100000.0))
+
+
+def _bank_stake_pct() -> float:
+    return max(0.0, min(1.0, _number(os.getenv("GOOL_MONEY_FLOW_BANK_STAKE_PCT", "0.02"), 0.02)))
+
+
+def _load_bank_state() -> dict[str, Any]:
+    path = money_flow_bank_state_path()
+    try:
+        payload = json.loads(path.read_text("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_bank_state(state: dict[str, Any]) -> None:
+    path = money_flow_bank_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), "utf-8")
+    tmp.replace(path)
+
+
+def _ensure_bank_state(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    state = _load_bank_state()
+    if state:
+        return state
+    created = [dt for row in rows if (dt := _parse_dt(row.get("created_at"))) is not None]
+    started = min(created) if created else datetime.now(timezone.utc)
+    state = {
+        "version": 1,
+        "started_at": started.astimezone(timezone.utc).isoformat(),
+        "initial_bank_rub": round(_bank_initial_env(), 2),
+    }
+    _save_bank_state(state)
+    return state
+
+
+def _bank_initial(state: dict[str, Any]) -> float:
+    return max(0.0, _number(state.get("initial_bank_rub"), _bank_initial_env()))
+
+
+def _row_profit_rub(row: dict[str, Any]) -> float:
+    result = str(row.get("result") or "pending").lower()
+    if result not in FINAL_RESULTS:
+        return 0.0
+    if row.get("virtual_profit_rub") is not None:
+        return _number(row.get("virtual_profit_rub"))
+    return _number(row.get("virtual_stake_rub")) * _number(row.get("profit_units"))
+
+
+def _settled_before(row: dict[str, Any], cutoff: datetime) -> bool:
+    if str(row.get("result") or "pending").lower() not in FINAL_RESULTS:
+        return False
+    settled = _parse_dt(row.get("settled_at"))
+    return settled is not None and settled < cutoff
+
+
+def _apply_bank_settlement(row: dict[str, Any]) -> bool:
+    if str(row.get("result") or "pending").lower() not in FINAL_RESULTS:
+        return False
+    if row.get("virtual_stake_rub") is None:
+        return False
+    profit = round(_number(row.get("virtual_stake_rub")) * _number(row.get("profit_units")), 2)
+    if row.get("virtual_profit_rub") == profit:
+        return False
+    row["virtual_profit_rub"] = profit
+    return True
+
+
+def _ensure_bank_fields(rows: list[dict[str, Any]]) -> bool:
+    state = _ensure_bank_state(rows)
+    started = _parse_dt(state.get("started_at")) or datetime.min.replace(tzinfo=timezone.utc)
+    initial = _bank_initial(state)
+    pct = _bank_stake_pct()
+    active = [
+        row
+        for row in rows
+        if (created := _parse_dt(row.get("created_at"))) is not None and created >= started
+    ]
+    active.sort(key=lambda row: str(row.get("created_at") or ""))
+    processed: list[dict[str, Any]] = []
+    changed = False
+    for row in active:
+        created = _parse_dt(row.get("created_at")) or datetime.now(timezone.utc)
+        before = initial + sum(_row_profit_rub(prior) for prior in processed if _settled_before(prior, created))
+        before = round(max(0.0, before), 2)
+        if row.get("virtual_bank_before_rub") is None:
+            row["virtual_bank_before_rub"] = before
+            changed = True
+        if row.get("virtual_stake_rub") is None:
+            row["virtual_stake_rub"] = round(min(before, before * pct), 2)
+            row["virtual_stake_pct"] = round(pct, 6)
+            changed = True
+        elif row.get("virtual_stake_pct") is None:
+            row["virtual_stake_pct"] = round(pct, 6)
+            changed = True
+        if _apply_bank_settlement(row):
+            changed = True
+        processed.append(row)
+    return changed
+
+
+def _attach_bank_fields(row: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    _ensure_bank_fields(rows)
+    state = _ensure_bank_state(rows)
+    created = _parse_dt(row.get("created_at")) or datetime.now(timezone.utc)
+    before = _bank_initial(state) + sum(_row_profit_rub(prior) for prior in rows if _settled_before(prior, created))
+    before = round(max(0.0, before), 2)
+    pct = _bank_stake_pct()
+    row["virtual_bank_before_rub"] = before
+    row["virtual_stake_rub"] = round(min(before, before * pct), 2)
+    row["virtual_stake_pct"] = round(pct, 6)
+    row["virtual_profit_rub"] = None
+
+
+def _bank_summary(rows: list[dict[str, Any]]) -> dict[str, float | int]:
+    _ensure_bank_fields(rows)
+    state = _ensure_bank_state(rows)
+    initial = _bank_initial(state)
+    realized = initial + sum(_row_profit_rub(row) for row in rows)
+    pending = [row for row in rows if str(row.get("result") or "pending").lower() == "pending"]
+    return {
+        "initial": round(initial, 2),
+        "bank": round(realized, 2),
+        "pnl": round(realized - initial, 2),
+        "pending": len(pending),
+        "pending_stake": round(sum(_number(row.get("virtual_stake_rub")) for row in pending), 2),
+    }
 
 
 def _last_goal_minute(record: dict[str, Any]) -> int | None:
@@ -234,6 +386,7 @@ def _entry(record: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
         "alternatives": [],
         "flashscore_meta": flashscore_meta(record),
         "stats_snapshot": stats_snapshot(record),
+        "live_momentum_snapshot": dict(record.get("live_momentum") or {}),
         "cards": dict(record.get("cards") or {}),
         "matchbook_flow": dict(info),
         "result": "pending",
@@ -281,22 +434,32 @@ def _result_text(row: dict[str, Any]) -> str:
 
 def _settle_and_notify(record: dict[str, Any], path: Path) -> None:
     rows = load_signal_journal(path)
-    changed = False
+    bank_changed = _ensure_bank_fields(rows)
+    changed = bank_changed
     match_id = str(((record.get("match") or {}).get("flashscore_event_id") or ""))
     for row in rows:
         if str(row.get("match_id") or "") != match_id:
             continue
         if str(row.get("result") or "pending").lower() == "pending" and settle_entry(row, record):
+            _apply_bank_settlement(row)
             changed = True
         if (
             str(row.get("result") or "").lower() in FINAL_RESULTS
             and bool(row.get("telegram_sent"))
             and not bool(row.get("result_telegram_sent"))
         ):
-            sent = telegram.broadcast(_result_text(row))
+            sent = 0
+            try:
+                png = render_money_flow_result_card(row, record)
+                sent = telegram.broadcast_photo(append_bank_strip(png, row, result=True))
+            except Exception as exc:
+                print(f"GOOL_MONEY_FLOW_RESULT_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+            if sent <= 0:
+                sent = telegram.broadcast(_result_text(row))
             if sent > 0:
                 row["result_telegram_sent"] = True
                 row["result_telegram_sent_at"] = _now()
+                row["result_telegram_delivery_count"] = int(sent)
                 changed = True
     if changed:
         save_signal_journal(path, rows)
@@ -315,6 +478,8 @@ def maybe_emit_money_flow(record: dict[str, Any]) -> dict[str, Any] | None:
 
     candidate = _entry(record, info)
     rows = load_signal_journal(path)
+    if _ensure_bank_fields(rows):
+        save_signal_journal(path, rows)
     if any(str(row.get("entry_key") or "") == candidate["entry_key"] for row in rows):
         return None
     if any(
@@ -325,7 +490,15 @@ def maybe_emit_money_flow(record: dict[str, Any]) -> dict[str, Any] | None:
     ):
         return None
 
-    sent = telegram.broadcast(_signal_text(candidate))
+    _attach_bank_fields(candidate, rows)
+    sent = 0
+    try:
+        png = render_money_flow_signal_card(record, candidate)
+        sent = telegram.broadcast_photo(append_bank_strip(png, candidate))
+    except Exception as exc:
+        print(f"GOOL_MONEY_FLOW_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+    if sent <= 0:
+        sent = telegram.broadcast(_signal_text(candidate))
     if sent <= 0:
         print(f"GOOL_MONEY_FLOW_SEND_FAILED match={candidate['match_id']}", flush=True)
         return None
@@ -338,14 +511,39 @@ def maybe_emit_money_flow(record: dict[str, Any]) -> dict[str, Any] | None:
         f"GOOL_MONEY_FLOW_BET match={candidate['match_id']} minute={candidate['minute']} "
         f"market={candidate['market']} odd={candidate['odd']:.2f} level={info.get('level')} "
         f"delta=£{float(info.get('volume_delta') or 0):.0f}/{info.get('window')} "
-        f"fair_pp={float(info.get('fair_delta_pp') or 0):+.2f}",
+        f"fair_pp={float(info.get('fair_delta_pp') or 0):+.2f} stake={candidate['virtual_stake_rub']:.0f}rub",
         flush=True,
     )
     return candidate
 
 
-def money_flow_report_line(path: Path | None = None) -> str:
+def money_flow_open_section(path: Path | None = None) -> str | None:
     rows = load_signal_journal(path or money_flow_journal_path())
+    if _ensure_bank_fields(rows):
+        save_signal_journal(path or money_flow_journal_path(), rows)
+    pending = [row for row in rows if str(row.get("result") or "pending").lower() == "pending"]
+    pending.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    if not pending:
+        return None
+    parts = [f"💸 <b>MONEY FLOW · В ИГРЕ</b>\nОткрыто: <b>{len(pending)}</b>"]
+    for index, row in enumerate(pending[:8], 1):
+        score = list(row.get("score") or [0, 0])
+        flow = row.get("matchbook_flow") or {}
+        parts.append(
+            f"<b>{index}. {html.escape(str(row.get('home') or '?'))} — {html.escape(str(row.get('away') or '?'))}</b>\n"
+            f"🎯 <b>{html.escape(str(row.get('market') or '?'))} @ {float(row.get('odd') or 0):.2f}</b>\n"
+            f"вход {int(row.get('minute') or 0)}' · {int(score[0])}:{int(score[1])} · "
+            f"поток +£{float(flow.get('volume_delta') or 0):,.0f}/{flow.get('window')} · "
+            f"ставка {float(row.get('virtual_stake_rub') or 0):,.0f} ₽"
+        )
+    return "\n\n".join(parts)
+
+
+def money_flow_report_line(path: Path | None = None) -> str:
+    journal = path or money_flow_journal_path()
+    rows = load_signal_journal(journal)
+    if _ensure_bank_fields(rows):
+        save_signal_journal(journal, rows)
     counts = Counter(str(row.get("result") or "pending").lower() for row in rows)
     settled = counts["won"] + counts["lost"]
     hit = "—" if settled <= 0 else f"{counts['won'] / settled * 100:.1f}%"
@@ -355,8 +553,11 @@ def money_flow_report_line(path: Path | None = None) -> str:
         if str(row.get("result") or "").lower() in FINAL_RESULTS
     )
     roi = "—" if settled <= 0 else f"{profit / settled * 100:+.1f}%"
+    bank = _bank_summary(rows)
+    pnl_sign = "+" if float(bank["pnl"]) > 0 else ""
     return (
         f"💸 Matchbook MONEY FLOW: ✅ <b>{counts['won']}</b> · ❌ <b>{counts['lost']}</b> · "
         f"⏳ <b>{counts['pending']}</b> · ↩️ <b>{counts['void'] + counts['push']}</b> · "
-        f"проход <b>{hit}</b> · P/L <b>{profit:+.2f}u</b> · ROI <b>{roi}</b>"
+        f"проход <b>{hit}</b> · P/L <b>{profit:+.2f}u</b> · ROI <b>{roi}</b> · "
+        f"банк <b>{float(bank['bank']):,.0f} ₽</b> ({pnl_sign}{float(bank['pnl']):,.0f} ₽)"
     )

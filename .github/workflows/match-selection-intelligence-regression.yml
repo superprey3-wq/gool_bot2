@@ -7,24 +7,32 @@ on:
     paths:
       - 'src/gool_bot2/multi_match_intelligence.py'
       - 'src/gool_bot2/multi_true_prematch.py'
+      - 'src/gool_bot2/multi_lineup_context.py'
       - 'src/gool_bot2/xbet_prematch_market.py'
       - 'src/gool_bot2/xbet_market_worker.py'
+      - 'src/gool_bot2/providers/fotmob_lineup_guard.py'
+      - 'src/gool_bot2/providers/__init__.py'
       - 'src/gool_bot2/multi_runtime.py'
       - 'src/gool_bot2/multi_entry_enrichment.py'
       - 'tests/test_multi_match_intelligence.py'
       - 'tests/test_xbet_prematch_market.py'
+      - 'tests/test_multi_lineup_context.py'
       - 'tests/test_multi_runtime_coverage.py'
       - '.github/workflows/match-selection-intelligence-regression.yml'
   pull_request:
     paths:
       - 'src/gool_bot2/multi_match_intelligence.py'
       - 'src/gool_bot2/multi_true_prematch.py'
+      - 'src/gool_bot2/multi_lineup_context.py'
       - 'src/gool_bot2/xbet_prematch_market.py'
       - 'src/gool_bot2/xbet_market_worker.py'
+      - 'src/gool_bot2/providers/fotmob_lineup_guard.py'
+      - 'src/gool_bot2/providers/__init__.py'
       - 'src/gool_bot2/multi_runtime.py'
       - 'src/gool_bot2/multi_entry_enrichment.py'
       - 'tests/test_multi_match_intelligence.py'
       - 'tests/test_xbet_prematch_market.py'
+      - 'tests/test_multi_lineup_context.py'
       - 'tests/test_multi_runtime_coverage.py'
       - '.github/workflows/match-selection-intelligence-regression.yml'
   workflow_dispatch:
@@ -47,6 +55,7 @@ jobs:
           pytest -q \
             tests/test_multi_match_intelligence.py \
             tests/test_xbet_prematch_market.py \
+            tests/test_multi_lineup_context.py \
             tests/test_multi_runtime_coverage.py \
             tests/test_multi_two_system_concept.py \
             tests/test_multi_another_goal_guard.py
@@ -55,9 +64,13 @@ jobs:
           ruff check --select E9,F63,F7,F82 \
             src/gool_bot2/multi_match_intelligence.py \
             src/gool_bot2/multi_true_prematch.py \
+            src/gool_bot2/multi_lineup_context.py \
             src/gool_bot2/xbet_prematch_market.py \
             src/gool_bot2/xbet_market_worker.py \
+            src/gool_bot2/providers/fotmob_lineup_guard.py \
+            src/gool_bot2/providers/__init__.py \
             src/gool_bot2/multi_runtime.py \
             src/gool_bot2/multi_entry_enrichment.py \
             tests/test_multi_match_intelligence.py \
-            tests/test_xbet_prematch_market.py
+            tests/test_xbet_prematch_market.py \
+            tests/test_multi_lineup_context.py

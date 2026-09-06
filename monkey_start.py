@@ -12,7 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
-MULTI_RESET_ID = "live_brain70_total_volume_v2_2026_09_06"
+MULTI_RESET_ID = "brain_v3_market_systems_clean_epoch_2026_09_06"
 
 
 def load_env(path: Path) -> None:
@@ -34,11 +34,11 @@ def _truthy(name: str, default: bool = False) -> bool:
 
 
 def _reset_multi_tracking_once(runtime: Path) -> None:
-    """Start the two-system public epoch with clean Multi tracking.
+    """Start the Brain V3 production epoch with clean public performance tracking.
 
-    The marker lives in persistent runtime storage, so only the first boot after
-    this deployment resets Multi journal, virtual bank and disposable analysis.
-    Later restarts keep every newly collected public bet.
+    This removes only betting journals/banks and disposable Brain analysis. Market
+    histories for 1xBet and Matchbook are deliberately preserved so STEAM/FLOW do
+    not lose their live movement context.
     """
     live = runtime / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -53,8 +53,13 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     analysis_raw = os.getenv("GOOL_MULTI_ANALYSIS_PATH", "").strip() or os.getenv("GOOL_MULTI_SHADOW_PATH", "").strip()
     multi_analysis = Path(analysis_raw) if analysis_raw else live / "gool_multi_analysis.jsonl"
 
+    flow_journal_raw = os.getenv("GOOL_MONEY_FLOW_JOURNAL_PATH", "").strip()
+    flow_journal = Path(flow_journal_raw) if flow_journal_raw else live / "gool_money_flow_journal.json"
+    flow_bank_raw = os.getenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", "").strip()
+    flow_bank = Path(flow_bank_raw) if flow_bank_raw else flow_journal.with_name("gool_money_flow_bank_state.json")
+
     removed: list[str] = []
-    for path in (multi_journal, bank_state, multi_analysis):
+    for path in (multi_journal, bank_state, multi_analysis, flow_journal, flow_bank):
         try:
             if path.exists():
                 path.unlink()
@@ -62,13 +67,22 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
         except OSError as exc:
             raise RuntimeError(f"multi_reset_failed path={path} err={exc}") from exc
 
+    trace_root = Path(os.getenv("GOOL_BRAIN_V3_TRACE_DIR", str(live / "brain_v3")))
+    try:
+        if trace_root.exists():
+            for path in trace_root.glob("*.jsonl"):
+                path.unlink()
+                removed.append(str(path))
+    except OSError as exc:
+        raise RuntimeError(f"brain_v3_trace_reset_failed path={trace_root} err={exc}") from exc
+
     marker.write_text(
-        f"reset_id={MULTI_RESET_ID}\nmin_rating={os.getenv('GOOL_MULTI_MIN_RATING', '70')}\n",
+        f"reset_id={MULTI_RESET_ID}\nbrain=V3\nmin_rating={os.getenv('GOOL_MULTI_MIN_RATING', '70')}\n",
         "utf-8",
     )
     print(
         f"GOOL_BOOT multi_tracking_reset={MULTI_RESET_ID} "
-        f"removed={len(removed)} journal={multi_journal} bank={bank_state} analysis={multi_analysis}",
+        f"removed={len(removed)} journal={multi_journal} bank={bank_state} flow_journal={flow_journal}",
         flush=True,
     )
 
@@ -130,21 +144,17 @@ def main() -> None:
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
     os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
 
-    # The collector writes a new LIVE snapshot once per minute. Polling the same
-    # raw files every 3 seconds adds needless process wakeups on a small VPS.
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
-    # Both market collectors stay inside the live router freshness window while
-    # remaining light enough for the small VPS.
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
-    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")
+    # The upgraded host can comfortably sample Matchbook more often. Ten-second
+    # snapshots make 30/60/120/300s money-flow trajectories materially cleaner.
+    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")
     os.environ.setdefault("MATCHBOOK_MIN_MARKET_VOLUME", "50")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
-    # Production cutover: old server env files do not need a new variable.
-    # Explicit GOOL_MULTI_TELEGRAM_MODE=shadow still provides an instant rollback.
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
 
     raw_live.mkdir(parents=True, exist_ok=True)
@@ -178,6 +188,7 @@ def main() -> None:
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
+    print("GOOL_BOOT brain=V3 prematch=support_only xbet=odds+separate_steam matchbook=separate_money_flow", flush=True)
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -186,7 +197,7 @@ def main() -> None:
     commands = {
         "live": [sys.executable, "-m", "gool_bot2.storage_live_collector", "--interval", os.environ.get("LIVE_INTERVAL_SECONDS", "60")],
         "xbet": [sys.executable, "-m", "gool_bot2.xbet_market_worker", "--interval", os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15")],
-        "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")],
+        "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
     }
     children: dict[str, subprocess.Popen] = {}

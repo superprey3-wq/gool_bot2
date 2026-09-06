@@ -1,27 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from playwright.async_api import async_playwright
 
-from gool_bot2.browser_context_worker import _stats_from_game, _trim_trends
+from gool_bot2.browser_context_worker import _browser_json, _stats_from_game, _trim_trends
 
 
 PAGE = "https://www.365scores.com/football/match/premier-league-7/everton-manchester-united-105-107-7"
 GAME = "https://webws.365scores.com/web/game/?appTypeId=5&langId=1&timezoneName=UTC&userCountryId=321&gameId=4742078&topBookmaker=103"
 TRENDS = "https://webws.365scores.com/web/trends/?appTypeId=5&langId=1&timezoneName=UTC&userCountryId=321&games=4742078&topBookmaker=103"
-
-
-async def _json(page, url: str):
-    result = await page.evaluate(
-        """async (url) => {
-            const r = await fetch(url, {credentials: 'include', cache: 'no-store'});
-            return {status: r.status, text: await r.text()};
-        }""",
-        url,
-    )
-    return int(result["status"]), json.loads(result["text"])
 
 
 async def main() -> int:
@@ -45,8 +33,8 @@ async def main() -> int:
             raise RuntimeError(f"page_status={None if response is None else response.status}")
         await page.wait_for_timeout(1500)
 
-        game_status, game_payload = await _json(page, GAME)
-        trend_status, trend_payload = await _json(page, TRENDS)
+        game_status, game_payload = await _browser_json(page, GAME)
+        trend_status, trend_payload = await _browser_json(page, TRENDS)
         if game_status != 200 or trend_status != 200:
             raise RuntimeError(f"api_status game={game_status} trends={trend_status}")
         game = game_payload.get("game") or {}

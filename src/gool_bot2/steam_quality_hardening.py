@@ -55,31 +55,54 @@ def _pressure_key(candidate: Any) -> str:
     return str(getattr(candidate, "key", "") or "")
 
 
-def _one_way_moves(candidate: Any, market_row: dict[str, Any] | None) -> int:
+def _pressure_row(candidate: Any, market_row: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(market_row, dict):
-        return 0
+        return {}
     pressure = market_row.get("pressure") or {}
     if not isinstance(pressure, dict):
-        return 0
+        return {}
     row = pressure.get(_pressure_key(candidate)) or {}
-    if not isinstance(row, dict):
-        return 0
-    return max(0, _integer(row.get("one_way_moves"), 0))
+    return dict(row) if isinstance(row, dict) else {}
+
+
+def _one_way_moves(candidate: Any, market_row: dict[str, Any] | None) -> int:
+    return max(0, _integer(_pressure_row(candidate, market_row).get("one_way_moves"), 0))
+
+
+def _trajectory_ok(candidate: Any, market_row: dict[str, Any] | None) -> bool:
+    """Require the price move to still be moving in the same direction.
+
+    Older/synthetic rows do not contain trajectory fields and remain compatible.
+    Production rows receive them from xbet_trajectory_hardening.
+    """
+    row = _pressure_row(candidate, market_row)
+    if "directional_consistency" not in row:
+        return True
+
+    consistency = _number(row.get("directional_consistency"), 1.0)
+    down_moves = max(0, _integer(row.get("down_moves"), 0))
+    retrace_pp = max(0.0, _number(row.get("retrace_pp"), 0.0))
+    latest_step_pp = _number(row.get("latest_step_pp"), 0.0)
+    consecutive_up = max(0, _integer(row.get("consecutive_up_moves"), 0))
+    moves = _one_way_moves(candidate, market_row)
+
+    max_retrace = max(0.25, _number(os.getenv("XBET_STEAM_MAX_RETRACE_PP"), 1.50))
+    min_consistency = max(0.50, min(1.0, _number(os.getenv("XBET_STEAM_MIN_DIRECTIONAL_CONSISTENCY"), 0.67)))
+    max_latest_reverse = max(0.10, _number(os.getenv("XBET_STEAM_MAX_LATEST_REVERSE_PP"), 0.50))
+
+    if retrace_pp > max_retrace:
+        return False
+    if latest_step_pp < -max_latest_reverse:
+        return False
+    if down_moves >= 2 and consistency < min_consistency:
+        return False
+    if moves <= 2 and down_moves > 0 and consecutive_up < 2:
+        return False
+    return True
 
 
 def _passes_quality_shape(candidate: Any, market_row: dict[str, Any] | None) -> bool:
-    """Reject small two-tick moves that previously leaked into public STEAM.
-
-    Autonomous STEAM is intentionally independent from football statistics, but
-    independence does not mean every small odds move is a bet. A signal must now
-    have one of three strong market shapes:
-      * >=7pp with at least two one-way moves and one related market;
-      * >=6pp with at least three moves and two related markets;
-      * >=8pp with at least three moves (extreme single-market path).
-
-    These shapes preserve the strong 7.7pp/2-move and 6.3pp/4-move examples while
-    rejecting the weak 5.0pp/2-move card that triggered this audit.
-    """
+    """Accept only strong, persistent and non-reversing autonomous STEAM."""
     delta = max(0.0, _number(getattr(candidate, "market_pressure_pp", 0.0)))
     moves = _one_way_moves(candidate, market_row)
     breadth = _breadth_count(candidate)
@@ -103,7 +126,8 @@ def _passes_quality_shape(candidate: Any, market_row: dict[str, Any] | None) -> 
         and breadth >= persistent_breadth
     )
     extreme = delta >= extreme_delta and moves >= extreme_moves
-    return bool(high_delta_confirmed or persistent_broad or extreme)
+    shape_ok = bool(high_delta_confirmed or persistent_broad or extreme)
+    return bool(shape_ok and _trajectory_ok(candidate, market_row))
 
 
 def _strict_confidence_wrapper(original: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
@@ -132,9 +156,6 @@ def install_steam_quality_hardening() -> None:
     if _INSTALLED:
         return
 
-    # Final safety floors. production_calibration historically used 5pp/2 moves
-    # to recover from a zero-signal period; these floors deliberately supersede
-    # that emergency calibration without requiring any host-side env edit.
     _floor_env("XBET_AUTONOMOUS_STEAM_MIN_DELTA_PP", 6.0)
     _floor_int_env("XBET_AUTONOMOUS_STEAM_MIN_ONE_WAY_MOVES", 2)
     _floor_env("XBET_STEAM_BREADTH_MIN_DELTA_PP", 2.0)
@@ -146,6 +167,9 @@ def install_steam_quality_hardening() -> None:
     _floor_int_env("XBET_AUTONOMOUS_STEAM_PERSISTENT_MIN_RELATED_MARKETS", 2)
     _floor_env("XBET_AUTONOMOUS_STEAM_EXTREME_DELTA_PP", 8.0)
     _floor_int_env("XBET_AUTONOMOUS_STEAM_EXTREME_ONE_WAY_MOVES", 3)
+    os.environ.setdefault("XBET_STEAM_MAX_RETRACE_PP", "1.5")
+    os.environ.setdefault("XBET_STEAM_MIN_DIRECTIONAL_CONSISTENCY", "0.67")
+    os.environ.setdefault("XBET_STEAM_MAX_LATEST_REVERSE_PP", "0.5")
 
     from . import multi_autonomous_steam as steam
     from . import multi_card
@@ -169,15 +193,13 @@ def install_steam_quality_hardening() -> None:
             tags = list(getattr(candidate, "reason_tags", []) or [])
             if "steam_quality_gate" not in tags:
                 tags.append("steam_quality_gate")
+            if "steam_trajectory_gate" not in tags:
+                tags.append("steam_trajectory_gate")
             candidate.reason_tags = tags
             kept.append(candidate)
         return kept
 
     steam.build_autonomous_steam_candidates = strict_build
-
-    # multi_runtime imports apply_autonomous_steam by value. Rebind it to the
-    # calibrated module function so the patched builder is guaranteed to be used
-    # in production, regardless of import order.
     multi_runtime.apply_autonomous_steam = steam.apply_autonomous_steam
 
     original_confidence = metrics.confidence_snapshot
@@ -198,9 +220,10 @@ def install_steam_quality_hardening() -> None:
         f"{os.getenv('XBET_AUTONOMOUS_STEAM_PERSISTENT_MIN_MOVES')}x/"
         f"{os.getenv('XBET_AUTONOMOUS_STEAM_PERSISTENT_MIN_RELATED_MARKETS')}markets "
         f"extreme={os.getenv('XBET_AUTONOMOUS_STEAM_EXTREME_DELTA_PP')}pp/"
-        f"{os.getenv('XBET_AUTONOMOUS_STEAM_EXTREME_ONE_WAY_MOVES')}x",
+        f"{os.getenv('XBET_AUTONOMOUS_STEAM_EXTREME_ONE_WAY_MOVES')}x "
+        f"retrace<={os.getenv('XBET_STEAM_MAX_RETRACE_PP')}pp",
         flush=True,
     )
 
 
-__all__ = ["install_steam_quality_hardening"]
+__all__ = ["install_steam_quality_hardening", "_passes_quality_shape", "_trajectory_ok"]

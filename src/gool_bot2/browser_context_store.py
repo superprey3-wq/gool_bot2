@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
+_CACHE_PATH = ""
 _CACHE_MTIME_NS = -1
 _CACHE_PAYLOAD: dict[str, Any] = {}
 
@@ -17,13 +18,14 @@ def _path() -> Path:
 
 
 def _load() -> dict[str, Any]:
-    global _CACHE_MTIME_NS, _CACHE_PAYLOAD
+    global _CACHE_PATH, _CACHE_MTIME_NS, _CACHE_PAYLOAD
     path = _path()
     try:
         stat = path.stat()
     except OSError:
         return {}
-    if int(stat.st_mtime_ns) == _CACHE_MTIME_NS:
+    path_key = str(path.resolve())
+    if path_key == _CACHE_PATH and int(stat.st_mtime_ns) == _CACHE_MTIME_NS:
         return _CACHE_PAYLOAD
     try:
         payload = json.loads(path.read_text("utf-8"))
@@ -31,6 +33,7 @@ def _load() -> dict[str, Any]:
         return {}
     if not isinstance(payload, dict):
         return {}
+    _CACHE_PATH = path_key
     _CACHE_MTIME_NS = int(stat.st_mtime_ns)
     _CACHE_PAYLOAD = payload
     return payload
@@ -58,18 +61,19 @@ def context_for_record(record: dict[str, Any]) -> dict[str, Any] | None:
 
     captured = _epoch(row.get("captured_epoch"))
     ttl = max(30.0, float(os.getenv("GOOL_BROWSER_CONTEXT_TTL_SECONDS", "180")))
-    if captured is None or time.time() - captured > ttl:
+    if captured is None or captured > time.time() + 30.0 or time.time() - captured > ttl:
         return None
 
     expected_score = [int(match.get("home_score") or 0), int(match.get("away_score") or 0)]
     score = row.get("score")
-    if isinstance(score, (list, tuple)) and len(score) >= 2:
-        try:
-            browser_score = [int(score[0]), int(score[1])]
-        except (TypeError, ValueError):
-            return None
-        if browser_score != expected_score:
-            return None
+    if not isinstance(score, (list, tuple)) or len(score) < 2:
+        return None
+    try:
+        browser_score = [int(score[0]), int(score[1])]
+    except (TypeError, ValueError):
+        return None
+    if browser_score != expected_score:
+        return None
 
     try:
         browser_minute = int(row.get("minute") or 0)
@@ -77,7 +81,7 @@ def context_for_record(record: dict[str, Any]) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         return None
     max_lag = max(1, int(os.getenv("GOOL_BROWSER_MAX_MINUTE_LAG", "3")))
-    if browser_minute > 0 and current_minute > 0 and abs(browser_minute - current_minute) > max_lag:
+    if browser_minute <= 0 or current_minute <= 0 or abs(browser_minute - current_minute) > max_lag:
         return None
     return dict(row)
 

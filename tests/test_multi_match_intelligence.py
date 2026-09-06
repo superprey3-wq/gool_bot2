@@ -195,12 +195,13 @@ def _decision() -> RouterDecision:
     )
 
 
-def test_match_suitability_hard_block_rejects_ordinary_bet():
+def test_match_suitability_is_diagnostic_not_a_main_brain_veto():
     decision = _decision()
-    record = {"match_intelligence": {"suitability": {"score": 0.8, "minimum": 0.58, "hard_blocks": ["score_desync"]}}}
+    record = {"match_intelligence": {"suitability": {"score": 0.2, "minimum": 0.58, "hard_blocks": ["score_desync"]}}}
     out = enforce_match_suitability(decision, record)
-    assert out.status == "WAIT"
-    assert "match_suitability_hard_block" in out.rejected[0].blocks
+    assert out is decision
+    assert out.status == "BET"
+    assert out.winner is not None
 
 
 def test_calibration_snapshot_records_fair_edge_bucket():

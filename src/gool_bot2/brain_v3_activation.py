@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from .brain_v3_decision import apply_brain_v3_to_experts
 from .brain_v3_external_trends import apply_external_trend_context
+from .brain_v3_trend_learning import install_brain_v3_trend_learning
 
 
 _INSTALLED = False
@@ -28,6 +29,7 @@ def install_brain_v3_activation() -> None:
 
     metrics.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
     multi_card.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
+    install_brain_v3_trend_learning()
 
     original_half: Callable[..., dict[str, Any]] = runtime.apply_half_goal_prior
     original_restore: Callable[..., dict[str, Any]] = runtime._restore_live_only_brain
@@ -41,9 +43,6 @@ def install_brain_v3_activation() -> None:
             data_quality=quality,
             prematch_profile=profile,
         )
-        # A score-relevant full-match trend (for example 1-1 + frequent O2.5)
-        # is only a small hint after the LIVE state machine has run. It cannot
-        # create LIVE foundation or bypass sustained-pressure safety gates.
         decision = apply_external_trend_context(record, experts, decision)
         if bool(decision.get("active")):
             match = record.get("match") or {}

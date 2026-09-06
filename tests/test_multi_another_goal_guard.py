@@ -65,15 +65,14 @@ def _market(draw_fair: float = 0.50, draw_delta: float = 4.0) -> dict:
     }
 
 
-def test_recent_goal_requires_three_minute_rebuild() -> None:
+def test_recent_goal_is_left_to_live_brain_score_epoch() -> None:
     decision = enforce_another_goal_context(
         _decision(62),
         _record(62, last_goal=60),
         {"another_goal": {"probability": 0.85}},
         _market(draw_delta=0.0),
     )
-    assert decision.status == "WAIT"
-    assert "another_goal_post_goal_rebuild" in decision.rejected[0].blocks
+    assert decision.status == "BET"
 
 
 def test_after_rebuild_window_entry_can_continue() -> None:
@@ -86,18 +85,17 @@ def test_after_rebuild_window_entry_can_continue() -> None:
     assert decision.status == "BET"
 
 
-def test_tied_match_draw_repricing_blocks_marginal_another_goal() -> None:
+def test_draw_repricing_cannot_veto_main_live_brain() -> None:
     decision = enforce_another_goal_context(
         _decision(65, score=(2, 2), pressure=1.0),
         _record(65, score=(2, 2)),
         {"another_goal": {"probability": 0.78}},
         _market(draw_fair=0.50, draw_delta=4.0),
     )
-    assert decision.status == "WAIT"
-    assert "another_goal_1x2_draw_repricing" in decision.rejected[0].blocks
+    assert decision.status == "BET"
 
 
-def test_tied_match_draw_repricing_can_be_overruled_only_by_strong_live_and_total() -> None:
+def test_strong_live_still_continues_when_market_also_supports() -> None:
     decision = enforce_another_goal_context(
         _decision(65, score=(2, 2), pressure=4.0),
         _record(65, score=(2, 2)),
@@ -107,15 +105,14 @@ def test_tied_match_draw_repricing_can_be_overruled_only_by_strong_live_and_tota
     assert decision.status == "BET"
 
 
-def test_second_half_saturation_blocks_without_double_confirmation() -> None:
+def test_prematch_half_saturation_cannot_veto_main_live_brain() -> None:
     decision = enforce_another_goal_context(
         _decision(68, score=(2, 1), pressure=1.0),
         _record(68, score=(2, 1), half_goals=2, line_prob=0.24),
         {"another_goal": {"probability": 0.79}},
         _market(draw_delta=0.0),
     )
-    assert decision.status == "WAIT"
-    assert "another_goal_half_total_saturated" in decision.rejected[0].blocks
+    assert decision.status == "BET"
 
 
 def test_leading_score_is_not_blocked_by_draw_repricing_rule() -> None:

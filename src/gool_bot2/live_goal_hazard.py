@@ -124,8 +124,6 @@ def estimate_live_goal_hazard(record: dict[str, Any], *, period: str) -> dict[st
 
     base_rate = None
     if xg_total is not None and minute > 0:
-        # The 12-minute denominator avoids huge cold-start rates from one early
-        # shot while leaving normal 15'+ matches unchanged.
         base_rate = xg_total / max(12.0, float(minute))
     recent10_rate = None if recent10 is None else recent10 / 10.0
     recent5_rate = None if recent5 is None else recent5 / 5.0
@@ -154,9 +152,6 @@ def estimate_live_goal_hazard(record: dict[str, Any], *, period: str) -> dict[st
             "blocks": ["live_hazard_no_xg_or_proxy"],
         }
 
-    # Attack-proxy xG is intentionally a little more conservative than provider
-    # xG. The rate cap prevents a single explosive five-minute burst from turning
-    # into an impossible 90-minute scoring pace.
     source_factor = 1.0 if xg_source == "provider_xg" else 0.92
     rate = min(_f("GOOL_HAZARD_MAX_RATE_PER_MINUTE", 0.060), max(0.0, rate * source_factor))
 
@@ -171,8 +166,6 @@ def estimate_live_goal_hazard(record: dict[str, Any], *, period: str) -> dict[st
     elif minute >= 30 and margin >= 3:
         score_factor = 0.88
 
-    # Genuine recent high-quality pressure can partially offset a dead-game
-    # score-state penalty, but never remove it entirely.
     if score_factor < 1.0 and (
         (recent5 is not None and recent5 >= 0.22)
         or (recent10 is not None and recent10 >= 0.40)
@@ -182,10 +175,6 @@ def estimate_live_goal_hazard(record: dict[str, Any], *, period: str) -> dict[st
     expected_goals_remaining = max(0.0, rate * float(minutes_left) * score_factor)
     probability = 1.0 - math.exp(-min(3.0, expected_goals_remaining))
 
-    # Late matches need actual chance quality, not just historical shot volume.
-    # This is the key protection against states such as 73', xG~1.0, 16 shots,
-    # 7 SOT, 0 big chances: plenty of activity, but little evidence that another
-    # goal is genuinely imminent.
     late_quality_ok = True
     big_total = _pair_total(record, "big_chances")
     if period == "FT" and minute >= 65:
@@ -256,11 +245,16 @@ def _apply_to_expert(expert: dict[str, Any], hazard: dict[str, Any]) -> None:
     diagnostics["live_goal_hazard"] = hazard
     expert["diagnostics"] = diagnostics
 
+    # If there is no cumulative xG or usable attack proxy, the underlying Goal
+    # State already has its own evidence/no-data rules. Do not manufacture a new
+    # NO_DATA state here. In production a raw PASS normally implies enough attack
+    # metrics for xg_or_proxy_pair; this branch mainly preserves synthetic tests
+    # and partial diagnostics.
+    if not bool(hazard.get("available")):
+        return
+
     probability = hazard.get("probability")
     if probability is not None:
-        # The old Goal State number was a pressure/confidence score. For the two
-        # public GOOL systems expose the time-aware next-goal hazard instead so a
-        # displayed 65% is no longer just a normalized pressure number.
         expert["probability"] = float(probability)
         expert["metric"] = "live_goal_hazard"
 
@@ -269,7 +263,7 @@ def _apply_to_expert(expert: dict[str, Any], hazard: dict[str, Any]) -> None:
         return
 
     expert["passed"] = False
-    expert["state"] = "BORDERLINE" if hazard.get("available") else "NO_DATA"
+    expert["state"] = "BORDERLINE"
     blocks = list(expert.get("blocks") or [])
     blocks.extend(str(item) for item in (hazard.get("blocks") or []) if str(item))
     if "live_goal_hazard_veto" not in blocks:
@@ -296,8 +290,6 @@ def build_goal_state_experts_with_hazard(
     match = record.get("match") or {}
     minute = int(match.get("minute") or 0)
 
-    # Only the two ordinary public systems are changed. Autonomous 1xBet STEAM
-    # and Matchbook MONEY FLOW remain independent, exactly as designed.
     if 1 <= minute <= 35 and isinstance(experts.get("goal_before_ht"), dict):
         _apply_to_expert(experts["goal_before_ht"], estimate_live_goal_hazard(record, period="1H"))
     if 46 <= minute <= 75 and isinstance(experts.get("another_goal"), dict):

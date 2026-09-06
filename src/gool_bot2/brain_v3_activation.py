@@ -10,7 +10,7 @@ from .brain_v3_trend_learning import install_brain_v3_trend_learning
 
 
 _INSTALLED = False
-_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + Chromium + время/счёт + capped history/trends + Decision Audit · 1xBet только кэф"
+_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + Chromium fallback + время/счёт + capped history/trends · 1xBet только кэф"
 
 
 def install_brain_v3_activation() -> None:

@@ -1,0 +1,24 @@
+name: scores365 trends probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/scores365_trend_probe.py'
+      - '.github/workflows/scores365-trends-probe.yml'
+      - 'src/gool_bot2/providers/scores365.py'
+      - 'src/gool_bot2/providers/scores365_prematch_guard.py'
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: pip install -e .
+      - name: Probe 365Scores trends
+        run: python scripts/scores365_trend_probe.py

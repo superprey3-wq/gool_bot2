@@ -105,7 +105,7 @@ def test_hard_no_cannot_be_revived_by_normal_market_override():
     assert "goal_state_hard_no" in row.blocks
 
 
-def test_borderline_needs_market_confirmation_and_min_odd_150():
+def test_borderline_cannot_be_revived_by_market_and_price_floor_stays_150():
     row = _candidate(odd=1.50, pressure=7.0, override=True)
     decision = RouterDecision(
         status="BET",
@@ -116,7 +116,7 @@ def test_borderline_needs_market_confirmation_and_min_odd_150():
         rejected=[],
         reason="legacy",
     )
-    experts = {
+    borderline = {
         "another_goal": {
             "probability": 0.74,
             "metric": "confidence",
@@ -125,15 +125,21 @@ def test_borderline_needs_market_confirmation_and_min_odd_150():
         }
     }
 
-    final = enforce_goal_state_policy(decision, experts)
-
-    assert final.status == "BET"
-    assert final.winner is row
-    assert row.odd == 1.50
-    assert row.expected_roi == 0.0
-    assert row.value_edge_pp == 0.0
+    final = enforce_goal_state_policy(decision, borderline)
+    assert final.status == "WAIT"
+    assert final.winner is None
+    assert "goal_state_borderline" in row.blocks
+    assert row.market_override is False
 
     low = _candidate(odd=1.49, pressure=9.0, override=True)
+    pass_experts = {
+        "another_goal": {
+            "probability": 0.80,
+            "metric": "confidence",
+            "state": "PASS",
+            "passed": True,
+        }
+    }
     low_decision = RouterDecision(
         status="BET",
         minute=50,
@@ -143,6 +149,6 @@ def test_borderline_needs_market_confirmation_and_min_odd_150():
         rejected=[],
         reason="legacy",
     )
-    low_final = enforce_goal_state_policy(low_decision, experts)
+    low_final = enforce_goal_state_policy(low_decision, pass_experts)
     assert low_final.status == "WAIT"
     assert "price_too_low" in low.blocks

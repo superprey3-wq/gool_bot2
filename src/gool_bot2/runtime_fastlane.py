@@ -45,13 +45,25 @@ def _write_health(payload: dict[str, Any]) -> None:
         print(f"SIGNAL_WORKER_HEALTH_ERROR {type(exc).__name__}:{exc}", flush=True)
 
 
+def _record_ingest_age(record: dict[str, Any]) -> float | None:
+    """Age of when this row actually reached storage, with source-time fallback.
+
+    An active collector starts a cycle before expensive per-match detail calls. On a
+    very large LIVE wave, `captured_at` can therefore be several minutes older than
+    the moment the row is finally appended. Cold-start filtering must not throw
+    away such freshly written rows merely because their source-cycle timestamp is
+    old; `ingested_at` is the correct freshness clock for queue admission.
+    """
+    return hardening._timestamp_age_seconds(record.get("ingested_at") or record.get("captured_at"))
+
+
 def _fast_process(self: Any, record: dict[str, Any]) -> int:
     """Run only the active Multi LIVE brain when legacy model output is discarded anyway.
 
     GOOL_LIVE_ONLY removes trained_probability/direct before Goal State routing.
     The current local legacy model does not produce the only remaining optional
     broad-live key (another_goal_live), so running the entire legacy analyzer for
-    every match changes no Multi decision.  It only burns cold-start/loop time.
+    every match changes no Multi decision. It only burns cold-start/loop time.
 
     We keep the two pieces Multi actually needs from the legacy worker: persistent
     prematch hydration for diagnostics and the 5m/10m momentum accumulator.
@@ -134,9 +146,9 @@ def _fast_process(self: Any, record: dict[str, Any]) -> int:
 def _fresh_run_once(self: Any, raw_dir: Path) -> int:
     """Coalesce unread rows and never deep-analyze stale pre-restart snapshots.
 
-    The raw directory persists across Monkey restarts.  Starting every file at
+    The raw directory persists across Monkey restarts. Starting every file at
     offset zero used to make the worker deep-process the newest state of many old
-    matches before it could catch the current LIVE wave.  We still advance every
+    matches before it could catch the current LIVE wave. We still advance every
     cursor to EOF, but only current snapshots enter the expensive pipeline.
     """
     from . import xbet_market_pressure as xbet
@@ -168,7 +180,7 @@ def _fresh_run_once(self: Any, raw_dir: Path) -> int:
                     if not isinstance(record, dict):
                         continue
                     parsed_rows += 1
-                    age = hardening._timestamp_age_seconds(record.get("captured_at"))
+                    age = _record_ingest_age(record)
                     if age is not None and age > max_raw_age:
                         stale_rows += 1
                         continue
@@ -198,7 +210,7 @@ def _fresh_run_once(self: Any, raw_dir: Path) -> int:
         )
 
     def freshness(record: dict[str, Any]) -> float:
-        age = hardening._timestamp_age_seconds(record.get("captured_at"))
+        age = _record_ingest_age(record)
         return age if age is not None else float("inf")
 
     pending_records.sort(key=freshness)
@@ -332,7 +344,7 @@ def install_runtime_fastlane() -> None:
         return
 
     # Five minutes was too short for a large restart wave and made the Telegram
-    # analysis page look as if only 1-2 matches existed.  Explicit server config
+    # analysis page look as if only 1-2 matches existed. Explicit server config
     # still wins; this only changes the production default.
     os.environ.setdefault("ANALYSIS_ONLINE_MAX_AGE_MINUTES", "15")
     os.environ.setdefault("SIGNAL_FRESH_RAW_MAX_AGE_SECONDS", "300")
@@ -344,4 +356,4 @@ def install_runtime_fastlane() -> None:
     _INSTALLED = True
 
 
-__all__ = ["install_runtime_fastlane", "_fast_process", "_fresh_run_once"]
+__all__ = ["install_runtime_fastlane", "_fast_process", "_fresh_run_once", "_record_ingest_age"]

@@ -8,6 +8,7 @@ from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections as _multi_in_game_sections
 from .multi_menu import journal_path, reconcile_pending, report_text
 from .multi_money_flow import money_flow_open_section, money_flow_report_line
+from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 from .public_epoch_reset import reset_public_tracking_once
@@ -43,6 +44,7 @@ def _analysis_text_safe(*args, **kwargs) -> str:
 
 def install_multi_product() -> None:
     """Point menus/reporting at the unified Multi product."""
+    install_money_flow_total_volume()
     reset_public_tracking_once()
     telegram.report_text = _report_text_with_bank
     telegram.in_game_sections = _in_game_sections_with_flow

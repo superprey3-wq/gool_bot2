@@ -2,8 +2,10 @@
 
 from .architecture_isolation import install_architecture_isolation
 from .production_calibration import install_production_calibration
+from .live_goal_hazard import install_live_goal_hazard
 from .runtime_fastlane import install_runtime_fastlane
 
 install_architecture_isolation()
 install_production_calibration()
+install_live_goal_hazard()
 install_runtime_fastlane()

@@ -249,7 +249,7 @@ def test_matchbook_never_manufactures_bet_from_wait() -> None:
     assert decision.status == "WAIT"
 
 
-def test_strong_support_requires_xbet_confluence_for_rating_bonus() -> None:
+def test_matchbook_support_does_not_modify_main_brain_rating() -> None:
     row = SimpleNamespace(
         strategy="another_goal",
         rating=78.0,
@@ -273,11 +273,11 @@ def test_strong_support_requires_xbet_confluence_for_rating_bonus() -> None:
         }
     }
     apply_matchbook_confirmation(decision, record)
-    assert row.rating == 79.0
-    assert "matchbook_xbet_confluence" in row.reason_tags
+    assert row.rating == 78.0
+    assert row.reason_tags == []
 
 
-def test_exchange_opposition_makes_entry_stricter() -> None:
+def test_matchbook_opposition_does_not_veto_main_brain() -> None:
     row = SimpleNamespace(
         strategy="another_goal",
         rating=79.0,
@@ -301,5 +301,5 @@ def test_exchange_opposition_makes_entry_stricter() -> None:
         }
     }
     apply_matchbook_confirmation(decision, record)
-    assert row.rating == 77.0
-    assert "matchbook_strong_opposition" in row.reason_tags
+    assert row.rating == 79.0
+    assert row.reason_tags == []

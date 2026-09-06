@@ -3,8 +3,13 @@ name: GOOL Multi real LIVE audit
 on:
   push:
     branches:
+      - main
       - feature/gool-multi-router
     paths:
+      - 'src/gool_bot2/__init__.py'
+      - 'src/gool_bot2/architecture_isolation.py'
+      - 'src/gool_bot2/production_calibration.py'
+      - 'src/gool_bot2/goal_state_engine.py'
       - 'scripts/gool_multi_live_audit.py'
       - 'scripts/gool_multi_card_preview.py'
       - 'src/gool_bot2/multi_*.py'
@@ -12,6 +17,7 @@ on:
       - 'src/gool_bot2/xbet_market_robust.py'
       - 'src/gool_bot2/xbet_market_worker.py'
       - 'src/gool_bot2/providers/flashscore.py'
+      - 'tests/test_zero_signal_audit.py'
       - 'tests/test_multi_router.py'
       - 'tests/test_multi_neutral_market.py'
       - 'tests/test_multi_market_opposition.py'
@@ -45,8 +51,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e '.[dev]'
 
-      - name: Unit safety check for Multi Bot
-        run: pytest -q tests/test_multi_router.py tests/test_multi_neutral_market.py tests/test_multi_market_opposition.py tests/test_multi_first_half_value.py tests/test_multi_min_odd.py tests/test_multi_cards_delivery.py tests/test_multi_card_journal_assets.py tests/test_multi_override.py tests/test_multi_card_and_shadow.py tests/test_multi_settlement.py tests/test_multi_journal.py tests/test_multi_menu.py tests/test_multi_bank.py tests/test_multi_model_capture.py tests/test_xbet_market_robust.py tests/test_xbet_first_half_child.py
+      - name: Production zero-signal safety check
+        run: pytest -q tests/test_zero_signal_audit.py tests/test_architecture_isolation.py tests/test_multi_autonomous_steam.py tests/test_xbet_market_robust.py
 
       - name: Render Multi signal/result card previews
         run: python scripts/gool_multi_card_preview.py --out-dir artifacts/gool_multi_cards

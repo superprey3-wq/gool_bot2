@@ -12,7 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
-MULTI_RESET_ID = "live_hazard_clean_epoch_v2_2026_09_06"
+MULTI_RESET_ID = "live_brain70_total_volume_v2_2026_09_06"
 
 
 def load_env(path: Path) -> None:
@@ -178,100 +178,36 @@ def main() -> None:
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
-    print(f"GOOL_BOOT multi_min_rating={os.environ['GOOL_MULTI_MIN_RATING']}", flush=True)
-    print(f"GOOL_BOOT paths raw={raw_live} journal={journal} analysis={analysis}", flush=True)
-    print(f"GOOL_BOOT shadow journal={shadow_journal} analysis={shadow_analysis} cards={shadow_cards}", flush=True)
-    print(f"GOOL_BOOT storage prematch_cache={prematch_cache}", flush=True)
-    print(f"GOOL_BOOT xbet state={xbet_state} interval={os.environ['XBET_MARKET_INTERVAL_SECONDS']} required={os.environ['XBET_MARKET_REQUIRED']}", flush=True)
-    print(
-        f"GOOL_BOOT matchbook state={matchbook_state} interval={os.environ['MATCHBOOK_MARKET_INTERVAL_SECONDS']} "
-        f"min_market_volume={os.environ['MATCHBOOK_MIN_MARKET_VOLUME']}",
-        flush=True,
-    )
-    print(f"GOOL_BOOT worker_sleep={os.environ['SIGNAL_WORKER_SLEEP']}s", flush=True)
-    print(f"GOOL_BOOT var_guard seconds={os.environ['VAR_WIN_CONFIRM_SECONDS']} snapshots={os.environ['VAR_WIN_CONFIRM_SNAPSHOTS']}", flush=True)
-
-    cleanup_env = os.environ.copy()
-    cleanup = subprocess.run(
-        [sys.executable, "-m", "gool_bot2.storage_runtime", "--once"],
-        env=cleanup_env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if cleanup.stdout.strip():
-        print(cleanup.stdout.strip(), flush=True)
-    if cleanup.returncode != 0:
-        print(f"GOOL_BOOT storage_cleanup_failed rc={cleanup.returncode} err={cleanup.stderr.strip()}", flush=True)
 
     env = os.environ.copy()
-    collector = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.storage_live_collector",
-        "--data-dir", str(raw_live),
-        "--interval", os.getenv("LIVE_INTERVAL_SECONDS", "60"),
-    ], env=env)
-    xbet = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.xbet_market_worker",
-        "--state", str(xbet_state),
-        "--history", str(xbet_history),
-        "--interval", os.getenv("XBET_MARKET_INTERVAL_SECONDS", "15"),
-    ], env=env)
-    matchbook = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.matchbook_market_worker",
-        "--state", str(matchbook_state),
-        "--interval", os.getenv("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15"),
-    ], env=env)
-    worker = subprocess.Popen([
-        sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var",
-        "--raw-dir", str(raw_live),
-        "--journal", str(journal),
-        "--analysis", str(analysis),
-    ], env=env)
+    env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONPATH"] = os.environ["PYTHONPATH"]
 
-    # Multi active already calculates BTTS/home-goal/away-goal inside the main
-    # worker. Running the old experimental shadow process at the same time
-    # duplicates raw-file scans, prematch JSON hydration and market analysis.
-    # Keep it automatically for rollback/shadow mode, or allow explicit opt-in.
-    multi_mode = str(os.environ.get("GOOL_MULTI_TELEGRAM_MODE", "active")).strip().lower()
-    legacy_shadow_enabled = multi_mode != "active" or _truthy("GOOL_LEGACY_SHADOW_WORKER", False)
-    shadow = None
-    if legacy_shadow_enabled:
-        shadow = subprocess.Popen([
-            sys.executable, "-m", "gool_bot2.storage_market_shadow_worker_var",
-            "--raw-dir", str(raw_live),
-            "--journal", str(shadow_journal),
-            "--analysis", str(shadow_analysis),
-            "--cards", str(shadow_cards),
-        ], env=env)
-        print(f"GOOL_BOOT legacy_shadow=enabled pid={shadow.pid}", flush=True)
-    else:
-        print("GOOL_BOOT legacy_shadow=disabled reason=multi_active", flush=True)
+    commands = {
+        "live": [sys.executable, "-m", "gool_bot2.storage_live_collector", "--interval", os.environ.get("LIVE_INTERVAL_SECONDS", "60")],
+        "xbet": [sys.executable, "-m", "gool_bot2.xbet_market_worker", "--interval", os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15")],
+        "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")],
+        "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
+    }
+    children: dict[str, subprocess.Popen] = {}
 
-    procs: list[tuple[str, subprocess.Popen]] = [
-        ("collector", collector),
-        ("xbet", xbet),
-        ("matchbook", matchbook),
-        ("worker", worker),
-    ]
-    if shadow is not None:
-        procs.append(("shadow", shadow))
+    def start_child(name: str) -> None:
+        command = commands[name]
+        children[name] = subprocess.Popen(command, env=env, cwd=str(ROOT))
+        print(f"GOOL_BOOT child={name} pid={children[name].pid} command={' '.join(command)}", flush=True)
 
-    print(
-        f"GOOL_BOOT running collector_pid={collector.pid} xbet_pid={xbet.pid} "
-        f"matchbook_pid={matchbook.pid} worker_pid={worker.pid} "
-        f"shadow_pid={shadow.pid if shadow is not None else '-'}",
-        flush=True,
-    )
-    try:
-        while True:
-            for name, proc in procs:
-                if proc.poll() is not None:
-                    raise RuntimeError(f"{name}_exited={proc.returncode}")
-            time.sleep(5)
-    finally:
-        for _, proc in procs:
-            if proc.poll() is None:
-                proc.terminate()
+    for name in commands:
+        start_child(name)
+
+    while True:
+        time.sleep(3)
+        for name, process in list(children.items()):
+            code = process.poll()
+            if code is None:
+                continue
+            print(f"GOOL_BOOT child_exit={name} code={code}; restarting in 2s", flush=True)
+            time.sleep(2)
+            start_child(name)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ _reset_multi_tracking_once = _STARTUP["_reset_multi_tracking_once"]
 
 
 def test_two_system_epoch_has_new_reset_id() -> None:
-    assert _MULTI_RESET_ID == "two_system_goal_epoch_v1_2026_09_05"
+    assert _MULTI_RESET_ID == "live_brain70_total_volume_v2_2026_09_06"
 
 
 def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkeypatch) -> None:

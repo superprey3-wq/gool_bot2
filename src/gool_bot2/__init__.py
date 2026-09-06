@@ -7,10 +7,12 @@ from .architecture_isolation import install_architecture_isolation
 from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_memory import install_brain_v3_memory
 from .live_goal_hazard import install_live_goal_hazard
+from .matchbook_long_flow import install_matchbook_long_flow
 from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
 from .runtime_fastlane import install_runtime_fastlane
 from .steam_quality_hardening import install_steam_quality_hardening
+from .xbet_trajectory_hardening import install_xbet_trajectory_hardening
 
 
 _ORIGINAL_GOAL_STATE_POLICY = _goal_state_policy.enforce_goal_state_policy
@@ -62,12 +64,15 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
-# Compatibility/calibration layers install first. Brain V3 activation installs
-# last so older production patches cannot overwrite its ordinary GOOL decision.
+# Compatibility/calibration layers install first. Autonomous market-memory layers
+# are independent. Brain V3 activation installs last so older production patches
+# cannot overwrite its ordinary GOOL decision.
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
+install_matchbook_long_flow()
 install_money_flow_total_volume()
+install_xbet_trajectory_hardening()
 install_live_goal_hazard()
 install_steam_quality_hardening()
 install_runtime_fastlane()

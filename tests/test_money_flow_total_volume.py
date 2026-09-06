@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from gool_bot2 import multi_money_flow
-from gool_bot2.multi_money_flow_total_volume import enhance_money_flow_result
 
 
 def _record(
@@ -71,13 +70,10 @@ def _record(
 def test_non_top_huge_total_volume_can_signal_without_fast_burst(monkeypatch):
     monkeypatch.setenv("MATCHBOOK_FLOW_NON_TOP_TOTAL_VOLUME_GBP", "5000")
     monkeypatch.setenv("MATCHBOOK_FLOW_NON_TOP_TOTAL_MIN_FAIR_PP", "0.75")
-    record = _record(volume=8500.0, delta_30=80.0, fair_pp_30=1.1)
+    info = multi_money_flow.evaluate_money_flow(
+        _record(volume=8500.0, delta_30=80.0, fair_pp_30=1.1)
+    )
 
-    base = multi_money_flow.evaluate_money_flow(record)
-    assert base["eligible"] is False
-    assert base["reason"] == "money_flow_threshold_not_reached"
-
-    info = enhance_money_flow_result(record, base)
     assert info["eligible"] is True
     assert info["signal_basis"] == "non_top_total_volume"
     assert info["level"] == "NON_TOP_BIG_VOLUME"
@@ -88,9 +84,9 @@ def test_non_top_huge_total_volume_can_signal_without_fast_burst(monkeypatch):
 
 def test_top_league_large_total_volume_is_not_special_signal(monkeypatch):
     monkeypatch.setenv("MATCHBOOK_FLOW_NON_TOP_TOTAL_VOLUME_GBP", "5000")
-    record = _record(league="England: Premier League", volume=8500.0)
-    base = multi_money_flow.evaluate_money_flow(record)
-    info = enhance_money_flow_result(record, base)
+    info = multi_money_flow.evaluate_money_flow(
+        _record(league="England: Premier League", volume=8500.0)
+    )
 
     assert info["eligible"] is False
     assert info["league_tier"] == "top"
@@ -100,8 +96,7 @@ def test_total_volume_without_over_direction_stays_wait(monkeypatch):
     monkeypatch.setenv("MATCHBOOK_FLOW_NON_TOP_TOTAL_VOLUME_GBP", "5000")
     record = _record(volume=12000.0, fair_pp_30=0.2, fair_pp_60=0.3)
     record["matchbook_exchange"]["systems"]["another_goal"]["flow"]["fair_over_delta_pp_15s"] = 0.1
-    base = multi_money_flow.evaluate_money_flow(record)
-    info = enhance_money_flow_result(record, base)
+    info = multi_money_flow.evaluate_money_flow(record)
 
     assert info["eligible"] is False
     assert info["reason"] == "money_flow_total_volume_wait_direction"
@@ -109,12 +104,10 @@ def test_total_volume_without_over_direction_stays_wait(monkeypatch):
 
 def test_existing_fast_flow_gets_non_top_total_volume_bonus(monkeypatch):
     monkeypatch.setenv("MATCHBOOK_FLOW_NON_TOP_TOTAL_VOLUME_GBP", "5000")
-    record = _record(volume=9000.0, delta_30=900.0, fair_pp_30=4.0, delta_60=1100.0, fair_pp_60=4.2)
-    base = multi_money_flow.evaluate_money_flow(record)
-    assert base["eligible"] is True
+    info = multi_money_flow.evaluate_money_flow(
+        _record(volume=9000.0, delta_30=900.0, fair_pp_30=4.0, delta_60=1100.0, fair_pp_60=4.2)
+    )
 
-    info = enhance_money_flow_result(record, base)
     assert info["eligible"] is True
     assert info["total_volume_anomaly"] is True
     assert info["total_volume_bonus"] > 0
-    assert info["score"] >= base["score"]

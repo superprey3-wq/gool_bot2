@@ -1,0 +1,33 @@
+name: browser live-data probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/browser_live_probe.py'
+      - '.github/workflows/browser-probe.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Probe AiScore and Gooolll
+        run: python scripts/browser_live_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-live-probe-report
+          path: browser_probe_report.json
+          if-no-files-found: warn
+          retention-days: 7

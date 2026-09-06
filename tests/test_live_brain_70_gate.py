@@ -85,12 +85,13 @@ def test_live_brain_71_passes_independent_of_xbet_movement(monkeypatch):
     assert negative.market_override is False
 
 
-def test_ordinary_public_confidence_is_exact_live_brain_score():
+def test_ordinary_public_confidence_is_exact_brain_v3_score():
     row = _candidate(pressure=12.0)
     experts = {
         "goal_before_ht": {
             "probability": 0.71,
-            "metric": "live_goal_hazard",
+            "metric": "brain_v3_probability",
+            "source": "brain_v3:state_machine",
             "state": "PASS",
             "passed": True,
         }
@@ -109,6 +110,6 @@ def test_ordinary_public_confidence_is_exact_live_brain_score():
     assert snap["confidence_score"] == 71.0
     assert snap["football_score"] == 71.0
     assert snap["formula"] == ORDINARY_FORMULA
-    assert snap["formula"] == "100% LIVE Brain · 1xBet только кэф"
+    assert snap["formula"] == "Brain V3: LIVE + время/счёт + PREMATCH support · 1xBet только кэф"
     assert snap["steam_confirmation"] is False
     assert snap["market_breadth_count"] == 0

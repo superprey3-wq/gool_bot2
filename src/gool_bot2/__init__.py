@@ -4,6 +4,7 @@ from typing import Any
 
 from . import goal_state_policy as _goal_state_policy
 from .architecture_isolation import install_architecture_isolation
+from .brain_v3_memory import install_brain_v3_memory
 from .live_goal_hazard import install_live_goal_hazard
 from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
@@ -70,3 +71,4 @@ install_money_flow_total_volume()
 install_live_goal_hazard()
 install_steam_quality_hardening()
 install_runtime_fastlane()
+install_brain_v3_memory()

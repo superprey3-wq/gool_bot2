@@ -110,6 +110,6 @@ def test_ordinary_public_confidence_is_exact_brain_v3_score():
     assert snap["confidence_score"] == 71.0
     assert snap["football_score"] == 71.0
     assert snap["formula"] == ORDINARY_FORMULA
-    assert snap["formula"] == "Brain V3: LIVE multi-source + время/счёт + capped history/trends · 1xBet только кэф"
+    assert snap["formula"] == "Brain V3: LIVE multi-source + Chromium fallback + время/счёт + capped history/trends · 1xBet только кэф"
     assert snap["steam_confirmation"] is False
     assert snap["market_breadth_count"] == 0

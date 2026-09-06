@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .brain_v3_decision import apply_brain_v3_to_experts
+from .brain_v3_external_trends import apply_external_trend_context
 
 
 _INSTALLED = False
-_BRAIN_V3_FORMULA = "Brain V3: LIVE + время/счёт + PREMATCH support · 1xBet только кэф"
+_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + время/счёт + capped history/trends · 1xBet только кэф"
 
 
 def install_brain_v3_activation() -> None:
@@ -14,8 +15,8 @@ def install_brain_v3_activation() -> None:
 
     The legacy Goal State engine is still calculated for diagnostics and rollback,
     but the active first-half/second-half expert is replaced by Brain V3 before
-    1xBet market demand and routing. PREMATCH is allowed only through Brain V3's
-    capped support term; 1xBet/Matchbook never enter the football probability.
+    1xBet market demand and routing. PREMATCH and historical trends are allowed
+    only as capped support; 1xBet/Matchbook never enter football probability.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -25,7 +26,6 @@ def install_brain_v3_activation() -> None:
     from . import multi_public_metrics as metrics
     from . import multi_runtime as runtime
 
-    # multi_card imports the formula by value, so update both modules explicitly.
     metrics.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
     multi_card.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
 
@@ -41,8 +41,13 @@ def install_brain_v3_activation() -> None:
             data_quality=quality,
             prematch_profile=profile,
         )
+        # A score-relevant full-match trend (for example 1-1 + frequent O2.5)
+        # is only a small hint after the LIVE state machine has run. It cannot
+        # create LIVE foundation or bypass sustained-pressure safety gates.
+        decision = apply_external_trend_context(record, experts, decision)
         if bool(decision.get("active")):
             match = record.get("match") or {}
+            trend = decision.get("external_trends") or {}
             print(
                 f"GOOL_BRAIN_V3 match={match.get('flashscore_event_id') or '-'} "
                 f"minute={int(match.get('minute') or 0)} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} "
@@ -50,6 +55,7 @@ def install_brain_v3_activation() -> None:
                 f"p={float(decision.get('probability') or 0):.3f} "
                 f"live={float(decision.get('live_probability') or 0):.3f} "
                 f"prematch={float(((decision.get('prematch') or {}).get('adjustment_pp')) or 0):+.1f}pp "
+                f"trend={float(trend.get('effective_adjustment_pp') or 0):+.1f}pp "
                 f"xg5={((decision.get('recent') or {}).get('xg5'))} "
                 f"xg10={((decision.get('recent') or {}).get('xg10'))}",
                 flush=True,
@@ -75,8 +81,6 @@ def install_brain_v3_activation() -> None:
         probs[strategy] = v3_probability
         out = original_restore(record, experts, intelligence, probs)
 
-        # Match Intelligence remains useful for integrity/suitability diagnostics,
-        # but no legacy hazard, lineup, kickoff or market term may rewrite V3.
         expert["probability"] = round(v3_probability, 4)
         adjustment = dict(out.get("probability_adjustment") or {})
         adjustment.update({
@@ -101,7 +105,7 @@ def install_brain_v3_activation() -> None:
     runtime._restore_live_only_brain = restore_v3_probability
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative prematch=support_only 1xbet=odds_only matchbook=separate",
+        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative live=multi_source prematch+trends=capped_support 1xbet=odds_only matchbook=separate",
         flush=True,
     )
 

@@ -7,6 +7,7 @@ from .architecture_isolation import install_architecture_isolation
 from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_memory import install_brain_v3_memory
 from .live_goal_hazard import install_live_goal_hazard
+from .matchbook_auth import install_matchbook_auth
 from .matchbook_long_flow import install_matchbook_long_flow
 from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
@@ -70,6 +71,7 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
+install_matchbook_auth()
 install_matchbook_long_flow()
 install_money_flow_total_volume()
 install_xbet_trajectory_hardening()

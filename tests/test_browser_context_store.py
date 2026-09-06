@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
 from gool_bot2.browser_context_store import attach_browser_context, context_for_record
 from gool_bot2.match_context import provider_count, provider_pair
 
@@ -76,10 +78,12 @@ def test_browser365_is_only_sparse_provider_fallback():
 
     # Healthy two-source consensus ignores browser365 because it observes the
     # same 365Scores data through another transport and is not independent.
-    assert provider_pair(healthy, "xg") == (0.5, 0.4)
+    healthy_pair = provider_pair(healthy, "xg")
+    assert healthy_pair == pytest.approx((0.5, 0.4))
     assert provider_count(healthy, "xg") == 2
 
     sparse = _record()
     sparse["providers"]["browser365"] = {"stats": {"xg": [0.8, 0.7]}}
-    assert provider_pair(sparse, "xg") == (0.6, 0.5)
+    sparse_pair = provider_pair(sparse, "xg")
+    assert sparse_pair == pytest.approx((0.6, 0.5))
     assert provider_count(sparse, "xg") == 2

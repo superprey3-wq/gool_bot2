@@ -15,6 +15,7 @@ from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
 from .runtime_fastlane import install_runtime_fastlane
 from .steam_quality_hardening import install_steam_quality_hardening
+from .steam_red_card_guard import install_steam_red_card_guard
 from .xbet_trajectory_hardening import install_xbet_trajectory_hardening
 
 
@@ -79,6 +80,9 @@ install_money_flow_total_volume()
 install_xbet_trajectory_hardening()
 install_live_goal_hazard()
 install_steam_quality_hardening()
+# Install after quality hardening so a red card wraps the final STEAM candidate
+# builder and cannot be bypassed by an earlier autonomous-market patch.
+install_steam_red_card_guard()
 install_runtime_fastlane()
 install_brain_v3_memory()
 # Browser wrapper must be installed after memory so it attaches fresh Chromium

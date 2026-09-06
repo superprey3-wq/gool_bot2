@@ -9,7 +9,7 @@ from gool_bot2.multi_money_flow import evaluate_money_flow
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
 
 
-def test_brain_pass_is_not_vetoed_by_second_rating_floor() -> None:
+def test_live_brain_below_70_stays_wait() -> None:
     row = MarketCandidate(
         key="match_total:0.5",
         family="match_total",
@@ -45,10 +45,9 @@ def test_brain_pass_is_not_vetoed_by_second_rating_floor() -> None:
 
     out = enforce_goal_state_policy(decision, experts)
 
-    assert row.rating < 70.0
-    assert out.status == "BET"
-    assert out.winner is row
-    assert "goal_state_rating_below_70" not in row.blocks
+    assert out.status == "WAIT"
+    assert out.winner is None
+    assert row in out.rejected
 
 
 def test_raw_live_pressure_pass_can_reach_goal_state_pass(monkeypatch) -> None:
@@ -80,7 +79,7 @@ def test_raw_live_pressure_pass_can_reach_goal_state_pass(monkeypatch) -> None:
     assert experts["another_goal"]["state"] == "PASS"
 
 
-def test_recalibrated_steam_detects_strong_but_not_extreme_move() -> None:
+def test_recalibrated_steam_requires_a_real_strong_move() -> None:
     record = {
         "match": {
             "flashscore_event_id": "steam-audit",
@@ -109,9 +108,9 @@ def test_recalibrated_steam_detects_strong_but_not_extreme_move() -> None:
         },
         "pressure": {
             "match_total:0.5": {
-                "prob_delta_pp": 5.5,
+                "prob_delta_pp": 7.5,
                 "one_way_moves": 2,
-                "old_odd": 1.82,
+                "old_odd": 1.88,
             },
             "home_total:0.5": {
                 "prob_delta_pp": 2.4,

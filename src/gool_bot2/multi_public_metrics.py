@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-ORDINARY_FORMULA = "65% футбол + 15% данные + 10% momentum + 10% 1xBet"
+ORDINARY_FORMULA = "100% LIVE Brain · 1xBet только кэф"
 STEAM_FORMULA = "30% футбол + 15% данные + 15% momentum + 40% прогруз"
 
 _EXPERT_BY_STRATEGY = {
@@ -126,16 +126,22 @@ def confidence_snapshot(
     momentum = momentum_score(record)
     market = _market_score(getattr(winner, "market_pressure_pp", 0.0))
     steam_strength = _clamp((_number(getattr(winner, "rating", None)) or 70.0) / 100.0)
-    breadth = _breadth_count(winner)
 
     if _is_steam(winner):
+        breadth = _breadth_count(winner)
         confidence = 0.30 * football + 0.15 * data + 0.15 * momentum + 0.40 * steam_strength
         formula = STEAM_FORMULA
         layer = "STEAM"
+        steam_confirmation = _steam_support(winner)
     else:
-        confidence = 0.65 * football + 0.15 * data + 0.10 * momentum + 0.10 * market
+        # Ordinary GOOL is deliberately identical to the main LIVE Brain score.
+        # Data/momentum/1xBet remain visible diagnostics but cannot change the
+        # public confidence or the >=70 entry decision.
+        breadth = 0
+        confidence = football
         formula = ORDINARY_FORMULA
         layer = "GOOL"
+        steam_confirmation = False
 
     return {
         "confidence_score": round(_clamp(confidence) * 100.0, 1),
@@ -145,7 +151,7 @@ def confidence_snapshot(
         "momentum_score": round(momentum * 100.0, 1),
         "market_score": round(market * 100.0, 1),
         "steam_score": round(steam_strength * 100.0, 1) if layer == "STEAM" else None,
-        "steam_confirmation": _steam_support(winner),
+        "steam_confirmation": steam_confirmation,
         "market_breadth_count": breadth,
         "multi_market_confirmation": breadth > 0,
         "layer": layer,
@@ -157,7 +163,6 @@ def brief_selection_reason(decision: Any, winner: Any) -> str:
     strategy = str(getattr(winner, "strategy", "") or "")
     source = str(getattr(winner, "source", "") or "")
     pressure = _number(getattr(winner, "market_pressure_pp", 0.0)) or 0.0
-    supported = _steam_support(winner)
     breadth = _breadth_count(winner)
 
     if source.startswith("1xbet:autonomous_steam"):
@@ -172,26 +177,20 @@ def brief_selection_reason(decision: Any, winner: Any) -> str:
         )
 
     if strategy == "another_goal":
-        text = "Матч сохраняет голевое давление; общий тотал покрывает следующий гол любой команды."
-    elif strategy == "goal_before_ht":
-        text = "Есть свежая угроза до перерыва; выбран реальный тотал 1-го тайма 1xBet."
-    elif strategy == "two_more_goals":
-        text = "Сильное LIVE-давление и запас времени поддерживают сценарий ещё двух голов."
-    elif strategy == "home_goal":
-        text = "Хозяева сильнее по текущему голевому состоянию; их командный тотал оправдан."
-    elif strategy == "away_goal":
-        text = "Гости сильнее по текущему голевому состоянию; их командный тотал оправдан."
-    elif strategy == "both_teams_to_score":
-        text = "Команда без гола сохраняет достаточную угрозу; ОЗ лучше всего выражает этот сценарий."
-    else:
-        fallback = str(getattr(decision, "reason", "") or "").strip()
-        text = fallback[:170] if fallback else "Выбран самый сильный проходящий LIVE-сценарий с реальным рынком 1xBet."
+        return "LIVE Brain видит достаточную голевую интенсивность; общий тотал покрывает следующий гол любой команды."
+    if strategy == "goal_before_ht":
+        return "LIVE Brain видит достаточную угрозу до перерыва; выбран доступный тотал 1-го тайма 1xBet."
+    if strategy == "two_more_goals":
+        return "LIVE Brain видит достаточную интенсивность и запас времени для сценария ещё двух голов."
+    if strategy == "home_goal":
+        return "LIVE Brain сильнее оценивает гол хозяев; выбран их доступный командный тотал."
+    if strategy == "away_goal":
+        return "LIVE Brain сильнее оценивает гол гостей; выбран их доступный командный тотал."
+    if strategy == "both_teams_to_score":
+        return "LIVE Brain видит достаточную угрозу команды без гола; ОЗ выражает этот сценарий."
 
-    if supported:
-        text = f"{text} Сильный STEAM 1xBet {pressure:+.1f} п.п. подтверждает вход."
-    if breadth:
-        text = f"{text} Связанных рынков в ту же сторону: {breadth}."
-    return text
+    fallback = str(getattr(decision, "reason", "") or "").strip()
+    return fallback[:170] if fallback else "Выбран самый сильный проходящий LIVE-сценарий с реальным кэфом 1xBet."
 
 
 def source_label(value: Any) -> str:

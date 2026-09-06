@@ -12,6 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
+PLAYWRIGHT_ROOT = ROOT / ".cache" / "ms-playwright"
 MULTI_RESET_ID = "brain_v3_market_systems_clean_epoch_2026_09_06"
 
 
@@ -87,6 +88,20 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     )
 
 
+def _pip_env() -> dict[str, str]:
+    PIP_TMP.mkdir(parents=True, exist_ok=True)
+    PLAYWRIGHT_ROOT.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env.update({
+        "TMPDIR": str(PIP_TMP),
+        "TMP": str(PIP_TMP),
+        "TEMP": str(PIP_TMP),
+        "PIP_NO_CACHE_DIR": "1",
+        "PLAYWRIGHT_BROWSERS_PATH": os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_ROOT)),
+    })
+    return env
+
+
 def ensure_deps() -> None:
     packages = {
         "numpy": "numpy>=1.26",
@@ -96,15 +111,69 @@ def ensure_deps() -> None:
         "yaml": "pyyaml>=6.0",
         "PIL": "pillow>=10.0",
     }
+    if _truthy("GOOL_BROWSER_ENABLE", True):
+        packages["playwright"] = "playwright>=1.55,<2"
     missing = [pkg for module, pkg in packages.items() if importlib.util.find_spec(module) is None]
     if not missing:
         print("GOOL_BOOT dependencies=ok", flush=True)
         return
-    PIP_TMP.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env.update({"TMPDIR": str(PIP_TMP), "TMP": str(PIP_TMP), "TEMP": str(PIP_TMP), "PIP_NO_CACHE_DIR": "1"})
-    print(f"GOOL_BOOT installing_dependencies tmp={PIP_TMP}", flush=True)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", *missing], env=env)
+    print(f"GOOL_BOOT installing_dependencies tmp={PIP_TMP} packages={','.join(missing)}", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", *missing], env=_pip_env())
+
+
+def _ensure_chromium() -> bool:
+    """Install and smoke-launch one Playwright Chromium without risking main GOOL.
+
+    Production containers often do not grant apt/root. We therefore install the
+    browser binary only (never --with-deps). If its shared libraries are missing,
+    the feature is disabled and the normal Flashscore/FotMob/365Scores pipeline
+    continues untouched.
+    """
+    if not _truthy("GOOL_BROWSER_ENABLE", True):
+        os.environ["GOOL_BROWSER_ENABLE"] = "0"
+        print("GOOL_BOOT browser365=disabled reason=config", flush=True)
+        return False
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:
+        os.environ["GOOL_BROWSER_ENABLE"] = "0"
+        print(f"GOOL_BOOT browser365=disabled reason=playwright_import error={type(exc).__name__}:{exc}", flush=True)
+        return False
+
+    try:
+        with sync_playwright() as p:
+            executable = Path(p.chromium.executable_path)
+        if not executable.exists():
+            print(f"GOOL_BOOT chromium=install path={PLAYWRIGHT_ROOT}", flush=True)
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                env=_pip_env(),
+                check=True,
+                timeout=max(120, int(os.getenv("GOOL_BROWSER_INSTALL_TIMEOUT_SECONDS", "300"))),
+            )
+        with sync_playwright() as p:
+            executable = Path(p.chromium.executable_path)
+            if not executable.exists():
+                raise RuntimeError(f"chromium_executable_missing={executable}")
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+            )
+            page = browser.new_page()
+            page.set_content("<html><body>gool-browser-smoke</body></html>")
+            if "gool-browser-smoke" not in page.inner_text("body"):
+                raise RuntimeError("chromium_smoke_content_failed")
+            browser.close()
+        os.environ["GOOL_BROWSER_ENABLE"] = "1"
+        print(f"GOOL_BOOT chromium=ready executable={executable}", flush=True)
+        return True
+    except Exception as exc:
+        os.environ["GOOL_BROWSER_ENABLE"] = "0"
+        print(
+            f"GOOL_BOOT browser365=disabled reason=chromium_smoke error={type(exc).__name__}:{exc}",
+            flush=True,
+        )
+        return False
 
 
 def find_model(filename: str) -> Path:
@@ -117,6 +186,7 @@ def find_model(filename: str) -> Path:
 def main() -> None:
     load_env(ENV_FILE)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_ROOT))
 
     runtime = Path(os.environ.get("RUNTIME_DATA_DIR", str(RUNTIME_ROOT)))
     raw_live = Path(os.environ.get("RAW_LIVE_DIR", str(runtime / "raw" / "live")))
@@ -143,6 +213,7 @@ def main() -> None:
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
     os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
+    os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
 
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
@@ -157,6 +228,16 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
 
+    # One persistent Chromium, at most two selected matches per cycle. It is a
+    # fallback source and historical-trend helper, never a replacement for LIVE.
+    os.environ.setdefault("GOOL_BROWSER_ENABLE", "1")
+    os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "30")
+    os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "2")
+    os.environ.setdefault("GOOL_BROWSER_MATCH_CACHE_SECONDS", "90")
+    os.environ.setdefault("GOOL_BROWSER_CONTEXT_TTL_SECONDS", "180")
+    os.environ.setdefault("GOOL_BROWSER_MAX_MINUTE_LAG", "3")
+    os.environ.setdefault("GOOL_BROWSER_MAX_RSS_MB", "550")
+
     raw_live.mkdir(parents=True, exist_ok=True)
     journal.parent.mkdir(parents=True, exist_ok=True)
     analysis.parent.mkdir(parents=True, exist_ok=True)
@@ -169,6 +250,7 @@ def main() -> None:
 
     _reset_multi_tracking_once(runtime)
     ensure_deps()
+    browser_enabled = _ensure_chromium()
 
     models = {
         "ARCHIVE_FOUNDATION_MODEL": "archive_foundation.pkl",
@@ -189,6 +271,13 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print("GOOL_BOOT brain=V3 prematch=support_only xbet=odds+separate_steam matchbook=separate_money_flow", flush=True)
+    if browser_enabled:
+        print(
+            "GOOL_BOOT browser365=enabled engine=chromium "
+            f"max_matches={os.environ['GOOL_BROWSER_MAX_MATCHES_PER_CYCLE']} "
+            f"rss_guard={os.environ['GOOL_BROWSER_MAX_RSS_MB']}MB trends=capped_support stats=fallback_only",
+            flush=True,
+        )
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -200,6 +289,14 @@ def main() -> None:
         "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
     }
+    if browser_enabled:
+        commands["browser"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.browser_context_worker",
+            "--interval",
+            os.environ.get("GOOL_BROWSER_INTERVAL_SECONDS", "30"),
+        ]
     children: dict[str, subprocess.Popen] = {}
 
     def start_child(name: str) -> None:
@@ -216,8 +313,9 @@ def main() -> None:
             code = process.poll()
             if code is None:
                 continue
-            print(f"GOOL_BOOT child_exit={name} code={code}; restarting in 2s", flush=True)
-            time.sleep(2)
+            delay = 15 if name == "browser" else 2
+            print(f"GOOL_BOOT child_exit={name} code={code}; restarting in {delay}s", flush=True)
+            time.sleep(delay)
             start_child(name)
 
 

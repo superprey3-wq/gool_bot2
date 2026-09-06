@@ -11,7 +11,7 @@ _reset_multi_tracking_once = _STARTUP["_reset_multi_tracking_once"]
 
 
 def test_two_system_epoch_has_new_reset_id() -> None:
-    assert _MULTI_RESET_ID == "live_brain70_total_volume_v2_2026_09_06"
+    assert _MULTI_RESET_ID == "brain_v3_market_systems_clean_epoch_2026_09_06"
 
 
 def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkeypatch) -> None:
@@ -20,27 +20,44 @@ def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkey
     journal = live / "gool_multi_journal.json"
     bank = live / "gool_multi_bank_state.json"
     analysis = live / "gool_multi_analysis.jsonl"
+    flow_journal = live / "gool_money_flow_journal.json"
+    flow_bank = live / "gool_money_flow_bank_state.json"
+    trace_dir = live / "brain_v3"
+    trace_dir.mkdir()
+    trace = trace_dir / "2026-09-06-13.jsonl"
+
     journal.write_text('[{"old": true}]', "utf-8")
     bank.write_text('{"bank": 99961}', "utf-8")
     analysis.write_text('{"old": true}\n', "utf-8")
+    flow_journal.write_text('[{"old": true}]', "utf-8")
+    flow_bank.write_text('{"bank": 99800}', "utf-8")
+    trace.write_text('{"old": true}\n', "utf-8")
 
     monkeypatch.delenv("GOOL_MULTI_JOURNAL_PATH", raising=False)
     monkeypatch.delenv("GOOL_MULTI_BANK_STATE_PATH", raising=False)
     monkeypatch.delenv("GOOL_MULTI_ANALYSIS_PATH", raising=False)
     monkeypatch.delenv("GOOL_MULTI_SHADOW_PATH", raising=False)
+    monkeypatch.delenv("GOOL_MONEY_FLOW_JOURNAL_PATH", raising=False)
+    monkeypatch.delenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", raising=False)
+    monkeypatch.delenv("GOOL_BRAIN_V3_TRACE_DIR", raising=False)
 
     _reset_multi_tracking_once(tmp_path)
 
     assert not journal.exists()
     assert not bank.exists()
     assert not analysis.exists()
+    assert not flow_journal.exists()
+    assert not flow_bank.exists()
+    assert not trace.exists()
     marker = live / f".gool_multi_reset_{_MULTI_RESET_ID}"
     assert marker.exists()
 
     # One-time reset: later restarts keep the new epoch.
     journal.write_text("[]", "utf-8")
+    flow_journal.write_text("[]", "utf-8")
     _reset_multi_tracking_once(tmp_path)
     assert journal.exists()
+    assert flow_journal.exists()
 
 
 def test_public_event_buckets_keep_only_two_systems_and_separate_steam() -> None:

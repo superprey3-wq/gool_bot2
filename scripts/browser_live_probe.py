@@ -23,6 +23,16 @@ STAT_TERMS = (
     "corner",
     "statistics",
     "stats",
+    "trend",
+    "insight",
+    "scored first",
+    "both teams scored",
+    "over 2.5",
+    "under 2.5",
+    "win or draw",
+    "won or drew",
+    "last matches",
+    "last games",
 )
 
 TARGETS = [
@@ -35,6 +45,11 @@ TARGETS = [
         "name": "gooolll",
         "url": "https://gooolll.com/",
         "detail_url": "https://gooolll.com/match/match-apf-1607431",
+    },
+    {
+        "name": "365scores",
+        "url": "https://www.365scores.com/football/team/everton-107",
+        "detail_url": "https://www.365scores.com/football/match/premier-league-7/everton-manchester-united-105-107-7",
     },
 ]
 
@@ -99,7 +114,7 @@ def _stat_context(text: str) -> list[str]:
         context = " | ".join(lines[lo:hi])
         if context not in wanted:
             wanted.append(context)
-        if len(wanted) >= 24:
+        if len(wanted) >= 30:
             break
     return wanted
 
@@ -131,7 +146,7 @@ async def probe_provider(browser: Browser, name: str, url: str, detail_url: str)
         except Exception:
             headers = {}
         content_type = headers.get("content-type", "")
-        interesting_url = bool(re.search(r"api|graphql|match|live|stat|score|event|supabase", response.url, re.I))
+        interesting_url = bool(re.search(r"api|graphql|match|live|stat|score|event|supabase|trend|insight", response.url, re.I))
         if req.resource_type == "document" and not interesting_url:
             return
 
@@ -226,8 +241,8 @@ async def probe_provider(browser: Browser, name: str, url: str, detail_url: str)
                 f"provider={name} status={None if response is None else response.status} "
                 f"url={page.url} terms={','.join(body_terms) or '-'} title={title[:120]}"
             )
-            for line in contexts[:12]:
-                print(f"PROBE_VISIBLE_STATS provider={name} {line[:500]}")
+            for line in contexts[:16]:
+                print(f"PROBE_VISIBLE_STATS provider={name} {line[:600]}")
         except Exception as exc:
             pages_visited.append({"url": target, "error": f"{type(exc).__name__}:{exc}"})
             print(f"PROBE_NAV_ERROR provider={name} url={target} type={type(exc).__name__} error={exc}")
@@ -245,10 +260,10 @@ async def probe_provider(browser: Browser, name: str, url: str, detail_url: str)
 
     api_rows = []
     for hit in network:
-        if re.search(r"api|graphql|supabase|match|stat|event", hit.url, re.I):
+        if re.search(r"api|graphql|supabase|match|stat|event|trend|insight", hit.url, re.I):
             if hit.url not in [row.url for row in api_rows]:
                 api_rows.append(hit)
-        if len(api_rows) >= 40:
+        if len(api_rows) >= 50:
             break
     for hit in api_rows:
         print(
@@ -258,6 +273,8 @@ async def probe_provider(browser: Browser, name: str, url: str, detail_url: str)
         )
         if hit.json_keys:
             print(f"PROBE_KEYS provider={name} keys={' | '.join(hit.json_keys[:35])}")
+        if hit.body_preview and hit.matched_terms:
+            print(f"PROBE_BODY provider={name} preview={hit.body_preview[:700]}")
 
     for hit in strong_sockets[:12]:
         print(
@@ -271,7 +288,7 @@ async def probe_provider(browser: Browser, name: str, url: str, detail_url: str)
         "start_url": url,
         "detail_url": detail_url,
         "pages": pages_visited,
-        "network": [asdict(row) for row in network[:160]],
+        "network": [asdict(row) for row in network[:200]],
         "sockets": [asdict(row) for row in sockets[:80]],
         "stat_network_count": len(strong_network),
         "stat_socket_count": len(strong_sockets),

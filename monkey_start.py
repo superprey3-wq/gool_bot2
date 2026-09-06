@@ -12,7 +12,7 @@ ENV_FILE = ROOT / "gool.env"
 DEPLOY_ROOT = ROOT / "gool_bot2_deploy"
 RUNTIME_ROOT = ROOT / "gool_bot2_data"
 PIP_TMP = ROOT / ".pip-tmp"
-MULTI_RESET_ID = "two_system_goal_epoch_v1_2026_09_05"
+MULTI_RESET_ID = "live_hazard_clean_epoch_v2_2026_09_06"
 
 
 def load_env(path: Path) -> None:

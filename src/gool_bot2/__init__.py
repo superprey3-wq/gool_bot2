@@ -4,6 +4,7 @@ from typing import Any
 
 from . import goal_state_policy as _goal_state_policy
 from .architecture_isolation import install_architecture_isolation
+from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_memory import install_brain_v3_memory
 from .live_goal_hazard import install_live_goal_hazard
 from .multi_money_flow_total_volume import install_money_flow_total_volume
@@ -16,7 +17,7 @@ _ORIGINAL_GOAL_STATE_POLICY = _goal_state_policy.enforce_goal_state_policy
 
 
 def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
-    """Ordinary GOOL = 100% LIVE Brain; 1xBet contributes only the quote."""
+    """Ordinary GOOL = football Brain; 1xBet contributes only the tradable quote."""
     seen: set[int] = set()
     rows = [
         getattr(decision, "winner", None),
@@ -61,9 +62,8 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
-# Install the older compatibility/calibration layers first. The final rules below
-# intentionally run last so emergency calibration cannot reintroduce weak public
-# signals or bypass total-volume money-flow intelligence.
+# Compatibility/calibration layers install first. Brain V3 activation installs
+# last so older production patches cannot overwrite its ordinary GOOL decision.
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
@@ -72,3 +72,4 @@ install_live_goal_hazard()
 install_steam_quality_hardening()
 install_runtime_fastlane()
 install_brain_v3_memory()
+install_brain_v3_activation()

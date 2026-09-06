@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import os
 import urllib.parse
-import urllib.request
 from typing import Any
 
 from .matchbook_exchange import MATCHBOOK_EVENTS_URL, decode_event
@@ -11,6 +9,16 @@ from .providers.common import UA
 
 
 def _page_payload(page: int, per_page: int) -> dict[str, Any]:
+    """Fetch one Matchbook page through the shared authenticated client.
+
+    The Matchbook worker replaces ``matchbook_exchange._fetch_events`` with this
+    paginated implementation. Calling urllib directly here would silently bypass
+    the session-token/auth layer installed at package startup and turn every
+    protected API response into ``matchbook_market_unavailable``. Keep all pages
+    on the same auth/refresh/error path as the base collector.
+    """
+    from . import matchbook_auth
+
     offset = max(0, (int(page) - 1) * int(per_page))
     orderbook_depth = max(3, min(10, int(os.getenv("MATCHBOOK_ORDERBOOK_DEPTH", "5"))))
     params = urllib.parse.urlencode(
@@ -30,17 +38,15 @@ def _page_payload(page: int, per_page: int) -> dict[str, Any]:
             "offset": offset,
         }
     )
-    req = urllib.request.Request(
+    payload = matchbook_auth._request_json(
         f"{MATCHBOOK_EVENTS_URL}?{params}",
-        headers={"User-Agent": UA, "Accept": "application/json,*/*"},
+        UA,
     )
-    with urllib.request.urlopen(req, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
     return payload if isinstance(payload, dict) else {}
 
 
 def fetch_events_paginated() -> list[dict[str, Any]]:
-    """Fetch all public soccer pages instead of silently stopping at 100 events."""
+    """Fetch the football board across pages without bypassing Matchbook auth."""
     per_page = max(20, min(100, int(os.getenv("MATCHBOOK_EVENTS_PER_PAGE", "100"))))
     max_pages = max(1, min(12, int(os.getenv("MATCHBOOK_MAX_PAGES", "6"))))
     seen: set[str] = set()
@@ -65,7 +71,7 @@ def fetch_events_paginated() -> list[dict[str, Any]]:
             added += 1
         print(
             f"MATCHBOOK_PAGE page={page} offset={(page - 1) * per_page} raw={len(events)} "
-            f"added={added} total={len(rows)}",
+            f"added={added} total={len(rows)} auth=shared",
             flush=True,
         )
         if len(events) < per_page or added == 0:

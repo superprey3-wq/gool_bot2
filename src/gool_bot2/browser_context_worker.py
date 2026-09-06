@@ -290,17 +290,23 @@ def _prune(state: dict[str, Any]) -> None:
 
 
 async def _browser_json(page: Any, url: str) -> tuple[int, Any]:
-    result = await page.evaluate(
-        """async (url) => {
-            const r = await fetch(url, {credentials: 'include', cache: 'no-store'});
-            const text = await r.text();
-            return {status: r.status, text};
-        }""",
+    """Fetch through Playwright's BrowserContext request session.
+
+    BrowserContext.request shares the browser context's cookie storage but is not
+    subject to the page's cross-origin fetch/CORS restrictions. This mirrors the
+    web app's API traffic while remaining reliable in headless production.
+    """
+    response = await page.context.request.get(
         url,
+        headers={
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": "https://www.365scores.com/",
+        },
+        timeout=12_000,
     )
-    status = int((result or {}).get("status") or 0)
+    status = int(response.status)
     try:
-        payload = json.loads((result or {}).get("text") or "")
+        payload = json.loads(await response.text())
     except Exception:
         payload = {}
     return status, payload
@@ -377,7 +383,14 @@ async def run(interval: float) -> int:
             viewport={"width": 1180, "height": 820},
             user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
         )
-        await context.route("**/*", lambda route: route.abort() if route.request.resource_type in {"image", "media", "font"} else route.continue_())
+
+        async def route_handler(route: Any) -> None:
+            if route.request.resource_type in {"image", "media", "font"}:
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await context.route("**/*", route_handler)
         page = await context.new_page()
         print(
             f"GOOL_BROWSER_CONTEXT started engine=chromium max_matches={max_matches} cache={cache_seconds:.0f}s max_rss={max_rss:.0f}MB",

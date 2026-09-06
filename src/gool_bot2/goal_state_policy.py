@@ -45,43 +45,50 @@ def _remove_blocks(row: MarketCandidate, names: set[str]) -> None:
 
 
 def _rate_core(row: MarketCandidate, expert: dict[str, Any]) -> None:
-    """Re-rate ordinary GOOL from football state, not from price/value.
+    """Make ordinary GOOL a pure LIVE-Brain decision.
 
-    1xBet is still mandatory as the real tradable market and contributes a
-    small confirmation/opposition component. VALUE never turns a weak football
-    state into a strong one.
+    The expert probability is the public/final football strength. 1xBet is only
+    the source of the tradable market, freshness/score epoch and odd. Its steam,
+    VALUE and opposition cannot raise, lower or revive an ordinary GOOL signal.
+    Autonomous 1xBet STEAM is applied later by its separate layer.
     """
     try:
         strength = float(expert.get("probability"))
     except (TypeError, ValueError):
         strength = float(row.model_probability or 0.0)
+    if strength > 1.0:
+        strength /= 100.0
     strength = max(0.0, min(1.0, strength))
+    row.model_probability = strength
+    row.rating = round(strength * 100.0, 1)
 
-    market_score = max(0.0, min(100.0, 50.0 + float(row.market_pressure_pp or 0.0) * 5.0))
-    data_score = max(0.0, min(100.0, float(row.data_quality or 0.0) * 100.0))
-    rating = 0.82 * (strength * 100.0) + 0.12 * data_score + 0.06 * market_score
-
-    state = str(expert.get("state") or ("PASS" if expert.get("passed") else "BORDERLINE")).upper()
-    if state in {"BORDERLINE", "NO_DATA"} and row.market_override:
-        rating += 3.0
-
-    opposition = max(0.0, -float(row.market_pressure_pp or 0.0))
-    rating -= min(10.0, max(0.0, opposition - 3.0) * 1.5)
-    row.rating = round(max(0.0, min(99.0, rating)), 1)
-
-    # The state engine is confidence, not a calibrated betting probability.
+    # Ordinary GOOL must never inherit router VALUE/market overrides. Those are
+    # legacy routing aids; STEAM has its own autonomous product downstream.
     row.expected_roi = 0.0
     row.value_edge_pp = 0.0
     row.value_override = False
+    row.market_override = False
     row.reason_tags = [
-        tag for tag in row.reason_tags
-        if tag not in {"strong_value", "value", "value_override"}
+        tag
+        for tag in row.reason_tags
+        if tag
+        not in {
+            "strong_value",
+            "value",
+            "value_override",
+            "market_override",
+            "market_steam",
+            "strong_market_opposition",
+            "market_opposition",
+        }
     ]
-    if "confidence_metric" not in row.reason_tags:
-        row.reason_tags.append("confidence_metric")
+    if "live_brain_only" not in row.reason_tags:
+        row.reason_tags.append("live_brain_only")
     if "goal_state_engine" not in row.reason_tags:
         row.reason_tags.append("goal_state_engine")
 
+    # Remove only legacy soft router blocks. Hard time, stale/missing 1xBet price,
+    # low data quality and other integrity guards remain intact.
     _remove_blocks(
         row,
         {
@@ -89,30 +96,28 @@ def _rate_core(row: MarketCandidate, expert: dict[str, Any]) -> None:
             "gool_wait_without_verified_override",
             "router_rating_below_62",
             "correlated_better_option",
+            "goal_state_hard_no",
+            "goal_state_borderline",
+            "goal_state_borderline_without_market",
+            "goal_state_no_data",
+            "goal_state_no_data_without_market",
+            "goal_state_rating_below_70",
+            "goal_state_market_opposition",
         },
     )
-
-    state_blocks = {
-        "goal_state_hard_no",
-        "goal_state_borderline_without_market",
-        "goal_state_no_data_without_market",
-        "goal_state_rating_below_70",
-        "goal_state_market_opposition",
-    }
-    _remove_blocks(row, state_blocks)
 
     if row.odd < ABSOLUTE_MIN_BET_ODD and "price_too_low" not in row.blocks:
         row.blocks.append("price_too_low")
 
+    state = str(expert.get("state") or ("PASS" if expert.get("passed") else "BORDERLINE")).upper()
     if state == "HARD_NO":
         row.blocks.append("goal_state_hard_no")
-    elif state == "BORDERLINE" and not row.market_override:
-        row.blocks.append("goal_state_borderline_without_market")
-    elif state == "NO_DATA" and not row.market_override:
-        row.blocks.append("goal_state_no_data_without_market")
-
-    if float(row.market_pressure_pp or 0.0) <= _f("GOOL_STATE_HARD_MARKET_OPPOSITION_PP", -6.0):
-        row.blocks.append("goal_state_market_opposition")
+    elif state == "BORDERLINE":
+        row.blocks.append("goal_state_borderline")
+    elif state == "NO_DATA":
+        row.blocks.append("goal_state_no_data")
+    elif state != "PASS":
+        row.blocks.append("goal_state_borderline")
 
     min_rating = _f("GOOL_MULTI_MIN_RATING", 70.0)
     if row.rating < min_rating:
@@ -128,7 +133,6 @@ def _rerank(decision: RouterDecision) -> RouterDecision:
         (row for row in rows if row.eligible),
         key=lambda row: (
             float(row.rating),
-            float(row.market_pressure_pp),
             -int(row.goals_to_win),
             float(row.odd),
         ),
@@ -153,7 +157,7 @@ def _rerank(decision: RouterDecision) -> RouterDecision:
         decision.status = "WAIT"
         decision.winner = None
         decision.alternatives = []
-        decision.reason = "WAIT: единый GOOL Goal State не нашёл достаточно сильного футбольного сценария при кэфе 1xBet от 1.40."
+        decision.reason = "WAIT: LIVE Brain не нашёл сценарий PASS с силой не ниже 70 при свежем кэфе 1xBet от 1.50."
         return decision
 
     decision.status = "BET"
@@ -201,7 +205,7 @@ def _coverage_rules(decision: RouterDecision, experts: dict[str, Any]) -> Router
             return _replace(
                 decision,
                 broad,
-                "GOOL Goal State выбрал общий рынок на ещё один гол: он покрывает обе команды, а командный вариант не сильнее минимум на 6 пунктов.",
+                "GOOL LIVE Brain выбрал общий рынок на ещё один гол: он покрывает обе команды, а командный вариант не сильнее минимум на 6 пунктов.",
             )
 
     # From 55' do not chase two-goal confidence when a one-goal market is valid.
@@ -210,7 +214,7 @@ def _coverage_rules(decision: RouterDecision, experts: dict[str, Any]) -> Router
             return _replace(
                 decision,
                 broad,
-                "После 55-й минуты GOOL Goal State предпочитает один гол сценарию +2.",
+                "После 55-й минуты GOOL LIVE Brain предпочитает один гол сценарию +2.",
             )
         winner.blocks.append("late_two_more_without_one_goal_cover")
         winner.eligible = False
@@ -251,26 +255,24 @@ def enforce_goal_state_policy(
     decision: RouterDecision,
     experts: dict[str, Any],
 ) -> RouterDecision:
-    """Final ordinary-GOOL policy before the independent steam layer.
+    """Final ordinary-GOOL policy before the independent STEAM layer.
 
-    PASS can bet. BORDERLINE/NO_DATA need verified 1xBet market override.
-    HARD_NO can never be revived by VALUE or ordinary market logic.
-    Exceptional autonomous steam is applied later by a separate module.
+    Every ordinary candidate is re-rated from its current LIVE expert
+    probability, including the newer ``live_goal_hazard`` metric. Only PASS with
+    LIVE-Brain strength >= GOOL_MULTI_MIN_RATING may bet. 1xBet movement cannot
+    alter this decision; its autonomous STEAM layer runs later.
     """
     for row in _all_candidates(decision):
         expert = _expert(experts, row)
-        if expert and str(expert.get("metric") or "").lower() == "confidence":
+        if expert:
             _rate_core(row, expert)
 
     decision = _rerank(decision)
     decision = _coverage_rules(decision, experts)
 
     if decision.status == "BET" and decision.winner is not None:
-        expert = _expert(experts, decision.winner)
-        state = str(expert.get("state") or "PASS").upper()
-        if not decision.reason or "VALUE" in decision.reason or "баланс" in decision.reason:
-            if state in {"BORDERLINE", "NO_DATA"} and decision.winner.market_override:
-                decision.reason = "GOOL Goal State был пограничным, но сильное подтверждённое движение 1xBet разрешило вход."
-            else:
-                decision.reason = "GOOL Goal State дал PASS; 1xBet используется как реальная цена, фильтр кэфа и подтверждение рынка."
+        decision.reason = (
+            f"GOOL LIVE Brain дал PASS {decision.winner.rating:.0f}/100; "
+            "1xBet используется только как свежий рынок и кэф."
+        )
     return decision

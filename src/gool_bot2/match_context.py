@@ -95,8 +95,22 @@ def provider_pair(record: dict[str, Any], key: str, mode: str = "consensus") -> 
 def provider_count(record: dict[str, Any], key: str | None = None) -> int:
     providers = record.get("providers") or {}
     if key is None:
-        return sum(1 for p in providers.values() if isinstance(p, dict))
-    return sum(1 for p in providers.values() if isinstance(p, dict) and key in ((p.get("stats") or {})))
+        # browser365 is another observation path to 365Scores, not a fourth
+        # independent football-data source.
+        ordinary = sum(1 for name, p in providers.items() if str(name) != "browser365" and isinstance(p, dict))
+        browser = any(str(name) == "browser365" and isinstance(p, dict) for name, p in providers.items())
+        return ordinary if ordinary >= 2 or not browser else ordinary + 1
+
+    ordinary = sum(
+        1
+        for name, p in providers.items()
+        if str(name) != "browser365" and isinstance(p, dict) and key in ((p.get("stats") or {}))
+    )
+    browser = any(
+        str(name) == "browser365" and isinstance(p, dict) and key in ((p.get("stats") or {}))
+        for name, p in providers.items()
+    )
+    return ordinary if ordinary >= 2 or not browser else ordinary + 1
 
 
 def _safe_pair(record: dict[str, Any], key: str) -> tuple[float | None, float | None]:

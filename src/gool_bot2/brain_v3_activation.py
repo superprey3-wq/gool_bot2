@@ -4,12 +4,13 @@ from typing import Any, Callable
 
 from .brain_v3_browser_support import apply_browser_support
 from .brain_v3_decision import apply_brain_v3_to_experts
+from .brain_v3_decision_audit import audit_brain_v3_decision
 from .brain_v3_external_trends import apply_external_trend_context
 from .brain_v3_trend_learning import install_brain_v3_trend_learning
 
 
 _INSTALLED = False
-_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + Chromium fallback + время/счёт + capped history/trends · 1xBet только кэф"
+_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + Chromium + время/счёт + capped history/trends + Decision Audit · 1xBet только кэф"
 
 
 def install_brain_v3_activation() -> None:
@@ -18,7 +19,9 @@ def install_brain_v3_activation() -> None:
     The legacy Goal State engine is still calculated for diagnostics and rollback,
     but the active first-half/second-half expert is replaced by Brain V3 before
     1xBet market demand and routing. PREMATCH and historical/browser trends are
-    capped support only; 1xBet/Matchbook never enter football probability.
+    capped support only; the final Decision Audit argues the no-more-goal case and
+    compares the current match with other recent BET-quality candidates. 1xBet and
+    Matchbook never enter football probability.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -46,10 +49,13 @@ def install_brain_v3_activation() -> None:
         )
         decision = apply_external_trend_context(record, experts, decision)
         decision = apply_browser_support(record, experts, decision)
+        decision = audit_brain_v3_decision(record, experts, decision)
         if bool(decision.get("active")):
             match = record.get("match") or {}
             trend = decision.get("external_trends") or {}
             browser = decision.get("browser365") or {}
+            countercase = decision.get("countercase") or {}
+            selection = decision.get("selection_audit") or {}
             print(
                 f"GOOL_BRAIN_V3 match={match.get('flashscore_event_id') or '-'} "
                 f"minute={int(match.get('minute') or 0)} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} "
@@ -59,6 +65,8 @@ def install_brain_v3_activation() -> None:
                 f"prematch={float(((decision.get('prematch') or {}).get('adjustment_pp')) or 0):+.1f}pp "
                 f"trend={float(trend.get('effective_adjustment_pp') or 0):+.1f}pp "
                 f"chrome={float(browser.get('effective_adjustment_pp') or 0):+.1f}pp "
+                f"under={float(countercase.get('no_more_goal_risk') or 0):.2f} "
+                f"select={float(selection.get('score') or 0):.2f} "
                 f"xg5={((decision.get('recent') or {}).get('xg5'))} "
                 f"xg10={((decision.get('recent') or {}).get('xg10'))}",
                 flush=True,
@@ -108,7 +116,7 @@ def install_brain_v3_activation() -> None:
     runtime._restore_live_only_brain = restore_v3_probability
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate",
+        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative decision_audit=selection+under_countercase live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate",
         flush=True,
     )
 

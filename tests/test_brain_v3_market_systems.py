@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from gool_bot2 import brain_v3_memory as memory
 from gool_bot2.multi_money_flow_total_volume import enhance_money_flow_result
 from gool_bot2.steam_quality_hardening import _trajectory_ok
@@ -54,7 +56,7 @@ def test_v3_memory_never_carries_first_half_pressure_into_second_half() -> None:
         "epoch-test",
     )
     assert later["windows"]["5m"]["home_shots"] == 3.0
-    assert later["windows"]["5m"]["home_xg"] == 0.30
+    assert later["windows"]["5m"]["home_xg"] == pytest.approx(0.30)
 
 
 def _steam_candidate() -> SimpleNamespace:

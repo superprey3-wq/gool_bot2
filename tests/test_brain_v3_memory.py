@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from gool_bot2 import brain_v3_memory as memory
 
 
 def _record(minute: int, *, score=(0, 0), shots=(0, 0), sot=(0, 0), xg=(0.0, 0.0), big=(0, 0), danger=(0, 0)) -> dict:
     return {
-        "captured_at": f"2026-09-06T12:{minute:02d}:00+00:00",
+        "captured_at": "2026-09-06T12:00:00+00:00",
         "match": {
             "flashscore_event_id": "v3-test",
             "home": "Home",
@@ -43,7 +45,7 @@ def test_v3_memory_builds_5_10_15_minute_pressure_windows() -> None:
 
     assert set(out["windows"]) >= {"5m", "10m", "15m"}
     assert out["windows"]["5m"]["home_shots"] == 6.0
-    assert out["windows"]["10m"]["home_xg"] == 1.14
+    assert out["windows"]["10m"]["home_xg"] == pytest.approx(1.14)
     assert out["pressure"]["home"] is not None
     assert out["pressure"]["home"] > out["pressure"]["away"]
     assert out["pressure"]["state"] in {"HOME_PRESSURE", "HOME_SIEGE", "HOME_BUILDING"}
@@ -67,7 +69,7 @@ def test_v3_memory_never_uses_pre_goal_stats_as_post_goal_pressure() -> None:
         _record(71, score=(1, 0), shots=(15, 7), sot=(7, 2), xg=(1.69, 0.63)),
         "v3-test",
     )
-    assert later["windows"]["5m"]["home_xg"] == 0.04
+    assert later["windows"]["5m"]["home_xg"] == pytest.approx(0.04)
     assert later["windows"]["5m"]["home_shots"] == 1.0
 
 
@@ -79,4 +81,4 @@ def test_v3_duplicate_same_minute_replaces_snapshot_instead_of_fake_delta() -> N
 
     assert out["snapshot_count"] == 2
     assert out["windows"]["5m"]["home_shots"] == 2.0
-    assert out["windows"]["5m"]["home_xg"] == 0.15
+    assert out["windows"]["5m"]["home_xg"] == pytest.approx(0.15)

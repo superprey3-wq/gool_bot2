@@ -1,0 +1,37 @@
+name: browser production regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'monkey_start.py'
+      - 'src/gool_bot2/browser_context_*.py'
+      - 'src/gool_bot2/brain_v3_browser_support.py'
+      - 'src/gool_bot2/brain_v3_activation.py'
+      - 'src/gool_bot2/match_context.py'
+      - 'scripts/browser_production_smoke.py'
+      - 'tests/test_browser_context_store.py'
+      - 'tests/test_brain_v3_browser_support.py'
+      - '.github/workflows/browser-production-regression.yml'
+
+jobs:
+  browser-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest playwright
+      - name: Unit-test browser freshness, fallback and Brain V3 caps
+        run: |
+          pytest -q tests/test_browser_context_store.py tests/test_brain_v3_browser_support.py
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Smoke real 365Scores page, stats and trends endpoint
+        run: python scripts/browser_production_smoke.py

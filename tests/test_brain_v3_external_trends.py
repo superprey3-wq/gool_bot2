@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from gool_bot2 import brain_v3_learning as learning
 from gool_bot2.brain_v3_external_trends import apply_external_trend_context, build_external_trend_context
 
 
@@ -132,3 +133,57 @@ def test_250_match_trend_layer_is_lightweight_without_network_fanout() -> None:
     # This is deliberately generous for shared CI runners. The trend calculation
     # is pure in-memory work; 250 live matches must not imply 250 browser sessions.
     assert elapsed < 5.0
+
+
+def test_trend_is_a_separate_learning_pattern() -> None:
+    brain = _decision(probability=0.72)
+    brain.update({
+        "match_state": "END_TO_END",
+        "minute": 68,
+        "score": [1, 1],
+        "recent": {"xg5": 0.30, "xg10": 0.48, "xg5_source": "provider_xg"},
+        "pressure_index": 0.78,
+        "home_pressure": 0.74,
+        "away_pressure": 0.61,
+        "home_trend": "RISING",
+        "away_trend": "STEADY",
+        "external_trends": {
+            "available": True,
+            "market_hint": "over_2_5",
+            "label": "supportive",
+            "effective_adjustment_pp": 1.2,
+        },
+    })
+    keys = learning._pattern_keys(brain)
+    assert "external_trend:2H:over_2_5:supportive" in keys
+
+
+def test_lost_trend_supported_bet_is_explained_in_learning_review() -> None:
+    brain = _decision(probability=0.74)
+    brain.update({
+        "match_state": "END_TO_END",
+        "minute": 68,
+        "score": [1, 1],
+        "recent": {"xg5": 0.32, "xg10": 0.52, "sot5": 2, "big5": 0, "xg5_source": "provider_xg"},
+        "pressure_index": 0.80,
+        "home_pressure": 0.78,
+        "away_pressure": 0.62,
+        "home_trend": "RISING",
+        "away_trend": "STEADY",
+        "external_trends": {
+            "available": True,
+            "market_hint": "over_2_5",
+            "label": "supportive",
+            "effective_adjustment_pp": 1.2,
+        },
+    })
+    row = {
+        "result": "lost",
+        "minute": 68,
+        "market_family": "full_match_total",
+        "stats_snapshot": {},
+        "settled_stats_snapshot": {},
+        "probability": 0.74,
+    }
+    reasons, _ = learning._diagnose(row, brain, None)
+    assert "external_trend_support_did_not_convert" in reasons

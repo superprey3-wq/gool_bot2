@@ -59,11 +59,12 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
+# Install the older compatibility/calibration layers first. The two final rules
+# below intentionally run last so later installers cannot reintroduce the old
+# PASS-without-70 behavior or bypass total-volume money-flow intelligence.
 install_architecture_isolation()
-# architecture_isolation intentionally separates the systems, but its older
-# 90% brain + 10% data ranking is superseded by the final 100% LIVE-Brain rule.
+install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
 install_money_flow_total_volume()
-install_production_calibration()
 install_live_goal_hazard()
 install_runtime_fastlane()

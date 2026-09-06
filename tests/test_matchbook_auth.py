@@ -5,7 +5,7 @@ import urllib.error
 
 import pytest
 
-from gool_bot2 import matchbook_auth
+from gool_bot2 import matchbook_auth, matchbook_pagination
 from gool_bot2.matchbook_exchange import MatchbookExchangeCollector
 
 
@@ -50,6 +50,23 @@ def test_session_token_is_sent(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = matchbook_auth._request_json("https://api.matchbook.com/edge/rest/events", "test-agent")
     assert payload == {"events": []}
     assert seen.get("session-token") == "token-123"
+
+
+def test_paginated_page_uses_shared_auth_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    def fake_request(url: str, user_agent: str, *, retry_auth: bool = True):
+        seen["url"] = url
+        seen["ua"] = user_agent
+        return {"events": []}
+
+    monkeypatch.setattr(matchbook_auth, "_request_json", fake_request)
+    payload = matchbook_pagination._page_payload(2, 100)
+
+    assert payload == {"events": []}
+    assert "offset=100" in seen["url"]
+    assert "session-token" not in seen["url"].lower()
+    assert seen["ua"]
 
 
 def test_auth_failure_clears_stale_exchange_state(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

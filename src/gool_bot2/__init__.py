@@ -7,6 +7,7 @@ from .architecture_isolation import install_architecture_isolation
 from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_learning_runtime import install_brain_v3_learning_runtime
 from .brain_v3_memory import install_brain_v3_memory
+from .browser_context_runtime import install_browser_context_runtime
 from .live_goal_hazard import install_live_goal_hazard
 from .matchbook_auth import install_matchbook_auth
 from .matchbook_long_flow import install_matchbook_long_flow
@@ -80,5 +81,8 @@ install_live_goal_hazard()
 install_steam_quality_hardening()
 install_runtime_fastlane()
 install_brain_v3_memory()
+# Browser wrapper must be installed after memory so it attaches fresh Chromium
+# fallback stats before the memory wrapper takes its per-minute snapshot.
+install_browser_context_runtime()
 install_brain_v3_learning_runtime()
 install_brain_v3_activation()

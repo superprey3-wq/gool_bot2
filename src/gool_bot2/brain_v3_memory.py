@@ -37,8 +37,6 @@ def _safe_delta(current: Any, previous: Any) -> float | None:
     b = _number(previous)
     if a is None or b is None:
         return None
-    # Provider counters occasionally re-sync backwards. A negative delta is not
-    # attacking pressure and must never become a fake positive signal later.
     return max(0.0, a - b)
 
 
@@ -46,9 +44,20 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, float(value)))
 
 
+def _period(minute: int, halftime: bool) -> str:
+    if halftime:
+        return "HT"
+    if 0 < minute <= 45:
+        return "1H"
+    if minute >= 46:
+        return "2H"
+    return "PRE"
+
+
 def _snapshot(record: dict[str, Any], match_id: str) -> dict[str, Any]:
     match = record.get("match") or {}
     stats: dict[str, Any] = {}
+    observed_pairs = 0
     for key, alias in (
         ("shots", "shots"),
         ("shots_on_target", "sot"),
@@ -61,13 +70,20 @@ def _snapshot(record: dict[str, Any], match_id: str) -> dict[str, Any]:
         home, away = _pair(record, key)
         stats[f"home_{alias}"] = home
         stats[f"away_{alias}"] = away
+        if home is not None and away is not None:
+            observed_pairs += 1
 
+    minute = int(match.get("minute") or 0)
+    halftime = bool(match.get("is_halftime"))
     return {
         "match_id": match_id,
         "captured_at": str(record.get("captured_at") or datetime.now(timezone.utc).isoformat()),
-        "minute": int(match.get("minute") or 0),
+        "minute": minute,
+        "period": _period(minute, halftime),
         "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
-        "halftime": bool(match.get("is_halftime")),
+        "halftime": halftime,
+        "observed_pairs": observed_pairs,
+        "usable": observed_pairs >= 2,
         **stats,
     }
 
@@ -76,16 +92,23 @@ def _same_score(row: dict[str, Any], current: dict[str, Any]) -> bool:
     return list(row.get("score") or []) == list(current.get("score") or [])
 
 
+def _same_epoch(row: dict[str, Any], current: dict[str, Any]) -> bool:
+    return _same_score(row, current) and str(row.get("period") or "") == str(current.get("period") or "")
+
+
 def _previous_for_window(
     history: list[dict[str, Any]],
     current: dict[str, Any],
     window: int,
 ) -> dict[str, Any] | None:
+    if not bool(current.get("usable")):
+        return None
     target_minute = int(current.get("minute") or 0) - int(window)
     candidates = [
         row
         for row in history[:-1]
-        if _same_score(row, current)
+        if bool(row.get("usable"))
+        and _same_epoch(row, current)
         and int(row.get("minute") or 0) <= target_minute
     ]
     if candidates:
@@ -98,6 +121,7 @@ def _window_delta(current: dict[str, Any], previous: dict[str, Any], window: int
         "window_minutes": int(window),
         "from_minute": int(previous.get("minute") or 0),
         "to_minute": int(current.get("minute") or 0),
+        "period": current.get("period"),
     }
     for alias in ("shots", "sot", "xg", "big", "danger", "corners", "attacks"):
         for side in ("home", "away"):
@@ -208,13 +232,15 @@ def _trend(window5: dict[str, Any] | None, window10: dict[str, Any] | None, side
 def _epoch(history: list[dict[str, Any]], current: dict[str, Any]) -> dict[str, Any]:
     same: list[dict[str, Any]] = []
     for row in reversed(history):
-        if not _same_score(row, current):
+        if not _same_epoch(row, current):
             break
-        same.append(row)
+        if bool(row.get("usable")):
+            same.append(row)
     same.reverse()
     start = same[0] if same else current
     return {
         "score": list(current.get("score") or [0, 0]),
+        "period": current.get("period"),
         "start_minute": int(start.get("minute") or 0),
         "age_minutes": max(0, int(current.get("minute") or 0) - int(start.get("minute") or 0)),
         "samples": len(same),
@@ -255,19 +281,16 @@ def build_brain_v3_memory(record: dict[str, Any], match_id: str) -> dict[str, An
     current = _snapshot(record, match_id)
     history = list(_HISTORY.get(match_id) or [])
 
-    # A collector can occasionally emit the same football minute twice. Keep the
-    # freshest statistics for that minute/score instead of manufacturing pressure
-    # from duplicate cumulative counters.
     history = [
         row for row in history
         if not (
             int(row.get("minute") or 0) == int(current.get("minute") or 0)
-            and _same_score(row, current)
+            and _same_epoch(row, current)
         )
     ]
     history.append(current)
     history.sort(key=lambda row: (int(row.get("minute") or 0), str(row.get("captured_at") or "")))
-    history = history[-50:]
+    history = history[-60:]
     _HISTORY[match_id] = history
 
     windows: dict[str, Any] = {}
@@ -284,11 +307,13 @@ def build_brain_v3_memory(record: dict[str, Any], match_id: str) -> dict[str, An
     away_trend = _trend(w5, w10, "away")
     epoch = _epoch(history, current)
     state = _classify(home_pressure, away_pressure, home_trend, away_trend, epoch)
+    period_samples = sum(1 for row in history if bool(row.get("usable")) and str(row.get("period")) == str(current.get("period")))
 
     out = {
-        "version": 1,
-        "mode": "shadow",
+        "version": 2,
+        "mode": "active_memory",
         "snapshot_count": len(history),
+        "period_snapshot_count": period_samples,
         "current": current,
         "score_epoch": epoch,
         "windows": windows,
@@ -357,12 +382,6 @@ def _append_trace(record: dict[str, Any], memory: dict[str, Any]) -> None:
 
 
 def install_brain_v3_memory() -> None:
-    """Attach continuous match-memory before either legacy or FASTLANE processing.
-
-    This is deliberately shadow-only: it records and classifies pressure but does
-    not alter any current BET/WAIT decision. Brain V3 can therefore be developed
-    against real match trajectories without changing production signals.
-    """
     global _INSTALLED
     if _INSTALLED:
         return
@@ -391,7 +410,7 @@ def install_brain_v3_memory() -> None:
     hardening._safe_process = process_with_memory
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_MEMORY installed snapshots=continuous windows=3/5/10/15m mode=shadow",
+        "GOOL_BRAIN_V3_MEMORY installed snapshots=continuous windows=3/5/10/15m epochs=score+half mode=active_memory",
         flush=True,
     )
 

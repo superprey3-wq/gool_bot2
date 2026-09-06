@@ -234,7 +234,6 @@ def apply_history_trend_support(record: dict[str, Any], decision: dict[str, Any]
     total_min_pp = max(-3.0, min(0.0, float(os.getenv("GOOL_BRAIN_V3_CONTEXT_MIN_ADJUST_PP", "-2.0"))))
     total_max_pp = min(5.0, max(0.0, float(os.getenv("GOOL_BRAIN_V3_CONTEXT_MAX_ADJUST_PP", "4.0"))))
     total_context_pp = _clamp(existing_context_pp + requested_pp, total_min_pp, total_max_pp)
-    applied_pp = total_context_pp - existing_context_pp
     adjusted = live_probability + total_context_pp / 100.0
     cap = _number(decision.get("confidence_cap"))
     if cap is not None:
@@ -249,7 +248,7 @@ def apply_history_trend_support(record: dict[str, Any], decision: dict[str, Any]
     decision["confidence_score"] = round(adjusted * 100.0, 1)
 
     thoughts = list(decision.get("thoughts") or [])
-    if abs(applied_pp) >= 0.05:
+    if abs(float(trend.get("applied_adjustment_pp") or 0.0)) >= 0.05:
         thoughts.append(
             f"history_trend={trend.get('label')} O{float(trend.get('next_full_total_line') or 0):.1f} "
             f"{float(trend.get('combined_over_rate') or 0)*100:.0f}% ({float(trend.get('applied_adjustment_pp') or 0):+.1f}pp)"
@@ -280,6 +279,53 @@ def apply_history_trend_support(record: dict[str, Any], decision: dict[str, Any]
     return decision
 
 
+def _install_learning_hooks() -> None:
+    """Let the existing learner measure whether trend-supported bets really work."""
+    try:
+        from . import brain_v3_learning as learning_module
+    except Exception:
+        return
+    if getattr(learning_module, "_history_trend_hooks_installed", False):
+        return
+
+    original_pattern_keys = learning_module._pattern_keys
+    original_diagnose = learning_module._diagnose
+
+    def pattern_keys_with_history_trend(brain: dict[str, Any]) -> list[str]:
+        keys = list(original_pattern_keys(brain))
+        trend = brain.get("history_trend") or {}
+        if bool(trend.get("available")):
+            period = str(brain.get("period") or trend.get("period") or "UNK")
+            label = str(trend.get("label") or "unknown")
+            line = _number(trend.get("next_full_total_line"))
+            if line is not None:
+                keys.append(f"history_trend:{period}:O{line:.1f}:{label}")
+            if int(trend.get("scores365_sample") or 0) >= 4:
+                keys.append(f"scores365_trend:{period}:{label}")
+        return list(dict.fromkeys(keys))
+
+    def diagnose_with_history_trend(
+        row: dict[str, Any],
+        brain: dict[str, Any],
+        record: dict[str, Any] | None,
+    ) -> tuple[list[str], dict[str, Any]]:
+        reasons, post = original_diagnose(row, brain, record)
+        trend = brain.get("history_trend") or {}
+        applied = float(_number(trend.get("applied_adjustment_pp")) or 0.0)
+        outcome = str(row.get("result") or "").lower()
+        if applied >= 0.75 and outcome == "lost":
+            reasons.append("history_trend_support_did_not_convert")
+        elif applied >= 0.75 and outcome == "won":
+            reasons.append("history_trend_support_confirmed")
+        elif applied <= -0.75 and outcome == "won":
+            reasons.append("history_trend_caution_was_too_strong")
+        return list(dict.fromkeys(reasons)), post
+
+    learning_module._pattern_keys = pattern_keys_with_history_trend
+    learning_module._diagnose = diagnose_with_history_trend
+    learning_module._history_trend_hooks_installed = True
+
+
 def install_brain_v3_history_trends() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -302,9 +348,10 @@ def install_brain_v3_history_trends() -> None:
         return apply_history_trend_support(record, decision)
 
     decision_module.evaluate_brain_v3 = evaluate_with_history_trends
+    _install_learning_hooks()
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_HISTORY_TRENDS installed mode=score_aware context_only max=+2.0pp total_context_cap=+4.0pp",
+        "GOOL_BRAIN_V3_HISTORY_TRENDS installed mode=score_aware context_only max=+2.0pp total_context_cap=+4.0pp learning=tracked",
         flush=True,
     )
 

@@ -47,7 +47,8 @@ def _pairs(record: dict[str, Any], key: str) -> list[tuple[float, float]]:
     flash_pair = _stat_pair(flash_stats, key)
     flash_active = flash_pair is not None and abs(flash_pair[0]) + abs(flash_pair[1]) > 1e-12
 
-    out: list[tuple[float, float]] = []
+    ordinary: list[tuple[float, float]] = []
+    browser: list[tuple[float, float]] = []
     for provider_name, provider in providers.items():
         stats = (provider or {}).get("stats") or {}
         pair = _stat_pair(stats, key)
@@ -58,8 +59,17 @@ def _pairs(record: dict[str, Any], key: str) -> list[tuple[float, float]]:
         # has cumulative activity for this metric.
         if str(provider_name) != "flashscore" and flash_active and _empty_attack_snapshot(stats):
             continue
-        out.append(pair)
-    return out
+        if str(provider_name) == "browser365":
+            browser.append(pair)
+        else:
+            ordinary.append(pair)
+
+    # Chromium deliberately observes the same 365Scores match through a browser.
+    # Never let that duplicate a healthy 2/3-source consensus. It only fills a
+    # sparse LIVE metric when fewer than two normal providers expose it.
+    if len(ordinary) >= 2:
+        return ordinary
+    return [*ordinary, *browser]
 
 
 def provider_pair(record: dict[str, Any], key: str, mode: str = "consensus") -> tuple[float | None, float | None]:
@@ -67,8 +77,8 @@ def provider_pair(record: dict[str, Any], key: str, mode: str = "consensus") -> 
 
     GOOL receives Flashscore, FotMob and 365Scores. The default consensus uses
     the median per side after removing clearly empty/stale secondary snapshots.
-    This lets genuine cross-site agreement protect against one outlier without
-    allowing placeholder zero rows to erase real cumulative match activity.
+    A fresh Chromium observation is fallback-only and never double-weights the
+    normal 365Scores provider when two ordinary sources already have the metric.
     """
     pairs = _pairs(record, key)
     if not pairs:

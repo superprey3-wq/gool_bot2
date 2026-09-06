@@ -3,8 +3,10 @@ name: scores365 trends probe
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'scripts/scores365_trend_probe.py'
+      - 'scripts/scores365_trends_probe.py'
       - '.github/workflows/scores365-trends-probe.yml'
       - 'src/gool_bot2/providers/scores365.py'
       - 'src/gool_bot2/providers/scores365_prematch_guard.py'
@@ -12,13 +14,25 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install package
-        run: pip install -e .
-      - name: Probe 365Scores trends
+      - name: Install package and Playwright Chromium
+        run: |
+          pip install -e .
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Probe 365Scores embedded trend flags
         run: python scripts/scores365_trend_probe.py
+      - name: Probe 365Scores Trends and Insights network
+        run: python scripts/scores365_trends_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scores365-trends-probe
+          path: scores365_trends_probe.json
+          if-no-files-found: warn
+          retention-days: 7

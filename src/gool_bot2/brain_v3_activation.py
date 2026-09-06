@@ -6,6 +6,7 @@ from .brain_v3_decision import apply_brain_v3_to_experts
 
 
 _INSTALLED = False
+_BRAIN_V3_FORMULA = "Brain V3: LIVE + время/счёт + PREMATCH support · 1xBet только кэф"
 
 
 def install_brain_v3_activation() -> None:
@@ -20,7 +21,13 @@ def install_brain_v3_activation() -> None:
     if _INSTALLED:
         return
 
+    from . import multi_card
+    from . import multi_public_metrics as metrics
     from . import multi_runtime as runtime
+
+    # multi_card imports the formula by value, so update both modules explicitly.
+    metrics.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
+    multi_card.ORDINARY_FORMULA = _BRAIN_V3_FORMULA
 
     original_half: Callable[..., dict[str, Any]] = runtime.apply_half_goal_prior
     original_restore: Callable[..., dict[str, Any]] = runtime._restore_live_only_brain

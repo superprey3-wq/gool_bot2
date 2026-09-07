@@ -132,7 +132,11 @@ def _active_strategy(minute: int, halftime: bool) -> tuple[str | None, str | Non
         return None, None, 0
     if 1 <= minute <= 35:
         return "goal_before_ht", "1H", 47
-    if 46 <= minute <= 75:
+    # Ordinary Brain V3 entries become increasingly fragile after 70'.  The old
+    # inclusive 75' window allowed a fresh BET with only ~15 regulation minutes
+    # left (plus an optimistic stoppage horizon). Keep 74'+ for autonomous market
+    # systems, but stop ordinary football entries before that point.
+    if 46 <= minute <= 73:
         return "another_goal", "2H", 95
     return None, None, 0
 
@@ -230,7 +234,10 @@ def evaluate_brain_v3(
             score_multiplier *= 0.82
         elif margin >= 2 and minute >= 70:
             score_multiplier *= 0.90
-        if hs == aws and minute >= 65 and h >= 0.45 and a >= 0.45:
+        # A draw used to receive +5% even at 75'. That is exactly the kind of
+        # late generic boost that can turn a merely busy 1:1 into a false BET.
+        # Keep the incentive only before the late-entry regime begins.
+        if hs == aws and 65 <= minute < 70 and h >= 0.45 and a >= 0.45:
             score_multiplier += 0.05
     elif minute >= 30 and margin >= 2:
         score_multiplier *= 0.92
@@ -299,9 +306,32 @@ def evaluate_brain_v3(
     if not sustained and (home_trend == "RISING" or away_trend == "RISING") and xg5 is not None and xg5 >= 0.18:
         sustained = True
 
+    # Late draw is a special risk class. 1:1/2:2 after 70' is not allowed to
+    # piggy-back on ordinary pressure thresholds; it needs a genuinely violent
+    # LIVE phase across both the 5m and 10m windows. PREMATCH cannot satisfy this.
+    late_draw = bool(period == "2H" and minute >= 70 and hs == aws)
+    late_draw_exceptional = bool(
+        not late_draw
+        or (
+            state in {"END_TO_END", "HOME_SIEGE", "AWAY_SIEGE"}
+            and quality >= 0.60
+            and xg5 is not None
+            and xg5 >= _f("GOOL_BRAIN_V3_LATE_DRAW_XG5_MIN", 0.30)
+            and xg10 is not None
+            and xg10 >= _f("GOOL_BRAIN_V3_LATE_DRAW_XG10_MIN", 0.50)
+            and (
+                (sot5 is not None and sot5 >= _f("GOOL_BRAIN_V3_LATE_DRAW_SOT5_MIN", 2.0))
+                or (big5 is not None and big5 >= 1.0)
+            )
+            and strongest_trend != "FALLING"
+        )
+    )
+
     bet_min = _f("GOOL_BRAIN_V3_BET_MIN", 0.70)
     if minute >= 70:
         bet_min = max(bet_min, _f("GOOL_BRAIN_V3_LATE_BET_MIN", 0.72))
+    if late_draw:
+        bet_min = max(bet_min, _f("GOOL_BRAIN_V3_LATE_DRAW_BET_MIN", 0.76))
     if period == "1H" and minute >= 30:
         bet_min = max(bet_min, _f("GOOL_BRAIN_V3_1H_LATE_BET_MIN", 0.71))
     if margin >= 3:
@@ -317,6 +347,8 @@ def evaluate_brain_v3(
     if sot5 is not None:
         thoughts.append(f"sot5={sot5:.0f}")
     thoughts.append(f"trend={home_trend}/{away_trend}")
+    if late_draw:
+        thoughts.append(f"late_draw_exceptional={late_draw_exceptional}")
     if prematch.get("available"):
         thoughts.append(
             f"prematch={prematch.get('label')} {float(prematch.get('probability') or 0)*100:.0f}% "
@@ -341,6 +373,8 @@ def evaluate_brain_v3(
         blocks.append("brain_v3_pressure_not_sustained")
     if strongest_trend == "FALLING" and state not in {"END_TO_END", "HOME_SIEGE", "AWAY_SIEGE"}:
         blocks.append("brain_v3_pressure_falling")
+    if late_draw and not late_draw_exceptional:
+        blocks.append("brain_v3_late_draw_not_exceptional")
     if adjusted_probability is None:
         blocks.append("brain_v3_probability_unavailable")
 
@@ -352,7 +386,12 @@ def evaluate_brain_v3(
         and pressure_ok
         and recent_quality
     )
-    bet_ready = bool(live_foundation and sustained and "brain_v3_pressure_falling" not in blocks)
+    bet_ready = bool(
+        live_foundation
+        and sustained
+        and "brain_v3_pressure_falling" not in blocks
+        and "brain_v3_late_draw_not_exceptional" not in blocks
+    )
 
     if adjusted_probability is None or not live_foundation:
         status = WATCH
@@ -415,6 +454,8 @@ def evaluate_brain_v3(
         "recent_quality": recent_quality,
         "sustained_pressure": sustained,
         "live_foundation": live_foundation,
+        "late_draw": late_draw,
+        "late_draw_exceptional": late_draw_exceptional,
         "thoughts": thoughts,
         "blocks": blocks,
     }

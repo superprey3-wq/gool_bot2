@@ -10,127 +10,66 @@ on:
 jobs:
   public-board:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install playwright
-      - run: python -m playwright install chromium
-      - name: Capture anonymous BETDAQ market subscriptions
+      - name: Inspect BETDAQ client market protocol
         run: |
           python - <<'PY'
-          import asyncio
           import re
-          from playwright.async_api import async_playwright
+          from urllib.parse import urljoin
+          from urllib.request import Request, urlopen
 
-          URL = 'https://www.betdaq.com/exchange/soccer/english-soccer/premier-league-8531709'
-          sockets = []
-          frames = []
+          PAGE = 'https://www.betdaq.com/exchange/soccer/italian-soccer/serie-a-6181483'
+          UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
 
-          def compact(value, limit=1800):
-              if isinstance(value, bytes):
-                  try:
-                      value = value.decode('utf-8', errors='replace')
-                  except Exception:
-                      return f'<bytes {len(value)}>'
-              return re.sub(r'\s+', ' ', str(value))[:limit]
+          def fetch(url):
+              req = Request(url, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
+              with urlopen(req, timeout=25) as r:
+                  body = r.read().decode('utf-8', errors='ignore')
+                  print('FETCH', r.status, len(body), url)
+                  return body
 
-          async def main():
-              async with async_playwright() as p:
-                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
-                  context = await browser.new_context(locale='en-GB')
-                  page = await context.new_page()
+          html = fetch(PAGE)
+          scripts = []
+          for src in re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, flags=re.I):
+              url = urljoin(PAGE, src)
+              if 'betdaq.com' in url and url not in scripts:
+                  scripts.append(url)
 
-                  async def inspect_response(response):
-                      low = response.url.lower()
-                      if 'aapi-service.betdaq.com' in low or 'webservice.betdaq.com' in low:
-                          try:
-                              ctype = await response.header_value('content-type') or ''
-                          except Exception:
-                              ctype = ''
-                          print('BETDAQ_API_RESPONSE', response.status, ctype, response.url[:700])
-                          if response.status == 200:
-                              try:
-                                  body = await response.text()
-                                  print('BETDAQ_API_BODY', compact(body))
-                              except Exception as exc:
-                                  print('BETDAQ_API_BODY_ERROR', type(exc).__name__, str(exc))
-
-                  def on_ws(ws):
-                      sockets.append(ws.url)
-                      print('BETDAQ_WS_OPEN', ws.url[:800])
-
-                      def sent(payload):
-                          text = compact(payload)
-                          frames.append(('sent', text))
-                          if len(frames) <= 220:
-                              print('BETDAQ_WS_SENT', text)
-
-                      def received(payload):
-                          text = compact(payload)
-                          frames.append(('recv', text))
-                          if len(frames) <= 300:
-                              print('BETDAQ_WS_RECV', text)
-
-                      ws.on('framesent', sent)
-                      ws.on('framereceived', received)
-                      ws.on('close', lambda: print('BETDAQ_WS_CLOSE', ws.url[:500]))
-
-                  page.on('websocket', on_ws)
-                  page.on('response', lambda response: asyncio.create_task(inspect_response(response)))
-
-                  response = await page.goto(URL, wait_until='domcontentloaded', timeout=45000)
-                  print('BETDAQ_PAGE_STATUS', None if response is None else response.status)
-                  await page.wait_for_timeout(2500)
-
-                  accepted = False
-                  for label in ('Accept All', 'Manage Neccessary Only'):
-                      try:
-                          button = page.get_by_role('button', name=label, exact=True)
-                          if await button.count():
-                              await button.first.click(timeout=5000)
-                              accepted = True
-                              print('BETDAQ_COOKIE_CLICK', label)
-                              break
-                      except Exception as exc:
-                          print('BETDAQ_COOKIE_CLICK_ERROR', label, type(exc).__name__, str(exc)[:200])
-                  if not accepted:
-                      try:
-                          await page.get_by_text('Accept All', exact=True).first.click(timeout=5000)
-                          accepted = True
-                          print('BETDAQ_COOKIE_CLICK text=Accept All')
-                      except Exception as exc:
-                          print('BETDAQ_COOKIE_NOT_CLICKED', type(exc).__name__, str(exc)[:250])
-
-                  await page.wait_for_timeout(18000)
-                  text = await page.locator('body').inner_text(timeout=10000)
-                  print('BETDAQ_BODY_LEN', len(text))
-                  print('BETDAQ_SOCKETS', len(sockets))
-                  print('BETDAQ_FRAMES', len(frames))
-                  print('BETDAQ_BODY', compact(text, 3500))
-
-                  sent = [x for side, x in frames if side == 'sent']
-                  recv = [x for side, x in frames if side == 'recv']
-                  # Market subscriptions are materially larger/different than the
-                  # initial client id + clock handshake. Report frame lengths too.
-                  print('BETDAQ_SENT_LENGTHS', [len(x) for x in sent[:40]])
-                  print('BETDAQ_RECV_LENGTHS', [len(x) for x in recv[:80]])
-                  marketish = [
-                      x for x in sent + recv
-                      if any(token in x.lower() for token in ('market','selection','price','matched','event'))
-                         or len(x) > 250
-                  ]
-                  print('BETDAQ_MARKETISH_FRAMES', len(marketish))
-                  for row in marketish[:50]:
-                      print('BETDAQ_MARKETISH', row)
-
-                  await context.close()
-                  await browser.close()
-
-              if len(frames) <= 5:
-                  raise SystemExit('BETDAQ stayed at handshake only; no anonymous market subscription observed')
-
-          asyncio.run(main())
+          print('SCRIPTS', len(scripts))
+          needles = [
+              'getMarketSelections', 'matchedAmounts', 'MatchedAmount',
+              'subscribeExchangeMarket', 'subscribeExchangeSelection',
+              'subscribeExchangeEvent', 'ExchangeMarketMatchedAmount',
+              'getEventClassifiers', 'getEventClassifier', 'marketByVolume',
+              'getMarket', 'getPrices', 'subscribe', 'AAPI/'
+          ]
+          hits = 0
+          for url in scripts:
+              try:
+                  body = fetch(url)
+              except Exception as exc:
+                  print('SCRIPT_ERROR', type(exc).__name__, str(exc), url)
+                  continue
+              low = body.lower()
+              for needle in needles:
+                  pos = low.find(needle.lower())
+                  if pos < 0:
+                      continue
+                  hits += 1
+                  snippet = re.sub(r'\s+', ' ', body[max(0, pos-900):pos+1800])
+                  print('PROTO_HIT', needle, url)
+                  print('PROTO_SNIP', snippet[:2800])
+                  start = pos + len(needle)
+                  pos2 = low.find(needle.lower(), start)
+                  if pos2 >= 0:
+                      snippet2 = re.sub(r'\s+', ' ', body[max(0, pos2-700):pos2+1400])
+                      print('PROTO_SNIP2', snippet2[:2200])
+          print('PROTO_HITS', hits)
+          if hits < 3:
+              raise SystemExit('not enough BETDAQ protocol clues found')
           PY

@@ -107,6 +107,54 @@ def test_neutral_volume_is_not_called_direction(monkeypatch):
     assert "1X2: больше всего проторговано" in text
 
 
+def test_unavailable_state_shows_real_matchbook_error(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        money_menu,
+        "load_matchbook_state",
+        lambda: {
+            "captured_at": now.isoformat(),
+            "available": False,
+            "authenticated": False,
+            "error": "matchbook_auth_required status=403",
+            "events": [],
+        },
+    )
+    text = money_menu.money_text()
+    assert "Matchbook API сейчас недоступен" in text
+    assert "matchbook_auth_required status=403" in text
+    assert "Это не означает, что матчей нет" in text
+
+
+def test_live_event_is_not_hidden_by_stale_start_date(monkeypatch):
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+    now = datetime.now(timezone.utc)
+    event = _event("Live Home — Live Away", 15000, hours=-24, live=True)
+    monkeypatch.setattr(
+        money_menu,
+        "load_matchbook_state",
+        lambda: {"captured_at": now.isoformat(), "events": [event]},
+    )
+    text = money_menu.money_text()
+    assert "Live Home — Live Away" in text
+    assert "🔴 LIVE" in text
+
+
+def test_existing_events_with_no_today_match_show_dates(monkeypatch):
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+    now = datetime.now(timezone.utc)
+    tomorrow = _event("Tomorrow — Match", 10000, hours=24)
+    monkeypatch.setattr(
+        money_menu,
+        "load_matchbook_state",
+        lambda: {"captured_at": now.isoformat(), "events": [tomorrow]},
+    )
+    text = money_menu.money_text()
+    assert "В Matchbook state есть" in text
+    assert "подходящих нет" in text
+    assert tomorrow["start"][:10] in text
+
+
 def test_money_button_install_is_idempotent():
     fake = SimpleNamespace(
         MENU_KEYBOARD={

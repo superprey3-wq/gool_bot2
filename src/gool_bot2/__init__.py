@@ -5,6 +5,7 @@ from typing import Any
 from . import goal_state_policy as _goal_state_policy
 from .architecture_isolation import install_architecture_isolation
 from .brain_v3_activation import install_brain_v3_activation
+from .brain_v3_candidate_stability import install_brain_v3_candidate_stability
 from .brain_v3_field_scan_runtime import install_brain_v3_field_scan_runtime
 from .brain_v3_learning_runtime import install_brain_v3_learning_runtime
 from .brain_v3_memory import install_brain_v3_memory
@@ -93,6 +94,9 @@ install_browser_context_runtime()
 install_brain_v3_learning_runtime()
 install_brain_v3_activation()
 install_brain_v3_selection_hardening()
+# A candidate that deteriorated on a football pass cannot be resurrected by a
+# market-only price refresh. It needs another genuinely fresh football scan.
+install_brain_v3_candidate_stability()
 # Wrap the already-installed fastlane last: fresh football passes receive scan ids,
 # while market rechecks can only confirm a round after the whole field was visited.
 install_brain_v3_field_scan_runtime()

@@ -10,85 +10,79 @@ on:
 jobs:
   public-board:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Inspect BETDAQ public football pages without login
+      - run: python -m pip install playwright
+      - run: python -m playwright install chromium
+      - name: Capture anonymous BETDAQ exchange network payloads
         run: |
           python - <<'PY'
+          import asyncio
+          import json
           import re
-          from urllib.parse import urljoin
-          from urllib.request import Request, urlopen
+          from playwright.async_api import async_playwright
 
-          ROOT = 'https://www.betdaq.com/'
-          UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+          URL = 'https://www.betdaq.com/exchange/soccer/english-soccer/premier-league-8531709'
+          interesting = []
 
-          def fetch(url):
-              req = Request(url, headers={'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Encoding': 'identity'})
-              with urlopen(req, timeout=20) as r:
-                  body = r.read().decode('utf-8', errors='ignore')
-                  print('BETDAQ_FETCH', r.status, len(body), url)
-                  return body
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+                  context = await browser.new_context(locale='en-GB')
+                  page = await context.new_page()
 
-          def links(body):
-              out = []
-              for href in re.findall(r'href=["\']([^"\']+)["\']', body, flags=re.I):
-                  url = urljoin(ROOT, href)
-                  if '/exchange/soccer/' in url and url not in out:
-                      out.append(url)
-              return out
+                  async def inspect_response(response):
+                      url = response.url
+                      low = url.lower()
+                      if not any(token in low for token in ('betdaq.com', 'webservice', 'datasite', '/api/', 'price', 'market')):
+                          return
+                      if url.endswith(('.js','.css','.png','.jpg','.jpeg','.svg','.woff','.woff2','.ico')):
+                          return
+                      try:
+                          ctype = (await response.header_value('content-type') or '').lower()
+                      except Exception:
+                          ctype = ''
+                      record = (response.status, ctype, url)
+                      if record not in interesting:
+                          interesting.append(record)
+                          print('BETDAQ_NET', response.status, ctype[:70], url[:500])
+                      if response.status != 200 or not any(x in ctype for x in ('json','text','javascript','xml')):
+                          return
+                      try:
+                          body = await response.text()
+                      except Exception:
+                          return
+                      low_body = body.lower()
+                      if not any(x in low_body for x in ('matchedamount','matched_amount','matched', 'availableamount','price','marketid','selectionid')):
+                          return
+                      clean = re.sub(r'\s+', ' ', body)
+                      for needle in ('matchedamount', 'matched', 'availableamount', 'marketid', 'selectionid'):
+                          pos = clean.lower().find(needle)
+                          if pos >= 0:
+                              print('BETDAQ_PAYLOAD', needle, clean[max(0,pos-180):pos+700][:1000])
+                              break
 
-          home = fetch(ROOT)
-          leagues = links(home)
-          print('BETDAQ_LEAGUES', len(leagues))
-          event_links = []
-          readable = []
+                  page.on('response', lambda response: asyncio.create_task(inspect_response(response)))
+                  response = await page.goto(URL, wait_until='domcontentloaded', timeout=45000)
+                  print('BETDAQ_PAGE_STATUS', None if response is None else response.status)
+                  await page.wait_for_timeout(12000)
+                  text = await page.locator('body').inner_text(timeout=10000)
+                  print('BETDAQ_BODY_LEN', len(text))
+                  for needle in ('Matched:', 'Matched', 'Back', 'Lay'):
+                      pos = text.find(needle)
+                      print('BETDAQ_BODY_TOKEN', needle, pos)
+                      if pos >= 0:
+                          print('BETDAQ_BODY_SNIP', re.sub(r'\s+', ' ', text[max(0,pos-250):pos+900])[:1200])
+                  print('BETDAQ_INTERESTING_COUNT', len(interesting))
+                  await context.close()
+                  await browser.close()
 
-          for league in leagues[:6]:
-              body = fetch(league)
-              low = body.lower()
-              print('BETDAQ_TOKENS', league, 'matched=', low.count('matched'), 'market=', low.count('market'), 'back=', low.count('back'), 'lay=', low.count('lay'))
-              for needle in ('matched', 'matchedamount', 'matched_amount', 'totalmatched', 'availableamount', 'available-amount'):
-                  pos = low.find(needle)
-                  if pos >= 0:
-                      print('BETDAQ_SNIP', needle, re.sub(r'\s+', ' ', body[max(0,pos-180):pos+360])[:700])
-              for url in links(body):
-                  if url != league and url not in event_links:
-                      event_links.append(url)
-              # Common embedded data/API clues.
-              for pattern in (r'https?://[^"\'<> ]+', r'/api/[^"\'<> ]+', r'/[^"\'<> ]*(?:market|price|event)[^"\'<> ]*'):
-                  hits = re.findall(pattern, body, flags=re.I)
-                  for hit in hits[:20]:
-                      if any(x in hit.lower() for x in ('api', 'market', 'price', 'event')):
-                          print('BETDAQ_CLUE', hit[:300])
+              if not interesting:
+                  raise SystemExit('no BETDAQ network traffic captured')
 
-          print('BETDAQ_EVENT_LINKS', len(event_links))
-          for url in event_links[:10]:
-              print('BETDAQ_EVENT_LINK', url)
-
-          for url in event_links[:8]:
-              try:
-                  body = fetch(url)
-              except Exception as exc:
-                  print('BETDAQ_EVENT_ERROR', type(exc).__name__, str(exc), url)
-                  continue
-              low = body.lower()
-              vals = re.findall(r'Matched\s*:\s*£\s*([0-9][0-9,]*(?:\.\d+)?)', body, flags=re.I)
-              print('BETDAQ_EVENT_TOKENS', 'matched=', low.count('matched'), 'back=', low.count('back'), 'lay=', low.count('lay'), url)
-              if vals:
-                  readable.append((url, vals[:10]))
-                  print('BETDAQ_MATCHED', url, vals[:10])
-              else:
-                  pos = low.find('matched')
-                  if pos >= 0:
-                      print('BETDAQ_EVENT_SNIP', re.sub(r'\s+', ' ', body[max(0,pos-220):pos+500])[:900])
-
-          # Even if the values are client-rendered, a successful probe means the
-          # server can reach BETDAQ and we have payload clues for the next adapter.
-          if not leagues:
-              raise SystemExit('BETDAQ homepage exposed no soccer exchange links')
-          print('BETDAQ_SMOKE_REACHABLE leagues=', len(leagues), 'events=', len(event_links), 'readable_matched=', len(readable))
+          asyncio.run(main())
           PY

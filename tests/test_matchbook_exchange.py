@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from gool_bot2.matchbook_exchange import MatchbookExchangeCollector, decode_event, matchbook_context
+from gool_bot2 import matchbook_exchange as matchbook_module
+from gool_bot2.matchbook_exchange import MatchbookExchangeCollector, decode_event
 from gool_bot2.multi_exchange_confirmation import apply_matchbook_confirmation
 from gool_bot2.multi_money_flow import evaluate_money_flow
 
@@ -122,7 +123,10 @@ def test_decode_matchbook_totals_and_orderbook() -> None:
     assert 0.50 < total["fair_over"] < 0.60
 
 
-def test_matchbook_context_selects_exact_next_goal_line() -> None:
+def test_legacy_matchbook_helpers_select_exact_next_goal_line() -> None:
+    # Production routes the public exchange seam to BETDAQ. This test deliberately
+    # exercises the retained Matchbook decoder/helpers without depending on that
+    # runtime monkeypatch.
     event = decode_event(_event())
     assert event is not None
     event["totals"]["FT:2.5"]["flow"] = {
@@ -140,9 +144,10 @@ def test_matchbook_context_selects_exact_next_goal_line() -> None:
             "away_score": 1,
         }
     }
-    ctx = matchbook_context(record, state)
-    assert ctx["available"] is True
-    active = ctx["systems"]["another_goal"]
+    matched, score = matchbook_module._best_event(record, state)
+    assert matched is not None
+    assert score >= 0.72
+    active = matchbook_module._target_context(matched, "FT", 2.5)
     assert active["line"] == 2.5
     assert active["liquid"] is True
     assert active["level"] == "SUPPORT"

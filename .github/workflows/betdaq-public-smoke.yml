@@ -1,0 +1,71 @@
+name: BETDAQ public smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/betdaq-public-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  public-board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Probe BETDAQ public exchange without login
+        run: |
+          python - <<'PY'
+          import re
+          from urllib.parse import urljoin
+          from urllib.request import Request, urlopen
+
+          ROOT = 'https://www.betdaq.com/'
+          UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+
+          def fetch(url):
+              req = Request(url, headers={'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Encoding': 'identity'})
+              with urlopen(req, timeout=20) as r:
+                  body = r.read().decode('utf-8', errors='ignore')
+                  print('BETDAQ_FETCH', r.status, len(body), url)
+                  return body
+
+          home = fetch(ROOT)
+          hrefs = []
+          for href in re.findall(r'href=["\']([^"\']+)["\']', home, flags=re.I):
+              url = urljoin(ROOT, href)
+              if '/exchange/soccer/' in url and url not in hrefs:
+                  hrefs.append(url)
+          print('BETDAQ_SOCCER_LINKS', len(hrefs))
+          for url in hrefs[:10]:
+              print('BETDAQ_LINK', url)
+
+          matched = []
+          for url in hrefs[:8]:
+              try:
+                  body = fetch(url)
+              except Exception as exc:
+                  print('BETDAQ_EVENT_ERROR', type(exc).__name__, str(exc), url)
+                  continue
+              vals = re.findall(r'Matched\s*:\s*£\s*([0-9][0-9,]*(?:\.\d+)?)', body, flags=re.I)
+              if vals:
+                  matched.append((url, vals[:10]))
+                  print('BETDAQ_MATCHED', url, vals[:10])
+
+          if not hrefs:
+              # A known public soccer event route proves whether event pages are
+              # reachable even when the homepage is client-rendered.
+              known = 'https://www.betdaq.com/exchange/soccer/lithuanian-soccer/lithuania-a-lyga/fk-kauno-algiris-v-transinvest-vilnius-15045067'
+              body = fetch(known)
+              vals = re.findall(r'Matched\s*:\s*£\s*([0-9][0-9,]*(?:\.\d+)?)', body, flags=re.I)
+              print('BETDAQ_KNOWN_MATCHED', vals[:10])
+              if vals:
+                  matched.append((known, vals[:10]))
+
+          if not matched:
+              raise SystemExit('BETDAQ public exchange returned no readable Matched data')
+          print('BETDAQ_SMOKE_SUCCESS readable_markets=', len(matched))
+          PY

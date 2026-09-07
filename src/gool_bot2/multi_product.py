@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 from . import telegram
-from .betfair_public_http_worker import start_background_worker as start_betfair_public_worker
 from .money_menu import install_money_button, money_text
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_bank import current_bank_summary
@@ -79,7 +78,7 @@ def _install_direct_money_handler() -> bool:
                         f"GOOL_TELEGRAM_MONEY_ERROR {type(exc).__name__}:{exc}",
                         flush=True,
                     )
-                    reply = "⚠️ <b>ДЕНЬГИ</b>\n\nНе удалось прочитать свежую публичную Betfair Exchange доску. Попробуй ещё раз чуть позже."
+                    reply = "⚠️ <b>ДЕНЬГИ</b>\n\nБиржевой источник сейчас проходит замену. GOOL и STEAM продолжают работать независимо."
                 return int(_send(token, chat_id, reply, reply_markup=telegram.MENU_KEYBOARD))
             return _original(token, journal_path_arg, update)
 
@@ -98,10 +97,10 @@ def install_multi_product() -> None:
     telegram.analysis_text = _analysis_text_safe
     install_money_button(telegram)
     _install_direct_money_handler()
-    # Public Betfair board is a read-only trial source and runs inside this worker
-    # process as one daemon thread. It does not create a second Telegram poller or
-    # a second Chromium process.
-    start_betfair_public_worker()
+    # Betfair public trial was deliberately NOT started in production: both plain
+    # HTTP and headless Chromium were rejected with 403 in the network smoke.
+    # Keep the probe/parser code for research, but do not waste host resources on
+    # a collector that cannot obtain a board.
 
     def _reconcile(_: Path) -> int:
         path = journal_path()
@@ -112,24 +111,24 @@ def install_multi_product() -> None:
     if is_multi_telegram_active():
         telegram.START_TEXT = (
             "🟢 <b>GOOL MULTI работает</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet + Betfair PUBLIC\n"
-            "Две основные GOOL-системы + отдельный STEAM. Betfair MONEY FLOW пока проходит production-проверку.\n"
+            "MODEL + PREMATCH + LIVE + 1xBet\n"
+            "Две основные GOOL-системы + отдельный STEAM. Биржевой MONEY FLOW сейчас проходит замену источника.\n"
             "Обычный GOOL по-прежнему выбирает один лучший рынок или WAIT.\n\n"
             "📊 Отчёт — GOOL + STEAM + статистика MONEY FLOW\n"
             "🟢 В игре — открытые BEST BET + MONEY FLOW\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
-            "💰 Деньги — топ-5 матчей по публичному Betfair matched + движение 1X2\n"
+            "💰 Деньги — биржевая доска (источник заменяется)\n"
             "💰 Дневной отчёт банка — автоматически в 23:59"
         )
     else:
         telegram.START_TEXT = (
             "🟢 <b>GOOL MULTI работает в shadow</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet + Betfair PUBLIC\n"
+            "MODEL + PREMATCH + LIVE + 1xBet\n"
             "Один лучший рынок на матч: BEST BET или WAIT.\n\n"
             "📊 Отчёт — статистика выбранных Multi-ставок + MONEY FLOW\n"
             "🟢 В игре — открытые Multi-ставки + MONEY FLOW\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
-            "💰 Деньги — топ-5 матчей по публичному Betfair matched + движение 1X2\n"
+            "💰 Деньги — биржевая доска (источник заменяется)\n"
             "💰 Виртуальный банк — дневной отчёт автоматически в 23:59\n\n"
             "Боевые Telegram-сигналы пока остаются на старом контуре до включения GOOL_MULTI_TELEGRAM_MODE=active."
         )

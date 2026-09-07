@@ -139,7 +139,7 @@ def test_candidate_that_deteriorates_between_scans_is_blocked(monkeypatch):
         _decision(0.76, probability=0.75),
     )
     assert out["status"] == "READY"
-    assert "brain_v3_selection_candidate_deteriorating" not in out["blocks"]  # field barrier wins first
+    assert "brain_v3_selection_candidate_deteriorating" in out["blocks"]
     assert out["selection_tournament"]["deteriorating"] is True
 
     clock["now"] = 145.0
@@ -150,6 +150,7 @@ def test_candidate_that_deteriorates_between_scans_is_blocked(monkeypatch):
     )
     assert out["status"] == "READY"
     assert "brain_v3_selection_candidate_deteriorating" in out["blocks"]
+    assert out["selection_tournament"]["deterioration_sticky"] is True
 
 
 def test_self_check_blocks_probability_rescued_by_context(monkeypatch):

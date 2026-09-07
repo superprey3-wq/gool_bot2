@@ -13,27 +13,40 @@ on:
 jobs:
   public-board:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[dev]'
-      - name: Probe public Betfair football exchange
+      - run: python -m pip install -e '.[dev]' playwright
+      - run: python -m playwright install chromium
+      - name: Probe public Betfair football exchange through Chromium fallback
         env:
           RUNTIME_DATA_DIR: ${{ runner.temp }}/gool-runtime
         run: |
           python - <<'PY'
-          from gool_bot2.betfair_public_http_worker import collect_once
-          state = collect_once()
-          rows = state.get('events') or []
-          print('BETFAIR_SMOKE available=', state.get('available'))
-          print('BETFAIR_SMOKE statuses=', state.get('statuses'))
-          print('BETFAIR_SMOKE error=', state.get('error'))
-          print('BETFAIR_SMOKE events=', len(rows))
-          for row in rows[:5]:
-              print('BETFAIR_SMOKE_ROW', row.get('start_label'), row.get('name'), row.get('matched_gbp'), row.get('runners'))
-          if not rows:
-              raise SystemExit('public Betfair board returned no parsed football events')
+          import asyncio
+          from gool_bot2.betfair_public_board import collect_betfair_public
+          from playwright.async_api import async_playwright
+
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'])
+                  context = await browser.new_context(locale='en-US')
+                  page = await context.new_page()
+                  state = await collect_betfair_public(context, page, {})
+                  rows = state.get('events') or []
+                  print('BETFAIR_SMOKE available=', state.get('available'))
+                  print('BETFAIR_SMOKE statuses=', state.get('statuses'))
+                  print('BETFAIR_SMOKE error=', state.get('error'))
+                  print('BETFAIR_SMOKE events=', len(rows))
+                  for row in rows[:5]:
+                      print('BETFAIR_SMOKE_ROW', row.get('start_label'), row.get('name'), row.get('matched_gbp'), row.get('runners'))
+                  await context.close()
+                  await browser.close()
+                  if not rows:
+                      raise SystemExit('public Betfair board returned no parsed football events through Chromium')
+
+          asyncio.run(main())
           PY

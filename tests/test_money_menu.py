@@ -1,158 +1,135 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from gool_bot2 import money_menu
+from gool_bot2.betfair_public_board import attach_price_flow, parse_betfair_html
 
 
-def _event(name: str, volume: float, *, hours: int, direction: float = 0.0, live: bool = False):
-    now = datetime.now(timezone.utc)
-    start = now.replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(hours=hours)
-    home, away = name.split(" — ", 1)
-    level = "SUPPORT" if direction > 0 else "OPPOSITION" if direction < 0 else "NEUTRAL"
+def _runner(label: str, back: float, lay: float):
     return {
-        "event_id": name,
-        "home": home,
-        "away": away,
-        "start": start.isoformat(),
-        "in_running": live,
-        "volume": volume,
-        "match_odds": {
-            "volume": volume * 0.7,
-            "runners": [
-                {"name": home, "volume": volume * 0.40},
-                {"name": "Draw", "volume": volume * 0.15},
-                {"name": away, "volume": volume * 0.10},
-            ],
-        },
-        "totals": {
-            "FT:2.5": {
-                "period": "FT",
-                "line": 2.5,
-                "volume": volume * 0.3,
-                "flow": {
-                    "level": level,
-                    "direction_pp": direction,
-                    "activity_volume": 125.0 if direction else 0.0,
-                    "orderbook_confirmed": bool(direction),
-                },
-            }
-        },
+        "label": label,
+        "best_back": {"odd": back, "available_gbp": 100.0},
+        "best_lay": {"odd": lay, "available_gbp": 100.0},
     }
+
+
+def _event(name: str, matched: float, *, label: str = "Today 20:00", live: bool = False, flow=None):
+    return {
+        "event_key": f"https://www.betfair.com/exchange/plus/en/football/test/{name}",
+        "url": f"https://www.betfair.com/exchange/plus/en/football/test/{name}",
+        "name": name,
+        "in_running": live,
+        "start_label": "LIVE" if live else label,
+        "matched_gbp": matched,
+        "runners": [_runner("П1", 2.0, 2.02), _runner("X", 3.4, 3.45), _runner("П2", 4.0, 4.1)],
+        "flow": flow or {"ready": False, "level": "WARMING"},
+    }
+
+
+def test_parse_public_betfair_anchor_row():
+    html = """
+    <html><body>
+      <a href="/exchange/plus/en/football/english-league/bromley-v-afc-wimbledon-betting-123">
+        Today 19:00 Bromley AFC Wimbledon 0 Unmatched bets 0 Matched bets£9,039
+        2.64 £166 2.66 £164 3.5 £115 3.55 £296 2.96 £40 3 £191
+      </a>
+    </body></html>
+    """
+    rows = parse_betfair_html(html)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["name"] == "Bromley AFC Wimbledon"
+    assert row["matched_gbp"] == 9039.0
+    assert row["start_label"] == "Today 19:00"
+    assert [x["label"] for x in row["runners"]] == ["П1", "X", "П2"]
+    assert row["runners"][0]["best_back"]["odd"] == 2.64
+    assert row["runners"][2]["best_lay"]["odd"] == 3.0
+
+
+def test_price_shortening_plus_new_matched_creates_flow():
+    old = _event("Home Away", 10000)
+    new = _event("Home Away", 10800)
+    new["runners"] = [_runner("П1", 1.88, 1.90), _runner("X", 3.6, 3.65), _runner("П2", 4.5, 4.6)]
+    out = attach_price_flow(old, new)
+    assert out["flow"]["ready"] is True
+    assert out["flow"]["outcome"] == "П1"
+    assert out["flow"]["level"] in {"FLOW", "STRONG_FLOW"}
+    assert out["flow"]["matched_delta_gbp"] == 800.0
 
 
 def test_money_board_top5_today_and_direction(monkeypatch):
     monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
     now = datetime.now(timezone.utc)
+    flow = {
+        "ready": True,
+        "level": "STRONG_FLOW",
+        "outcome": "П1",
+        "matched_delta_gbp": 800.0,
+        "implied_delta_pp": 2.1,
+        "old_odd": 2.1,
+        "new_odd": 1.95,
+    }
     events = [
-        _event("A — B", 1000, hours=0, direction=2.0),
-        _event("C — D", 9000, hours=0, direction=-2.5, live=True),
-        _event("E — F", 8000, hours=0),
-        _event("G — H", 7000, hours=0),
-        _event("I — J", 6000, hours=0),
-        _event("K — L", 5000, hours=0),
+        _event("A B", 1000),
+        _event("C D", 9000, live=True, flow=flow),
+        _event("E F", 8000),
+        _event("G H", 7000),
+        _event("I J", 6000),
+        _event("K L", 5000),
+        _event("Tomorrow Match", 999999, label="Tomorrow 20:00"),
     ]
-    tomorrow = _event("X — Y", 999999, hours=24)
-    events.append(tomorrow)
     monkeypatch.setattr(
         money_menu,
-        "load_matchbook_state",
-        lambda: {"captured_at": now.isoformat(), "events": events},
+        "load_betfair_state",
+        lambda: {"captured_at": now.isoformat(), "available": True, "events": events},
     )
 
     text = money_menu.money_text()
 
-    assert "C — D" in text
-    assert "E — F" in text
-    assert "G — H" in text
-    assert "I — J" in text
-    assert "K — L" in text
-    assert "A — B" not in text
-    assert "X — Y" not in text
-    assert "ТМ 2.5" in text
-    assert "больше всего проторговано" in text
+    assert "C D" in text
+    assert "E F" in text
+    assert "G H" in text
+    assert "I J" in text
+    assert "K L" in text
+    assert "A B" not in text
+    assert "Tomorrow Match" not in text
+    assert "Направление: <b>П1</b>" in text
     assert "🔴 LIVE" in text
+    assert "Betfair Exchange PUBLIC" in text
 
 
-def test_positive_flow_is_over(monkeypatch):
-    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+def test_empty_public_board_shows_http_diagnostics(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setattr(
         money_menu,
-        "load_matchbook_state",
-        lambda: {
-            "captured_at": now.isoformat(),
-            "events": [_event("Home — Away", 12000, hours=0, direction=3.2)],
-        },
-    )
-    text = money_menu.money_text()
-    assert "ТБ 2.5" in text
-    assert "стакан подтверждает" in text
-
-
-def test_neutral_volume_is_not_called_direction(monkeypatch):
-    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
-    now = datetime.now(timezone.utc)
-    monkeypatch.setattr(
-        money_menu,
-        "load_matchbook_state",
-        lambda: {
-            "captured_at": now.isoformat(),
-            "events": [_event("Home — Away", 12000, hours=0, direction=0.0)],
-        },
-    )
-    text = money_menu.money_text()
-    assert "Поток по тоталам: пока не подтверждён" in text
-    assert "1X2: больше всего проторговано" in text
-
-
-def test_unavailable_state_shows_real_matchbook_error(monkeypatch):
-    now = datetime.now(timezone.utc)
-    monkeypatch.setattr(
-        money_menu,
-        "load_matchbook_state",
+        "load_betfair_state",
         lambda: {
             "captured_at": now.isoformat(),
             "available": False,
-            "authenticated": False,
-            "error": "matchbook_auth_required status=403",
+            "statuses": ["403:all", "403:inplay"],
+            "error": "HTTPError:Forbidden",
             "events": [],
         },
     )
     text = money_menu.money_text()
-    assert "Matchbook API сейчас недоступен" in text
-    assert "matchbook_auth_required status=403" in text
-    assert "Это не означает, что матчей нет" in text
+    assert "Публичная Betfair-доска пока не распознана" in text
+    assert "403:all" in text
+    assert "HTTPError:Forbidden" in text
 
 
-def test_live_event_is_not_hidden_by_stale_start_date(monkeypatch):
-    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+def test_live_event_is_shown_even_without_today_label(monkeypatch):
     now = datetime.now(timezone.utc)
-    event = _event("Live Home — Live Away", 15000, hours=-24, live=True)
+    event = _event("Live Home Away", 15000, label="Sep 6 12:00", live=True)
     monkeypatch.setattr(
         money_menu,
-        "load_matchbook_state",
-        lambda: {"captured_at": now.isoformat(), "events": [event]},
+        "load_betfair_state",
+        lambda: {"captured_at": now.isoformat(), "available": True, "events": [event]},
     )
     text = money_menu.money_text()
-    assert "Live Home — Live Away" in text
+    assert "Live Home Away" in text
     assert "🔴 LIVE" in text
-
-
-def test_existing_events_with_no_today_match_show_dates(monkeypatch):
-    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
-    now = datetime.now(timezone.utc)
-    tomorrow = _event("Tomorrow — Match", 10000, hours=24)
-    monkeypatch.setattr(
-        money_menu,
-        "load_matchbook_state",
-        lambda: {"captured_at": now.isoformat(), "events": [tomorrow]},
-    )
-    text = money_menu.money_text()
-    assert "В Matchbook state есть" in text
-    assert "подходящих нет" in text
-    assert tomorrow["start"][:10] in text
 
 
 def test_money_button_install_is_idempotent():

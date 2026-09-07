@@ -13,6 +13,7 @@ from .brain_v3_memory import install_brain_v3_memory
 from .brain_v3_selection_hardening import install_brain_v3_selection_hardening
 from .browser_context_runtime import install_browser_context_runtime
 from .live_goal_hazard import install_live_goal_hazard
+from .matchbook_auth import install_matchbook_auth
 from .matchbook_long_flow import install_matchbook_long_flow
 from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
@@ -71,14 +72,14 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
-# Compatibility/calibration layers install first. Autonomous market-memory layers
-# remain independent. Brain V3 owns ordinary football decisions; the final
-# selection hardening wraps its audit so no later patch can bypass the tournament.
+# Compatibility/calibration layers install first. Autonomous market systems remain
+# independent: 1xBet STEAM, Matchbook MONEY FLOW and BETDAQ MONEY FLOW are three
+# separate lanes. Brain V3 owns ordinary football decisions and none of the three
+# market systems may manufacture its football probability.
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
-# The generic flow-memory calculation is reused by BETDAQ, but Matchbook auth/API
-# is no longer part of the production path.
+install_matchbook_auth()
 install_matchbook_long_flow()
 install_money_flow_total_volume()
 install_betdaq_runtime()

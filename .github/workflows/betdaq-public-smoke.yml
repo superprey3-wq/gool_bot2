@@ -10,102 +10,68 @@ on:
 jobs:
   public-board:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install playwright
-      - run: python -m playwright install chromium
-      - name: Capture BETDAQ Match Odds price and volume payload
+      - run: python -m pip install 'websockets>=15,<16'
+      - name: Probe direct lightweight BETDAQ websocket
         run: |
           python - <<'PY'
-          import asyncio
-          import json
-          import re
-          from urllib.request import Request, urlopen
-          from playwright.async_api import async_playwright
+          import asyncio, json, random, string, uuid
+          import websockets
 
-          SHORT = 'https://betdaq.biz/SAUdLa'
-          MATCH_ODDS = 52667628
-          UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
-          req = Request(SHORT, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
-          with urlopen(req, timeout=25) as r:
-              target = r.geturl()
-          print('TARGET', target, 'MATCH_ODDS', MATCH_ODDS)
+          SOCCER_ID = 100003
+          RS='\x01'; FS='\x02'
+          def cmd(mid, fields):
+              out=FS+str(mid)+RS
+              for k,v in fields.items():
+                  if isinstance(v,bool): v='T' if v else 'F'
+                  out += str(k)+FS+str(v)+FS+RS
+              return out
 
-          def aapi(msg_id, fields):
-              payload = '\x02' + str(msg_id) + '\x01'
-              for key, value in fields.items():
-                  if isinstance(value, bool):
-                      value = 'T' if value else 'F'
-                  payload += str(key) + '\x02' + str(value) + '\x02\x01'
-              return payload
-
-          frames = []
           async def main():
-              async with async_playwright() as p:
-                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
-                  context = await browser.new_context(locale='en-GB')
-                  page = await context.new_page()
-                  await page.add_init_script('''
-                    (() => { const N=window.WebSocket; window.__goolSockets=[];
-                      class G extends N { constructor(...a){super(...a);window.__goolSockets.push(this);} }
-                      G.CONNECTING=N.CONNECTING;G.OPEN=N.OPEN;G.CLOSING=N.CLOSING;G.CLOSED=N.CLOSED;window.WebSocket=G; })();
-                  ''')
-                  def on_ws(ws):
-                      def recv(payload):
-                          text = payload.decode('utf-8','replace') if isinstance(payload, bytes) else str(payload)
-                          frames.append(text)
-                      ws.on('framereceived', recv)
-                  page.on('websocket', on_ws)
-                  await page.goto(target, wait_until='domcontentloaded', timeout=45000)
-                  for _ in range(30):
-                      if any('AAPI/1/D' in x for x in frames):
-                          break
-                      await page.wait_for_timeout(300)
-
-                  before = len(frames)
-                  cmds = [
-                      aapi(9, {0:201, 6:str(MATCH_ODDS), 7:False, 8:True, 9:True, 12:False}),
-                      aapi(10,{0:202, 5:str(MATCH_ODDS), 6:3, 7:3, 8:0, 11:False}),
-                      aapi(14,{0:203, 5:str(MATCH_ODDS), 7:False}),
-                      aapi(13,{0:204, 5:str(MATCH_ODDS), 7:False}),
-                  ]
-                  for cmd in cmds:
-                      await page.evaluate('''cmd => { const s=window.__goolSockets.find(x=>x.readyState===1); if(!s) throw new Error('no ws'); s.send(JSON.stringify([cmd])); }''', cmd)
-                      await page.wait_for_timeout(600)
-                  await page.wait_for_timeout(5000)
-
-                  fresh = frames[before:]
-                  print('FRESH_COUNT', len(fresh))
-                  selected = []
-                  for text in fresh:
-                      if str(MATCH_ODDS) in text or any(tok in text for tok in ('AAPI/1/D','AAPI/1/M','AAPI/1/S')):
-                          selected.append(text)
-                  print('SELECTED_COUNT', len(selected))
-                  seen_topics = set()
-                  for text in selected[:160]:
-                      # SockJS frame contains one or more JSON-escaped AAPI messages.
-                      try:
-                          if text.startswith('a['):
-                              msgs = json.loads(text[1:])
-                          else:
-                              msgs = [text]
-                      except Exception:
-                          msgs = [text]
-                      for msg in msgs:
-                          topic = msg.split('\x02',1)[0]
-                          if topic not in seen_topics:
-                              seen_topics.add(topic)
-                              print('TOPIC', topic)
-                          print('PAYLOAD', repr(msg[:5000]))
-                  print('TOPIC_COUNT', len(seen_topics))
-                  await context.close(); await browser.close()
-
-              if not any(str(MATCH_ODDS) in x for x in fresh):
-                  raise SystemExit('no Match Odds payload returned')
-
+              server=f'{random.randrange(0,1000):03d}'
+              session=''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(8))
+              uri=f'wss://aapi-service.betdaq.com/AAPI/{server}/{session}/websocket'
+              print('URI', uri)
+              async with websockets.connect(
+                  uri,
+                  origin='https://www.betdaq.com',
+                  user_agent_header='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
+                  open_timeout=15,
+                  close_timeout=5,
+                  ping_interval=None,
+                  max_size=16*1024*1024,
+              ) as ws:
+                  first=await asyncio.wait_for(ws.recv(),10)
+                  print('OPEN',repr(first))
+                  if first!='o': raise SystemExit('SockJS did not open')
+                  anon=cmd(1,{0:0,1:'GBP',2:'en',3:1,4:False,5:0,6:'2.2',7:str(uuid.uuid4()),8:5,9:'GEP-exchange-D~Linux~Browser-3.18|',10:'getClientIdentifier'})
+                  await ws.send(json.dumps([anon]))
+                  ack=await asyncio.wait_for(ws.recv(),10)
+                  print('ANON_ACK',repr(ack[:1000]))
+                  # Fetch football hierarchy, but exclude market information to keep it light.
+                  hierarchy=cmd(12,{0:301,2:SOCCER_ID,3:False,4:False,5:False,11:True,12:False,14:False})
+                  await ws.send(json.dumps([hierarchy]))
+                  messages=[]
+                  deadline=asyncio.get_running_loop().time()+8
+                  while asyncio.get_running_loop().time()<deadline and len(messages)<20000:
+                      try: frame=await asyncio.wait_for(ws.recv(),0.8)
+                      except asyncio.TimeoutError: continue
+                      if frame=='h': continue
+                      if frame.startswith('a['):
+                          try: items=json.loads(frame[1:])
+                          except Exception: items=[]
+                          messages.extend(items)
+                  labels=[m for m in messages if '/EL/en'+FS in m]
+                  event_info=[m for m in messages if '/EEI'+FS in m and '/TAB/' not in m]
+                  print('FOOTBALL_MSGS',len(messages),'labels',len(labels),'event_info',len(event_info))
+                  for m in labels[-12:]: print('LABEL',repr(m[:500]))
+                  for m in event_info[-12:]: print('EEI',repr(m[:700]))
+                  if not messages or not labels:
+                      raise SystemExit('direct BETDAQ websocket returned no football hierarchy')
           asyncio.run(main())
           PY

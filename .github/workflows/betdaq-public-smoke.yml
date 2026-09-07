@@ -18,10 +18,11 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install playwright
       - run: python -m playwright install chromium
-      - name: Probe current anonymous BETDAQ football subscriptions
+      - name: Probe BETDAQ anonymous market stream directly
         run: |
           python - <<'PY'
           import asyncio
+          import json
           import re
           from urllib.request import Request, urlopen
           from playwright.async_api import async_playwright
@@ -32,79 +33,109 @@ jobs:
           req = Request(SHORT, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
           with urlopen(req, timeout=25) as r:
               target = r.geturl()
-              print('BETDAQ_SHORT', r.status, target)
+          print('BETDAQ_TARGET', target)
+          m = re.search(r'-(\d+)(?:[/?#]|$)', target)
+          if not m:
+              raise SystemExit('could not derive BETDAQ event id')
+          event_id = int(m.group(1))
+          print('BETDAQ_EVENT_ID', event_id)
 
           frames = []
-          sockets = []
 
-          def compact(value, limit=2400):
-              if isinstance(value, bytes):
-                  value = value.decode('utf-8', errors='replace')
-              return re.sub(r'\s+', ' ', str(value))[:limit]
+          def aapi(msg_id, fields):
+              payload = '\x02' + str(msg_id) + '\x01'
+              for key, value in fields.items():
+                  if isinstance(value, bool):
+                      value = 'T' if value else 'F'
+                  payload += str(key) + '\x02' + str(value) + '\x02\x01'
+              return payload
 
           async def main():
               async with async_playwright() as p:
                   browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
                   context = await browser.new_context(locale='en-GB')
                   page = await context.new_page()
+                  await page.add_init_script('''
+                    (() => {
+                      const NativeWS = window.WebSocket;
+                      window.__goolSockets = [];
+                      class GoolWS extends NativeWS {
+                        constructor(...args) {
+                          super(...args);
+                          window.__goolSockets.push(this);
+                        }
+                      }
+                      GoolWS.CONNECTING = NativeWS.CONNECTING;
+                      GoolWS.OPEN = NativeWS.OPEN;
+                      GoolWS.CLOSING = NativeWS.CLOSING;
+                      GoolWS.CLOSED = NativeWS.CLOSED;
+                      window.WebSocket = GoolWS;
+                    })();
+                  ''')
 
                   def on_ws(ws):
-                      sockets.append(ws.url)
-                      print('BETDAQ_WS_OPEN', ws.url[:700])
+                      print('BETDAQ_WS', ws.url)
                       def sent(payload):
-                          text = compact(payload)
+                          text = payload.decode('utf-8','replace') if isinstance(payload, bytes) else str(payload)
                           frames.append(('sent', text))
-                          print('BETDAQ_WS_SENT', text)
+                          print('SENT', repr(text[:3000]))
                       def recv(payload):
-                          text = compact(payload)
+                          text = payload.decode('utf-8','replace') if isinstance(payload, bytes) else str(payload)
                           frames.append(('recv', text))
-                          if len(frames) <= 160:
-                              print('BETDAQ_WS_RECV', text)
+                          if len(frames) < 120:
+                              print('RECV', repr(text[:5000]))
                       ws.on('framesent', sent)
                       ws.on('framereceived', recv)
                   page.on('websocket', on_ws)
 
-                  response = await page.goto(target, wait_until='domcontentloaded', timeout=45000)
-                  print('BETDAQ_PAGE', None if response is None else response.status, page.url)
-                  await page.wait_for_timeout(2500)
-                  try:
-                      btn = page.get_by_role('button', name='Accept All', exact=True)
-                      if await btn.count():
-                          await btn.first.click(timeout=5000)
-                          print('BETDAQ_COOKIE accepted')
-                  except Exception as exc:
-                      print('BETDAQ_COOKIE_ERROR', type(exc).__name__, str(exc)[:180])
-                  await page.wait_for_timeout(15000)
+                  resp = await page.goto(target, wait_until='domcontentloaded', timeout=45000)
+                  print('PAGE', None if resp is None else resp.status, page.url)
+                  await page.wait_for_timeout(3000)
 
-                  print('BETDAQ_FINAL_URL', page.url)
-                  try:
-                      body = await page.locator('body').inner_text(timeout=8000)
-                  except Exception:
-                      body = ''
-                  print('BETDAQ_BODY', compact(body, 5000))
-                  print('BETDAQ_FRAME_COUNT', len(frames))
+                  # Wait until the public anonymous session context was accepted.
+                  for _ in range(20):
+                      ok = await page.evaluate('''() => window.__goolSockets && window.__goolSockets.some(s => s.readyState === 1)''')
+                      if ok and any(side == 'recv' and 'AAPI/1/D' in text for side,text in frames):
+                          break
+                      await page.wait_for_timeout(500)
 
-                  sent = [x for side,x in frames if side == 'sent']
-                  market_sent = [x for x in sent if any(mark in x for mark in ('\u00029\u0001','\u000210\u0001','\u000214\u0001','\u000215\u0001'))]
-                  print('BETDAQ_MARKET_SENT', len(market_sent))
-                  for x in market_sent:
-                      print('BETDAQ_MARKET_CMD', x)
+                  commands = [
+                      # Event hierarchy including market/selection information.
+                      aapi(12, {0:100, 2:event_id, 3:False, 4:True, 5:False, 11:False, 12:True, 14:False}),
+                      # Market information under this event.
+                      aapi(9, {0:101, 2:event_id, 5:True, 7:False, 8:True, 9:True, 12:False}),
+                      # Detailed back/lay ladders for markets under this event.
+                      aapi(10, {0:102, 1:event_id, 4:False, 6:3, 7:3, 8:0, 11:False}),
+                      # Per-market matched amounts.
+                      aapi(14, {0:103, 1:event_id, 4:False, 7:False}),
+                      # Event-level matched amount.
+                      aapi(15, {0:104, 1:event_id, 2:False, 4:False}),
+                  ]
+                  print('BETDAQ_COMMANDS', len(commands))
+                  for cmd in commands:
+                      # SockJS native websocket transport expects an array of app messages.
+                      await page.evaluate('''cmd => {
+                        const s = window.__goolSockets.find(x => x.readyState === 1);
+                        if (!s) throw new Error('no open websocket');
+                        s.send(JSON.stringify([cmd]));
+                      }''', cmd)
+                      await page.wait_for_timeout(700)
 
-                  received = [x for side,x in frames if side == 'recv']
-                  material = [x for x in received if len(x) > 120]
-                  print('BETDAQ_MATERIAL_RECV', len(material))
-                  for x in material[:40]:
-                      print('BETDAQ_MATERIAL', x)
+                  await page.wait_for_timeout(7000)
+                  received = [text for side,text in frames if side == 'recv']
+                  material = [x for x in received if 'AAPI/' in x and len(x) > 100]
+                  print('BETDAQ_RECEIVED', len(received), 'material=', len(material))
+                  for x in material[:50]:
+                      print('MATERIAL', repr(x[:7000]))
 
                   await context.close()
                   await browser.close()
 
-              if not sockets:
-                  raise SystemExit('BETDAQ websocket did not open')
-              if not market_sent:
-                  raise SystemExit('current BETDAQ event produced no market subscription commands')
-              if not material:
-                  raise SystemExit('BETDAQ market subscription produced no material payload')
+              # More than just anonymous-context and ping acknowledgements.
+              useful = [x for x in material if not ('AAPI/1/D' in x and ('\x0222\x02' in x or '\x021\x02' in x))]
+              print('BETDAQ_USEFUL', len(useful))
+              if not useful:
+                  raise SystemExit('BETDAQ anonymous subscriptions returned no market payload')
 
           asyncio.run(main())
           PY

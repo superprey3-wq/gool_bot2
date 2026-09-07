@@ -1,0 +1,69 @@
+name: Polymarket public smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/polymarket-public-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  public-board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Probe official public Polymarket soccer data
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime, time, timezone, timedelta
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+          from zoneinfo import ZoneInfo
+
+          BASE='https://gamma-api.polymarket.com'
+          TZ=ZoneInfo('Europe/Moscow')
+          UA='GOOL/1.0 public-market-reader'
+          def get(path, params=None):
+              url=BASE+path
+              if params: url += '?' + urlencode(params)
+              req=Request(url,headers={'User-Agent':UA,'Accept':'application/json'})
+              with urlopen(req,timeout=20) as r:
+                  raw=r.read().decode('utf-8')
+                  print('FETCH',r.status,len(raw),url)
+                  return json.loads(raw)
+
+          sports=get('/sports')
+          soccer=[s for s in sports if '100350' in str(s.get('tags') or '').split(',')]
+          print('SOCCER_SPORTS',len(soccer))
+          print('SOCCER_NAMES',[s.get('name') for s in soccer[:30]])
+
+          now=datetime.now(TZ)
+          start=datetime.combine(now.date(),time.min,tzinfo=TZ).astimezone(timezone.utc)
+          end=(datetime.combine(now.date(),time.min,tzinfo=TZ)+timedelta(days=1)).astimezone(timezone.utc)
+          params={
+              'limit':100,
+              'active':'true',
+              'closed':'false',
+              'tag_id':100350,
+              'start_date_min':start.isoformat().replace('+00:00','Z'),
+              'start_date_max':end.isoformat().replace('+00:00','Z'),
+              'order':'volume',
+              'ascending':'false',
+          }
+          events=get('/events',params)
+          print('TODAY_EVENTS',len(events),now.date())
+          for ev in events[:15]:
+              print('EVENT',ev.get('id'),ev.get('startDate'),ev.get('title'),'volume=',ev.get('volume'),'volume24=',ev.get('volume24hr'),'liq=',ev.get('liquidity'))
+              for market in (ev.get('markets') or [])[:8]:
+                  print(' MARKET',market.get('id'),market.get('question'),'type=',market.get('sportsMarketType'),'volume=',market.get('volume'),'prices=',market.get('outcomePrices'),'outcomes=',market.get('outcomes'),'tokens=',market.get('clobTokenIds'))
+          if not events:
+              raise SystemExit('Polymarket returned no soccer events for today')
+          if not any(float(ev.get('volume') or 0)>0 for ev in events):
+              raise SystemExit('Polymarket soccer events have no volume')
+          print('POLYMARKET_SMOKE_SUCCESS')
+          PY

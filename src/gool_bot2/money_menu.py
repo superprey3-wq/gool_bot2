@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .betfair_public_board import load_betfair_state
+from .betdaq_exchange import load_betdaq_state
 
 
 BUTTON_TEXT = "💰 Деньги"
@@ -62,16 +62,18 @@ def _runner_text(event: dict[str, Any]) -> str:
     for row in event.get("runners") or []:
         if not isinstance(row, dict):
             continue
-        label = str(row.get("label") or "?")
-        back = _number((row.get("best_back") or {}).get("odd"))
-        lay = _number((row.get("best_lay") or {}).get("odd"))
+        label = str(row.get("label") or row.get("name") or "?")
+        back_row = row.get("best_back") or {}
+        lay_row = row.get("best_lay") or {}
+        back = _number(back_row.get("odd", back_row.get("odds")))
+        lay = _number(lay_row.get("odd", lay_row.get("odds")))
         if back > 1.0 and lay > 1.0:
             chunks.append(f"{label} {back:g}/{lay:g}")
         elif back > 1.0:
             chunks.append(f"{label} {back:g}/—")
         elif lay > 1.0:
             chunks.append(f"{label} —/{lay:g}")
-    return " · ".join(chunks) or "котировки пока не распознаны"
+    return " · ".join(chunks) or "котировки пока прогреваются"
 
 
 def _flow_text(event: dict[str, Any]) -> str:
@@ -87,65 +89,75 @@ def _flow_text(event: dict[str, Any]) -> str:
     pp = _number(flow.get("implied_delta_pp"))
     delta = _money(flow.get("matched_delta_gbp"))
     strength = "🔥 сильное" if level == "STRONG_FLOW" else "📈 заметное"
+    price = f"цена {old_odd:g}→{new_odd:g}" if old_odd > 1.0 and new_odd > 1.0 else "цена движется"
     return (
         f"🎯 Направление: <b>{outcome}</b> · {strength} · "
-        f"цена {old_odd:g}→{new_odd:g} · implied {pp:+.1f} п.п. · matched рынка +{delta}"
+        f"{price} · implied {pp:+.1f} п.п. · новый matched рынка +{delta}"
     )
 
 
 def _eligible_today(event: dict[str, Any]) -> bool:
     if bool(event.get("in_running")):
         return True
-    label = str(event.get("start_label") or "").strip().casefold()
-    return label.startswith("today")
+    start = _parse_dt(event.get("start"))
+    return bool(start is not None and start.astimezone(_tz()).date() == datetime.now(_tz()).date())
+
+
+def _start_label(event: dict[str, Any]) -> str:
+    if bool(event.get("in_running")):
+        return "🔴 LIVE"
+    start = _parse_dt(event.get("start"))
+    if start is None:
+        return "🕒 сегодня"
+    return f"🕒 {start.astimezone(_tz()).strftime('%H:%M')}"
 
 
 def money_text() -> str:
-    state = load_betfair_state()
+    state = load_betdaq_state()
     captured = _parse_dt(state.get("captured_at"))
     today = datetime.now(_tz()).date()
     parts = [
         f"💰 <b>GOOL MONEY BOARD · {today.strftime('%d.%m.%Y')}</b>",
-        f"Betfair Exchange PUBLIC · matched в GBP{_state_age(captured)}",
-        "<i>Matched — объём всего рынка. Направление П1/X/П2 — наш вывод только из нового matched + движения Back/Lay, а не утверждение, что весь объём поставлен на этот исход.</i>",
+        f"BETDAQ Exchange · anonymous AAPI · matched в GBP{_state_age(captured)}",
+        "<i>Matched — реальный объём рынка. Направление П1/X/П2 показываем только когда новый matched совпал с движением Back/Lay; весь объём не приписывается одному исходу.</i>",
     ]
 
     if not state:
-        parts.append("⚠️ Betfair public state ещё не создан. Collector только запускается.")
+        parts.append("⚠️ BETDAQ state ещё не создан. Биржевой collector только запускается.")
         return "\n\n".join(parts)
 
-    raw_events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
-    if not raw_events:
-        statuses = ", ".join(str(x) for x in state.get("statuses") or []) or "нет HTTP-статуса"
-        error = str(state.get("error") or "").strip()
-        detail = f"\nОшибка: <code>{_h(error)}</code>" if error else ""
+    if not bool(state.get("available", True)):
+        error = str(state.get("error") or "BETDAQ stream unavailable").strip()
         parts.append(
-            "⚠️ Публичная Betfair-доска пока не распознана.\n"
-            f"HTTP: <b>{_h(statuses)}</b>{detail}\n"
-            "Это тест источника без логина; GOOL/STEAM продолжают работать независимо."
+            "⚠️ BETDAQ stream сейчас недоступен.\n"
+            f"Причина: <code>{_h(error)}</code>\n"
+            "GOOL Brain и 1xBet STEAM продолжают работать независимо."
         )
         return "\n\n".join(parts)
 
+    raw_events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
     events = [dict(row) for row in raw_events if _eligible_today(row)]
     events.sort(key=lambda row: _number(row.get("matched_gbp")), reverse=True)
-    top = events[:5]
+    top = [row for row in events if _number(row.get("matched_gbp")) > 0.0][:5]
     if not top:
-        labels = ", ".join(str(row.get("start_label") or "?") for row in raw_events[:8])
         parts.append(
-            f"Betfair отдал <b>{len(raw_events)}</b> футбольных рынков, но текущий снимок не содержит Today/LIVE.\n"
-            f"Ближайшие метки: {_h(labels or '—')}"
+            f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился.\n"
+            f"Отслеживаемых рынков: <b>{int(_number(state.get('tracked_markets')))}</b>."
         )
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):
-        status = "🔴 LIVE" if bool(event.get("in_running")) else f"🕒 {_h(event.get('start_label') or 'Today')}"
         parts.append(
             f"<b>{index}. {_h(event.get('name') or '?')}</b>\n"
-            f"{status} · 💸 matched <b>{_money(event.get('matched_gbp'))}</b>\n"
+            f"{_start_label(event)} · 💸 Match Odds matched <b>{_money(event.get('matched_gbp'))}</b>\n"
             f"🏁 Back/Lay: {_h(_runner_text(event))}\n"
             f"{_flow_text(event)}"
         )
 
+    parts.append(
+        f"📡 Поле: {int(_number(state.get('tracked_events')))} матчей · "
+        f"{int(_number(state.get('tracked_markets')))} рынков под наблюдением"
+    )
     return "\n\n".join(parts)
 
 

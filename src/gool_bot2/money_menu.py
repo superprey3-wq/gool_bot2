@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import os
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -124,38 +125,94 @@ def _flow_label(flow: dict[str, Any]) -> str:
     )
 
 
+def _state_age_text(captured: datetime | None) -> str:
+    if captured is None:
+        return ""
+    age = max(0, int((datetime.now(timezone.utc) - captured.astimezone(timezone.utc)).total_seconds()))
+    return f" · снимок {age}с назад"
+
+
+def _empty_state_reason(state: dict[str, Any], captured: datetime | None) -> str | None:
+    if not state:
+        return "⚠️ Matchbook state пока не создан."
+    if state.get("available") is False:
+        error = _h(state.get("error") or "unknown_error")
+        auth = "да" if bool(state.get("authenticated")) else "нет"
+        return (
+            "⚠️ <b>Matchbook API сейчас недоступен.</b>\n"
+            f"Причина: <code>{error}</code>\n"
+            f"Сессия/API-доступ: <b>{auth}</b>.\n"
+            "Это не означает, что матчей нет — collector не получил биржевую доску."
+        )
+    rows = [row for row in (state.get("events") or []) if isinstance(row, dict)]
+    if not rows:
+        auth = "да" if bool(state.get("authenticated")) else "нет/публичный режим"
+        return (
+            "⚠️ Свежий Matchbook state получен, но API вернул <b>0 футбольных событий</b>.\n"
+            f"Сессия/API-доступ: <b>{auth}</b>."
+        )
+    return None
+
+
+def _no_today_reason(raw_events: list[dict[str, Any]], tz, today) -> str:
+    dates: Counter[str] = Counter()
+    invalid = 0
+    live = 0
+    for row in raw_events:
+        if bool(row.get("in_running")):
+            live += 1
+        start = _parse_dt(row.get("start"))
+        if start is None:
+            invalid += 1
+            continue
+        dates[start.astimezone(tz).date().isoformat()] += 1
+    nearest = ", ".join(f"{day}: {count}" for day, count in sorted(dates.items())[:4]) or "нет распознаваемых дат"
+    return (
+        f"В Matchbook state есть <b>{len(raw_events)}</b> футбольных событий, но на {today.strftime('%d.%m.%Y')} подходящих нет.\n"
+        f"Даты в state: {_h(nearest)} · без даты: {invalid} · LIVE: {live}."
+    )
+
+
 def money_text() -> str:
     state = load_matchbook_state()
     captured = _parse_dt(state.get("captured_at"))
     tz = _tz()
     now = datetime.now(tz)
     today = now.date()
-    events: list[dict[str, Any]] = []
-    for raw in state.get("events") or []:
-        if not isinstance(raw, dict):
-            continue
-        start = _parse_dt(raw.get("start"))
-        if start is None or start.astimezone(tz).date() != today:
-            continue
-        row = dict(raw)
-        row["_start_dt"] = start.astimezone(tz)
-        row["_volume"] = _event_volume(row)
-        events.append(row)
-
-    events.sort(key=lambda row: (float(row.get("_volume") or 0.0), bool(row.get("in_running"))), reverse=True)
-    top = events[:5]
-    age_text = ""
-    if captured is not None:
-        age = max(0, int((datetime.now(timezone.utc) - captured.astimezone(timezone.utc)).total_seconds()))
-        age_text = f" · снимок {age}с назад"
+    age_text = _state_age_text(captured)
 
     parts = [
         f"💰 <b>GOOL MONEY BOARD · {today.strftime('%d.%m.%Y')}</b>",
         f"Matchbook · реальные биржевые объёмы в GBP{age_text}",
         "<i>Объём ≠ направление. Направление показывается отдельно только когда поток подтверждён движением цены/объёма.</i>",
     ]
+
+    state_problem = _empty_state_reason(state, captured)
+    if state_problem is not None:
+        parts.append(state_problem)
+        return "\n\n".join(parts)
+
+    raw_events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
+    events: list[dict[str, Any]] = []
+    for raw in raw_events:
+        start = _parse_dt(raw.get("start"))
+        is_live = bool(raw.get("in_running"))
+        # LIVE is always shown even if an upstream kickoff timestamp is stale or
+        # absent. Prematch still requires a kickoff on the user's current date.
+        if not is_live and (start is None or start.astimezone(tz).date() != today):
+            continue
+        row = dict(raw)
+        row["_start_dt"] = start.astimezone(tz) if start is not None else None
+        row["_volume"] = _event_volume(row)
+        events.append(row)
+
+    events.sort(
+        key=lambda row: (float(row.get("_volume") or 0.0), bool(row.get("in_running"))),
+        reverse=True,
+    )
+    top = events[:5]
     if not top:
-        parts.append("На сегодня в текущем Matchbook state нет открытых футбольных матчей с объёмом.")
+        parts.append(_no_today_reason(raw_events, tz, today))
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):

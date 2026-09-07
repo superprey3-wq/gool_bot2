@@ -18,16 +18,24 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install playwright
       - run: python -m playwright install chromium
-      - name: Capture anonymous BETDAQ exchange network payloads
+      - name: Capture anonymous BETDAQ streaming payloads
         run: |
           python - <<'PY'
           import asyncio
-          import json
           import re
           from playwright.async_api import async_playwright
 
           URL = 'https://www.betdaq.com/exchange/soccer/english-soccer/premier-league-8531709'
-          interesting = []
+          sockets = []
+          frames = []
+
+          def compact(value, limit=1400):
+              if isinstance(value, bytes):
+                  try:
+                      value = value.decode('utf-8', errors='replace')
+                  except Exception:
+                      return f'<bytes {len(value)}>'
+              return re.sub(r'\s+', ' ', str(value))[:limit]
 
           async def main():
               async with async_playwright() as p:
@@ -36,53 +44,57 @@ jobs:
                   page = await context.new_page()
 
                   async def inspect_response(response):
-                      url = response.url
-                      low = url.lower()
-                      if not any(token in low for token in ('betdaq.com', 'webservice', 'datasite', '/api/', 'price', 'market')):
-                          return
-                      if url.endswith(('.js','.css','.png','.jpg','.jpeg','.svg','.woff','.woff2','.ico')):
-                          return
-                      try:
-                          ctype = (await response.header_value('content-type') or '').lower()
-                      except Exception:
-                          ctype = ''
-                      record = (response.status, ctype, url)
-                      if record not in interesting:
-                          interesting.append(record)
-                          print('BETDAQ_NET', response.status, ctype[:70], url[:500])
-                      if response.status != 200 or not any(x in ctype for x in ('json','text','javascript','xml')):
-                          return
-                      try:
-                          body = await response.text()
-                      except Exception:
-                          return
-                      low_body = body.lower()
-                      if not any(x in low_body for x in ('matchedamount','matched_amount','matched', 'availableamount','price','marketid','selectionid')):
-                          return
-                      clean = re.sub(r'\s+', ' ', body)
-                      for needle in ('matchedamount', 'matched', 'availableamount', 'marketid', 'selectionid'):
-                          pos = clean.lower().find(needle)
-                          if pos >= 0:
-                              print('BETDAQ_PAYLOAD', needle, clean[max(0,pos-180):pos+700][:1000])
-                              break
+                      low = response.url.lower()
+                      if 'aapi-service.betdaq.com' in low or 'webservice.betdaq.com' in low:
+                          try:
+                              ctype = await response.header_value('content-type') or ''
+                          except Exception:
+                              ctype = ''
+                          print('BETDAQ_API_RESPONSE', response.status, ctype, response.url[:700])
+                          if response.status == 200:
+                              try:
+                                  body = await response.text()
+                                  print('BETDAQ_API_BODY', compact(body, 1800))
+                              except Exception as exc:
+                                  print('BETDAQ_API_BODY_ERROR', type(exc).__name__, str(exc))
 
+                  def on_ws(ws):
+                      sockets.append(ws.url)
+                      print('BETDAQ_WS_OPEN', ws.url[:800])
+
+                      def sent(payload):
+                          text = compact(payload)
+                          if len(frames) < 80:
+                              frames.append(('sent', text))
+                              print('BETDAQ_WS_SENT', text)
+
+                      def received(payload):
+                          text = compact(payload)
+                          low = text.lower()
+                          if len(frames) < 160 or any(x in low for x in ('market','price','matched','selection','event')):
+                              frames.append(('recv', text))
+                              print('BETDAQ_WS_RECV', text)
+
+                      ws.on('framesent', sent)
+                      ws.on('framereceived', received)
+                      ws.on('close', lambda: print('BETDAQ_WS_CLOSE', ws.url[:500]))
+
+                  page.on('websocket', on_ws)
                   page.on('response', lambda response: asyncio.create_task(inspect_response(response)))
+
                   response = await page.goto(URL, wait_until='domcontentloaded', timeout=45000)
                   print('BETDAQ_PAGE_STATUS', None if response is None else response.status)
-                  await page.wait_for_timeout(12000)
+                  await page.wait_for_timeout(15000)
                   text = await page.locator('body').inner_text(timeout=10000)
                   print('BETDAQ_BODY_LEN', len(text))
-                  for needle in ('Matched:', 'Matched', 'Back', 'Lay'):
-                      pos = text.find(needle)
-                      print('BETDAQ_BODY_TOKEN', needle, pos)
-                      if pos >= 0:
-                          print('BETDAQ_BODY_SNIP', re.sub(r'\s+', ' ', text[max(0,pos-250):pos+900])[:1200])
-                  print('BETDAQ_INTERESTING_COUNT', len(interesting))
+                  print('BETDAQ_SOCKETS', len(sockets))
+                  print('BETDAQ_FRAMES', len(frames))
+                  print('BETDAQ_BODY', compact(text, 1800))
                   await context.close()
                   await browser.close()
 
-              if not interesting:
-                  raise SystemExit('no BETDAQ network traffic captured')
+              if not sockets and not frames:
+                  raise SystemExit('BETDAQ produced no websocket/streaming traffic')
 
           asyncio.run(main())
           PY

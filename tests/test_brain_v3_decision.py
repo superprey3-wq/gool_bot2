@@ -147,3 +147,62 @@ def test_v3_first_half_uses_same_state_machine() -> None:
     assert out["strategy"] == "goal_before_ht"
     assert out["status"] == BET
     assert out["probability"] >= 0.70
+
+
+def test_v3_never_opens_ordinary_entry_at_75_even_in_hot_draw() -> None:
+    record = _record(
+        75,
+        score=(1, 1),
+        state="END_TO_END",
+        home_pressure=0.78,
+        away_pressure=0.82,
+        home_trend="RISING",
+        away_trend="RISING",
+        xg=(1.45, 1.55),
+        w5_xg=(0.22, 0.28),
+        w10_xg=(0.42, 0.48),
+    )
+    out = evaluate_brain_v3(record, data_quality=0.90)
+    assert out["status"] == WATCH
+    assert out["active"] is False
+    assert "brain_v3_outside_entry_window" in out["blocks"]
+
+
+def test_v3_late_draw_needs_exceptional_live_evidence() -> None:
+    record = _record(
+        72,
+        score=(1, 1),
+        state="END_TO_END",
+        home_pressure=0.58,
+        away_pressure=0.61,
+        home_trend="RISING",
+        away_trend="STEADY",
+        xg=(1.20, 1.20),
+        w5_xg=(0.10, 0.15),
+        w10_xg=(0.18, 0.25),
+    )
+    out = evaluate_brain_v3(record, data_quality=0.82)
+    assert out["late_draw"] is True
+    assert out["late_draw_exceptional"] is False
+    assert out["status"] != BET
+    assert "brain_v3_late_draw_not_exceptional" in out["blocks"]
+
+
+def test_v3_can_still_take_exceptional_late_draw_before_cutoff() -> None:
+    record = _record(
+        72,
+        score=(1, 1),
+        state="END_TO_END",
+        home_pressure=0.70,
+        away_pressure=0.75,
+        home_trend="RISING",
+        away_trend="RISING",
+        xg=(1.30, 1.50),
+        w5_xg=(0.18, 0.25),
+        w10_xg=(0.35, 0.45),
+    )
+    out = evaluate_brain_v3(record, data_quality=0.90)
+    assert out["late_draw"] is True
+    assert out["late_draw_exceptional"] is True
+    assert out["status"] == BET
+    assert out["probability"] >= out["bet_min"]

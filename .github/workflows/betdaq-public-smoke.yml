@@ -18,7 +18,7 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install playwright
       - run: python -m playwright install chromium
-      - name: Probe BETDAQ anonymous market stream directly
+      - name: Capture BETDAQ Match Odds price and volume payload
         run: |
           python - <<'PY'
           import asyncio
@@ -28,19 +28,12 @@ jobs:
           from playwright.async_api import async_playwright
 
           SHORT = 'https://betdaq.biz/SAUdLa'
+          MATCH_ODDS = 52667628
           UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
-
           req = Request(SHORT, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
           with urlopen(req, timeout=25) as r:
               target = r.geturl()
-          print('BETDAQ_TARGET', target)
-          m = re.search(r'-(\d+)(?:[/?#]|$)', target)
-          if not m:
-              raise SystemExit('could not derive BETDAQ event id')
-          event_id = int(m.group(1))
-          print('BETDAQ_EVENT_ID', event_id)
-
-          frames = []
+          print('TARGET', target, 'MATCH_ODDS', MATCH_ODDS)
 
           def aapi(msg_id, fields):
               payload = '\x02' + str(msg_id) + '\x01'
@@ -50,92 +43,69 @@ jobs:
                   payload += str(key) + '\x02' + str(value) + '\x02\x01'
               return payload
 
+          frames = []
           async def main():
               async with async_playwright() as p:
                   browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
                   context = await browser.new_context(locale='en-GB')
                   page = await context.new_page()
                   await page.add_init_script('''
-                    (() => {
-                      const NativeWS = window.WebSocket;
-                      window.__goolSockets = [];
-                      class GoolWS extends NativeWS {
-                        constructor(...args) {
-                          super(...args);
-                          window.__goolSockets.push(this);
-                        }
-                      }
-                      GoolWS.CONNECTING = NativeWS.CONNECTING;
-                      GoolWS.OPEN = NativeWS.OPEN;
-                      GoolWS.CLOSING = NativeWS.CLOSING;
-                      GoolWS.CLOSED = NativeWS.CLOSED;
-                      window.WebSocket = GoolWS;
-                    })();
+                    (() => { const N=window.WebSocket; window.__goolSockets=[];
+                      class G extends N { constructor(...a){super(...a);window.__goolSockets.push(this);} }
+                      G.CONNECTING=N.CONNECTING;G.OPEN=N.OPEN;G.CLOSING=N.CLOSING;G.CLOSED=N.CLOSED;window.WebSocket=G; })();
                   ''')
-
                   def on_ws(ws):
-                      print('BETDAQ_WS', ws.url)
-                      def sent(payload):
-                          text = payload.decode('utf-8','replace') if isinstance(payload, bytes) else str(payload)
-                          frames.append(('sent', text))
-                          print('SENT', repr(text[:3000]))
                       def recv(payload):
                           text = payload.decode('utf-8','replace') if isinstance(payload, bytes) else str(payload)
-                          frames.append(('recv', text))
-                          if len(frames) < 120:
-                              print('RECV', repr(text[:5000]))
-                      ws.on('framesent', sent)
+                          frames.append(text)
                       ws.on('framereceived', recv)
                   page.on('websocket', on_ws)
-
-                  resp = await page.goto(target, wait_until='domcontentloaded', timeout=45000)
-                  print('PAGE', None if resp is None else resp.status, page.url)
-                  await page.wait_for_timeout(3000)
-
-                  # Wait until the public anonymous session context was accepted.
-                  for _ in range(20):
-                      ok = await page.evaluate('''() => window.__goolSockets && window.__goolSockets.some(s => s.readyState === 1)''')
-                      if ok and any(side == 'recv' and 'AAPI/1/D' in text for side,text in frames):
+                  await page.goto(target, wait_until='domcontentloaded', timeout=45000)
+                  for _ in range(30):
+                      if any('AAPI/1/D' in x for x in frames):
                           break
-                      await page.wait_for_timeout(500)
+                      await page.wait_for_timeout(300)
 
-                  commands = [
-                      # Event hierarchy including market/selection information.
-                      aapi(12, {0:100, 2:event_id, 3:False, 4:True, 5:False, 11:False, 12:True, 14:False}),
-                      # Market information under this event.
-                      aapi(9, {0:101, 2:event_id, 5:True, 7:False, 8:True, 9:True, 12:False}),
-                      # Detailed back/lay ladders for markets under this event.
-                      aapi(10, {0:102, 1:event_id, 4:False, 6:3, 7:3, 8:0, 11:False}),
-                      # Per-market matched amounts.
-                      aapi(14, {0:103, 1:event_id, 4:False, 7:False}),
-                      # Event-level matched amount.
-                      aapi(15, {0:104, 1:event_id, 2:False, 4:False}),
+                  before = len(frames)
+                  cmds = [
+                      aapi(9, {0:201, 6:str(MATCH_ODDS), 7:False, 8:True, 9:True, 12:False}),
+                      aapi(10,{0:202, 5:str(MATCH_ODDS), 6:3, 7:3, 8:0, 11:False}),
+                      aapi(14,{0:203, 5:str(MATCH_ODDS), 7:False}),
+                      aapi(13,{0:204, 5:str(MATCH_ODDS), 7:False}),
                   ]
-                  print('BETDAQ_COMMANDS', len(commands))
-                  for cmd in commands:
-                      # SockJS native websocket transport expects an array of app messages.
-                      await page.evaluate('''cmd => {
-                        const s = window.__goolSockets.find(x => x.readyState === 1);
-                        if (!s) throw new Error('no open websocket');
-                        s.send(JSON.stringify([cmd]));
-                      }''', cmd)
-                      await page.wait_for_timeout(700)
+                  for cmd in cmds:
+                      await page.evaluate('''cmd => { const s=window.__goolSockets.find(x=>x.readyState===1); if(!s) throw new Error('no ws'); s.send(JSON.stringify([cmd])); }''', cmd)
+                      await page.wait_for_timeout(600)
+                  await page.wait_for_timeout(5000)
 
-                  await page.wait_for_timeout(7000)
-                  received = [text for side,text in frames if side == 'recv']
-                  material = [x for x in received if 'AAPI/' in x and len(x) > 100]
-                  print('BETDAQ_RECEIVED', len(received), 'material=', len(material))
-                  for x in material[:50]:
-                      print('MATERIAL', repr(x[:7000]))
+                  fresh = frames[before:]
+                  print('FRESH_COUNT', len(fresh))
+                  selected = []
+                  for text in fresh:
+                      if str(MATCH_ODDS) in text or any(tok in text for tok in ('AAPI/1/D','AAPI/1/M','AAPI/1/S')):
+                          selected.append(text)
+                  print('SELECTED_COUNT', len(selected))
+                  seen_topics = set()
+                  for text in selected[:160]:
+                      # SockJS frame contains one or more JSON-escaped AAPI messages.
+                      try:
+                          if text.startswith('a['):
+                              msgs = json.loads(text[1:])
+                          else:
+                              msgs = [text]
+                      except Exception:
+                          msgs = [text]
+                      for msg in msgs:
+                          topic = msg.split('\x02',1)[0]
+                          if topic not in seen_topics:
+                              seen_topics.add(topic)
+                              print('TOPIC', topic)
+                          print('PAYLOAD', repr(msg[:5000]))
+                  print('TOPIC_COUNT', len(seen_topics))
+                  await context.close(); await browser.close()
 
-                  await context.close()
-                  await browser.close()
-
-              # More than just anonymous-context and ping acknowledgements.
-              useful = [x for x in material if not ('AAPI/1/D' in x and ('\x0222\x02' in x or '\x021\x02' in x))]
-              print('BETDAQ_USEFUL', len(useful))
-              if not useful:
-                  raise SystemExit('BETDAQ anonymous subscriptions returned no market payload')
+              if not any(str(MATCH_ODDS) in x for x in fresh):
+                  raise SystemExit('no Match Odds payload returned')
 
           asyncio.run(main())
           PY

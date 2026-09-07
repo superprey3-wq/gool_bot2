@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from . import telegram
+from .money_menu import install_money_button, money_text
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections as _multi_in_game_sections
@@ -42,6 +44,50 @@ def _analysis_text_safe(*args, **kwargs) -> str:
     return text.replace("PRICE<", "PRICE&lt;").replace("RATING<", "RATING&lt;")
 
 
+def _install_direct_money_handler() -> bool:
+    """Extend the existing single background responder; never start another poller."""
+    modules = [
+        sys.modules.get("gool_bot2.storage_market_signal_worker_var"),
+        sys.modules.get("__main__"),
+    ]
+    for module in modules:
+        if module is None:
+            continue
+        spec = getattr(module, "__spec__", None)
+        spec_name = str(getattr(spec, "name", "") or "")
+        module_name = str(getattr(module, "__name__", "") or "")
+        if module_name == "__main__" and spec_name not in {"", "gool_bot2.storage_market_signal_worker_var"}:
+            continue
+        if bool(getattr(module, "_GOOL_MONEY_MENU_INSTALLED", False)):
+            return True
+        original = getattr(module, "_handle_direct_telegram_update", None)
+        direct_send = getattr(module, "_direct_send_message", None)
+        if not callable(original) or not callable(direct_send):
+            continue
+
+        def money_aware_handler(token, journal_path_arg, update, _original=original, _send=direct_send):
+            message = update.get("message") or {}
+            raw_text = str(message.get("text") or "").strip()
+            text = raw_text.split("@", 1)[0].lower()
+            chat_id = (message.get("chat") or {}).get("id")
+            if chat_id is not None and text == "💰 деньги":
+                try:
+                    reply = money_text()
+                except Exception as exc:
+                    print(
+                        f"GOOL_TELEGRAM_MONEY_ERROR {type(exc).__name__}:{exc}",
+                        flush=True,
+                    )
+                    reply = "⚠️ <b>ДЕНЬГИ</b>\n\nНе удалось прочитать свежий Matchbook state. Попробуй ещё раз чуть позже."
+                return int(_send(token, chat_id, reply, reply_markup=telegram.MENU_KEYBOARD))
+            return _original(token, journal_path_arg, update)
+
+        setattr(module, "_handle_direct_telegram_update", money_aware_handler)
+        setattr(module, "_GOOL_MONEY_MENU_INSTALLED", True)
+        return True
+    return False
+
+
 def install_multi_product() -> None:
     """Point menus/reporting at the unified Multi product."""
     install_money_flow_total_volume()
@@ -49,6 +95,8 @@ def install_multi_product() -> None:
     telegram.report_text = _report_text_with_bank
     telegram.in_game_sections = _in_game_sections_with_flow
     telegram.analysis_text = _analysis_text_safe
+    install_money_button(telegram)
+    _install_direct_money_handler()
 
     def _reconcile(_: Path) -> int:
         path = journal_path()
@@ -65,6 +113,7 @@ def install_multi_product() -> None:
             "📊 Отчёт — GOOL + STEAM + отдельная статистика MONEY FLOW\n"
             "🟢 В игре — открытые BEST BET + MONEY FLOW\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
+            "💰 Деньги — топ-5 матчей дня по объёму Matchbook и направление потока\n"
             "💰 Дневной отчёт банка — автоматически в 23:59"
         )
     else:
@@ -75,6 +124,7 @@ def install_multi_product() -> None:
             "📊 Отчёт — статистика выбранных Multi-ставок + MONEY FLOW\n"
             "🟢 В игре — открытые Multi-ставки + MONEY FLOW\n"
             "🧠 Анализ — почему каждый матч BET или WAIT\n"
+            "💰 Деньги — топ-5 матчей дня по объёму Matchbook и направление потока\n"
             "💰 Виртуальный банк — дневной отчёт автоматически в 23:59\n\n"
             "Боевые Telegram-сигналы пока остаются на старом контуре до включения GOOL_MULTI_TELEGRAM_MODE=active."
         )

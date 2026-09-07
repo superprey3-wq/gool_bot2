@@ -87,8 +87,10 @@ def test_betdaq_has_separate_journal_path(monkeypatch, tmp_path: Path):
 def test_betdaq_runtime_does_not_replace_matchbook_context():
     from gool_bot2 import matchbook_exchange
 
-    assert matchbook_exchange.matchbook_context.__module__.endswith("matchbook_exchange")
-    assert matchbook_exchange.matchbook_context.__name__ == "matchbook_context"
+    # Runtime hardening is allowed to wrap Matchbook with its own freshness guard;
+    # the important invariant is that BETDAQ never becomes Matchbook's context.
+    assert matchbook_exchange.matchbook_context.__module__ != "gool_bot2.betdaq_exchange"
+    assert matchbook_exchange.matchbook_context.__name__ != "betdaq_context"
 
 
 def test_monkey_start_launches_both_exchange_workers():

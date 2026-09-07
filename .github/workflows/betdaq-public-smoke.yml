@@ -10,49 +10,101 @@ on:
 jobs:
   public-board:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Inspect BETDAQ anonymous streaming field layout
+      - run: python -m pip install playwright
+      - run: python -m playwright install chromium
+      - name: Probe current anonymous BETDAQ football subscriptions
         run: |
           python - <<'PY'
+          import asyncio
           import re
           from urllib.request import Request, urlopen
+          from playwright.async_api import async_playwright
 
-          URL = 'https://www.betdaq.com/dist/prodgec.js?ver=3.18/'
+          SHORT = 'https://betdaq.biz/SAUdLa'
           UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
-          req = Request(URL, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
-          with urlopen(req, timeout=25) as r:
-              body = r.read().decode('utf-8', errors='ignore')
-              print('FETCH', r.status, len(body))
 
-          needles = [
-              't.aapiId={',
-              'setAnonymousSessionContext=function',
-              'setAnonymousSessionContext',
-              'subscribeDetailedMarketPrices=function',
-              'subscribeMarketMatchedAmounts=function',
-              'subscribeEventMatchedAmounts=function',
-              '_sendStreamingMessage=function',
-              'sendStreamingMessage',
-              'addToPushMessages',
-              'getClientIdentifier'
-          ]
-          hits = 0
-          low = body.lower()
-          for needle in needles:
-              pos = low.find(needle.lower())
-              if pos < 0:
-                  print('MISS', needle)
-                  continue
-              hits += 1
-              snip = re.sub(r'\s+', ' ', body[max(0,pos-1800):pos+5200])
-              print('LAYOUT_HIT', needle)
-              print('LAYOUT_SNIP', snip[:7000])
-          print('LAYOUT_HITS', hits)
-          if hits < 6:
-              raise SystemExit('not enough field-layout clues found')
+          req = Request(SHORT, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
+          with urlopen(req, timeout=25) as r:
+              target = r.geturl()
+              print('BETDAQ_SHORT', r.status, target)
+
+          frames = []
+          sockets = []
+
+          def compact(value, limit=2400):
+              if isinstance(value, bytes):
+                  value = value.decode('utf-8', errors='replace')
+              return re.sub(r'\s+', ' ', str(value))[:limit]
+
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+                  context = await browser.new_context(locale='en-GB')
+                  page = await context.new_page()
+
+                  def on_ws(ws):
+                      sockets.append(ws.url)
+                      print('BETDAQ_WS_OPEN', ws.url[:700])
+                      def sent(payload):
+                          text = compact(payload)
+                          frames.append(('sent', text))
+                          print('BETDAQ_WS_SENT', text)
+                      def recv(payload):
+                          text = compact(payload)
+                          frames.append(('recv', text))
+                          if len(frames) <= 160:
+                              print('BETDAQ_WS_RECV', text)
+                      ws.on('framesent', sent)
+                      ws.on('framereceived', recv)
+                  page.on('websocket', on_ws)
+
+                  response = await page.goto(target, wait_until='domcontentloaded', timeout=45000)
+                  print('BETDAQ_PAGE', None if response is None else response.status, page.url)
+                  await page.wait_for_timeout(2500)
+                  try:
+                      btn = page.get_by_role('button', name='Accept All', exact=True)
+                      if await btn.count():
+                          await btn.first.click(timeout=5000)
+                          print('BETDAQ_COOKIE accepted')
+                  except Exception as exc:
+                      print('BETDAQ_COOKIE_ERROR', type(exc).__name__, str(exc)[:180])
+                  await page.wait_for_timeout(15000)
+
+                  print('BETDAQ_FINAL_URL', page.url)
+                  try:
+                      body = await page.locator('body').inner_text(timeout=8000)
+                  except Exception:
+                      body = ''
+                  print('BETDAQ_BODY', compact(body, 5000))
+                  print('BETDAQ_FRAME_COUNT', len(frames))
+
+                  sent = [x for side,x in frames if side == 'sent']
+                  market_sent = [x for x in sent if any(mark in x for mark in ('\u00029\u0001','\u000210\u0001','\u000214\u0001','\u000215\u0001'))]
+                  print('BETDAQ_MARKET_SENT', len(market_sent))
+                  for x in market_sent:
+                      print('BETDAQ_MARKET_CMD', x)
+
+                  received = [x for side,x in frames if side == 'recv']
+                  material = [x for x in received if len(x) > 120]
+                  print('BETDAQ_MATERIAL_RECV', len(material))
+                  for x in material[:40]:
+                      print('BETDAQ_MATERIAL', x)
+
+                  await context.close()
+                  await browser.close()
+
+              if not sockets:
+                  raise SystemExit('BETDAQ websocket did not open')
+              if not market_sent:
+                  raise SystemExit('current BETDAQ event produced no market subscription commands')
+              if not material:
+                  raise SystemExit('BETDAQ market subscription produced no material payload')
+
+          asyncio.run(main())
           PY

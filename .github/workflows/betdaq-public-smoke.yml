@@ -16,60 +16,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Inspect BETDAQ client market protocol
+      - name: Inspect BETDAQ anonymous streaming field layout
         run: |
           python - <<'PY'
           import re
-          from urllib.parse import urljoin
           from urllib.request import Request, urlopen
 
-          PAGE = 'https://www.betdaq.com/exchange/soccer/italian-soccer/serie-a-6181483'
+          URL = 'https://www.betdaq.com/dist/prodgec.js?ver=3.18/'
           UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+          req = Request(URL, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
+          with urlopen(req, timeout=25) as r:
+              body = r.read().decode('utf-8', errors='ignore')
+              print('FETCH', r.status, len(body))
 
-          def fetch(url):
-              req = Request(url, headers={'User-Agent': UA, 'Accept-Encoding': 'identity'})
-              with urlopen(req, timeout=25) as r:
-                  body = r.read().decode('utf-8', errors='ignore')
-                  print('FETCH', r.status, len(body), url)
-                  return body
-
-          html = fetch(PAGE)
-          scripts = []
-          for src in re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, flags=re.I):
-              url = urljoin(PAGE, src)
-              if 'betdaq.com' in url and url not in scripts:
-                  scripts.append(url)
-
-          print('SCRIPTS', len(scripts))
           needles = [
-              'getMarketSelections', 'matchedAmounts', 'MatchedAmount',
-              'subscribeExchangeMarket', 'subscribeExchangeSelection',
-              'subscribeExchangeEvent', 'ExchangeMarketMatchedAmount',
-              'getEventClassifiers', 'getEventClassifier', 'marketByVolume',
-              'getMarket', 'getPrices', 'subscribe', 'AAPI/'
+              't.aapiId={',
+              'setAnonymousSessionContext=function',
+              'setAnonymousSessionContext',
+              'subscribeDetailedMarketPrices=function',
+              'subscribeMarketMatchedAmounts=function',
+              'subscribeEventMatchedAmounts=function',
+              '_sendStreamingMessage=function',
+              'sendStreamingMessage',
+              'addToPushMessages',
+              'getClientIdentifier'
           ]
           hits = 0
-          for url in scripts:
-              try:
-                  body = fetch(url)
-              except Exception as exc:
-                  print('SCRIPT_ERROR', type(exc).__name__, str(exc), url)
+          low = body.lower()
+          for needle in needles:
+              pos = low.find(needle.lower())
+              if pos < 0:
+                  print('MISS', needle)
                   continue
-              low = body.lower()
-              for needle in needles:
-                  pos = low.find(needle.lower())
-                  if pos < 0:
-                      continue
-                  hits += 1
-                  snippet = re.sub(r'\s+', ' ', body[max(0, pos-900):pos+1800])
-                  print('PROTO_HIT', needle, url)
-                  print('PROTO_SNIP', snippet[:2800])
-                  start = pos + len(needle)
-                  pos2 = low.find(needle.lower(), start)
-                  if pos2 >= 0:
-                      snippet2 = re.sub(r'\s+', ' ', body[max(0, pos2-700):pos2+1400])
-                      print('PROTO_SNIP2', snippet2[:2200])
-          print('PROTO_HITS', hits)
-          if hits < 3:
-              raise SystemExit('not enough BETDAQ protocol clues found')
+              hits += 1
+              snip = re.sub(r'\s+', ' ', body[max(0,pos-1800):pos+5200])
+              print('LAYOUT_HIT', needle)
+              print('LAYOUT_SNIP', snip[:7000])
+          print('LAYOUT_HITS', hits)
+          if hits < 6:
+              raise SystemExit('not enough field-layout clues found')
           PY

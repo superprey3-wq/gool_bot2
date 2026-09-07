@@ -7,6 +7,7 @@ from .architecture_isolation import install_architecture_isolation
 from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_learning_runtime import install_brain_v3_learning_runtime
 from .brain_v3_memory import install_brain_v3_memory
+from .brain_v3_selection_hardening import install_brain_v3_selection_hardening
 from .browser_context_runtime import install_browser_context_runtime
 from .live_goal_hazard import install_live_goal_hazard
 from .matchbook_auth import install_matchbook_auth
@@ -69,8 +70,8 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
 
 
 # Compatibility/calibration layers install first. Autonomous market-memory layers
-# are independent. Brain V3 activation installs last so older production patches
-# cannot overwrite its ordinary GOOL decision.
+# remain independent. Brain V3 owns ordinary football decisions; the final
+# selection hardening wraps its audit so no later patch can bypass the tournament.
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
@@ -90,3 +91,4 @@ install_brain_v3_memory()
 install_browser_context_runtime()
 install_brain_v3_learning_runtime()
 install_brain_v3_activation()
+install_brain_v3_selection_hardening()

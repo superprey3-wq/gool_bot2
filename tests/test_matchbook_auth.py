@@ -6,7 +6,7 @@ import urllib.error
 import pytest
 
 from gool_bot2 import matchbook_auth, matchbook_pagination
-from gool_bot2.matchbook_exchange import MatchbookExchangeCollector
+from gool_bot2 import matchbook_exchange as exchange
 
 
 def _reset_session(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -69,20 +69,37 @@ def test_paginated_page_uses_shared_auth_client(monkeypatch: pytest.MonkeyPatch)
     assert seen["ua"]
 
 
-def test_auth_failure_clears_stale_exchange_state(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_optional_matchbook_auth_guard_clears_stale_exchange_state(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The old Matchbook network path is optional now; install its guard explicitly.
+
+    Production is routed to anonymous BETDAQ, so package import intentionally no
+    longer installs Matchbook auth. This unit test scopes the legacy patch and
+    restores the module afterwards to avoid contaminating the BETDAQ test suite.
+    """
     _reset_session(monkeypatch)
     state_path = tmp_path / "matchbook.json"
     state_path.write_text('{"events":[{"event_id":"stale"}]}', encoding="utf-8")
-    collector = MatchbookExchangeCollector(state_path)
+
+    original_fetch = exchange._fetch_events
+    original_collect = exchange.MatchbookExchangeCollector.collect_once
+    original_installed = matchbook_auth._INSTALLED
 
     def fail(*args, **kwargs):
         raise matchbook_auth.MatchbookAuthError("matchbook_auth_required status=403")
 
     monkeypatch.setattr(matchbook_auth, "_request_json", fail)
-    with pytest.raises(matchbook_auth.MatchbookAuthError):
-        collector.collect_once()
+    try:
+        matchbook_auth._INSTALLED = False
+        matchbook_auth.install_matchbook_auth()
+        collector = exchange.MatchbookExchangeCollector(state_path)
+        with pytest.raises(matchbook_auth.MatchbookAuthError):
+            collector.collect_once()
 
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["available"] is False
-    assert payload["events"] == []
-    assert "auth_required" in payload["error"]
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        assert payload["available"] is False
+        assert payload["events"] == []
+        assert "auth_required" in payload["error"]
+    finally:
+        exchange._fetch_events = original_fetch
+        exchange.MatchbookExchangeCollector.collect_once = original_collect
+        matchbook_auth._INSTALLED = original_installed

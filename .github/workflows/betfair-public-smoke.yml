@@ -1,0 +1,39 @@
+name: Betfair public smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/gool_bot2/betfair_public_board.py'
+      - 'src/gool_bot2/betfair_public_http_worker.py'
+      - 'src/gool_bot2/money_menu.py'
+      - '.github/workflows/betfair-public-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  public-board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Probe public Betfair football exchange
+        env:
+          RUNTIME_DATA_DIR: ${{ runner.temp }}/gool-runtime
+        run: |
+          python - <<'PY'
+          from gool_bot2.betfair_public_http_worker import collect_once
+          state = collect_once()
+          rows = state.get('events') or []
+          print('BETFAIR_SMOKE available=', state.get('available'))
+          print('BETFAIR_SMOKE statuses=', state.get('statuses'))
+          print('BETFAIR_SMOKE error=', state.get('error'))
+          print('BETFAIR_SMOKE events=', len(rows))
+          for row in rows[:5]:
+              print('BETFAIR_SMOKE_ROW', row.get('start_label'), row.get('name'), row.get('matched_gbp'), row.get('runners'))
+          if not rows:
+              raise SystemExit('public Betfair board returned no parsed football events')
+          PY

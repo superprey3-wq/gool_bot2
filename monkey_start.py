@@ -38,8 +38,8 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     """Start the Brain V3 production epoch with clean public performance tracking.
 
     This removes only betting journals/banks and disposable Brain analysis. Market
-    histories for 1xBet and Matchbook are deliberately preserved so STEAM/FLOW do
-    not lose their live movement context.
+    histories for autonomous market systems are deliberately preserved so STEAM/FLOW
+    do not lose their live movement context.
     """
     live = runtime / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -110,6 +110,7 @@ def ensure_deps() -> None:
         "pydantic": "pydantic>=2.8",
         "yaml": "pyyaml>=6.0",
         "PIL": "pillow>=10.0",
+        "websockets": "websockets>=15,<16",
     }
     if _truthy("GOOL_BROWSER_ENABLE", True):
         packages["playwright"] = "playwright>=1.55,<2"
@@ -199,6 +200,7 @@ def main() -> None:
     xbet_state = Path(os.environ.get("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     xbet_history = Path(os.environ.get("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
     matchbook_state = Path(os.environ.get("MATCHBOOK_MARKET_STATE", str(runtime / "live" / "matchbook_market_state.json")))
+    betdaq_state = Path(os.environ.get("BETDAQ_MARKET_STATE", str(runtime / "live" / "betdaq_market_state.json")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["RAW_LIVE_DIR"] = str(raw_live)
@@ -213,15 +215,18 @@ def main() -> None:
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
     os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
+    os.environ["BETDAQ_MARKET_STATE"] = str(betdaq_state)
     os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
 
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
-    # The upgraded host can comfortably sample Matchbook more often. Ten-second
-    # snapshots make 30/60/120/300s money-flow trajectories materially cleaner.
+    # Both exchange workers are lightweight and independent. Ten-second snapshots
+    # give the 30/60/120/300s flow trajectories enough resolution.
     os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")
     os.environ.setdefault("MATCHBOOK_MIN_MARKET_VOLUME", "50")
+    os.environ.setdefault("BETDAQ_MARKET_INTERVAL_SECONDS", "10")
+    os.environ.setdefault("BETDAQ_MIN_MARKET_VOLUME", "50")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
@@ -247,6 +252,7 @@ def main() -> None:
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
     matchbook_state.parent.mkdir(parents=True, exist_ok=True)
+    betdaq_state.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
     ensure_deps()
@@ -270,7 +276,11 @@ def main() -> None:
         raise RuntimeError("telegram_not_configured")
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
-    print("GOOL_BOOT brain=V3 prematch=support_only xbet=odds+separate_steam matchbook=separate_money_flow", flush=True)
+    print(
+        "GOOL_BOOT brain=V3 prematch=support_only xbet=odds+separate_steam "
+        "matchbook=separate_money_flow betdaq=separate_money_flow",
+        flush=True,
+    )
     if browser_enabled:
         print(
             "GOOL_BOOT browser365=enabled engine=chromium "
@@ -287,6 +297,7 @@ def main() -> None:
         "live": [sys.executable, "-m", "gool_bot2.storage_live_collector", "--interval", os.environ.get("LIVE_INTERVAL_SECONDS", "60")],
         "xbet": [sys.executable, "-m", "gool_bot2.xbet_market_worker", "--interval", os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15")],
         "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")],
+        "betdaq": [sys.executable, "-m", "gool_bot2.betdaq_market_worker", "--interval", os.environ.get("BETDAQ_MARKET_INTERVAL_SECONDS", "10")],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
     }
     if browser_enabled:

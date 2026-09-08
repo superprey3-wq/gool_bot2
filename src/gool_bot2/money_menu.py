@@ -66,28 +66,69 @@ def _state_age(captured: datetime | None) -> str:
     return f" · снимок {age}с назад"
 
 
-def _runner_text(event: dict[str, Any]) -> str:
-    chunks: list[str] = []
+def _match_rows(event: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
     for row in event.get("runners") or []:
         if not isinstance(row, dict):
             continue
-        label = str(row.get("label") or row.get("name") or "?")
+        role = str(row.get("outcome") or "").upper()
+        if role in {"P1", "X", "P2"} and role not in rows:
+            rows[role] = row
+    return rows
+
+
+def _runner_text(event: dict[str, Any]) -> str:
+    rows = _match_rows(event)
+    if set(rows) != {"P1", "X", "P2"}:
+        return "⚠️ BETDAQ прислал неоднозначные подписи 1X2 — GOOL не угадывает исходы"
+    chunks: list[str] = []
+    for role in ("P1", "X", "P2"):
+        row = rows[role]
         back_row = row.get("best_back") or {}
         lay_row = row.get("best_lay") or {}
         back = _number(back_row.get("odd", back_row.get("odds")))
         lay = _number(lay_row.get("odd", lay_row.get("odds")))
         if back > 1.0 and lay > 1.0:
-            chunks.append(f"{label} {back:g}/{lay:g}")
+            chunks.append(f"{role} {back:g}/{lay:g}")
         elif back > 1.0:
-            chunks.append(f"{label} {back:g}/—")
+            chunks.append(f"{role} {back:g}/—")
         elif lay > 1.0:
-            chunks.append(f"{label} —/{lay:g}")
-    return " · ".join(chunks) or "котировки пока прогреваются"
+            chunks.append(f"{role} —/{lay:g}")
+        else:
+            chunks.append(f"{role} —")
+    return " · ".join(chunks)
+
+
+def _selection_money_text(event: dict[str, Any]) -> str:
+    rows = _match_rows(event)
+    if set(rows) != {"P1", "X", "P2"}:
+        return "💰 По исходам: недоступно — 1X2 labels не прошли проверку"
+    if not any(bool(row.get("selection_matched_ready")) for row in rows.values()):
+        return "💰 По исходам: selection matched ещё прогружается"
+    for_chunks = [f"{role} {_money(rows[role].get('matched_for_gbp'))}" for role in ("P1", "X", "P2")]
+    against_chunks = [f"{role} {_money(rows[role].get('matched_against_gbp'))}" for role in ("P1", "X", "P2")]
+    return (
+        "💰 FOR matched: " + " · ".join(for_chunks) + "\n"
+        "↩️ AGAINST matched: " + " · ".join(against_chunks)
+    )
+
+
+def _selection_depth_text(event: dict[str, Any]) -> str:
+    rows = _match_rows(event)
+    if set(rows) != {"P1", "X", "P2"}:
+        return ""
+    chunks = [
+        f"{role} {_money(rows[role].get('back_depth_gbp'))}/{_money(rows[role].get('lay_depth_gbp'))}"
+        for role in ("P1", "X", "P2")
+    ]
+    return "📚 Стакан Back/Lay: " + " · ".join(chunks)
 
 
 def _flow_text(event: dict[str, Any]) -> str:
     flow = event.get("flow") or {}
     level = str(flow.get("level") or "WARMING")
+    if level == "INVALID_RUNNERS":
+        return "🎯 Направление: отключено — BETDAQ 1X2 labels не прошли проверку"
     if level == "WARMING" or not bool(flow.get("ready")):
         return "🎯 Направление: прогрев — нужен следующий снимок цены/объёма"
     if level not in {"FLOW", "STRONG_FLOW"}:
@@ -103,6 +144,43 @@ def _flow_text(event: dict[str, Any]) -> str:
         f"🎯 Направление: <b>{outcome}</b> · {strength} · "
         f"{price} · implied {pp:+.1f} п.п. · новый matched рынка +{delta}"
     )
+
+
+def _main_total(event: dict[str, Any]) -> dict[str, Any] | None:
+    rows = [row for row in (event.get("totals") or {}).values() if isinstance(row, dict)]
+    if not rows:
+        return None
+    ft = [row for row in rows if str(row.get("period") or "FT").upper() == "FT"]
+    pool = ft or rows
+    pool.sort(key=lambda row: (_number(row.get("matched_gbp", row.get("volume"))), -abs(_number(row.get("line")) - 2.5)), reverse=True)
+    return pool[0] if pool else None
+
+
+def _total_money_text(event: dict[str, Any]) -> str:
+    market = _main_total(event)
+    if not market:
+        return "⚽ Тотал: рынок пока не прогрузился"
+    line = _number(market.get("line"))
+    over = market.get("over") or {}
+    under = market.get("under") or {}
+    market_matched = _money(market.get("matched_gbp", market.get("volume")))
+    chunks = [f"⚽ Главный тотал <b>{line:g}</b> · matched рынка <b>{market_matched}</b>"]
+    if bool(over.get("selection_matched_ready")) or bool(under.get("selection_matched_ready")):
+        chunks.append(
+            f"💰 FOR matched: ТБ {_money(over.get('matched_for_gbp'))} · ТМ {_money(under.get('matched_for_gbp'))}"
+        )
+        chunks.append(
+            f"↩️ AGAINST matched: ТБ {_money(over.get('matched_against_gbp'))} · ТМ {_money(under.get('matched_against_gbp'))}"
+        )
+    else:
+        chunks.append("💰 ТБ/ТМ selection matched ещё прогружается")
+    if over or under:
+        chunks.append(
+            "📚 Стакан Back/Lay: "
+            f"ТБ {_money(over.get('back_depth_gbp'))}/{_money(over.get('lay_depth_gbp'))} · "
+            f"ТМ {_money(under.get('back_depth_gbp'))}/{_money(under.get('lay_depth_gbp'))}"
+        )
+    return "\n".join(chunks)
 
 
 def _eligible_today(event: dict[str, Any]) -> bool:
@@ -126,7 +204,10 @@ def _coverage_text(state: dict[str, Any]) -> str:
     markets = int(_number(state.get("tracked_markets")))
     totals = int(_number(state.get("tracked_total_markets")))
     total_events = int(_number(state.get("events_with_totals")))
+    valid_labels = int(_number(state.get("valid_match_odds_labels")))
     base = f"📡 Поле: <b>{events}</b> матчей · <b>{markets}</b> рынков под наблюдением"
+    if valid_labels > 0:
+        base += f"\n🏁 Валидный 1X2: <b>{valid_labels}</b> матчей"
     if totals > 0 or total_events > 0:
         base += f"\n⚽ GOOL totals: <b>{totals}</b> рынков · <b>{total_events}</b> матчей с тоталами"
     return base
@@ -165,20 +246,14 @@ def _sxbet_flow_text(event: dict[str, Any], *, prefix: str = "SX направл�
 def _sxbet_totals_text() -> str:
     try:
         from .sxbet_totals import fetch_sxbet_totals_state
-
         state = fetch_sxbet_totals_state()
     except Exception as exc:
-        return (
-            "⚽ <b>SX TOTALS</b>\n"
-            f"⚠️ Тоталы не запустились: <code>{_h(type(exc).__name__ + ':' + str(exc))}</code>"
-        )
-
+        return "⚽ <b>SX TOTALS</b>\n" f"⚠️ Тоталы не запустились: <code>{_h(type(exc).__name__ + ':' + str(exc))}</code>"
     captured = _parse_dt(state.get("captured_at"))
     parts = [f"⚽ <b>SX TOTALS · ТБ/ТМ</b> · main LIVE line{_state_age(captured)}"]
     if not bool(state.get("available")):
         parts.append(f"⚠️ Причина: <code>{_h(state.get('error') or 'sxbet_totals_unavailable')}</code>")
         return "\n".join(parts)
-
     events = [dict(row) for row in (state.get("events") or []) if isinstance(row, dict)]
     events.sort(key=lambda row: _number(row.get("liquidity_usdc")), reverse=True)
     top = events[:5]
@@ -188,7 +263,6 @@ def _sxbet_totals_text() -> str:
             f"Рынков: {int(_number(state.get('markets_seen')))}"
         )
         return "\n".join(parts)
-
     for index, event in enumerate(top, 1):
         line = _number(event.get("line"))
         parts.append(
@@ -203,24 +277,14 @@ def _sxbet_totals_text() -> str:
 def _sxbet_fallback_text() -> str:
     try:
         from .sxbet_public import fetch_sxbet_state
-
         state = fetch_sxbet_state()
     except Exception as exc:
-        state = {
-            "available": False,
-            "error": f"{type(exc).__name__}:{exc}",
-            "events": [],
-        }
-
+        state = {"available": False, "error": f"{type(exc).__name__}:{exc}", "events": []}
     captured = _parse_dt(state.get("captured_at"))
     parts = [
         f"🟦 <b>SX BET RESERVE</b> · anonymous REST · USDC{_state_age(captured)}",
-        (
-            "<i>Здесь показывается реальная исполнимая ликвидность SX-стакана, "
-            "а не matched/traded volume. Поэтому GOOL не смешивает её с BETDAQ matched.</i>"
-        ),
+        "<i>Здесь показывается реальная исполнимая ликвидность SX-стакана, а не matched/traded volume. Поэтому GOOL не смешивает её с BETDAQ matched.</i>",
     ]
-
     if not bool(state.get("available")):
         parts.append(
             "⚠️ SX Bet 1X2 REST сейчас недоступен.\n"
@@ -233,8 +297,7 @@ def _sxbet_fallback_text() -> str:
         if not top:
             parts.append(
                 "✅ SX Bet public REST отвечает, но LIVE-футбольных 1X2 рынков со стаканом сейчас не найдено.\n"
-                f"Получено рынков: <b>{int(_number(state.get('markets_seen')))}</b> · "
-                f"заявок: <b>{int(_number(state.get('orders_seen')))}</b>"
+                f"Получено рынков: <b>{int(_number(state.get('markets_seen')))}</b> · заявок: <b>{int(_number(state.get('orders_seen')))}</b>"
             )
         else:
             for index, event in enumerate(top, 1):
@@ -245,11 +308,8 @@ def _sxbet_fallback_text() -> str:
                     f"{_sxbet_flow_text(event)}"
                 )
             parts.append(
-                f"📡 SX: <b>{len(events)}</b> LIVE матчей · "
-                f"<b>{int(_number(state.get('markets_seen')))}</b> рынков · "
-                f"<b>{int(_number(state.get('orders_seen')))}</b> заявок"
+                f"📡 SX: <b>{len(events)}</b> LIVE матчей · <b>{int(_number(state.get('markets_seen')))}</b> рынков · <b>{int(_number(state.get('orders_seen')))}</b> заявок"
             )
-
     parts.append(_sxbet_totals_text())
     return "\n\n".join(parts)
 
@@ -261,14 +321,15 @@ def money_text() -> str:
     parts = [
         f"💰 <b>GOOL MONEY BOARD · {today.strftime('%d.%m.%Y')}</b>",
         f"BETDAQ Exchange · anonymous AAPI · matched в GBP{_state_age(captured)}",
-        "<i>Matched — реальный объём рынка. Направление П1/X/П2 показываем только когда новый matched совпал с движением Back/Lay; весь объём не приписывается одному исходу.</i>",
+        (
+            "<i>Market matched — общий проторгованный объём рынка. FOR/AGAINST matched ниже — реальные суммы по конкретной selection; "
+            "стакан Back/Lay — деньги, доступные сейчас и ещё не обязательно сматченные. GOOL не складывает эти величины между собой.</i>"
+        ),
     ]
-
     if not state:
         parts.append("⚠️ BETDAQ state ещё не создан. Биржевой collector только запускается.")
         parts.append(_sxbet_fallback_text())
         return "\n\n".join(parts)
-
     if not bool(state.get("available", True)):
         error = str(state.get("error") or "BETDAQ stream unavailable").strip()
         parts.append(
@@ -284,20 +345,23 @@ def money_text() -> str:
     events.sort(key=lambda row: _number(row.get("matched_gbp")), reverse=True)
     top = [row for row in events if _number(row.get("matched_gbp")) > 0.0][:5]
     if not top:
-        parts.append(
-            f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился."
-        )
+        parts.append(f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился.")
         parts.append(_coverage_text(state))
         parts.append(_sxbet_fallback_text())
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):
-        parts.append(
+        depth = _selection_depth_text(event)
+        card = (
             f"<b>{index}. {_h(event.get('name') or '?')}</b>\n"
             f"{_start_label(event)} · 💸 Match Odds matched <b>{_money(event.get('matched_gbp'))}</b>\n"
             f"🏁 Back/Lay: {_h(_runner_text(event))}\n"
-            f"{_flow_text(event)}"
+            f"{_selection_money_text(event)}"
         )
+        if depth:
+            card += f"\n{depth}"
+        card += f"\n{_total_money_text(event)}\n{_flow_text(event)}"
+        parts.append(card)
 
     parts.append(_coverage_text(state))
     return "\n\n".join(parts)

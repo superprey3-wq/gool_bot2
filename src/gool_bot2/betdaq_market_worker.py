@@ -21,7 +21,7 @@ def _ensure_websockets() -> None:
 
 def main() -> None:
     _ensure_websockets()
-    from .betdaq_production import ProductionBetdaqExchangeCollector
+    from .betdaq_selection_matched import SelectionMatchedBetdaqCollector
 
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
     parser = argparse.ArgumentParser(description="GOOL BETDAQ anonymous exchange money-flow collector")
@@ -35,12 +35,13 @@ def main() -> None:
         default=float(os.getenv("BETDAQ_MARKET_INTERVAL_SECONDS", os.getenv("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10"))),
     )
     args = parser.parse_args()
-    collector = ProductionBetdaqExchangeCollector(Path(args.state))
+    collector = SelectionMatchedBetdaqCollector(Path(args.state))
     signal.signal(signal.SIGINT, collector.stop)
     signal.signal(signal.SIGTERM, collector.stop)
     print(
         f"BETDAQ_EXCHANGE started mode=anonymous_aapi interval={max(8.0, args.interval):.0f}s "
-        f"state={args.state} board=all_today_football markets=match_odds+ft_1h_totals decoder=live_hardened",
+        f"state={args.state} board=all_today_football markets=match_odds+ft_1h_totals "
+        "decoder=live_hardened selection_matched=on",
         flush=True,
     )
     collector.run(args.interval)

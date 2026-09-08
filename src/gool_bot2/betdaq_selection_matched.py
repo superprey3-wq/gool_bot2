@@ -211,6 +211,20 @@ class SelectionMatchedBetdaqCollector(ProductionBetdaqExchangeCollector):
                 match_odds["flow"] = invalid_flow
                 event["flow"] = dict(invalid_flow)
         state["valid_match_odds_labels"] = valid_count
+
+        # Selection pushes are driven directly by the BETDAQ collector so they can
+        # fire both PREMATCH and LIVE; the football-record signal loop is not needed.
+        try:
+            from .betdaq_selection_alerts import process_selection_alerts
+
+            alerts = process_selection_alerts(state)
+            state["selection_pushes"] = alerts
+            if alerts:
+                print(f"BETDAQ_SELECTION_PUSH emitted={len(alerts)}", flush=True)
+        except Exception as exc:
+            state["selection_pushes"] = []
+            state["selection_push_error"] = f"{type(exc).__name__}:{exc}"
+            print(f"BETDAQ_SELECTION_PUSH error={type(exc).__name__}:{exc}", flush=True)
         return state
 
 

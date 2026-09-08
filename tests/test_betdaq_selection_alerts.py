@@ -40,6 +40,8 @@ def _state(
     tb_for: float = 200.0,
     tb_back: float = 2.00,
     tb_lay: float = 2.04,
+    match_market_matched: float = 0.0,
+    total_market_matched: float = 0.0,
     second_tb: tuple[float, float, float] | None = None,
 ) -> dict:
     p1 = _runner(1, outcome="P1", label="Real Madrid", back=p1_back, lay=p1_lay, matched_for=p1_for)
@@ -52,6 +54,7 @@ def _state(
             "id": "20",
             "period": "FT",
             "line": 2.5,
+            "matched_gbp": total_market_matched,
             "over": over,
             "under": under,
         }
@@ -62,6 +65,7 @@ def _state(
             "id": "21",
             "period": "FT",
             "line": 3.5,
+            "matched_gbp": total_market_matched,
             "over": _runner(13, label="Over 3.5", back=back, lay=lay, matched_for=matched),
             "under": _runner(14, label="Under 3.5", back=1.50, lay=1.54, matched_for=100.0),
         }
@@ -75,7 +79,12 @@ def _state(
                 "home": "Real Madrid",
                 "away": "Inter",
                 "in_running": False,
-                "match_odds": {"id": "10", "labels_valid": True, "runners": [p1, draw, p2]},
+                "match_odds": {
+                    "id": "10",
+                    "labels_valid": True,
+                    "matched_gbp": match_market_matched,
+                    "runners": [p1, draw, p2],
+                },
                 "totals": totals,
             }
         ],
@@ -164,3 +173,82 @@ def test_correlated_total_lines_emit_only_strongest_line():
     tb_alerts = [row for row in alerts if row["selection"] == "TB"]
     assert len(tb_alerts) == 1
     assert tb_alerts[0]["label"] == "ТБ 3.5"
+
+
+def test_large_event_rejects_small_300_gbp_spike_even_with_strong_price_move():
+    tracker = SelectionPushTracker()
+    t0 = datetime(2026, 9, 8, 18, 0, tzinfo=timezone.utc)
+    tracker.evaluate(
+        _state(t0, match_market_matched=60000.0, total_market_matched=20000.0)
+    )
+
+    alerts = tracker.evaluate(
+        _state(
+            t0 + timedelta(seconds=16),
+            tb_for=523.0,
+            tb_back=1.72,
+            tb_lay=1.76,
+            match_market_matched=60000.0,
+            total_market_matched=20323.0,
+        )
+    )
+
+    assert alerts == []
+
+
+def test_small_event_allows_same_300_gbp_spike_when_market_is_thin():
+    tracker = SelectionPushTracker()
+    t0 = datetime(2026, 9, 8, 18, 0, tzinfo=timezone.utc)
+    tracker.evaluate(
+        _state(t0, match_market_matched=3000.0, total_market_matched=1200.0)
+    )
+
+    alerts = tracker.evaluate(
+        _state(
+            t0 + timedelta(seconds=16),
+            tb_for=523.0,
+            tb_back=1.72,
+            tb_lay=1.76,
+            match_market_matched=3300.0,
+            total_market_matched=1523.0,
+        )
+    )
+
+    assert len(alerts) == 1
+    alert = alerts[0]
+    assert alert["selection"] == "TB"
+    assert alert["delta_for_gbp"] == 323.0
+    assert alert["adaptive_min_delta_gbp"] == 150.0
+    assert alert["event_scale_gbp"] == 3300.0
+
+
+def test_large_event_requires_about_one_and_half_percent_in_15s():
+    t0 = datetime(2026, 9, 8, 18, 0, tzinfo=timezone.utc)
+
+    quiet_tracker = SelectionPushTracker()
+    quiet_tracker.evaluate(_state(t0, match_market_matched=60000.0))
+    assert quiet_tracker.evaluate(
+        _state(
+            t0 + timedelta(seconds=16),
+            p1_for=1000.0,
+            p1_back=1.78,
+            p1_lay=1.82,
+            match_market_matched=60000.0,
+        )
+    ) == []
+
+    strong_tracker = SelectionPushTracker()
+    strong_tracker.evaluate(_state(t0, match_market_matched=60000.0))
+    alerts = strong_tracker.evaluate(
+        _state(
+            t0 + timedelta(seconds=16),
+            p1_for=1200.0,
+            p1_back=1.78,
+            p1_lay=1.82,
+            match_market_matched=60000.0,
+        )
+    )
+    assert len(alerts) == 1
+    assert alerts[0]["delta_for_gbp"] == 1000.0
+    assert alerts[0]["adaptive_min_delta_gbp"] == 900.0
+    assert alerts[0]["event_scale_pct"] > 1.5

@@ -3,10 +3,19 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import betdaq_exchange as exchange
+
+
+# BETDAQ MarketType values from the External API specification.
+# 13 (Unspecified) is kept as a legacy compatibility bucket because older/live
+# AAPI payloads have exposed some soccer totals under that value.
+MATCH_ODDS_MARKET_TYPES = frozenset({3})
+GOAL_TOTAL_MARKET_TYPES = frozenset({4, 13, 17, 27, 40, 46})
+GOOL_MARKET_TYPES = tuple(sorted(MATCH_ODDS_MARKET_TYPES | GOAL_TOTAL_MARKET_TYPES))
 
 
 _FLOW_ENV = {
@@ -46,8 +55,8 @@ def install_live_decoder() -> None:
 def event_hierarchy_fields(correlation_id: int = 301, *, fetch_only: bool = False) -> dict[int, Any]:
     """Build an anonymous football hierarchy request.
 
-    Production keeps one persistent subscription alive.  Discovery can also send a
-    fetch-only replay on the same socket if the first burst is incomplete.  BETDAQ
+    Production keeps one persistent subscription alive. Discovery can also send a
+    fetch-only replay on the same socket if the first burst is incomplete. BETDAQ
     sometimes populates the daily hierarchy in several phases, so relying on only
     one of those modes can produce a false empty board while the stream is healthy.
     """
@@ -61,6 +70,30 @@ def event_hierarchy_fields(correlation_id: int = 301, *, fetch_only: bool = Fals
         12: False,
         13: False,
         14: False,
+    }
+
+
+def market_information_fields(event_id: int, correlation_id: int) -> dict[int, Any]:
+    """Build the AAPI SubscribeMarketInformation(9) request used by GOOL.
+
+    Field 4 is marketTypesToInclude. Historically GOOL asked only for 3~13,
+    incorrectly treating MarketType 13 as the totals family. Current BETDAQ market
+    types use 4/17/27/40/46 for the relevant Over/Under/Total families. We keep 13
+    only as a backwards-compatible bucket and validate totals by their runners.
+
+    Field 7 is the deprecated fetchOnly flag for command 9 and the AAPI spec says
+    it must always be false. The previous collector sent true here.
+    """
+    return {
+        0: int(correlation_id),
+        2: int(event_id),
+        4: "~".join(str(value) for value in GOOL_MARKET_TYPES),
+        5: False,
+        7: False,
+        8: True,
+        9: True,
+        11: False,
+        12: False,
     }
 
 
@@ -114,7 +147,7 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         """Return football events in a rolling LIVE/upcoming window.
 
         The old base collector required the event's local calendar date to equal
-        today's date.  That is unnecessarily brittle around midnight, timezone
+        today's date. That is unnecessarily brittle around midnight, timezone
         conversion, delayed daily-board rollover and games already in progress.
         GOOL needs LIVE games plus enough upcoming events to keep subscriptions
         warm, so production uses an explicit UTC lookback/lookahead horizon.
@@ -126,7 +159,7 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
             if event is None:
                 continue
             # Initial hierarchy contains no market/selection topics because field
-            # 11 excludes market information.  Accept the language label family
+            # 11 excludes market information. Accept the language label family
             # instead of hard-coding only one exact suffix.
             if "/EL/" in topic and attrs.get("1"):
                 labels[event] = str(attrs["1"]).strip()
@@ -151,6 +184,93 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
             rows.append({"event_id": event, "name": name, "home": home, "away": away, "start": start})
         rows.sort(key=lambda row: row["start"])
         return rows
+
+    def _catalog(self) -> dict[int, dict[str, Any]]:
+        """Build a resilient GOOL catalog from BETDAQ market metadata.
+
+        MarketType is authoritative for Match Odds, so do not require the English
+        display name to equal exactly 'Match Odds'. For totals, validate the actual
+        Over/Under runner pair and line; this safely permits legacy type 13 while
+        supporting the current total-related MarketType values.
+        """
+        names: dict[int, str] = {}
+        types: dict[int, int] = {}
+        events: dict[int, int] = {}
+        selections: dict[int, dict[int, str]] = defaultdict(dict)
+
+        for topic, attrs in self._topics.items():
+            mid = exchange._market_id(topic)
+            if mid is None:
+                continue
+            event = exchange._event_id(topic)
+            if event is not None:
+                events[mid] = event
+
+            if (topic.endswith("/ML/en") or "/MEI/MEL/en" in topic) and attrs.get("1"):
+                names[mid] = str(attrs["1"]).strip()
+            elif topic.endswith("/MEI"):
+                try:
+                    types[mid] = int(attrs.get("2", "0"))
+                except (TypeError, ValueError):
+                    pass
+
+            if (topic.endswith("/SL/en") or "/SEI/SEL/en" in topic) and attrs.get("1"):
+                sid = exchange._selection_id(topic)
+                if sid is not None:
+                    selections[mid][sid] = str(attrs["1"]).strip()
+
+        out: dict[int, dict[str, Any]] = {}
+        for mid, event in events.items():
+            if event not in self._tracked_events:
+                continue
+
+            name = names.get(mid, "")
+            mtype = types.get(mid)
+            runner_labels = selections.get(mid, {})
+
+            if mtype in MATCH_ODDS_MARKET_TYPES:
+                out[mid] = {
+                    "event_id": event,
+                    "id": mid,
+                    "name": name or "Match Odds",
+                    "type": mtype,
+                    "kind": "match_odds",
+                    "selections": dict(runner_labels),
+                }
+                continue
+
+            # Only total-like market types (plus a partially delivered type) are
+            # candidates. The actual runner labels are the final safety gate.
+            if mtype is not None and mtype not in GOAL_TOTAL_MARKET_TYPES:
+                continue
+            total = exchange._goal_total_market(name, runner_labels)
+            if total is None:
+                continue
+            period, line = total
+            if mtype in {40, 46}:
+                period = "1H"
+            out[mid] = {
+                "event_id": event,
+                "id": mid,
+                "name": name or (f"Half-time Total {line:g}" if period == "1H" else f"Total {line:g}"),
+                "type": mtype,
+                "kind": "total",
+                "period": period,
+                "line": float(line),
+                "selections": dict(runner_labels),
+            }
+        return out
+
+    def _observed_market_types(self) -> list[int]:
+        values: set[int] = set()
+        for topic, attrs in self._topics.items():
+            if not topic.endswith("/MEI"):
+                continue
+            try:
+                values.add(int(attrs.get("2", "0")))
+            except (TypeError, ValueError):
+                continue
+        return sorted(values)
 
     def _discovery_counts(self) -> tuple[int, int]:
         labels: set[int] = set()
@@ -216,21 +336,7 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         corr = 1000
         for row in events:
             corr += 1
-            await self._send(
-                ws,
-                9,
-                {
-                    0: corr,
-                    2: int(row["event_id"]),
-                    4: "3~13",
-                    5: False,
-                    7: True,
-                    8: True,
-                    9: True,
-                    11: False,
-                    12: False,
-                },
-            )
+            await self._send(ws, 9, market_information_fields(int(row["event_id"]), corr))
             await asyncio.sleep(0.01)
 
         await self._recv_for(ws, 12.0)
@@ -239,7 +345,11 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
             await self._recv_for(ws, 6.0)
             self._markets = self._catalog()
         if not self._markets:
-            raise RuntimeError("betdaq_no_relevant_markets")
+            observed = ",".join(str(value) for value in self._observed_market_types()) or "none"
+            raise RuntimeError(
+                f"betdaq_no_relevant_markets observed_types={observed} "
+                f"topics={len(self._topics)} requested_types={'~'.join(str(value) for value in GOOL_MARKET_TYPES)}"
+            )
 
         market_ids = sorted(self._markets)
         for offset in range(0, len(market_ids), 120):
@@ -255,7 +365,10 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         match_odds = [row for row in self._markets.values() if row.get("kind") == "match_odds"]
         totals = [row for row in self._markets.values() if row.get("kind") == "total"]
         if not totals:
-            raise RuntimeError("betdaq_no_goal_total_markets")
+            raise RuntimeError(
+                "betdaq_no_goal_total_markets "
+                f"observed_types={','.join(str(value) for value in self._observed_market_types()) or 'none'}"
+            )
         total_events = len({int(row["event_id"]) for row in totals})
         odds_events = len({int(row["event_id"]) for row in match_odds})
         print(
@@ -272,8 +385,12 @@ install_live_decoder()
 
 __all__ = [
     "BetdaqFlowHelper",
+    "GOAL_TOTAL_MARKET_TYPES",
+    "GOOL_MARKET_TYPES",
+    "MATCH_ODDS_MARKET_TYPES",
     "ProductionBetdaqExchangeCollector",
     "event_hierarchy_fields",
     "install_live_decoder",
+    "market_information_fields",
     "runner_line",
 ]

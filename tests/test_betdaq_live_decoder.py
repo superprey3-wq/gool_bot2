@@ -24,6 +24,19 @@ def test_event_hierarchy_is_persistent_not_fetch_only() -> None:
     assert fields[11] is True
 
 
+def test_market_information_subscription_uses_real_total_types() -> None:
+    from gool_bot2.betdaq_production import GOOL_MARKET_TYPES, market_information_fields
+
+    fields = market_information_fields(15139301, 1001)
+    requested = {int(value) for value in str(fields[4]).split("~")}
+
+    assert requested == set(GOOL_MARKET_TYPES)
+    assert {3, 4, 17, 27, 40, 46} <= requested
+    assert 13 in requested  # backwards compatibility only; 13 is Unspecified
+    assert fields[7] is False  # SubscribeMarketInformation.fetchOnly is deprecated/must be false
+    assert fields[8] is True
+
+
 def test_live_half_total_market_is_recognized() -> None:
     from gool_bot2 import betdaq_exchange
     from gool_bot2.betdaq_production import install_live_decoder
@@ -61,7 +74,7 @@ def test_live_aapi_price_ladder_decodes_actual_payload_shape() -> None:
     assert by_label["Under (0.5)"]["best_lay"]["odds"] == 5.0
 
 
-def test_production_catalog_keeps_live_goal_total_market(tmp_path: Path) -> None:
+def test_production_catalog_keeps_current_half_total_market_type(tmp_path: Path) -> None:
     from gool_bot2.betdaq_production import ProductionBetdaqExchangeCollector
 
     event = 15139301
@@ -72,7 +85,7 @@ def test_production_catalog_keeps_live_goal_total_market(tmp_path: Path) -> None
     collector = ProductionBetdaqExchangeCollector(tmp_path / "betdaq.json")
     collector._tracked_events = {event}
     collector._topics = {
-        f"{root}/MEI": {"2": "13"},
+        f"{root}/MEI": {"2": "40"},
         f"{root}/MEI/MEL/en": {"1": "Half-time Totals Over/Under (0.5)"},
         f"{root}/S/E_{over}/SEI/SEL/en": {"1": "Over (0.5)"},
         f"{root}/S/E_{under}/SEI/SEL/en": {"1": "Under (0.5)"},
@@ -83,6 +96,45 @@ def test_production_catalog_keeps_live_goal_total_market(tmp_path: Path) -> None
     assert catalog[market]["kind"] == "total"
     assert catalog[market]["period"] == "1H"
     assert catalog[market]["line"] == 0.5
+
+
+def test_production_catalog_keeps_legacy_unspecified_total_when_runners_validate(tmp_path: Path) -> None:
+    from gool_bot2.betdaq_production import ProductionBetdaqExchangeCollector
+
+    event = 15139301
+    market = 52961328
+    root = f"AAPI/1/E/E_1/E/E_100003/E/E_1186459/E/E_4012456/E/E_{event}/M/E_{market}"
+    collector = ProductionBetdaqExchangeCollector(tmp_path / "betdaq.json")
+    collector._tracked_events = {event}
+    collector._topics = {
+        f"{root}/MEI": {"2": "13"},
+        f"{root}/MEI/MEL/en": {"1": "Totals Over/Under (2.5)"},
+        f"{root}/S/E_1/SEI/SEL/en": {"1": "Over (2.5)"},
+        f"{root}/S/E_2/SEI/SEL/en": {"1": "Under (2.5)"},
+    }
+
+    catalog = collector._catalog()
+    assert catalog[market]["kind"] == "total"
+    assert catalog[market]["period"] == "FT"
+    assert catalog[market]["line"] == 2.5
+
+
+def test_match_odds_does_not_depend_on_exact_english_market_name(tmp_path: Path) -> None:
+    from gool_bot2.betdaq_production import ProductionBetdaqExchangeCollector
+
+    event = 15139301
+    market = 52961329
+    root = f"AAPI/1/E/E_1/E/E_100003/E/E_1186459/E/E_4012456/E/E_{event}/M/E_{market}"
+    collector = ProductionBetdaqExchangeCollector(tmp_path / "betdaq.json")
+    collector._tracked_events = {event}
+    collector._topics = {
+        f"{root}/MEI": {"2": "3"},
+        f"{root}/MEI/MEL/en": {"1": "90 Minutes Match Odds"},
+    }
+
+    catalog = collector._catalog()
+    assert catalog[market]["kind"] == "match_odds"
+    assert catalog[market]["name"] == "90 Minutes Match Odds"
 
 
 def test_betdaq_flow_helper_has_own_calibration_and_windows(monkeypatch, tmp_path: Path) -> None:

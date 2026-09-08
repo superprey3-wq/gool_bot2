@@ -50,6 +50,15 @@ def _money(value: Any) -> str:
     return f"£{amount:.0f}"
 
 
+def _usdc(value: Any) -> str:
+    amount = max(0.0, _number(value))
+    if amount >= 1_000_000:
+        return f"${amount / 1_000_000:.2f}m"
+    if amount >= 1_000:
+        return f"${amount / 1_000:.1f}k"
+    return f"${amount:.0f}"
+
+
 def _state_age(captured: datetime | None) -> str:
     if captured is None:
         return ""
@@ -123,6 +132,88 @@ def _coverage_text(state: dict[str, Any]) -> str:
     return base
 
 
+def _sxbet_quote(event: dict[str, Any], label: str) -> str:
+    row = (event.get("outcomes") or {}).get(label) or {}
+    odd = _number(row.get("decimal_odd"))
+    depth = _number(row.get("available_usdc"))
+    if odd <= 1.0:
+        return f"{label} —"
+    return f"{label} {odd:.2f} · {_usdc(depth)}"
+
+
+def _sxbet_flow_text(event: dict[str, Any]) -> str:
+    flow = event.get("flow") or {}
+    level = str(flow.get("level") or "WARMING")
+    if level == "WARMING" or not bool(flow.get("ready")):
+        return "🎯 SX направление: прогрев — сравним следующий снимок цены и стакана"
+    if level not in {"LIQUIDITY_PUSH", "STRONG_LIQUIDITY_PUSH"}:
+        return "🎯 SX направление: подтверждённого давления стакана пока нет"
+    outcome = _h(flow.get("outcome") or "?")
+    old_odd = _number(flow.get("old_odd"))
+    new_odd = _number(flow.get("new_odd"))
+    pp = _number(flow.get("implied_delta_pp"))
+    depth_delta = _number(flow.get("liquidity_delta_usdc"))
+    rel = _number(flow.get("relative_liquidity_pct"))
+    strength = "🔥 сильное" if level == "STRONG_LIQUIDITY_PUSH" else "📈 заметное"
+    return (
+        f"🎯 SX направление: <b>{outcome}</b> · {strength} LIQUIDITY PUSH · "
+        f"цена {old_odd:.2f}→{new_odd:.2f} · implied {pp:+.1f} п.п. · "
+        f"стакан +{_usdc(depth_delta)} ({rel:+.1f}%)"
+    )
+
+
+def _sxbet_fallback_text() -> str:
+    try:
+        from .sxbet_public import fetch_sxbet_state
+
+        state = fetch_sxbet_state()
+    except Exception as exc:
+        return (
+            "🟦 <b>SX Bet fallback</b>\n"
+            f"⚠️ Не удалось запустить резерв: <code>{_h(type(exc).__name__ + ':' + str(exc))}</code>"
+        )
+
+    captured = _parse_dt(state.get("captured_at"))
+    parts = [
+        f"🟦 <b>SX BET RESERVE</b> · anonymous REST · USDC{_state_age(captured)}",
+        (
+            "<i>Здесь показывается реальная исполнимая ликвидность SX-стакана, "
+            "а не matched/traded volume. Поэтому GOOL не смешивает её с BETDAQ matched.</i>"
+        ),
+    ]
+    if not bool(state.get("available")):
+        parts.append(
+            "⚠️ SX Bet public REST сейчас недоступен.\n"
+            f"Причина: <code>{_h(state.get('error') or 'sxbet_unavailable')}</code>"
+        )
+        return "\n\n".join(parts)
+
+    events = [dict(row) for row in (state.get("events") or []) if isinstance(row, dict)]
+    events.sort(key=lambda row: _number(row.get("liquidity_usdc")), reverse=True)
+    top = events[:5]
+    if not top:
+        parts.append(
+            "✅ SX Bet public REST отвечает, но LIVE-футбольных 1X2 рынков со стаканом сейчас не найдено.\n"
+            f"Получено рынков: <b>{int(_number(state.get('markets_seen')))}</b> · "
+            f"заявок: <b>{int(_number(state.get('orders_seen')))}</b>"
+        )
+        return "\n\n".join(parts)
+
+    for index, event in enumerate(top, 1):
+        parts.append(
+            f"<b>{index}. {_h(event.get('name') or '?')}</b>\n"
+            f"🔴 LIVE · 💵 исполнимая глубина <b>{_usdc(event.get('liquidity_usdc'))}</b>\n"
+            f"🏁 {_sxbet_quote(event, 'P1')} · {_sxbet_quote(event, 'X')} · {_sxbet_quote(event, 'P2')}\n"
+            f"{_sxbet_flow_text(event)}"
+        )
+    parts.append(
+        f"📡 SX: <b>{len(events)}</b> LIVE матчей · "
+        f"<b>{int(_number(state.get('markets_seen')))}</b> рынков · "
+        f"<b>{int(_number(state.get('orders_seen')))}</b> заявок"
+    )
+    return "\n\n".join(parts)
+
+
 def money_text() -> str:
     state = load_betdaq_state()
     captured = _parse_dt(state.get("captured_at"))
@@ -135,6 +226,7 @@ def money_text() -> str:
 
     if not state:
         parts.append("⚠️ BETDAQ state ещё не создан. Биржевой collector только запускается.")
+        parts.append(_sxbet_fallback_text())
         return "\n\n".join(parts)
 
     if not bool(state.get("available", True)):
@@ -144,6 +236,7 @@ def money_text() -> str:
             f"Причина: <code>{_h(error)}</code>\n"
             "GOOL Brain и 1xBet STEAM продолжают работать независимо."
         )
+        parts.append(_sxbet_fallback_text())
         return "\n\n".join(parts)
 
     raw_events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
@@ -155,6 +248,7 @@ def money_text() -> str:
             f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился."
         )
         parts.append(_coverage_text(state))
+        parts.append(_sxbet_fallback_text())
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):

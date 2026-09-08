@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import betdaq_exchange as exchange
@@ -22,12 +23,7 @@ _FLOW_ENV = {
 
 
 def runner_line(label: str) -> tuple[str | None, float | None]:
-    """Parse the exact BETDAQ goal-total runner labels seen on the live AAPI.
-
-    BETDAQ currently sends labels such as ``Over (0.5)`` and ``Under (2.5)``.
-    Keep support for the older/plain ``Over 0.5`` representation as well, but
-    require the whole label to match so team/corner props cannot be misread.
-    """
+    """Parse the exact BETDAQ goal-total runner labels seen on the live AAPI."""
     text = str(label or "").strip()
     match = re.match(
         r"^(Over|Under)\s*(?:\(\s*)?([0-9]+(?:\.[0-9]+)?)(?:\s*\))?\s*$",
@@ -47,34 +43,36 @@ def install_live_decoder() -> None:
     exchange._runner_line = runner_line
 
 
-def event_hierarchy_fields(correlation_id: int = 301) -> dict[int, Any]:
-    """Fields for the persistent anonymous football hierarchy subscription.
+def event_hierarchy_fields(correlation_id: int = 301, *, fetch_only: bool = False) -> dict[int, Any]:
+    """Build an anonymous football hierarchy request.
 
-    The successful live AAPI probe uses fetch_only=False. Production previously
-    used fetch_only=True, which can leave the collector with an incomplete one-shot
-    hierarchy and therefore zero events when the daily board is being populated.
+    Production keeps one persistent subscription alive.  Discovery can also send a
+    fetch-only replay on the same socket if the first burst is incomplete.  BETDAQ
+    sometimes populates the daily hierarchy in several phases, so relying on only
+    one of those modes can produce a false empty board while the stream is healthy.
     """
     return {
         0: int(correlation_id),
         2: exchange.SOCCER_ID,
         3: False,
         4: False,
-        5: False,  # fetch_only=False: keep hierarchy subscription alive
-        11: True,  # event discovery only; market metadata is requested per event
+        5: bool(fetch_only),
+        11: True,
         12: False,
         13: False,
         14: False,
     }
 
 
-class BetdaqFlowHelper(exchange.MatchbookExchangeCollector):
-    """Reuse the proven flow maths while keeping BETDAQ tuning independent.
+def _hours(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return float(default)
 
-    ``MatchbookExchangeCollector._flow`` is a pure history/order-book calculation,
-    but its knobs historically use MATCHBOOK_* names. The BETDAQ worker runs in a
-    separate process, so alias the knobs only for the duration of one calculation
-    and restore the process environment immediately afterwards.
-    """
+
+class BetdaqFlowHelper(exchange.MatchbookExchangeCollector):
+    """Reuse the proven flow maths while keeping BETDAQ tuning independent."""
 
     def _flow(self, event_id: str, key: str, market: dict[str, Any], now: float) -> dict[str, Any]:
         saved = {name: os.environ.get(name) for name in _FLOW_ENV}
@@ -112,39 +110,102 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         )
         return state
 
+    def _events_from_topics(self) -> list[dict[str, Any]]:
+        """Return football events in a rolling LIVE/upcoming window.
+
+        The old base collector required the event's local calendar date to equal
+        today's date.  That is unnecessarily brittle around midnight, timezone
+        conversion, delayed daily-board rollover and games already in progress.
+        GOOL needs LIVE games plus enough upcoming events to keep subscriptions
+        warm, so production uses an explicit UTC lookback/lookahead horizon.
+        """
+        labels: dict[int, str] = {}
+        starts: dict[int, datetime] = {}
+        for topic, attrs in self._topics.items():
+            event = exchange._event_id(topic)
+            if event is None:
+                continue
+            # Initial hierarchy contains no market/selection topics because field
+            # 11 excludes market information.  Accept the language label family
+            # instead of hard-coding only one exact suffix.
+            if "/EL/" in topic and attrs.get("1"):
+                labels[event] = str(attrs["1"]).strip()
+            if topic.endswith("/EEI") and attrs.get("3"):
+                dt = exchange._parse_dt(attrs.get("3"))
+                if dt is not None:
+                    starts[event] = dt.astimezone(timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        lower = now - timedelta(hours=_hours("BETDAQ_DISCOVERY_LOOKBACK_HOURS", 6.0))
+        upper = now + timedelta(hours=_hours("BETDAQ_DISCOVERY_LOOKAHEAD_HOURS", 36.0))
+        rows: list[dict[str, Any]] = []
+        for event, start in starts.items():
+            if start < lower or start > upper:
+                continue
+            name = labels.get(event, "").strip()
+            if not name:
+                continue
+            home, away = exchange._split_teams(name)
+            if not home or not away:
+                continue
+            rows.append({"event_id": event, "name": name, "home": home, "away": away, "start": start})
+        rows.sort(key=lambda row: row["start"])
+        return rows
+
+    def _discovery_counts(self) -> tuple[int, int]:
+        labels: set[int] = set()
+        starts: set[int] = set()
+        for topic, attrs in self._topics.items():
+            event = exchange._event_id(topic)
+            if event is None:
+                continue
+            if "/EL/" in topic and attrs.get("1"):
+                labels.add(event)
+            if topic.endswith("/EEI") and attrs.get("3"):
+                starts.add(event)
+        return len(labels), len(starts)
+
     async def _discover_events(self, ws: Any) -> list[dict[str, Any]]:
-        """Discover today's football board without failing on a partial first burst."""
-        await self._send(ws, 12, event_hierarchy_fields())
-        events: list[dict[str, Any]] = []
+        """Discover LIVE/upcoming football with persistent + snapshot recovery."""
+        await self._send(ws, 12, event_hierarchy_fields(301, fetch_only=False))
         received = 0
         waits = (6.0, 6.0, 8.0)
+        best: list[dict[str, Any]] = []
         for attempt, wait in enumerate(waits, 1):
             received += await self._recv_for(ws, wait)
-            events = self._events_from_topics()
-            if events:
-                print(
-                    f"BETDAQ_EXCHANGE discovery_ready attempt={attempt} "
-                    f"events={len(events)} messages={received}",
-                    flush=True,
-                )
-                return events
+            current = self._events_from_topics()
+            if len(current) > len(best):
+                best = current
+            labels, starts = self._discovery_counts()
             print(
-                f"BETDAQ_EXCHANGE discovery_wait attempt={attempt} "
-                f"messages={received} topics={len(self._topics)}",
+                f"BETDAQ_DISCOVERY attempt={attempt} labels={labels} starts={starts} "
+                f"eligible={len(current)} messages={received} topics={len(self._topics)} "
+                f"window=-{_hours('BETDAQ_DISCOVERY_LOOKBACK_HOURS', 6.0):g}h/+{_hours('BETDAQ_DISCOVERY_LOOKAHEAD_HOURS', 36.0):g}h",
                 flush=True,
             )
 
-        labels = sum(1 for topic in self._topics if topic.endswith("/EL/en"))
-        starts = sum(1 for topic in self._topics if topic.endswith("/EEI"))
+            # After the first persistent burst, ask BETDAQ for a one-shot replay.
+            # It merges into the same topic store and repairs a partially delivered
+            # hierarchy without creating a second browser or a second worker.
+            if attempt == 1:
+                await self._send(ws, 12, event_hierarchy_fields(302, fetch_only=True))
+
+        if best:
+            print(
+                f"BETDAQ_EXCHANGE discovery_ready events={len(best)} messages={received}",
+                flush=True,
+            )
+            return best
+
+        labels, starts = self._discovery_counts()
         raise RuntimeError(
-            f"betdaq_no_today_football_events labels={labels} starts={starts} "
-            f"messages={received} topics={len(self._topics)}"
+            f"betdaq_no_football_events_in_window labels={labels} starts={starts} "
+            f"messages={received} topics={len(self._topics)} "
+            f"lookback_h={_hours('BETDAQ_DISCOVERY_LOOKBACK_HOURS', 6.0):g} "
+            f"lookahead_h={_hours('BETDAQ_DISCOVERY_LOOKAHEAD_HOURS', 36.0):g}"
         )
 
     async def _bootstrap(self, ws: Any) -> list[dict[str, Any]]:
-        # Do not call the base bootstrap here: its legacy hierarchy request used
-        # fetch_only=True. Keep the proven market/catalog/price subscription path,
-        # but start it from a persistent football hierarchy subscription.
         self._topics.clear()
         self._markets.clear()
         self._tracked_events.clear()
@@ -172,8 +233,6 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
             )
             await asyncio.sleep(0.01)
 
-        # Large daily boards can arrive in several bursts. Give metadata one extra
-        # short window before declaring the source broken.
         await self._recv_for(ws, 12.0)
         self._markets = self._catalog()
         if not self._markets:
@@ -196,8 +255,6 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         match_odds = [row for row in self._markets.values() if row.get("kind") == "match_odds"]
         totals = [row for row in self._markets.values() if row.get("kind") == "total"]
         if not totals:
-            # A Match Odds-only bootstrap looks superficially healthy but can never
-            # feed GOOL BETDAQ MONEY FLOW. Fail loudly so the supervisor reconnects.
             raise RuntimeError("betdaq_no_goal_total_markets")
         total_events = len({int(row["event_id"]) for row in totals})
         odds_events = len({int(row["event_id"]) for row in match_odds})
@@ -210,8 +267,6 @@ class ProductionBetdaqExchangeCollector(exchange.BetdaqExchangeCollector):
         return events
 
 
-# Install on import as well: helpers such as _goal_total_market and _decode_market
-# resolve _runner_line dynamically from betdaq_exchange's module globals.
 install_live_decoder()
 
 

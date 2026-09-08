@@ -98,3 +98,11 @@ def test_monkey_start_launches_both_exchange_workers():
     assert '"matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker"' in source
     assert '"betdaq": [sys.executable, "-m", "gool_bot2.betdaq_market_worker"' in source
     assert "matchbook=separate_money_flow betdaq=separate_money_flow" in source
+
+
+def test_matchbook_launcher_cannot_alias_betdaq_worker():
+    source = Path("src/gool_bot2/matchbook_market_worker.py").read_text(encoding="utf-8")
+    assert "from .betdaq_market_worker import main" not in source
+    assert "matchbook_exchange as exchange" in source
+    assert "fetch_events_paginated" in source
+    assert "MatchbookExchangeCollector" in source

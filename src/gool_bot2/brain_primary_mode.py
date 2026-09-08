@@ -15,6 +15,20 @@ _INSTALLED = False
 _ORIGINALS: dict[str, Any] = {}
 
 
+class BrainCandidate(MarketCandidate):
+    """Ordinary GOOL candidate whose price is optional in public snapshots."""
+
+    __slots__ = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        out = super().to_dict()
+        available = _number(self.odd) > 1.0
+        out["price_available"] = available
+        if not available:
+            out["odd"] = None
+        return out
+
+
 def _runtime() -> Path:
     return Path(os.getenv("RUNTIME_DATA_DIR", "data"))
 
@@ -77,7 +91,6 @@ def _market_price(
         market_score = (int(market_row.get("score_home") or 0), int(market_row.get("score_away") or 0))
     except (TypeError, ValueError):
         return 0.0, 0.0, "NO_DATA"
-    # A price from another score epoch is not even safe enough to show as info.
     if market_score != (hs, aws):
         return 0.0, 0.0, "SCORE_DESYNC"
 
@@ -104,12 +117,7 @@ def analyze_brain_primary_match(
     *,
     data_quality: float = 1.0,
 ) -> RouterDecision:
-    """Create ordinary GOOL from the main LIVE Brain, never from bookmaker confirmation.
-
-    1xBet can enrich the alert with a same-score price when available. Missing,
-    stale, low or moving odds cannot promote or veto the ordinary GOOL decision.
-    Autonomous 1xBet STEAM is applied later by the unchanged market layer.
-    """
+    """Create ordinary GOOL from the main LIVE Brain, never from bookmaker confirmation."""
     minute = int(match.get("minute") or 0)
     score = (int(match.get("home_score") or 0), int(match.get("away_score") or 0))
     strategy = _active_strategy(match)
@@ -132,7 +140,7 @@ def analyze_brain_primary_match(
     key, label, line = _target(match, strategy)
     odd, pressure, market_level = _market_price(match, market_row, strategy, line)
     family = "first_half_total" if strategy == "goal_before_ht" else "match_total"
-    candidate = MarketCandidate(
+    candidate = BrainCandidate(
         key=key,
         family=family,
         label=label,
@@ -163,7 +171,6 @@ def analyze_brain_primary_match(
         blocks.append(f"brain_state_{state.lower()}")
     if rating < minimum:
         blocks.append(f"brain_rating_below_{minimum:g}")
-    # This is football/provider quality, not bookmaker availability.
     if float(data_quality) < min_quality:
         blocks.append("data_quality_too_low")
     candidate.blocks = blocks
@@ -212,7 +219,6 @@ def _save_signal_state(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _brain_entry(record: dict[str, Any], decision: RouterDecision) -> dict[str, Any] | None:
-    """Return an unsent signal-only entry; persistence happens after delivery."""
     winner = decision.winner
     if winner is None or not str(winner.source or "").startswith("brain_primary:"):
         return None
@@ -286,7 +292,6 @@ def sync_brain_or_market_journal(
     *,
     data_quality: float = 1.0,
 ):
-    """Keep unpriced Brain alerts out of the betting P/L journal."""
     winner = decision.winner
     if winner is not None and str(winner.source or "").startswith("brain_primary:"):
         return [], _brain_entry(record, decision)
@@ -355,7 +360,6 @@ def _brain_post_goal_only(
     experts: dict[str, Any],
     market_row: dict[str, Any] | None,
 ) -> RouterDecision:
-    """Preserve the football post-goal rebuild guard, remove 1xBet opposition veto."""
     winner = decision.winner
     if winner is None or not str(winner.source or "").startswith("brain_primary:"):
         original = _ORIGINALS.get("another_goal_guard")
@@ -399,7 +403,6 @@ def apply_steam_preserving_brain(
     *,
     data_quality: float,
 ) -> RouterDecision:
-    """If STEAM fires too, deliver the independent Brain signal before STEAM overrides the card."""
     original = _ORIGINALS.get("apply_autonomous_steam")
     if original is None:
         return decision
@@ -407,8 +410,7 @@ def apply_steam_preserving_brain(
     if winner is not None and str(winner.source or "").startswith("brain_primary:"):
         from .multi_autonomous_steam import build_autonomous_steam_candidates
 
-        steam_rows = build_autonomous_steam_candidates(record, market_row, data_quality=data_quality)
-        if steam_rows:
+        if build_autonomous_steam_candidates(record, market_row, data_quality=data_quality):
             entry = _brain_entry(record, decision)
             if entry is not None:
                 emit_brain_or_market_signal(record, decision, entry, market_row=market_row)
@@ -416,7 +418,6 @@ def apply_steam_preserving_brain(
 
 
 def install_runtime_patches() -> None:
-    """Switch only ordinary GOOL to Brain-primary mode; keep STEAM independent."""
     global _INSTALLED
     if _INSTALLED or not _truthy("GOOL_BRAIN_PRIMARY_SIGNALS", True):
         return
@@ -435,8 +436,6 @@ def install_runtime_patches() -> None:
         _ORIGINALS.setdefault("emit_multi_signal", runtime.emit_multi_signal)
 
         runtime.analyze_multi_match = analyze_brain_primary_match
-        # Analyzer already applies main-Brain PASS/rating/provider-quality gates.
-        # Bookmaker VALUE/price/staleness and exchange confirmation are diagnostics only.
         runtime.enforce_goal_state_policy = _identity_policy
         runtime.apply_matchbook_confirmation = _identity_policy
         runtime._enforce_another_goal_context_for_mode = _brain_post_goal_only
@@ -449,6 +448,7 @@ def install_runtime_patches() -> None:
 
 
 __all__ = [
+    "BrainCandidate",
     "analyze_brain_primary_match",
     "apply_steam_preserving_brain",
     "emit_brain_or_market_signal",

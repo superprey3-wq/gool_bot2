@@ -104,6 +104,27 @@ def _label_for_match_odds(runner: dict[str, Any], event: dict[str, Any]) -> str:
     return str(runner.get("label") or runner.get("name") or "?")
 
 
+def _market_matched(market: dict[str, Any]) -> float:
+    return max(0.0, _number(market.get("matched_gbp", market.get("volume"))))
+
+
+def _event_scale(event: dict[str, Any]) -> float:
+    """Return a league-agnostic liquidity proxy for this event.
+
+    We deliberately do not sum unrelated markets. The largest real BETDAQ matched
+    market is used only as a scale reference, so a Champions-League-sized event
+    needs a materially larger selection delta than a thin lower-league event.
+    """
+    values: list[float] = []
+    match_odds = event.get("match_odds") or {}
+    if isinstance(match_odds, dict):
+        values.append(_market_matched(match_odds))
+    for market in (event.get("totals") or {}).values():
+        if isinstance(market, dict):
+            values.append(_market_matched(market))
+    return max(values, default=0.0)
+
+
 def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for event in state.get("events") or []:
@@ -112,10 +133,12 @@ def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
         event_id = str(event.get("event_id") or event.get("id") or "")
         if not event_id:
             continue
+        event_scale_gbp = _event_scale(event)
 
         match_odds = event.get("match_odds") or {}
         if bool(match_odds.get("labels_valid")):
             market_id = str(match_odds.get("id") or "")
+            market_matched_gbp = _market_matched(match_odds)
             for runner in match_odds.get("runners") or []:
                 if not isinstance(runner, dict) or str(runner.get("outcome") or "") not in {"P1", "X", "P2"}:
                     continue
@@ -127,6 +150,8 @@ def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
                         "event": event,
                         "event_id": event_id,
                         "market_id": market_id,
+                        "market_matched_gbp": market_matched_gbp,
+                        "event_scale_gbp": event_scale_gbp,
                         "selection_id": sid,
                         "runner": runner,
                         "family": "match_odds",
@@ -146,6 +171,7 @@ def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             period = str(market.get("period") or "FT")
             line = _number(market.get("line"))
+            market_matched_gbp = _market_matched(market)
             for side, key, ru in (("over", "TB", "ТБ"), ("under", "TM", "ТМ")):
                 runner = market.get(side) or {}
                 if not isinstance(runner, dict):
@@ -159,6 +185,8 @@ def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
                         "event": event,
                         "event_id": event_id,
                         "market_id": market_id,
+                        "market_matched_gbp": market_matched_gbp,
+                        "event_scale_gbp": event_scale_gbp,
                         "selection_id": sid,
                         "runner": runner,
                         "family": "total",
@@ -170,6 +198,18 @@ def _selection_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
                     }
                 )
     return rows
+
+
+def _adaptive_min_delta(row: dict[str, Any], base_delta: float, scale_pct: float) -> tuple[float, float]:
+    event_scale_gbp = max(
+        _number(row.get("event_scale_gbp")),
+        _number(row.get("market_matched_gbp")),
+    )
+    dynamic = event_scale_gbp * max(0.0, scale_pct) / 100.0
+    cap = _threshold("BETDAQ_SELECTION_PUSH_MAX_DYNAMIC_DELTA_GBP", 10000.0)
+    if cap > 0.0:
+        dynamic = min(dynamic, cap)
+    return max(float(base_delta), dynamic), event_scale_gbp
 
 
 def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[dict[str, float]]) -> dict[str, Any] | None:
@@ -185,21 +225,37 @@ def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[di
         return None
 
     windows = (
-        ("15s", 15.0, _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_15S", 150.0)),
-        ("30s", 30.0, _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_30S", 250.0)),
-        ("60s", 60.0, _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_60S", 500.0)),
+        (
+            "15s",
+            15.0,
+            _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_15S", 150.0),
+            _threshold("BETDAQ_SELECTION_PUSH_EVENT_PCT_15S", 1.5),
+        ),
+        (
+            "30s",
+            30.0,
+            _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_30S", 250.0),
+            _threshold("BETDAQ_SELECTION_PUSH_EVENT_PCT_30S", 2.0),
+        ),
+        (
+            "60s",
+            60.0,
+            _threshold("BETDAQ_SELECTION_PUSH_MIN_DELTA_60S", 500.0),
+            _threshold("BETDAQ_SELECTION_PUSH_EVENT_PCT_60S", 3.0),
+        ),
     )
     chosen: dict[str, Any] | None = None
-    for label, seconds, min_delta in windows:
+    for label, seconds, base_delta, scale_pct in windows:
         old = _prior(history, current["ts"], seconds)
         if old is None:
             continue
+        adaptive_min, event_scale_gbp = _adaptive_min_delta(row, base_delta, scale_pct)
         delta_for = max(0.0, current["for"] - float(old.get("for") or 0.0))
         delta_against = max(0.0, current["against"] - float(old.get("against") or 0.0))
         baseline = max(50.0, float(old.get("for") or 0.0))
         relative_pct = delta_for / baseline * 100.0
         pp = (current["prob"] - float(old.get("prob") or 0.0)) * 100.0
-        if delta_for >= min_delta and relative_pct >= min_relative and pp >= min_pp:
+        if delta_for >= adaptive_min and relative_pct >= min_relative and pp >= min_pp:
             chosen = {
                 "window": label,
                 "seconds": seconds,
@@ -211,6 +267,9 @@ def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[di
                 "new_back": current["back"],
                 "old_lay": float(old.get("lay") or 0.0),
                 "new_lay": current["lay"],
+                "adaptive_min_delta_gbp": adaptive_min,
+                "event_scale_gbp": event_scale_gbp,
+                "event_scale_pct": (delta_for / event_scale_gbp * 100.0) if event_scale_gbp > 0.0 else 0.0,
             }
             break
     if chosen is None:
@@ -218,17 +277,20 @@ def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[di
 
     extreme_delta = _threshold("BETDAQ_SELECTION_PUSH_EXTREME_DELTA_GBP", 750.0)
     extreme_pp = _threshold("BETDAQ_SELECTION_PUSH_EXTREME_PP", 2.5)
+    extreme_multiplier = _threshold("BETDAQ_SELECTION_PUSH_EXTREME_MULTIPLIER", 2.0)
+    adaptive_extreme = max(extreme_delta, chosen["adaptive_min_delta_gbp"] * extreme_multiplier)
     level = (
         "EXTREME_SELECTION_FLOW"
-        if chosen["delta_for_gbp"] >= extreme_delta and chosen["implied_delta_pp"] >= extreme_pp
+        if chosen["delta_for_gbp"] >= adaptive_extreme and chosen["implied_delta_pp"] >= extreme_pp
         else "SELECTION_FLOW"
     )
+    strength_ratio = chosen["delta_for_gbp"] / max(1.0, chosen["adaptive_min_delta_gbp"])
     score = min(
         99.0,
-        72.0
-        + min(12.0, chosen["implied_delta_pp"] * 2.0)
-        + min(8.0, chosen["relative_pct"] * 0.25)
-        + min(7.0, chosen["delta_for_gbp"] / 200.0),
+        70.0
+        + min(12.0, chosen["implied_delta_pp"] * 1.7)
+        + min(8.0, chosen["relative_pct"] * 0.15)
+        + min(9.0, max(0.0, strength_ratio - 1.0) * 9.0),
     )
     if level == "EXTREME_SELECTION_FLOW":
         score = max(score, 90.0)
@@ -243,6 +305,7 @@ def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[di
         "away": str(event.get("away") or ""),
         "in_running": bool(event.get("in_running")),
         "market_id": row["market_id"],
+        "market_matched_gbp": round(_number(row.get("market_matched_gbp")), 2),
         "selection_id": row["selection_id"],
         "family": row["family"],
         "group": row["group"],
@@ -255,6 +318,7 @@ def _candidate(row: dict[str, Any], current: dict[str, float], history: deque[di
         "back_depth_gbp": round(current["back_depth"], 2),
         "lay_depth_gbp": round(current["lay_depth"], 2),
         "spread_pct": round(spread_pct, 2),
+        "adaptive_extreme_delta_gbp": round(adaptive_extreme, 2),
         **{key: (round(value, 3) if isinstance(value, float) else value) for key, value in chosen.items()},
     }
 

@@ -14,6 +14,16 @@ def test_runner_line_accepts_live_betdaq_parentheses() -> None:
     assert runner_line("Home Team Total Goals Over (0.5)") == (None, None)
 
 
+def test_event_hierarchy_is_persistent_not_fetch_only() -> None:
+    from gool_bot2 import betdaq_exchange
+    from gool_bot2.betdaq_production import event_hierarchy_fields
+
+    fields = event_hierarchy_fields()
+    assert fields[2] == betdaq_exchange.SOCCER_ID
+    assert fields[5] is False
+    assert fields[11] is True
+
+
 def test_live_half_total_market_is_recognized() -> None:
     from gool_bot2 import betdaq_exchange
     from gool_bot2.betdaq_production import install_live_decoder

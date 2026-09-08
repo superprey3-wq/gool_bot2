@@ -128,6 +128,11 @@ def _plain_block(block: Any) -> str | None:
         "side_no_recent_threat": "давно нет опасных атак команды",
         "side_no_quality_threat": "мало острых моментов команды",
         "side_prematch_scoring_profile_low": "команда редко забивает по prematch",
+        "side_not_enough_live_evidence": "мало надёжных LIVE-данных по командам",
+        "expert_hard_no": "GOOL не подтверждает сценарий",
+        "expert_borderline": "GOOL ещё не набрал порог подтверждения",
+        "expert_no_data": "GOOL не хватает LIVE-данных",
+        "first_half_closed": "окно 1-го тайма уже закрыто",
         "warmup": "слишком рано для ставки",
         "window_closed": "окно этой ставки уже закрыто",
         "btts_already_won": "обе команды уже забили",
@@ -180,10 +185,35 @@ def _candidate_plain_reasons(candidate: dict[str, Any] | None) -> list[str]:
     return reasons
 
 
+def _active_expert_key(row: dict[str, Any]) -> str | None:
+    minute = int(row.get("minute") or 0)
+    if 1 <= minute <= 35:
+        return "goal_before_ht"
+    if 46 <= minute <= 75:
+        return "another_goal"
+    return None
+
+
+def _football_plain_reasons(row: dict[str, Any], candidate: dict[str, Any] | None) -> list[str]:
+    experts = row.get("experts") or {}
+    key = _active_expert_key(row) or "another_goal"
+    reasons = _expert_plain_reasons(experts.get(key) or {})
+    if not reasons and key != "another_goal":
+        reasons = _expert_plain_reasons(experts.get("another_goal") or {})
+    if not reasons and candidate:
+        candidate_key = _STRATEGY_EXPERT.get(str(candidate.get("strategy") or ""), "")
+        reasons = _expert_plain_reasons(experts.get(candidate_key) or {})
+    reasons.extend(text for text in _candidate_plain_reasons(candidate) if text not in reasons)
+    return reasons
+
+
 def _market_plain_reason(row: dict[str, Any]) -> str | None:
     market = row.get("market") or {}
     if not market.get("available"):
-        return "1xBet пока не дал свежий рынок"
+        raw = str(market.get("reason") or "")
+        if raw == "xbet_match_not_mapped_or_state_missing":
+            return "1xBet матч не сопоставлен или market-state не обновлён"
+        return "1xBet live-рынок недоступен"
 
     if market.get("score_desync"):
         return "счёт Flashscore и 1xBet расходится"
@@ -211,20 +241,39 @@ def _market_plain_reason(row: dict[str, Any]) -> str | None:
 
 
 def _wait_reason(row: dict[str, Any], candidate: dict[str, Any] | None) -> str:
+    football_reasons = _football_plain_reasons(row, candidate)
     market_reason = _market_plain_reason(row)
+
+    if football_reasons and market_reason:
+        return f"{', '.join(football_reasons[:2])}; также {market_reason}"
+    if football_reasons:
+        return ", ".join(football_reasons[:3])
     if market_reason:
         return market_reason
-
-    experts = row.get("experts") or {}
-    reasons = _expert_plain_reasons(experts.get("another_goal") or {})
-    if not reasons and candidate:
-        key = _STRATEGY_EXPERT.get(str(candidate.get("strategy") or ""), "")
-        reasons = _expert_plain_reasons(experts.get(key) or {})
-    reasons.extend(text for text in _candidate_plain_reasons(candidate) if text not in reasons)
-
-    if reasons:
-        return ", ".join(reasons[:3])
     return "GOOL пока не видит достаточно сильной игры для ставки"
+
+
+def _xbet_coverage_line(states: list[dict[str, Any]]) -> str:
+    total = len(states)
+    covered = sum(1 for row in states if bool((row.get("market") or {}).get("available")))
+
+    actionable: list[dict[str, Any]] = []
+    for row in states:
+        key = _active_expert_key(row)
+        if not key:
+            continue
+        expert = ((row.get("experts") or {}).get(key) or {})
+        state = str(expert.get("state") or ("PASS" if expert.get("passed") else "")).upper()
+        if state in {"PASS", "BORDERLINE"}:
+            actionable.append(row)
+    actionable_covered = sum(1 for row in actionable if bool((row.get("market") or {}).get("available")))
+
+    if actionable:
+        return (
+            f"📡 1xBet: рынок <b>{covered}/{total}</b> · "
+            f"для PASS/BORDERLINE <b>{actionable_covered}/{len(actionable)}</b>"
+        )
+    return f"📡 1xBet: рынок <b>{covered}/{total}</b> · футбольных PASS/BORDERLINE сейчас нет"
 
 
 def _bet_reason(candidate: dict[str, Any] | None) -> str:
@@ -263,6 +312,7 @@ def analysis_text(*_: Any, **__: Any) -> str:
     parts = [
         "🧠 <b>GOOL MULTI · КРАТКИЙ ОТЧЁТ</b>",
         f"Матчей: <b>{len(states)}</b> · ставок: <b>{bets}</b> · ждём: <b>{waits}</b>",
+        _xbet_coverage_line(states),
     ]
 
     shown = 0

@@ -10,18 +10,13 @@ from .betdaq_production import ProductionBetdaqExchangeCollector
 
 
 def selection_matched_fields(market_ids: list[int] | tuple[int, ...], correlation_id: int) -> dict[int, Any]:
-    """SubscribeSelectionMatchedAmounts (AAPI command 13).
-
-    BETDAQ exposes cumulative matched amounts for each selection under the market.
-    We deliberately disable the much heavier per-price match detail stream: GOOL
-    only needs the real FOR/AGAINST matched totals for P1/X/P2 and Over/Under.
-    """
+    """SubscribeSelectionMatchedAmounts (AAPI command 13)."""
     ids = [int(value) for value in market_ids]
     return {
         0: int(correlation_id),
         1: "~".join(str(value) for value in ids),
         2: False,  # includeSelectionMatchDetail
-        4: False,  # fetchOnly: subscription stays live
+        4: False,  # fetchOnly: keep the subscription live
     }
 
 
@@ -29,8 +24,7 @@ def _price_rows_nonzero(attrs: dict[str, str], runner_index: int, side_group: in
     """Decode only executable BETDAQ ladder levels.
 
     AAPI sends amount=0 when a previously published price level has been cleared.
-    The legacy decoder retained those zero-size levels, which could make an old
-    price look like the current best Back/Lay (for example a 4.6/1.64 cross).
+    Retaining it can make an old price look like the current best Back/Lay.
     """
     rows: list[dict[str, float]] = []
     prefix = f"1V{runner_index}-{side_group}V"
@@ -89,15 +83,13 @@ class SelectionMatchedBetdaqCollector(ProductionBetdaqExchangeCollector):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # _decode_price_ladder resolves this module global at call time, so this
-        # fixes cleared zero-size levels without duplicating the whole base decoder.
+        # _decode_price_ladder resolves this global at call time.
         exchange._price_rows = _price_rows_nonzero
 
     def _catalog(self) -> dict[int, dict[str, Any]]:
         catalog = super()._catalog()
 
-        # Prefer the canonical SelectionLanguage topic.  Some exchange-language
-        # deltas arrive independently and can otherwise overwrite a correct label.
+        # Prefer canonical SelectionLanguage names over exchange-language deltas.
         canonical: dict[int, dict[int, str]] = defaultdict(dict)
         fallback: dict[int, dict[int, str]] = defaultdict(dict)
         for topic, attrs in self._topics.items():
@@ -134,13 +126,22 @@ class SelectionMatchedBetdaqCollector(ProductionBetdaqExchangeCollector):
             corr += 1
             await self._send(ws, 13, selection_matched_fields(chunk, corr))
             await asyncio.sleep(0.02)
-        # Initial SMA snapshot is normally small because match detail is disabled.
         await self._recv_for(ws, 5.0)
-        print(
-            f"BETDAQ_SELECTION_MATCHED subscribed_markets={len(market_ids)}",
-            flush=True,
-        )
+        print(f"BETDAQ_SELECTION_MATCHED subscribed_markets={len(market_ids)}", flush=True)
         return events
+
+    def _market_topic_attrs(self, market_id: int, suffix: str) -> dict[str, str]:
+        # Command 13 creates child topics under /MMA/GBP/SMA/<selectionId>.
+        # Market-level matched must keep reading only the parent /MMA/GBP topic.
+        if suffix == "/MMA/GBP":
+            marker = f"/M/E_{int(market_id)}/"
+            candidates = [
+                attrs
+                for topic, attrs in self._topics.items()
+                if marker in topic and topic.endswith("/MMA/GBP")
+            ]
+            return max(candidates, key=len) if candidates else {}
+        return super()._market_topic_attrs(market_id, suffix)
 
     def _selection_matched(self, market_id: int) -> dict[int, dict[str, float]]:
         marker = f"/M/E_{int(market_id)}/"
@@ -202,7 +203,6 @@ class SelectionMatchedBetdaqCollector(ProductionBetdaqExchangeCollector):
             if labels_valid:
                 valid_count += 1
             else:
-                # Never infer money direction from duplicated/missing labels.
                 invalid_flow = {
                     "ready": False,
                     "level": "INVALID_RUNNERS",
@@ -214,7 +214,4 @@ class SelectionMatchedBetdaqCollector(ProductionBetdaqExchangeCollector):
         return state
 
 
-__all__ = [
-    "SelectionMatchedBetdaqCollector",
-    "selection_matched_fields",
-]
+__all__ = ["SelectionMatchedBetdaqCollector", "selection_matched_fields"]

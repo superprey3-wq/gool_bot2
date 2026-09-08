@@ -140,7 +140,9 @@ def test_invalid_duplicate_1x2_labels_disable_direction(tmp_path: Path) -> None:
     # Mirror only the validation section through a tiny synthetic parent result.
     class SyntheticCollector(SelectionMatchedBetdaqCollector):
         def __init__(self):
-            pass
+            self._stream_market_ids = set()
+            self._markets = {}
+            self._subscription_last = {}
 
     synthetic = SyntheticCollector()
     parent = SelectionMatchedBetdaqCollector.__mro__[1]

@@ -77,6 +77,7 @@ def _market_price(
         market_score = (int(market_row.get("score_home") or 0), int(market_row.get("score_away") or 0))
     except (TypeError, ValueError):
         return 0.0, 0.0, "NO_DATA"
+    # A price from another score epoch is not even safe enough to show as info.
     if market_score != (hs, aws):
         return 0.0, 0.0, "SCORE_DESYNC"
 
@@ -103,7 +104,12 @@ def analyze_brain_primary_match(
     *,
     data_quality: float = 1.0,
 ) -> RouterDecision:
-    """Create the ordinary GOOL decision from the LIVE Brain alone."""
+    """Create ordinary GOOL from the main LIVE Brain, never from bookmaker confirmation.
+
+    1xBet can enrich the alert with a same-score price when available. Missing,
+    stale, low or moving odds cannot promote or veto the ordinary GOOL decision.
+    Autonomous 1xBet STEAM is applied later by the unchanged market layer.
+    """
     minute = int(match.get("minute") or 0)
     score = (int(match.get("home_score") or 0), int(match.get("away_score") or 0))
     strategy = _active_strategy(match)
@@ -157,6 +163,7 @@ def analyze_brain_primary_match(
         blocks.append(f"brain_state_{state.lower()}")
     if rating < minimum:
         blocks.append(f"brain_rating_below_{minimum:g}")
+    # This is football/provider quality, not bookmaker availability.
     if float(data_quality) < min_quality:
         blocks.append("data_quality_too_low")
     candidate.blocks = blocks
@@ -205,6 +212,7 @@ def _save_signal_state(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _brain_entry(record: dict[str, Any], decision: RouterDecision) -> dict[str, Any] | None:
+    """Return an unsent signal-only entry; persistence happens after delivery."""
     winner = decision.winner
     if winner is None or not str(winner.source or "").startswith("brain_primary:"):
         return None
@@ -214,51 +222,60 @@ def _brain_entry(record: dict[str, Any], decision: RouterDecision) -> dict[str, 
         return None
     strategy = str(winner.strategy or "")
     signal_key = f"{match_id}:{strategy}"
+    with _LOCK:
+        state = _load_signal_state(_signal_state_path())
+        if signal_key in (state.get("signals") or {}):
+            return None
+    return {
+        "signal_key": signal_key,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "signal_only",
+        "match_id": match_id,
+        "home": match.get("home"),
+        "away": match.get("away"),
+        "league": match.get("league"),
+        "minute": int(match.get("minute") or 0),
+        "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
+        "strategy": strategy,
+        "head": strategy,
+        "market": winner.label,
+        "odd": float(winner.odd or 0.0),
+        "price_available": bool(float(winner.odd or 0.0) > 1.0),
+        "probability": float(winner.model_probability or 0.0),
+        "event_score": float(winner.rating or 0.0),
+        "confidence_score": float(winner.rating or 0.0),
+        "source": winner.source,
+        "signal_source": "GOOL_BRAIN",
+        "result": "signal_only",
+    }
+
+
+def _mark_brain_sent(entry: dict[str, Any], sent: int) -> None:
+    if int(sent or 0) <= 0 or not entry.get("signal_key"):
+        return
     path = _signal_state_path()
-    now = datetime.now(timezone.utc).isoformat()
     with _LOCK:
         state = _load_signal_state(path)
         signals = state.get("signals") or {}
-        if signal_key in signals:
-            return None
-        row = {
-            "signal_key": signal_key,
-            "created_at": now,
-            "mode": "signal_only",
-            "match_id": match_id,
-            "home": match.get("home"),
-            "away": match.get("away"),
-            "league": match.get("league"),
-            "minute": int(match.get("minute") or 0),
-            "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
-            "strategy": strategy,
-            "head": strategy,
-            "market": winner.label,
-            "odd": float(winner.odd or 0.0),
-            "price_available": bool(float(winner.odd or 0.0) > 1.0),
-            "probability": float(winner.model_probability or 0.0),
-            "event_score": float(winner.rating or 0.0),
-            "confidence_score": float(winner.rating or 0.0),
-            "source": winner.source,
-            "signal_source": "GOOL_BRAIN",
-            "result": "signal_only",
-        }
-        signals[signal_key] = row
+        row = dict(entry)
+        row["telegram_sent"] = True
+        row["telegram_delivery_count"] = int(sent)
+        row["telegram_sent_at"] = datetime.now(timezone.utc).isoformat()
+        signals[str(row["signal_key"])] = row
         ordered = sorted(
             (value for value in signals.values() if isinstance(value, dict)),
             key=lambda value: str(value.get("created_at") or ""),
             reverse=True,
         )[:1000]
-        state = {
+        payload = {
             "version": 1,
-            "updated_at": now,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "signals": {str(value.get("signal_key") or ""): value for value in ordered if value.get("signal_key")},
         }
         try:
-            _save_signal_state(path, state)
+            _save_signal_state(path, payload)
         except Exception as exc:
             print(f"GOOL_BRAIN_SIGNAL_STATE_ERROR {type(exc).__name__}:{exc}", flush=True)
-        return row
 
 
 def sync_brain_or_market_journal(
@@ -269,6 +286,7 @@ def sync_brain_or_market_journal(
     *,
     data_quality: float = 1.0,
 ):
+    """Keep unpriced Brain alerts out of the betting P/L journal."""
     winner = decision.winner
     if winner is not None and str(winner.source or "").startswith("brain_primary:"):
         return [], _brain_entry(record, decision)
@@ -314,6 +332,7 @@ def emit_brain_or_market_signal(
         if not is_multi_telegram_active():
             return 0
         sent = telegram.broadcast(_brain_text(record, entry))
+        _mark_brain_sent(entry, sent)
         print(
             f"GOOL_BRAIN_SIGNAL_SENT match={entry.get('match_id')} strategy={entry.get('strategy')} "
             f"score={entry.get('confidence_score')} price_available={int(bool(entry.get('price_available')))} sent={sent}",
@@ -336,6 +355,7 @@ def _brain_post_goal_only(
     experts: dict[str, Any],
     market_row: dict[str, Any] | None,
 ) -> RouterDecision:
+    """Preserve the football post-goal rebuild guard, remove 1xBet opposition veto."""
     winner = decision.winner
     if winner is None or not str(winner.source or "").startswith("brain_primary:"):
         original = _ORIGINALS.get("another_goal_guard")
@@ -360,9 +380,11 @@ def _brain_post_goal_only(
     if last_goal is None or wait_minutes <= 0 or minute - last_goal >= wait_minutes:
         return decision
 
-    winner.blocks.append("another_goal_post_goal_rebuild")
+    if "another_goal_post_goal_rebuild" not in winner.blocks:
+        winner.blocks.append("another_goal_post_goal_rebuild")
     winner.eligible = False
-    decision.rejected.append(winner)
+    if not any(row.key == winner.key for row in decision.rejected):
+        decision.rejected.append(winner)
     decision.winner = None
     decision.alternatives = []
     decision.status = "WAIT"
@@ -370,7 +392,31 @@ def _brain_post_goal_only(
     return decision
 
 
+def apply_steam_preserving_brain(
+    decision: RouterDecision,
+    record: dict[str, Any],
+    market_row: dict[str, Any] | None,
+    *,
+    data_quality: float,
+) -> RouterDecision:
+    """If STEAM fires too, deliver the independent Brain signal before STEAM overrides the card."""
+    original = _ORIGINALS.get("apply_autonomous_steam")
+    if original is None:
+        return decision
+    winner = decision.winner
+    if winner is not None and str(winner.source or "").startswith("brain_primary:"):
+        from .multi_autonomous_steam import build_autonomous_steam_candidates
+
+        steam_rows = build_autonomous_steam_candidates(record, market_row, data_quality=data_quality)
+        if steam_rows:
+            entry = _brain_entry(record, decision)
+            if entry is not None:
+                emit_brain_or_market_signal(record, decision, entry, market_row=market_row)
+    return original(decision, record, market_row, data_quality=data_quality)
+
+
 def install_runtime_patches() -> None:
+    """Switch only ordinary GOOL to Brain-primary mode; keep STEAM independent."""
     global _INSTALLED
     if _INSTALLED or not _truthy("GOOL_BRAIN_PRIMARY_SIGNALS", True):
         return
@@ -384,14 +430,18 @@ def install_runtime_patches() -> None:
         _ORIGINALS.setdefault("apply_matchbook_confirmation", runtime.apply_matchbook_confirmation)
         _ORIGINALS.setdefault("another_goal_guard", runtime._enforce_another_goal_context_for_mode)
         _ORIGINALS.setdefault("enforce_match_suitability", runtime.enforce_match_suitability)
+        _ORIGINALS.setdefault("apply_autonomous_steam", runtime.apply_autonomous_steam)
         _ORIGINALS.setdefault("sync_multi_journal", runtime.sync_multi_journal)
         _ORIGINALS.setdefault("emit_multi_signal", runtime.emit_multi_signal)
 
         runtime.analyze_multi_match = analyze_brain_primary_match
+        # Analyzer already applies main-Brain PASS/rating/provider-quality gates.
+        # Bookmaker VALUE/price/staleness and exchange confirmation are diagnostics only.
         runtime.enforce_goal_state_policy = _identity_policy
         runtime.apply_matchbook_confirmation = _identity_policy
         runtime._enforce_another_goal_context_for_mode = _brain_post_goal_only
         runtime.enforce_match_suitability = _identity_policy
+        runtime.apply_autonomous_steam = apply_steam_preserving_brain
         runtime.sync_multi_journal = sync_brain_or_market_journal
         runtime.emit_multi_signal = emit_brain_or_market_signal
         _INSTALLED = True
@@ -400,6 +450,7 @@ def install_runtime_patches() -> None:
 
 __all__ = [
     "analyze_brain_primary_match",
+    "apply_steam_preserving_brain",
     "emit_brain_or_market_signal",
     "install_runtime_patches",
     "sync_brain_or_market_journal",

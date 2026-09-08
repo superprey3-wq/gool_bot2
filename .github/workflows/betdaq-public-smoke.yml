@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/betdaq-public-smoke.yml'
+      - 'src/gool_bot2/betdaq_exchange.py'
+      - 'src/gool_bot2/betdaq_production.py'
+      - 'src/gool_bot2/betdaq_market_worker.py'
+      - 'src/gool_bot2/betdaq_runtime.py'
+      - 'src/gool_bot2/multi_betdaq_money_flow.py'
+      - 'tests/test_betdaq_live_decoder.py'
+      - 'monkey_start.py'
   workflow_dispatch:
 
 jobs:
@@ -16,8 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install 'websockets>=15,<16'
-      - name: Probe BETDAQ goal-total market payload
+      - run: python -m pip install -e .
+      - name: Validate production decoder on live BETDAQ goal-total payload
         run: |
           python - <<'PY'
           import asyncio, json, random, re, string, uuid
@@ -25,13 +32,19 @@ jobs:
           from zoneinfo import ZoneInfo
           import websockets
 
+          from gool_bot2 import betdaq_exchange
+          from gool_bot2.betdaq_production import install_live_decoder, runner_line
+
+          install_live_decoder()
           SOCCER_ID=100003; RS='\x01'; FS='\x02'; TZ=ZoneInfo('Europe/Moscow')
+
           def cmd(mid, fields):
               out=FS+str(mid)+RS
               for k,v in fields.items():
                   if isinstance(v,bool): v='T' if v else 'F'
                   out += str(k)+FS+str(v)+FS+RS
               return out
+
           def attrs(msg):
               try: _,tail=msg.split(FS,1)
               except ValueError: return {}
@@ -39,18 +52,22 @@ jobs:
               for part in tail.split(RS):
                   if FS not in part: continue
                   k,v=part.split(FS,1)
-                  if k.isdigit(): out[int(k)]=v
+                  if k: out[k]=v
               return out
+
           def event_id(topic):
               vals=re.findall(r'/E/E_(\d+)',topic)
               return int(vals[-1]) if vals else None
+
           def market_id(topic):
               m=re.search(r'/M/E_(\d+)',topic)
               return int(m.group(1)) if m else None
+
           def selection_id(topic):
               m=re.search(r'/S/E_(\d+)',topic)
               return int(m.group(1)) if m else None
-          async def recv_for(ws, seconds, limit=50000):
+
+          async def recv_for(ws, seconds, limit=60000):
               out=[]; loop=asyncio.get_running_loop(); deadline=loop.time()+seconds
               while loop.time()<deadline and len(out)<limit:
                   try: frame=await asyncio.wait_for(ws.recv(),0.5)
@@ -59,20 +76,21 @@ jobs:
                       try: out.extend(json.loads(frame[1:]))
                       except Exception: pass
               return out
+
           async def main():
               uri=f"wss://aapi-service.betdaq.com/AAPI/{random.randrange(1000):03d}/{''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(8))}/websocket"
               async with websockets.connect(uri,origin='https://www.betdaq.com',user_agent_header='Mozilla/5.0 Chrome/140',open_timeout=15,close_timeout=5,ping_interval=None,max_size=16*1024*1024) as ws:
                   assert await asyncio.wait_for(ws.recv(),10)=='o'
                   await ws.send(json.dumps([cmd(1,{0:0,1:'GBP',2:'en',3:1,4:False,5:0,6:'2.2',7:str(uuid.uuid4()),8:5,9:'GEP-exchange-D~Linux~Browser-3.18|',10:'getClientIdentifier'})]))
-                  ack=await asyncio.wait_for(ws.recv(),10); print('ANON',repr(ack[:600]))
+                  ack=await asyncio.wait_for(ws.recv(),10); print('ANON',repr(ack[:500]))
                   await ws.send(json.dumps([cmd(12,{0:301,2:SOCCER_ID,3:False,4:False,5:False,11:True,12:False,13:False,14:False})]))
                   msgs=await recv_for(ws,5)
                   labels={}; starts={}
                   for msg in msgs:
                       topic=msg.split(FS,1)[0]; eid=event_id(topic); a=attrs(msg)
                       if not eid: continue
-                      if topic.endswith('/EL/en') and 1 in a: labels[eid]=a[1].strip()
-                      if topic.endswith('/EEI') and 3 in a: starts[eid]=a[3]
+                      if topic.endswith('/EL/en') and a.get('1'): labels[eid]=a['1'].strip()
+                      if topic.endswith('/EEI') and a.get('3'): starts[eid]=a['3']
                   today=datetime.now(TZ).date(); candidates=[]
                   for eid,raw in starts.items():
                       if eid not in labels: continue
@@ -82,37 +100,55 @@ jobs:
                   candidates.sort(key=lambda x: abs((x[0]-datetime.now(timezone.utc)).total_seconds()))
                   print('TODAY',len(candidates))
                   if not candidates: raise SystemExit('no today football events')
-                  _,eid,name=candidates[0]; print('EVENT',eid,name)
 
-                  await ws.send(json.dumps([cmd(9,{0:401,2:eid,4:'3~13',5:True,7:False,8:True,9:True,11:False,12:False})]))
-                  market_msgs=await recv_for(ws,7)
-                  names={}; types={}; selnames={}
-                  for msg in market_msgs:
-                      topic=msg.split(FS,1)[0]; mid=market_id(topic); a=attrs(msg)
-                      if not mid: continue
-                      if topic.endswith('/ML/en') or topic.endswith('/MEI/MEL/en'):
-                          if 1 in a: names[mid]=a[1].strip()
-                      elif topic.endswith('/MEI'):
-                          try: types[mid]=int(a.get(2))
-                          except Exception: pass
-                      elif topic.endswith('/SEI/SEL/en'):
-                          sid=selection_id(topic)
-                          if sid and 1 in a: selnames.setdefault(mid,{})[sid]=a[1].strip()
-                  goal=[]
-                  for mid,mname in names.items():
-                      low=mname.casefold()
-                      if types.get(mid)==13 and ('goal' in low or 'total' in low) and 'corner' not in low:
-                          goal.append((mid,mname,selnames.get(mid,{})))
-                  for row in goal[:80]: print('GOAL_MARKET',row)
-                  exact=[r for r in goal if 'team' not in r[1].casefold() and 'both teams' not in r[1].casefold() and 'result and' not in r[1].casefold()]
-                  if not exact: raise SystemExit('no usable goal-total market')
-                  mid,mname,sels=exact[0]; print('CHOSEN',mid,mname,sels)
-                  await ws.send(json.dumps([cmd(10,{0:501,5:str(mid),6:3,7:3,8:0,11:False})]))
-                  await ws.send(json.dumps([cmd(14,{0:502,5:str(mid),7:False})]))
+                  chosen=None
+                  corr=400
+                  for _,eid,name in candidates[:12]:
+                      corr += 1
+                      await ws.send(json.dumps([cmd(9,{0:corr,2:eid,4:'3~13',5:True,7:False,8:True,9:True,11:False,12:False})]))
+                      market_msgs=await recv_for(ws,3)
+                      names={}; types={}; selnames={}
+                      for msg in market_msgs:
+                          topic=msg.split(FS,1)[0]; mid=market_id(topic); a=attrs(msg)
+                          if not mid: continue
+                          if topic.endswith('/ML/en') or topic.endswith('/MEI/MEL/en'):
+                              if a.get('1'): names[mid]=a['1'].strip()
+                          elif topic.endswith('/MEI'):
+                              try: types[mid]=int(a.get('2','0'))
+                              except Exception: pass
+                          elif topic.endswith('/SEI/SEL/en') or topic.endswith('/SL/en'):
+                              sid=selection_id(topic)
+                              if sid and a.get('1'): selnames.setdefault(mid,{})[sid]=a['1'].strip()
+                      for mid,mname in names.items():
+                          if types.get(mid) != 13: continue
+                          sels=selnames.get(mid,{})
+                          parsed=betdaq_exchange._goal_total_market(mname,sels)
+                          if parsed is not None:
+                              chosen=(eid,name,mid,mname,sels,parsed)
+                              break
+                      if chosen: break
+
+                  if not chosen: raise SystemExit('production decoder found no usable goal-total market')
+                  eid,name,mid,mname,sels,parsed=chosen
+                  print('PRODUCTION_MARKET',eid,name,mid,mname,sels,'parsed',parsed)
+                  parsed_sides={runner_line(label)[0] for label in sels.values()}
+                  if not {'over','under'} <= parsed_sides: raise SystemExit('production runner parser missed Over/Under')
+
+                  corr += 1
+                  await ws.send(json.dumps([cmd(10,{0:corr,5:str(mid),6:3,7:3,8:0,11:False})]))
+                  corr += 1
+                  await ws.send(json.dumps([cmd(14,{0:corr,5:str(mid),7:False})]))
                   payloads=await recv_for(ws,5)
                   relevant=[m for m in payloads if str(mid) in m]
-                  for msg in relevant[:20]: print('PAYLOAD',repr(msg[:5000]))
-                  if not any('/MDP/' in m for m in relevant): raise SystemExit('no price payload')
-                  if not any('/MMA/' in m for m in relevant): raise SystemExit('no matched amount payload')
+                  mdp=next((m for m in relevant if '/MDP/' in m),None)
+                  mma=next((m for m in relevant if '/MMA/' in m),None)
+                  if mdp is None: raise SystemExit('no live price payload')
+                  if mma is None: raise SystemExit('no live matched amount payload')
+                  runners=betdaq_exchange._decode_price_ladder(attrs(mdp),sels)
+                  decoded={runner_line(str(row.get('label') or ''))[0] for row in runners}
+                  print('PRODUCTION_DECODE runners',[(r.get('label'),r.get('best_back'),r.get('best_lay')) for r in runners])
+                  print('MATCHED',attrs(mma))
+                  if not {'over','under'} <= decoded: raise SystemExit('production price decoder missed Over/Under runners')
+
           asyncio.run(main())
           PY

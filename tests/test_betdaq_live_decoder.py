@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def test_runner_line_accepts_live_betdaq_parentheses() -> None:
+    from gool_bot2.betdaq_production import runner_line
+
+    assert runner_line("Over (0.5)") == ("over", 0.5)
+    assert runner_line("Under (2.5)") == ("under", 2.5)
+    assert runner_line("Over 3.5") == ("over", 3.5)
+    assert runner_line("Home Team Total Goals Over (0.5)") == (None, None)
+
+
+def test_live_half_total_market_is_recognized() -> None:
+    from gool_bot2 import betdaq_exchange
+    from gool_bot2.betdaq_production import install_live_decoder
+
+    install_live_decoder()
+    selections = {327054935: "Over (0.5)", 327054936: "Under (0.5)"}
+    assert betdaq_exchange._goal_total_market("Half-time Totals Over/Under (0.5)", selections) == ("1H", 0.5)
+    assert betdaq_exchange._goal_total_market("Home Team Total Goals Over/Under (0.5)", selections) is None
+
+
+def test_live_aapi_price_ladder_decodes_actual_payload_shape() -> None:
+    from gool_bot2 import betdaq_exchange
+    from gool_bot2.betdaq_production import install_live_decoder
+
+    install_live_decoder()
+    attrs = {
+        "1V1-1": "327054936",
+        "1V1-2V1-1": "3.6",
+        "1V1-2V1-2": "7.69",
+        "1V1-3V1-1": "5",
+        "1V1-3V1-2": "20.00",
+        "1V2-1": "327054935",
+        "1V2-2V1-1": "1.25",
+        "1V2-2V1-2": "80.00",
+        "1V2-3V1-1": "1.39",
+        "1V2-3V1-2": "20.00",
+    }
+    labels = {327054935: "Over (0.5)", 327054936: "Under (0.5)"}
+    runners = betdaq_exchange._decode_price_ladder(attrs, labels)
+    by_label = {row["label"]: row for row in runners}
+
+    assert by_label["Over (0.5)"]["best_back"]["odds"] == 1.25
+    assert by_label["Over (0.5)"]["best_lay"]["odds"] == 1.39
+    assert by_label["Under (0.5)"]["best_back"]["odds"] == 3.6
+    assert by_label["Under (0.5)"]["best_lay"]["odds"] == 5.0
+
+
+def test_production_catalog_keeps_live_goal_total_market(tmp_path: Path) -> None:
+    from gool_bot2.betdaq_production import ProductionBetdaqExchangeCollector
+
+    event = 15139301
+    market = 52961327
+    over = 327054935
+    under = 327054936
+    root = f"AAPI/1/E/E_1/E/E_100003/E/E_1186459/E/E_4012456/E/E_{event}/M/E_{market}"
+    collector = ProductionBetdaqExchangeCollector(tmp_path / "betdaq.json")
+    collector._tracked_events = {event}
+    collector._topics = {
+        f"{root}/MEI": {"2": "13"},
+        f"{root}/MEI/MEL/en": {"1": "Half-time Totals Over/Under (0.5)"},
+        f"{root}/S/E_{over}/SEI/SEL/en": {"1": "Over (0.5)"},
+        f"{root}/S/E_{under}/SEI/SEL/en": {"1": "Under (0.5)"},
+    }
+
+    catalog = collector._catalog()
+    assert market in catalog
+    assert catalog[market]["kind"] == "total"
+    assert catalog[market]["period"] == "1H"
+    assert catalog[market]["line"] == 0.5
+
+
+def test_betdaq_context_targets_next_half_goal_line() -> None:
+    from gool_bot2.betdaq_exchange import betdaq_context
+
+    now = datetime.now(timezone.utc).isoformat()
+    total_market = {
+        "id": "52960000",
+        "name": "Totals Over/Under (2.5)",
+        "status": "open",
+        "volume": 2000.0,
+        "fair_over": 0.58,
+        "over": {"best_back": {"odds": 1.8}, "best_lay": {"odds": 1.82}},
+        "under": {"best_back": {"odds": 2.1}, "best_lay": {"odds": 2.12}},
+        "flow": {"window_ready_30s": True},
+    }
+    state = {
+        "captured_at": now,
+        "available": True,
+        "events": [
+            {
+                "event_id": "99",
+                "name": "Home v Away",
+                "home": "Home",
+                "away": "Away",
+                "totals": {"FT:2.5": total_market},
+            }
+        ],
+    }
+    record = {
+        "match": {
+            "home": "Home",
+            "away": "Away",
+            "minute": 67,
+            "home_score": 1,
+            "away_score": 1,
+            "is_finished": False,
+        }
+    }
+
+    context = betdaq_context(record, state)
+    flow = context["systems"]["money_flow"]
+    assert context["available"] is True
+    assert flow["available"] is True
+    assert flow["period"] == "FT"
+    assert flow["line"] == 2.5

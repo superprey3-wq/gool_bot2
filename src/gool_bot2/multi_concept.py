@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .brain_primary_mode import install_runtime_patches
 from .multi_router import RouterDecision
 from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
 
@@ -19,6 +20,8 @@ def ordinary_strategy(match: dict[str, Any]) -> str | None:
     Production concept:
     - first half: goal before half-time only, entries through 35';
     - second half: one more goal only, from 46' through 75';
+    - ordinary GOOL is decided by the main LIVE Brain; bookmaker odds are
+      optional information and never confirmation/veto;
     - autonomous 1xBet STEAM is a separate market system and has no minute cap
       while the match and its market are genuinely LIVE.
     """
@@ -38,12 +41,14 @@ def ordinary_strategy(match: dict[str, Any]) -> str | None:
 
 
 def routing_experts(match: dict[str, Any], experts: dict[str, Any]) -> dict[str, Any]:
-    """Expose only the active ordinary system to the market router.
+    """Expose only the active ordinary system to the Brain-primary router.
 
-    The full expert set is kept outside this function for diagnostics, journal
-    context and autonomous STEAM confidence. Only ordinary production routing is
-    reduced to the two-system concept.
+    The runtime patch is installed lazily here, after ``multi_runtime`` has
+    finished importing. It changes only ordinary GOOL: 1xBet remains available
+    as optional display context, while autonomous STEAM keeps its original
+    independent market pipeline.
     """
+    install_runtime_patches()
     strategy = ordinary_strategy(match)
     if strategy is None or strategy not in experts:
         return {}

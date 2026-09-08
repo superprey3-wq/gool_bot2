@@ -112,6 +112,17 @@ def _start_label(event: dict[str, Any]) -> str:
     return f"🕒 {start.astimezone(_tz()).strftime('%H:%M')}"
 
 
+def _coverage_text(state: dict[str, Any]) -> str:
+    events = int(_number(state.get("tracked_events")))
+    markets = int(_number(state.get("tracked_markets")))
+    totals = int(_number(state.get("tracked_total_markets")))
+    total_events = int(_number(state.get("events_with_totals")))
+    base = f"📡 Поле: <b>{events}</b> матчей · <b>{markets}</b> рынков под наблюдением"
+    if totals > 0 or total_events > 0:
+        base += f"\n⚽ GOOL totals: <b>{totals}</b> рынков · <b>{total_events}</b> матчей с тоталами"
+    return base
+
+
 def money_text() -> str:
     state = load_betdaq_state()
     captured = _parse_dt(state.get("captured_at"))
@@ -141,9 +152,9 @@ def money_text() -> str:
     top = [row for row in events if _number(row.get("matched_gbp")) > 0.0][:5]
     if not top:
         parts.append(
-            f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился.\n"
-            f"Отслеживаемых рынков: <b>{int(_number(state.get('tracked_markets')))}</b>."
+            f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился."
         )
+        parts.append(_coverage_text(state))
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):
@@ -154,10 +165,7 @@ def money_text() -> str:
             f"{_flow_text(event)}"
         )
 
-    parts.append(
-        f"📡 Поле: {int(_number(state.get('tracked_events')))} матчей · "
-        f"{int(_number(state.get('tracked_markets')))} рынков под наблюдением"
-    )
+    parts.append(_coverage_text(state))
     return "\n\n".join(parts)
 
 

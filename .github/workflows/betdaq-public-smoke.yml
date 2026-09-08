@@ -17,14 +17,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install 'websockets>=15,<16'
-      - name: Identify BETDAQ football market types
+      - name: Probe BETDAQ goal-total market payload
         run: |
           python - <<'PY'
           import asyncio, json, random, re, string, uuid
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
           import websockets
 
-          EVENT_ID=15088496
-          RS='\x01'; FS='\x02'
+          SOCCER_ID=100003; RS='\x01'; FS='\x02'; TZ=ZoneInfo('Europe/Moscow')
           def cmd(mid, fields):
               out=FS+str(mid)+RS
               for k,v in fields.items():
@@ -40,10 +41,16 @@ jobs:
                   k,v=part.split(FS,1)
                   if k.isdigit(): out[int(k)]=v
               return out
+          def event_id(topic):
+              vals=re.findall(r'/E/E_(\d+)',topic)
+              return int(vals[-1]) if vals else None
           def market_id(topic):
               m=re.search(r'/M/E_(\d+)',topic)
               return int(m.group(1)) if m else None
-          async def recv_for(ws, seconds, limit=20000):
+          def selection_id(topic):
+              m=re.search(r'/S/E_(\d+)',topic)
+              return int(m.group(1)) if m else None
+          async def recv_for(ws, seconds, limit=50000):
               out=[]; loop=asyncio.get_running_loop(); deadline=loop.time()+seconds
               while loop.time()<deadline and len(out)<limit:
                   try: frame=await asyncio.wait_for(ws.recv(),0.5)
@@ -57,30 +64,55 @@ jobs:
               async with websockets.connect(uri,origin='https://www.betdaq.com',user_agent_header='Mozilla/5.0 Chrome/140',open_timeout=15,close_timeout=5,ping_interval=None,max_size=16*1024*1024) as ws:
                   assert await asyncio.wait_for(ws.recv(),10)=='o'
                   await ws.send(json.dumps([cmd(1,{0:0,1:'GBP',2:'en',3:1,4:False,5:0,6:'2.2',7:str(uuid.uuid4()),8:5,9:'GEP-exchange-D~Linux~Browser-3.18|',10:'getClientIdentifier'})]))
-                  await asyncio.wait_for(ws.recv(),10)
-                  # Event hierarchy: markets yes, selections no, no tabs. One event only.
-                  await ws.send(json.dumps([cmd(12,{0:301,2:EVENT_ID,3:False,4:False,5:False,8:True,11:False,12:False,13:False,14:False})]))
-                  msgs=await recv_for(ws,6)
-                  names={}; types={}
+                  ack=await asyncio.wait_for(ws.recv(),10); print('ANON',repr(ack[:600]))
+                  await ws.send(json.dumps([cmd(12,{0:301,2:SOCCER_ID,3:False,4:False,5:False,11:True,12:False,13:False,14:False})]))
+                  msgs=await recv_for(ws,5)
+                  labels={}; starts={}
                   for msg in msgs:
-                      topic=msg.split(FS,1)[0]; mid=market_id(topic)
+                      topic=msg.split(FS,1)[0]; eid=event_id(topic); a=attrs(msg)
+                      if not eid: continue
+                      if topic.endswith('/EL/en') and 1 in a: labels[eid]=a[1].strip()
+                      if topic.endswith('/EEI') and 3 in a: starts[eid]=a[3]
+                  today=datetime.now(TZ).date(); candidates=[]
+                  for eid,raw in starts.items():
+                      if eid not in labels: continue
+                      try: dt=datetime.fromisoformat(raw.replace('Z','+00:00'))
+                      except Exception: continue
+                      if dt.astimezone(TZ).date()==today: candidates.append((dt,eid,labels[eid]))
+                  candidates.sort(key=lambda x: abs((x[0]-datetime.now(timezone.utc)).total_seconds()))
+                  print('TODAY',len(candidates))
+                  if not candidates: raise SystemExit('no today football events')
+                  _,eid,name=candidates[0]; print('EVENT',eid,name)
+
+                  await ws.send(json.dumps([cmd(9,{0:401,2:eid,4:'3~13',5:True,7:False,8:True,9:True,11:False,12:False})]))
+                  market_msgs=await recv_for(ws,7)
+                  names={}; types={}; selnames={}
+                  for msg in market_msgs:
+                      topic=msg.split(FS,1)[0]; mid=market_id(topic); a=attrs(msg)
                       if not mid: continue
-                      a=attrs(msg)
                       if topic.endswith('/ML/en') or topic.endswith('/MEI/MEL/en'):
                           if 1 in a: names[mid]=a[1].strip()
                       elif topic.endswith('/MEI'):
                           try: types[mid]=int(a.get(2))
                           except Exception: pass
-                  rows=[]
-                  for mid,name in names.items():
-                      text=name.casefold()
-                      if any(x in text for x in ('match odds','over/under','over under','total goal','1st half','first half')):
-                          rows.append((types.get(mid),mid,name))
-                  for row in sorted(rows,key=lambda x:(x[0] or 9999,x[2])): print('TYPE',*row)
-                  wanted=[r for r in rows if r[2].casefold()=='match odds']
-                  totals=[r for r in rows if 'over/under' in r[2].casefold() or 'over under' in r[2].casefold()]
-                  print('MATCH_ODDS',wanted)
-                  print('TOTALS',totals)
-                  if not wanted or not totals: raise SystemExit('required football market types not found')
+                      elif topic.endswith('/SEI/SEL/en'):
+                          sid=selection_id(topic)
+                          if sid and 1 in a: selnames.setdefault(mid,{})[sid]=a[1].strip()
+                  goal=[]
+                  for mid,mname in names.items():
+                      low=mname.casefold()
+                      if types.get(mid)==13 and ('goal' in low or 'total' in low) and 'corner' not in low:
+                          goal.append((mid,mname,selnames.get(mid,{})))
+                  for row in goal[:80]: print('GOAL_MARKET',row)
+                  exact=[r for r in goal if 'team' not in r[1].casefold() and 'both teams' not in r[1].casefold() and 'result and' not in r[1].casefold()]
+                  if not exact: raise SystemExit('no usable goal-total market')
+                  mid,mname,sels=exact[0]; print('CHOSEN',mid,mname,sels)
+                  await ws.send(json.dumps([cmd(10,{0:501,5:str(mid),6:3,7:3,8:0,11:False})]))
+                  await ws.send(json.dumps([cmd(14,{0:502,5:str(mid),7:False})]))
+                  payloads=await recv_for(ws,5)
+                  relevant=[m for m in payloads if str(mid) in m]
+                  for msg in relevant[:20]: print('PAYLOAD',repr(msg[:5000]))
+                  if not any('/MDP/' in m for m in relevant): raise SystemExit('no price payload')
+                  if not any('/MMA/' in m for m in relevant): raise SystemExit('no matched amount payload')
           asyncio.run(main())
           PY

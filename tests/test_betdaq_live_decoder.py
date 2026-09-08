@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -72,6 +73,35 @@ def test_production_catalog_keeps_live_goal_total_market(tmp_path: Path) -> None
     assert catalog[market]["kind"] == "total"
     assert catalog[market]["period"] == "1H"
     assert catalog[market]["line"] == 0.5
+
+
+def test_betdaq_flow_helper_has_own_calibration_and_windows(monkeypatch, tmp_path: Path) -> None:
+    from gool_bot2.betdaq_production import BetdaqFlowHelper
+
+    monkeypatch.setenv("MATCHBOOK_FLOW_WOM_MIN", "0.91")
+    monkeypatch.setenv("BETDAQ_FLOW_WOM_MIN", "0.50")
+    helper = BetdaqFlowHelper(tmp_path / "betdaq-flow.json")
+
+    def market(volume: float, fair: float) -> dict:
+        over = {
+            "best_back": {"odds": 1.80, "available": 400.0},
+            "best_lay": {"odds": 1.82, "available": 100.0},
+            "prices": [
+                {"side": "back", "odds": 1.80, "available": 400.0},
+                {"side": "lay", "odds": 1.82, "available": 100.0},
+            ],
+        }
+        return {"volume": volume, "fair_over": fair, "over": over, "under": {}}
+
+    first = helper._flow("bd-env-test", "FT:2.5", market(1000.0, 0.50), 1000.0)
+    second = helper._flow("bd-env-test", "FT:2.5", market(1400.0, 0.54), 1031.0)
+
+    assert first["window_ready_30s"] is False
+    assert second["window_ready_30s"] is True
+    assert second["volume_delta_30s"] == 400.0
+    assert second["fair_over_delta_pp_30s"] == 4.0
+    assert second["back_wom"] > 0.5
+    assert os.environ["MATCHBOOK_FLOW_WOM_MIN"] == "0.91"
 
 
 def test_betdaq_context_targets_next_half_goal_line() -> None:

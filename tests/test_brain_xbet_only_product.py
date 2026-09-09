@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+import importlib.util
 import inspect
-
-import monkey_start
+from pathlib import Path
 
 from gool_bot2 import multi_concept, multi_product, telegram
+
+
+def _monkey_start_module():
+    path = Path(__file__).resolve().parents[1] / "monkey_start.py"
+    spec = importlib.util.spec_from_file_location("gool_test_monkey_start", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_production_supervisor_starts_no_exchange_workers(monkeypatch):
     monkeypatch.setenv("LIVE_INTERVAL_SECONDS", "60")
     monkeypatch.setenv("XBET_MARKET_INTERVAL_SECONDS", "15")
+    monkey_start = _monkey_start_module()
 
     commands = monkey_start._production_commands(False)
 
@@ -21,6 +31,7 @@ def test_production_supervisor_starts_no_exchange_workers(monkeypatch):
 
 
 def test_browser_is_support_process_not_signal_system():
+    monkey_start = _monkey_start_module()
     commands = monkey_start._production_commands(True)
     assert set(commands) == {"live", "xbet", "worker", "browser"}
 

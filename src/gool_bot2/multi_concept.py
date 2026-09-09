@@ -4,6 +4,7 @@ from typing import Any
 
 from .brain_card_restore import install_brain_card_patch
 from .brain_in_game import install_brain_in_game_patch
+from .brain_journal_results import install_brain_journal_results
 from .brain_primary_mode import install_runtime_patches
 from .multi_router import RouterDecision
 from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
@@ -48,12 +49,14 @@ def routing_experts(match: dict[str, Any], experts: dict[str, Any]) -> dict[str,
     The runtime patch is installed lazily here, after ``multi_runtime`` has
     finished importing. It changes only ordinary GOOL: 1xBet remains available
     as optional display context, while autonomous STEAM keeps its original
-    independent market pipeline. Only the normal GOOL card and Brain-aware
-    "В игре" view are installed; exchange-money views are disabled.
+    independent market pipeline. The normal GOOL card, Brain-aware "В игре"
+    view and result-only journal tracking are installed together; exchange-money
+    views remain disabled.
     """
     install_runtime_patches()
     install_brain_card_patch()
     install_brain_in_game_patch()
+    install_brain_journal_results()
     strategy = ordinary_strategy(match)
     if strategy is None or strategy not in experts:
         return {}

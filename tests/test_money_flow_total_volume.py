@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from gool_bot2 import multi_money_flow
+from gool_bot2.multi_money_flow_total_volume import install_money_flow_total_volume
+
+
+# Exchange money-flow is no longer installed by the production package. Keep its
+# historical algorithm unit-tested by opting into the patch explicitly here.
+install_money_flow_total_volume()
 
 
 def _record(

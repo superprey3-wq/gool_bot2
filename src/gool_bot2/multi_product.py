@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from . import telegram
+from .brain_journal_tracking import install_brain_journal_tracking
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_menu import in_game_sections as _multi_in_game_sections
 from .multi_menu import journal_path, reconcile_pending, report_text
@@ -63,6 +64,7 @@ def _disable_exchange_money_runtime() -> None:
 def install_multi_product() -> None:
     """Expose the two-system GOOL product: Brain + autonomous 1xBet STEAM."""
     reset_public_tracking_once()
+    install_brain_journal_tracking()
     _disable_exchange_money_runtime()
 
     # Re-assert the exact three-button public menu. No money/exchange button is

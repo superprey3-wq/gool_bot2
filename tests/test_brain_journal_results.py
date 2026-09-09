@@ -61,6 +61,9 @@ def test_tracking_brain_signal_settles_won_without_fake_profit(monkeypatch):
     monkeypatch.setattr(bridge, "_ORIGINAL_SETTLE_ENTRY", journal.settle_entry)
     monkeypatch.setattr(bridge, "_ORIGINAL_FINISH_ROW", journal._finish_row)
     monkeypatch.setattr(journal, "_finish_row", bridge._finish_result_only)
+    # Production deliberately waits for VAR/score confirmation before a live
+    # goal is published as WON. This test exercises the post-confirmation path.
+    monkeypatch.setattr(journal, "confirmed_win", lambda *args, **kwargs: True)
     changed = bridge._settle_tracking(row, _record(minute=66, hs=1, aws=1))
     assert changed is True
     assert row["result"] == "won"

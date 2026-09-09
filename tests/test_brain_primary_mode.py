@@ -136,6 +136,11 @@ def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(tmp_path / "brain-card-signals.json"))
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     monkeypatch.setattr("gool_bot2.multi_telegram.is_multi_telegram_active", lambda: True)
+    monkeypatch.setattr(
+        card_restore,
+        "_fresh_flashscore_state",
+        lambda match_id: {"home_score": 1, "away_score": 0, "is_finished": False},
+    )
 
     record = {"match": _match()}
     decision = mode.analyze_brain_primary_match(
@@ -168,6 +173,55 @@ def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
     assert rendered == [True]
     assert decision.winner.odd == 0.0
     assert (tmp_path / "brain-card-signals.json").exists()
+
+
+def test_brain_card_is_dropped_if_score_changed_before_send(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(tmp_path / "stale-score-signals.json"))
+    monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
+    monkeypatch.setattr("gool_bot2.multi_telegram.is_multi_telegram_active", lambda: True)
+    monkeypatch.setattr(
+        card_restore,
+        "_fresh_flashscore_state",
+        lambda match_id: {"home_score": 1, "away_score": 1, "is_finished": False},
+    )
+
+    record = {"match": _match(hs=1, aws=0)}
+    decision = mode.analyze_brain_primary_match(
+        record["match"], None, {"another_goal": _experts(0.92)["another_goal"]}, data_quality=0.80
+    )
+    _, entry = mode.sync_brain_or_market_journal(
+        record,
+        decision,
+        _experts(0.92),
+        Path(tmp_path / "bet-journal.json"),
+        data_quality=0.80,
+    )
+    assert entry is not None
+    assert decision.winner is not None
+    assert decision.winner.label == "ТБ 1.5"
+
+    monkeypatch.setattr(
+        "gool_bot2.multi_steam_card.render_multi_signal_card",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("stale card must not render")),
+    )
+    monkeypatch.setattr(
+        "gool_bot2.telegram.broadcast_photo",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("stale card must not send")),
+    )
+    monkeypatch.setattr(
+        "gool_bot2.telegram.broadcast",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("stale fallback must not send")),
+    )
+
+    assert card_restore.emit_brain_card_signal(record, decision, entry) == 0
+    assert not (tmp_path / "stale-score-signals.json").exists()
+
+    refreshed = mode.analyze_brain_primary_match(
+        _match(hs=1, aws=1), None, {"another_goal": _experts(0.92)["another_goal"]}, data_quality=0.80
+    )
+    assert refreshed.status == "BET"
+    assert refreshed.winner is not None
+    assert refreshed.winner.label == "ТБ 2.5"
 
 
 def test_routing_experts_installs_brain_primary_runtime_and_card(monkeypatch):

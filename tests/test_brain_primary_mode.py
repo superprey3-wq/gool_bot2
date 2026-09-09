@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import gool_bot2.brain_card_restore as card_restore
 import gool_bot2.brain_primary_mode as mode
 import gool_bot2.multi_concept as concept
 
@@ -131,12 +132,51 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
     assert repeated is None
 
 
-def test_routing_experts_installs_brain_primary_runtime(monkeypatch):
+def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(tmp_path / "brain-card-signals.json"))
+    monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
+    monkeypatch.setattr("gool_bot2.multi_telegram.is_multi_telegram_active", lambda: True)
+
+    record = {"match": _match()}
+    decision = mode.analyze_brain_primary_match(
+        record["match"], None, {"another_goal": _experts(0.92)["another_goal"]}, data_quality=0.80
+    )
+    _, entry = mode.sync_brain_or_market_journal(
+        record,
+        decision,
+        _experts(0.92),
+        Path(tmp_path / "bet-journal.json"),
+        data_quality=0.80,
+    )
+    assert entry is not None
+    assert decision.winner is not None
+    assert decision.winner.odd == 0.0
+
+    rendered = []
+
+    def fake_render(record_arg, decision_arg, *, entry=None, market_row=None):
+        assert decision_arg.winner is not None
+        assert decision_arg.winner.odd is None
+        rendered.append(True)
+        return b"normal-gool-png"
+
+    monkeypatch.setattr("gool_bot2.multi_steam_card.render_multi_signal_card", fake_render)
+    monkeypatch.setattr("gool_bot2.telegram.broadcast_photo", lambda png: 1 if png == b"normal-gool-png" else 0)
+    monkeypatch.setattr("gool_bot2.telegram.broadcast", lambda text: (_ for _ in ()).throw(AssertionError("text fallback should not run")))
+
+    assert card_restore.emit_brain_card_signal(record, decision, entry) == 1
+    assert rendered == [True]
+    assert decision.winner.odd == 0.0
+    assert (tmp_path / "brain-card-signals.json").exists()
+
+
+def test_routing_experts_installs_brain_primary_runtime_and_card(monkeypatch):
     called = []
-    monkeypatch.setattr(concept, "install_runtime_patches", lambda: called.append(True))
+    monkeypatch.setattr(concept, "install_runtime_patches", lambda: called.append("runtime"))
+    monkeypatch.setattr(concept, "install_brain_card_patch", lambda: called.append("card"))
     experts = _experts()
 
     routed = concept.routing_experts(_match(), experts)
 
-    assert called == [True]
+    assert called == ["runtime", "card"]
     assert set(routed) == {"another_goal"}

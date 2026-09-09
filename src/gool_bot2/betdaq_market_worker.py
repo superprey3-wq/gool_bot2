@@ -21,6 +21,9 @@ def _ensure_websockets() -> None:
 
 def main() -> None:
     _ensure_websockets()
+    from .betdaq_stream_priority_fix import install_betdaq_stream_priority_fix
+
+    install_betdaq_stream_priority_fix()
     from .betdaq_selection_matched import SelectionMatchedBetdaqCollector
 
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))

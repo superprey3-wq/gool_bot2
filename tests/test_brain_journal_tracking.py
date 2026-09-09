@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import gool_bot2.brain_journal_tracking as tracking
-import gool_bot2.multi_journal as journal
 from gool_bot2.journal import load_signal_journal, save_signal_journal
 from gool_bot2.multi_router import MarketCandidate, RouterDecision
 
@@ -88,7 +87,21 @@ def test_tracking_result_never_invents_profit(monkeypatch):
         "odd": None,
         "result": "pending",
     }
-    monkeypatch.setattr(tracking, "_ORIGINAL_FINISH_ROW", journal._finish_row)
+
+    def fake_finish(target, *, result, minute, score, reason):
+        target.update(
+            {
+                "result": result,
+                "profit_units": -1.0,
+                "settled_minute": minute,
+                "settled_score": list(score),
+                "settlement_source": reason,
+                "virtual_stake_rub": 2000.0,
+                "virtual_profit_rub": -2000.0,
+            }
+        )
+
+    monkeypatch.setattr(tracking, "_ORIGINAL_FINISH_ROW", fake_finish)
 
     tracking._finish_row_without_fake_profit(
         row,

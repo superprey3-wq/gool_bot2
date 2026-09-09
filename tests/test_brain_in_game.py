@@ -41,6 +41,10 @@ def _analysis(path: Path, *, minute: int, score=(0, 0), finished: bool = False) 
     path.write_text(json.dumps(row) + "\n", "utf-8")
 
 
+def _no_fresh(monkeypatch) -> None:
+    monkeypatch.setattr(menu, "_fresh_flashscore_states", lambda _ids: {})
+
+
 def test_sent_brain_signal_appears_in_game_without_fake_bet(tmp_path, monkeypatch):
     brain = tmp_path / "brain.json"
     analysis = tmp_path / "analysis.jsonl"
@@ -49,6 +53,7 @@ def test_sent_brain_signal_appears_in_game_without_fake_bet(tmp_path, monkeypatc
     _analysis(analysis, minute=64, score=(0, 0))
     monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
     monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["EMPTY"])
+    _no_fresh(monkeypatch)
 
     rows = menu.in_game_with_brain(journal, analysis)
     text = "\n".join(rows)
@@ -68,6 +73,7 @@ def test_brain_next_goal_disappears_after_goal(tmp_path, monkeypatch):
     _analysis(analysis, minute=67, score=(1, 0))
     monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
     monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["NO OPEN SIGNALS"])
+    _no_fresh(monkeypatch)
 
     assert menu.in_game_with_brain(journal, analysis) == ["NO OPEN SIGNALS"]
 
@@ -80,5 +86,83 @@ def test_first_half_brain_signal_disappears_after_halftime(tmp_path, monkeypatch
     _analysis(analysis, minute=46, score=(0, 0))
     monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
     monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["NO OPEN SIGNALS"])
+    _no_fresh(monkeypatch)
+
+    assert menu.in_game_with_brain(journal, analysis) == ["NO OPEN SIGNALS"]
+
+
+def test_finished_match_disappears_even_when_analysis_is_stale_live(tmp_path, monkeypatch):
+    brain = tmp_path / "brain.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal = tmp_path / "journal.json"
+    _write_brain(brain, minute=62, score=(0, 0))
+    # Analysis stopped while the match was still live.
+    _analysis(analysis, minute=74, score=(0, 0), finished=False)
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
+    monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["NO OPEN SIGNALS"])
+    monkeypatch.setattr(
+        menu,
+        "_fresh_flashscore_states",
+        lambda ids: {
+            "m1": {
+                "event_id": "m1",
+                "coarse_status": "3",
+                "is_finished": True,
+                "home_score": 0,
+                "away_score": 0,
+            }
+        },
+    )
+
+    assert menu.in_game_with_brain(journal, analysis) == ["NO OPEN SIGNALS"]
+
+
+def test_fresh_flashscore_goal_closes_brain_signal_before_analysis_catches_up(tmp_path, monkeypatch):
+    brain = tmp_path / "brain.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal = tmp_path / "journal.json"
+    _write_brain(brain, minute=62, score=(0, 0))
+    _analysis(analysis, minute=63, score=(0, 0), finished=False)
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
+    monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["NO OPEN SIGNALS"])
+    monkeypatch.setattr(
+        menu,
+        "_fresh_flashscore_states",
+        lambda ids: {
+            "m1": {
+                "event_id": "m1",
+                "coarse_status": "2",
+                "is_finished": False,
+                "home_score": 1,
+                "away_score": 0,
+            }
+        },
+    )
+
+    assert menu.in_game_with_brain(journal, analysis) == ["NO OPEN SIGNALS"]
+
+
+def test_fresh_halftime_status_closes_first_half_signal(tmp_path, monkeypatch):
+    brain = tmp_path / "brain.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal = tmp_path / "journal.json"
+    _write_brain(brain, strategy="goal_before_ht", minute=34, score=(0, 0))
+    _analysis(analysis, minute=35, score=(0, 0), finished=False)
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(brain))
+    monkeypatch.setattr(menu, "_ORIGINAL_IN_GAME", lambda *_: ["NO OPEN SIGNALS"])
+    monkeypatch.setattr(
+        menu,
+        "_fresh_flashscore_states",
+        lambda ids: {
+            "m1": {
+                "event_id": "m1",
+                "coarse_status": "2",
+                "status_code": "38",
+                "is_finished": False,
+                "home_score": 0,
+                "away_score": 0,
+            }
+        },
+    )
 
     assert menu.in_game_with_brain(journal, analysis) == ["NO OPEN SIGNALS"]

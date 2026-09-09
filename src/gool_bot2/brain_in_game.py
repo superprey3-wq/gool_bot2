@@ -69,6 +69,36 @@ def _latest_states(path: Path | None) -> dict[str, dict[str, Any]]:
     return latest
 
 
+def _fresh_flashscore_states(match_ids: set[str]) -> dict[str, dict[str, Any]]:
+    """Fetch authoritative current/finished state for Brain signals shown in-game.
+
+    Analysis JSONL normally stops receiving rows once a match leaves the working
+    minute window. Without this direct refresh a finished match can remain shown
+    with its last LIVE minute until the age fallback expires. One batched master
+    feed lookup keeps the menu current without adding work to the normal signal loop.
+    """
+    ids = {str(match_id) for match_id in match_ids if str(match_id)}
+    if not ids:
+        return {}
+    try:
+        from .providers.flashscore import FlashscoreProvider
+
+        payload = FlashscoreProvider().event_states(ids)
+    except Exception as exc:
+        print(
+            f"GOOL_BRAIN_IN_GAME_STATE_ERROR error={type(exc).__name__}:{exc}",
+            flush=True,
+        )
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        str(match_id): dict(state)
+        for match_id, state in payload.items()
+        if isinstance(state, dict)
+    }
+
+
 def _score(value: Any, fallback: list[int] | None = None) -> list[int]:
     fallback = list(fallback or [0, 0])
     try:
@@ -94,8 +124,21 @@ def _state_score(state: dict[str, Any], entry_score: list[int]) -> list[int]:
 def _is_finished(state: dict[str, Any]) -> bool:
     if bool(state.get("is_finished")):
         return True
+    coarse = str(state.get("coarse_status") or "").strip()
+    if coarse == "3":
+        return True
     status = str(state.get("status") or state.get("phase") or "").strip().upper()
     return status in {"FINISHED", "FT", "AFTER EXTRA TIME", "AET", "ENDED"}
+
+
+def _is_halftime(state: dict[str, Any]) -> bool:
+    if bool(state.get("is_halftime")):
+        return True
+    status_code = str(state.get("status_code") or "").strip()
+    if status_code == "38":
+        return True
+    status = str(state.get("status") or state.get("phase") or "").strip().upper()
+    return status in {"HALFTIME", "HALF TIME", "HT"}
 
 
 def _active_brain_rows(analysis_path: Path | None) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -104,9 +147,8 @@ def _active_brain_rows(analysis_path: Path | None) -> list[tuple[dict[str, Any],
         max_age_minutes = max(15.0, float(os.getenv("GOOL_BRAIN_IN_GAME_MAX_AGE_MINUTES", "180")))
     except (TypeError, ValueError):
         max_age_minutes = 180.0
-    states = _latest_states(analysis_path)
-    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
 
+    candidates: list[dict[str, Any]] = []
     for row in _load_brain_rows():
         if not bool(row.get("telegram_sent")):
             continue
@@ -119,9 +161,26 @@ def _active_brain_rows(analysis_path: Path | None) -> list[tuple[dict[str, Any],
         age_minutes = (now - created.astimezone(timezone.utc)).total_seconds() / 60.0
         if age_minutes < -2.0 or age_minutes > max_age_minutes:
             continue
+        candidates.append(row)
 
+    if not candidates:
+        return []
+
+    states = _latest_states(analysis_path)
+    match_ids = {str(row.get("match_id") or "") for row in candidates}
+    fresh_states = _fresh_flashscore_states(match_ids)
+    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    for row in candidates:
         match_id = str(row.get("match_id") or "")
         state = dict(states.get(match_id) or {})
+        fresh = fresh_states.get(match_id)
+        if fresh:
+            # The master-feed state is authoritative for finished/HT flags and
+            # current score. Preserve the last analysis minute only because the
+            # compact event state intentionally does not calculate a minute.
+            state.update(fresh)
+
         if _is_finished(state):
             continue
 
@@ -142,7 +201,8 @@ def _active_brain_rows(analysis_path: Path | None) -> list[tuple[dict[str, Any],
             live_minute = entry_minute
         live_minute = max(entry_minute, live_minute)
 
-        if strategy == "goal_before_ht" and (bool(state.get("is_halftime")) or live_minute > 45):
+        strategy = str(row.get("strategy") or row.get("head") or "")
+        if strategy == "goal_before_ht" and (_is_halftime(state) or live_minute > 45):
             continue
 
         view = {
@@ -236,7 +296,7 @@ def install_brain_in_game_patch() -> None:
     _ORIGINAL_IN_GAME = telegram.in_game_sections
     telegram.in_game_sections = in_game_with_brain
     _INSTALLED = True
-    print("GOOL_BRAIN_IN_GAME installed source=signal_state", flush=True)
+    print("GOOL_BRAIN_IN_GAME installed source=signal_state fresh_flashscore=on", flush=True)
 
 
 __all__ = ["in_game_with_brain", "install_brain_in_game_patch"]

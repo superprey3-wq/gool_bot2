@@ -110,14 +110,17 @@ def _score(value: Any, fallback: list[int] | None = None) -> list[int]:
 
 
 def _state_score(state: dict[str, Any], entry_score: list[int]) -> list[int]:
-    direct = state.get("score")
-    if isinstance(direct, (list, tuple)) and len(direct) >= 2:
-        return _score(direct, entry_score)
+    # Flashscore event_states() supplies home_score/away_score and is fetched
+    # immediately when the menu opens. Prefer it over a possibly stale analysis
+    # JSONL `score` field left from the last Brain scan.
     try:
         if "home_score" in state or "away_score" in state:
             return [int(state.get("home_score") or 0), int(state.get("away_score") or 0)]
     except Exception:
         pass
+    direct = state.get("score")
+    if isinstance(direct, (list, tuple)) and len(direct) >= 2:
+        return _score(direct, entry_score)
     return entry_score
 
 

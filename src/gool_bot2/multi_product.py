@@ -4,38 +4,26 @@ import sys
 from pathlib import Path
 
 from . import telegram
-from .money_menu import install_money_button, money_text
 from .multi_analysis_view import analysis_text as _analysis_text
-from .multi_bank import current_bank_summary
 from .multi_menu import in_game_sections as _multi_in_game_sections
 from .multi_menu import journal_path, reconcile_pending, report_text
-from .multi_money_flow import money_flow_open_section, money_flow_report_line
-from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 from .public_epoch_reset import reset_public_tracking_once
 
 
-def _report_text_with_bank(*args, **kwargs) -> str:
+_CLEAN_MENU_KEYBOARD = {
+    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🧠 Анализ"}]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
+def _report_text_clean(*args, **kwargs) -> str:
+    """Public journal contains only the ordinary Brain and 1xBet STEAM lanes."""
     path = journal_path()
     reconcile_finalized_first_half(path)
-    text = report_text(*args, **kwargs)
-    flow = money_flow_report_line()
-    bank = "\n".join(current_bank_summary(path))
-    return (
-        f"{text}\n\n"
-        "<b>Отдельная система денежного потока:</b>\n"
-        f"{flow}\n\n"
-        f"{bank}"
-    )
-
-
-def _in_game_sections_with_flow(*args, **kwargs) -> list[str]:
-    sections = list(_multi_in_game_sections(*args, **kwargs))
-    flow = money_flow_open_section()
-    if flow:
-        sections.append(flow)
-    return sections
+    return report_text(*args, **kwargs)
 
 
 def _analysis_text_safe(*args, **kwargs) -> str:
@@ -44,8 +32,16 @@ def _analysis_text_safe(*args, **kwargs) -> str:
     return text.replace("PRICE<", "PRICE&lt;").replace("RATING<", "RATING&lt;")
 
 
-def _install_direct_money_handler() -> bool:
-    """Extend the existing single background responder; never start another poller."""
+def _disable_exchange_money_runtime() -> None:
+    """Hard-disable legacy exchange FLOW emitters inside the production worker.
+
+    The signal worker imports these callables before ``install_multi_product`` is
+    executed. Replacing the module globals here guarantees that stale Matchbook or
+    BETDAQ state files cannot generate money-flow Telegram messages after the
+    exchange workers have been removed from the supervisor. The daily virtual-bank
+    push is disabled as well; the user-facing product is now only Journal/In Game/
+    Analysis plus GOOL Brain and autonomous 1xBet STEAM alerts.
+    """
     modules = [
         sys.modules.get("gool_bot2.storage_market_signal_worker_var"),
         sys.modules.get("__main__"),
@@ -58,49 +54,23 @@ def _install_direct_money_handler() -> bool:
         module_name = str(getattr(module, "__name__", "") or "")
         if module_name == "__main__" and spec_name not in {"", "gool_bot2.storage_market_signal_worker_var"}:
             continue
-        if bool(getattr(module, "_GOOL_MONEY_MENU_INSTALLED", False)):
-            return True
-        original = getattr(module, "_handle_direct_telegram_update", None)
-        direct_send = getattr(module, "_direct_send_message", None)
-        if not callable(original) or not callable(direct_send):
-            continue
-
-        def money_aware_handler(token, journal_path_arg, update, _original=original, _send=direct_send):
-            message = update.get("message") or {}
-            raw_text = str(message.get("text") or "").strip()
-            text = raw_text.split("@", 1)[0].lower()
-            chat_id = (message.get("chat") or {}).get("id")
-            if chat_id is not None and text == "💰 деньги":
-                try:
-                    reply = money_text()
-                except Exception as exc:
-                    print(
-                        f"GOOL_TELEGRAM_MONEY_ERROR {type(exc).__name__}:{exc}",
-                        flush=True,
-                    )
-                    reply = "⚠️ <b>ДЕНЬГИ</b>\n\nБиржевой источник сейчас проходит замену. GOOL и STEAM продолжают работать независимо."
-                return int(_send(token, chat_id, reply, reply_markup=telegram.MENU_KEYBOARD))
-            return _original(token, journal_path_arg, update)
-
-        setattr(module, "_handle_direct_telegram_update", money_aware_handler)
-        setattr(module, "_GOOL_MONEY_MENU_INSTALLED", True)
-        return True
-    return False
+        if hasattr(module, "_maybe_emit_money_flow"):
+            setattr(module, "_maybe_emit_money_flow", lambda _record: None)
+        if hasattr(module, "daily_report_due_date"):
+            setattr(module, "daily_report_due_date", lambda *_args, **_kwargs: None)
 
 
 def install_multi_product() -> None:
-    """Point menus/reporting at the unified Multi product."""
-    install_money_flow_total_volume()
+    """Expose the two-system GOOL product: Brain + autonomous 1xBet STEAM."""
     reset_public_tracking_once()
-    telegram.report_text = _report_text_with_bank
-    telegram.in_game_sections = _in_game_sections_with_flow
+    _disable_exchange_money_runtime()
+
+    # Re-assert the exact three-button public menu. No money/exchange button is
+    # appended anywhere in the active product.
+    telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
+    telegram.report_text = _report_text_clean
+    telegram.in_game_sections = _multi_in_game_sections
     telegram.analysis_text = _analysis_text_safe
-    install_money_button(telegram)
-    _install_direct_money_handler()
-    # Betfair public trial was deliberately NOT started in production: both plain
-    # HTTP and headless Chromium were rejected with 403 in the network smoke.
-    # Keep the probe/parser code for research, but do not waste host resources on
-    # a collector that cannot obtain a board.
 
     def _reconcile(_: Path) -> int:
         path = journal_path()
@@ -110,25 +80,19 @@ def install_multi_product() -> None:
     telegram._force_reconcile_pending = _reconcile
     if is_multi_telegram_active():
         telegram.START_TEXT = (
-            "🟢 <b>GOOL MULTI работает</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet\n"
-            "Две основные GOOL-системы + отдельный STEAM. Биржевой MONEY FLOW сейчас проходит замену источника.\n"
-            "Обычный GOOL по-прежнему выбирает один лучший рынок или WAIT.\n\n"
-            "📊 Отчёт — GOOL + STEAM + статистика MONEY FLOW\n"
-            "🟢 В игре — открытые BEST BET + MONEY FLOW\n"
-            "🧠 Анализ — почему каждый матч BET или WAIT\n"
-            "💰 Деньги — биржевая доска (источник заменяется)\n"
-            "💰 Дневной отчёт банка — автоматически в 23:59"
+            "🟢 <b>GOOL работает</b>\n\n"
+            "Активные системы:\n"
+            "🧠 GOOL Brain — обычные LIVE-сигналы по футболу\n"
+            "🔥 1xBet STEAM — отдельные сигналы прогруза\n\n"
+            "📊 Отчёт — журнал Brain + STEAM\n"
+            "🟢 В игре — активные сигналы\n"
+            "🧠 Анализ — текущий разбор матчей"
         )
     else:
         telegram.START_TEXT = (
-            "🟢 <b>GOOL MULTI работает в shadow</b>\n\n"
-            "MODEL + PREMATCH + LIVE + 1xBet\n"
-            "Один лучший рынок на матч: BEST BET или WAIT.\n\n"
-            "📊 Отчёт — статистика выбранных Multi-ставок + MONEY FLOW\n"
-            "🟢 В игре — открытые Multi-ставки + MONEY FLOW\n"
-            "🧠 Анализ — почему каждый матч BET или WAIT\n"
-            "💰 Деньги — биржевая доска (источник заменяется)\n"
-            "💰 Виртуальный банк — дневной отчёт автоматически в 23:59\n\n"
-            "Боевые Telegram-сигналы пока остаются на старом контуре до включения GOOL_MULTI_TELEGRAM_MODE=active."
+            "🟢 <b>GOOL работает в shadow</b>\n\n"
+            "Активные системы: GOOL Brain + 1xBet STEAM.\n\n"
+            "📊 Отчёт — журнал\n"
+            "🟢 В игре — активные сигналы\n"
+            "🧠 Анализ — текущий разбор матчей"
         )

@@ -4,7 +4,6 @@ from typing import Any
 
 from . import goal_state_policy as _goal_state_policy
 from .architecture_isolation import install_architecture_isolation
-from .betdaq_runtime import install_betdaq_runtime
 from .brain_v3_activation import install_brain_v3_activation
 from .brain_v3_candidate_stability import install_brain_v3_candidate_stability
 from .brain_v3_field_scan_runtime import install_brain_v3_field_scan_runtime
@@ -13,9 +12,6 @@ from .brain_v3_memory import install_brain_v3_memory
 from .brain_v3_selection_hardening import install_brain_v3_selection_hardening
 from .browser_context_runtime import install_browser_context_runtime
 from .live_goal_hazard import install_live_goal_hazard
-from .matchbook_auth import install_matchbook_auth
-from .matchbook_long_flow import install_matchbook_long_flow
-from .multi_money_flow_total_volume import install_money_flow_total_volume
 from .production_calibration import install_production_calibration
 from .runtime_fastlane import install_runtime_fastlane
 from .steam_quality_hardening import install_steam_quality_hardening
@@ -72,17 +68,12 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
-# Compatibility/calibration layers install first. Autonomous market systems remain
-# independent: 1xBet STEAM, Matchbook MONEY FLOW and BETDAQ MONEY FLOW are three
-# separate lanes. Brain V3 owns ordinary football decisions and none of the three
-# market systems may manufacture its football probability.
+# Production has exactly two public signal lanes:
+# 1) ordinary GOOL Brain; 2) autonomous 1xBet STEAM.
+# Exchange money-flow systems are intentionally not installed here.
 install_architecture_isolation()
 install_production_calibration()
 _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
-install_matchbook_auth()
-install_matchbook_long_flow()
-install_money_flow_total_volume()
-install_betdaq_runtime()
 install_xbet_trajectory_hardening()
 install_live_goal_hazard()
 install_steam_quality_hardening()

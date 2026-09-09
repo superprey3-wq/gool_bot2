@@ -35,12 +35,7 @@ def _truthy(name: str, default: bool = False) -> bool:
 
 
 def _reset_multi_tracking_once(runtime: Path) -> None:
-    """Start the Brain V3 production epoch with clean public performance tracking.
-
-    This removes only betting journals/banks and disposable Brain analysis. Market
-    histories for autonomous market systems are deliberately preserved so STEAM/FLOW
-    do not lose their live movement context.
-    """
+    """Start the Brain V3 public epoch with clean GOOL tracking once."""
     live = runtime / "live"
     live.mkdir(parents=True, exist_ok=True)
     marker = live / f".gool_multi_reset_{MULTI_RESET_ID}"
@@ -54,13 +49,8 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     analysis_raw = os.getenv("GOOL_MULTI_ANALYSIS_PATH", "").strip() or os.getenv("GOOL_MULTI_SHADOW_PATH", "").strip()
     multi_analysis = Path(analysis_raw) if analysis_raw else live / "gool_multi_analysis.jsonl"
 
-    flow_journal_raw = os.getenv("GOOL_MONEY_FLOW_JOURNAL_PATH", "").strip()
-    flow_journal = Path(flow_journal_raw) if flow_journal_raw else live / "gool_money_flow_journal.json"
-    flow_bank_raw = os.getenv("GOOL_MONEY_FLOW_BANK_STATE_PATH", "").strip()
-    flow_bank = Path(flow_bank_raw) if flow_bank_raw else flow_journal.with_name("gool_money_flow_bank_state.json")
-
     removed: list[str] = []
-    for path in (multi_journal, bank_state, multi_analysis, flow_journal, flow_bank):
+    for path in (multi_journal, bank_state, multi_analysis):
         try:
             if path.exists():
                 path.unlink()
@@ -83,7 +73,7 @@ def _reset_multi_tracking_once(runtime: Path) -> None:
     )
     print(
         f"GOOL_BOOT multi_tracking_reset={MULTI_RESET_ID} "
-        f"removed={len(removed)} journal={multi_journal} bank={bank_state} flow_journal={flow_journal}",
+        f"removed={len(removed)} journal={multi_journal} bank={bank_state}",
         flush=True,
     )
 
@@ -92,13 +82,15 @@ def _pip_env() -> dict[str, str]:
     PIP_TMP.mkdir(parents=True, exist_ok=True)
     PLAYWRIGHT_ROOT.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env.update({
-        "TMPDIR": str(PIP_TMP),
-        "TMP": str(PIP_TMP),
-        "TEMP": str(PIP_TMP),
-        "PIP_NO_CACHE_DIR": "1",
-        "PLAYWRIGHT_BROWSERS_PATH": os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_ROOT)),
-    })
+    env.update(
+        {
+            "TMPDIR": str(PIP_TMP),
+            "TMP": str(PIP_TMP),
+            "TEMP": str(PIP_TMP),
+            "PIP_NO_CACHE_DIR": "1",
+            "PLAYWRIGHT_BROWSERS_PATH": os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_ROOT)),
+        }
+    )
     return env
 
 
@@ -123,13 +115,6 @@ def ensure_deps() -> None:
 
 
 def _ensure_chromium() -> bool:
-    """Install and smoke-launch one Playwright Chromium without risking main GOOL.
-
-    Production containers often do not grant apt/root. We therefore install the
-    browser binary only (never --with-deps). If its shared libraries are missing,
-    the feature is disabled and the normal Flashscore/FotMob/365Scores pipeline
-    continues untouched.
-    """
     if not _truthy("GOOL_BROWSER_ENABLE", True):
         os.environ["GOOL_BROWSER_ENABLE"] = "0"
         print("GOOL_BOOT browser365=disabled reason=config", flush=True)
@@ -184,6 +169,36 @@ def find_model(filename: str) -> Path:
     return matches[0]
 
 
+def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
+    """Return the only processes allowed in the public two-system product."""
+    commands = {
+        "live": [
+            sys.executable,
+            "-m",
+            "gool_bot2.storage_live_collector",
+            "--interval",
+            os.environ.get("LIVE_INTERVAL_SECONDS", "60"),
+        ],
+        "xbet": [
+            sys.executable,
+            "-m",
+            "gool_bot2.xbet_market_worker",
+            "--interval",
+            os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15"),
+        ],
+        "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
+    }
+    if browser_enabled:
+        commands["browser"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.browser_context_worker",
+            "--interval",
+            os.environ.get("GOOL_BROWSER_INTERVAL_SECONDS", "30"),
+        ]
+    return commands
+
+
 def main() -> None:
     load_env(ENV_FILE)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
@@ -191,7 +206,12 @@ def main() -> None:
 
     runtime = Path(os.environ.get("RUNTIME_DATA_DIR", str(RUNTIME_ROOT)))
     raw_live = Path(os.environ.get("RAW_LIVE_DIR", str(runtime / "raw" / "live")))
-    journal = Path(os.environ.get("SIGNAL_JOURNAL", os.environ.get("SIGNAL_JOURNAL_PATH", str(runtime / "live" / "signal_journal.json"))))
+    journal = Path(
+        os.environ.get(
+            "SIGNAL_JOURNAL",
+            os.environ.get("SIGNAL_JOURNAL_PATH", str(runtime / "live" / "signal_journal.json")),
+        )
+    )
     analysis = Path(os.environ.get("SIGNAL_ANALYSIS_PATH", str(runtime / "live" / "gool_bot2_analysis.jsonl")))
     shadow_journal = Path(os.environ.get("SHADOW_MARKET_JOURNAL", str(runtime / "live" / "gool_bot2_shadow_markets.json")))
     shadow_analysis = Path(os.environ.get("SHADOW_MARKET_ANALYSIS", str(runtime / "live" / "gool_bot2_shadow_analysis.jsonl")))
@@ -199,8 +219,6 @@ def main() -> None:
     prematch_cache = Path(os.environ.get("PREMATCH_CACHE_DIR", str(runtime / "live" / "prematch_cache")))
     xbet_state = Path(os.environ.get("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     xbet_history = Path(os.environ.get("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
-    matchbook_state = Path(os.environ.get("MATCHBOOK_MARKET_STATE", str(runtime / "live" / "matchbook_market_state.json")))
-    betdaq_state = Path(os.environ.get("BETDAQ_MARKET_STATE", str(runtime / "live" / "betdaq_market_state.json")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["RAW_LIVE_DIR"] = str(raw_live)
@@ -214,27 +232,24 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
-    os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
-    os.environ["BETDAQ_MARKET_STATE"] = str(betdaq_state)
     os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
 
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
-    # Both exchange workers are lightweight and independent. Ten-second snapshots
-    # give the 30/60/120/300s flow trajectories enough resolution.
-    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")
-    os.environ.setdefault("MATCHBOOK_MIN_MARKET_VOLUME", "50")
-    os.environ.setdefault("BETDAQ_MARKET_INTERVAL_SECONDS", "10")
-    os.environ.setdefault("BETDAQ_MIN_MARKET_VOLUME", "50")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
 
-    # One persistent Chromium, at most two selected matches per cycle. It is a
-    # fallback source and historical-trend helper, never a replacement for LIVE.
+    # Hard production kill-switches for every exchange-money lane. Values from an
+    # old gool.env cannot re-enable them accidentally after this deployment.
+    os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"
+    os.environ["BETDAQ_SELECTION_PUSH_ENABLED"] = "0"
+    os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"
+    os.environ["GOOL_EXCHANGE_MONEY_SYSTEMS_ENABLED"] = "0"
+
     os.environ.setdefault("GOOL_BROWSER_ENABLE", "1")
     os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "30")
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "2")
@@ -251,8 +266,6 @@ def main() -> None:
     shadow_cards.mkdir(parents=True, exist_ok=True)
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
-    matchbook_state.parent.mkdir(parents=True, exist_ok=True)
-    betdaq_state.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
     ensure_deps()
@@ -277,8 +290,8 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
-        "GOOL_BOOT brain=V3 prematch=support_only xbet=odds+separate_steam "
-        "matchbook=separate_money_flow betdaq=separate_money_flow",
+        "GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM exchange_money=off "
+        "matchbook_worker=off betdaq_worker=off sx_board=off",
         flush=True,
     )
     if browser_enabled:
@@ -293,21 +306,7 @@ def main() -> None:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONPATH"] = os.environ["PYTHONPATH"]
 
-    commands = {
-        "live": [sys.executable, "-m", "gool_bot2.storage_live_collector", "--interval", os.environ.get("LIVE_INTERVAL_SECONDS", "60")],
-        "xbet": [sys.executable, "-m", "gool_bot2.xbet_market_worker", "--interval", os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15")],
-        "matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker", "--interval", os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")],
-        "betdaq": [sys.executable, "-m", "gool_bot2.betdaq_market_worker", "--interval", os.environ.get("BETDAQ_MARKET_INTERVAL_SECONDS", "10")],
-        "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
-    }
-    if browser_enabled:
-        commands["browser"] = [
-            sys.executable,
-            "-m",
-            "gool_bot2.browser_context_worker",
-            "--interval",
-            os.environ.get("GOOL_BROWSER_INTERVAL_SECONDS", "30"),
-        ]
+    commands = _production_commands(browser_enabled)
     children: dict[str, subprocess.Popen] = {}
 
     def start_child(name: str) -> None:

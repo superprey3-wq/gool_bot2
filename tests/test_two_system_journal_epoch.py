@@ -14,7 +14,7 @@ def test_two_system_epoch_has_new_reset_id() -> None:
     assert _MULTI_RESET_ID == "brain_v3_market_systems_clean_epoch_2026_09_06"
 
 
-def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkeypatch) -> None:
+def test_reset_starts_public_journal_bank_and_analysis_from_zero(tmp_path: Path, monkeypatch) -> None:
     live = tmp_path / "live"
     live.mkdir(parents=True)
     journal = live / "gool_multi_journal.json"
@@ -46,15 +46,16 @@ def test_reset_starts_journal_bank_and_analysis_from_zero(tmp_path: Path, monkey
     assert not journal.exists()
     assert not bank.exists()
     assert not analysis.exists()
-    assert not flow_journal.exists()
-    assert not flow_bank.exists()
+    # Exchange FLOW is no longer part of the public product. Its old files are
+    # treated as dormant archives rather than production state and are untouched.
+    assert flow_journal.exists()
+    assert flow_bank.exists()
     assert not trace.exists()
     marker = live / f".gool_multi_reset_{_MULTI_RESET_ID}"
     assert marker.exists()
 
-    # One-time reset: later restarts keep the new epoch.
+    # One-time reset: later restarts keep the new public epoch and dormant archive.
     journal.write_text("[]", "utf-8")
-    flow_journal.write_text("[]", "utf-8")
     _reset_multi_tracking_once(tmp_path)
     assert journal.exists()
     assert flow_journal.exists()

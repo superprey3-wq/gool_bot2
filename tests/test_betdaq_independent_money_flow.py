@@ -87,17 +87,17 @@ def test_betdaq_has_separate_journal_path(monkeypatch, tmp_path: Path):
 def test_betdaq_runtime_does_not_replace_matchbook_context():
     from gool_bot2 import matchbook_exchange
 
-    # Runtime hardening is allowed to wrap Matchbook with its own freshness guard;
-    # the important invariant is that BETDAQ never becomes Matchbook's context.
+    # Dormant exchange modules remain isolated for research/regression purposes.
     assert matchbook_exchange.matchbook_context.__module__ != "gool_bot2.betdaq_exchange"
     assert matchbook_exchange.matchbook_context.__name__ != "betdaq_context"
 
 
-def test_monkey_start_launches_both_exchange_workers():
+def test_monkey_start_does_not_launch_exchange_workers():
     source = Path("monkey_start.py").read_text(encoding="utf-8")
-    assert '"matchbook": [sys.executable, "-m", "gool_bot2.matchbook_market_worker"' in source
-    assert '"betdaq": [sys.executable, "-m", "gool_bot2.betdaq_market_worker"' in source
-    assert "matchbook=separate_money_flow betdaq=separate_money_flow" in source
+    assert '"gool_bot2.matchbook_market_worker"' not in source
+    assert '"gool_bot2.betdaq_market_worker"' not in source
+    assert "systems=GOOL_BRAIN+1XBET_STEAM" in source
+    assert "exchange_money=off" in source
 
 
 def test_matchbook_launcher_cannot_alias_betdaq_worker():

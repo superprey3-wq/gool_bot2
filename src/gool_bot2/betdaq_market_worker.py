@@ -22,8 +22,10 @@ def _ensure_websockets() -> None:
 def main() -> None:
     _ensure_websockets()
     from .betdaq_stream_priority_fix import install_betdaq_stream_priority_fix
+    from .betdaq_selection_lifecycle_patch import install_betdaq_selection_lifecycle
 
     install_betdaq_stream_priority_fix()
+    install_betdaq_selection_lifecycle()
     from .betdaq_selection_matched import SelectionMatchedBetdaqCollector
 
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
@@ -44,7 +46,7 @@ def main() -> None:
     print(
         f"BETDAQ_EXCHANGE started mode=anonymous_aapi interval={max(8.0, args.interval):.0f}s "
         f"state={args.state} board=all_today_football markets=match_odds+ft_1h_totals "
-        "decoder=live_hardened selection_matched=on",
+        "decoder=live_hardened selection_matched=on result_lifecycle=on",
         flush=True,
     )
     collector.run(args.interval)

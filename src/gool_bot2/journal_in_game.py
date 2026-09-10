@@ -67,21 +67,26 @@ def _is_open(row: dict[str, Any]) -> bool:
     return was_publicly_sent(row)
 
 
-def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = None) -> list[str]:
-    """Show delivered journal entries that are not settled yet.
+def journal_in_game_sections(_journal_path: Path, _analysis_path: Path | None = None) -> list[str]:
+    """Show delivered, unsettled entries from the canonical GOOL Multi journal.
 
-    The journal is the source of truth for membership. Flashscore may be used by
-    reconciliation to update/settle a journal row, but an unrelated current LIVE
-    list never decides whether a bet existed.
+    The Telegram responder historically passes the legacy ``signal_journal.json``
+    path into every menu callback. That path is NOT the public GOOL Multi journal.
+    Membership therefore always resolves through ``multi_menu.journal_path()``.
+    Flashscore is used only by reconciliation/settlement; it never decides whether
+    a signal/stake existed.
     """
     from . import multi_menu
+
+    canonical_journal = multi_menu.journal_path()
+    canonical_analysis = multi_menu.analysis_path()
 
     try:
         multi_menu.reconcile_pending()
     except Exception as exc:
         print(f"GOOL_IN_GAME_RECONCILE_ERROR {type(exc).__name__}:{exc}", flush=True)
 
-    rows = [dict(row) for row in load_signal_journal(Path(journal_path)) if _is_open(row)]
+    rows = [dict(row) for row in load_signal_journal(canonical_journal) if _is_open(row)]
     latest: dict[str, dict[str, Any]] = {}
     for row in rows:
         key = str(row.get("entry_key") or row.get("brain_signal_key") or "")
@@ -93,10 +98,16 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
     rows = list(latest.values())
     rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
 
+    print(
+        f"GOOL_IN_GAME_JOURNAL source={canonical_journal} open={len(rows)} "
+        f"legacy_arg_ignored={int(Path(_journal_path) != canonical_journal)}",
+        flush=True,
+    )
+
     if not rows:
         return ["🟢 <b>GOOL MULTI · В ИГРЕ</b>\n\nОткрытых сигналов сейчас нет."]
 
-    states = _latest_analysis(analysis_path)
+    states = _latest_analysis(canonical_analysis)
     parts = [f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>{len(rows)}</b>"]
     for index, row in enumerate(rows, 1):
         state = states.get(str(row.get("match_id") or "")) or {}
@@ -135,7 +146,7 @@ def install_journal_in_game() -> None:
 
     telegram.in_game_sections = journal_in_game_sections
     _INSTALLED = True
-    print("GOOL_IN_GAME installed source=delivered_journal settlement=flashscore", flush=True)
+    print("GOOL_IN_GAME installed source=canonical_delivered_journal settlement=flashscore", flush=True)
 
 
 __all__ = ["install_journal_in_game", "journal_in_game_sections"]

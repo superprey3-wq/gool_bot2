@@ -11,6 +11,7 @@ from .multi_card import _gool_metric_text, render_multi_result_card
 from .multi_delivery import finalize_result_delivery, was_publicly_sent
 from .multi_router import RouterDecision
 from .multi_steam_card import is_strong_steam, render_multi_signal_card
+from .result_delivery_once import finalize_result_reservation, reserve_result_delivery
 
 
 ACTIVE_MODE = "active"
@@ -87,17 +88,12 @@ def emit_multi_signal(
     if not is_multi_telegram_active() or entry is None or decision.winner is None:
         return 0
 
-    # The production decision/rating gate is authoritative. Do not apply a
-    # second hidden "probability >= 70%" gate here: Goal State strength is a
-    # confidence metric, not a calibrated betting probability.
     active_entry = dict(entry)
     active_entry["mode"] = "active"
     strong_steam = is_strong_steam(decision)
     fallback = _signal_caption(active_entry, strong_steam=strong_steam)
     sent = 0
     try:
-        # The PNG already contains match, score, market, price and strength.
-        # Append the exact bankroll/stake fields stored for this journal entry.
         png = render_multi_signal_card(record, decision, entry=active_entry, market_row=market_row)
         sent = telegram.broadcast_photo(append_bank_strip(png, active_entry))
     except Exception as exc:
@@ -128,6 +124,18 @@ def emit_multi_results(
                 flush=True,
             )
             continue
+
+        reservation: str | None = None
+        if journal_path is not None:
+            reservation = reserve_result_delivery(journal_path, row)
+            if reservation is None:
+                print(
+                    f"GOOL_MULTI_RESULT_DUPLICATE_BLOCKED match={row.get('match_id')} "
+                    f"entry={row.get('entry_key')} result={row.get('result')}",
+                    flush=True,
+                )
+                continue
+
         fallback = _result_caption(row)
         sent = 0
         try:
@@ -138,6 +146,10 @@ def emit_multi_results(
         if sent == 0:
             sent = telegram.broadcast(fallback)
         total += sent
+
+        if journal_path is not None and reservation is not None:
+            finalize_result_reservation(journal_path, row, reservation, sent)
+
         finalized = False
         if sent > 0 and journal_path is not None:
             finalized = finalize_result_delivery(journal_path, row, sent)

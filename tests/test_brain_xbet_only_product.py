@@ -59,4 +59,8 @@ def test_active_routing_does_not_install_betdaq_menu():
     source = inspect.getsource(multi_concept.routing_experts).casefold()
     assert "betdaq" not in source
     assert "install_brain_card_patch" in source
-    assert "install_brain_in_game_patch" in source
+    assert "install_brain_journal_results" in source
+    assert "install_result_delivery_guard" in source
+    assert "install_journal_in_game" in source
+    assert "install_brain_in_game_patch" not in source
+    assert "install_strict_in_game_live" not in source

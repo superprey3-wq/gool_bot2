@@ -13,6 +13,12 @@ _ORIGINAL_EMIT: Any = None
 
 
 def _guarded_emit(record: dict[str, Any], rows: list[dict[str, Any]], *, journal_path: Path | None = None) -> int:
+    """Final at-most-once barrier for every GOOL result-card path.
+
+    The guard is deliberately installed on ``multi_telegram.emit_multi_results``
+    itself, not only on a runtime alias. LIVE settlement, menu reconciliation and
+    Brain retry code therefore all hit this exact function before Telegram.
+    """
     if not rows:
         return 0
     if journal_path is None or _ORIGINAL_EMIT is None:
@@ -41,23 +47,24 @@ def _guarded_emit(record: dict[str, Any], rows: list[dict[str, Any]], *, journal
 
 
 def install_result_delivery_guard() -> None:
+    """Install one result sender for LIVE, menu and retry paths."""
     global _INSTALLED, _ORIGINAL_EMIT
     if _INSTALLED:
         return
     with _LOCK:
         if _INSTALLED:
             return
-        from . import brain_journal_results
         from . import multi_runtime
+        from . import multi_telegram
 
-        _ORIGINAL_EMIT = multi_runtime.emit_multi_results
+        # Capture the real renderer/sender once. All callers, including the
+        # Brain journal retry path which imports multi_telegram dynamically, are
+        # redirected through the same durable sidecar reservation.
+        _ORIGINAL_EMIT = multi_telegram.emit_multi_results
+        multi_telegram.emit_multi_results = _guarded_emit
         multi_runtime.emit_multi_results = _guarded_emit
-        # brain_journal_results._menu_reconcile resolves this module global
-        # dynamically, so patch it too. LIVE settlement and menu reconciliation
-        # therefore hit the same final sidecar reservation before Telegram.
-        brain_journal_results._emit_results = _guarded_emit
         _INSTALLED = True
-        print("GOOL_RESULT_DELIVERY_GUARD installed mode=at_most_once sidecar=on", flush=True)
+        print("GOOL_RESULT_DELIVERY_GUARD installed mode=at_most_once final_sender=multi_telegram", flush=True)
 
 
 __all__ = ["install_result_delivery_guard"]

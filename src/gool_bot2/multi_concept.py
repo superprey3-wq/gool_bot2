@@ -8,6 +8,7 @@ from .brain_journal_results import install_brain_journal_results
 from .brain_primary_mode import install_runtime_patches
 from .multi_router import RouterDecision
 from .stale_replay_guard import install_stale_replay_guard
+from .strict_in_game_live import install_strict_in_game_live
 from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
 
 FIRST_HALF_STRATEGY = "goal_before_ht"
@@ -63,6 +64,9 @@ def routing_experts(match: dict[str, Any], experts: dict[str, Any]) -> dict[str,
     install_brain_card_patch()
     install_brain_in_game_patch()
     install_brain_journal_results()
+    # Install last: this renderer deliberately overrides every legacy/menu
+    # "В игре" path and only exposes event ids Flashscore confirms as LIVE now.
+    install_strict_in_game_live()
     strategy = ordinary_strategy(match)
     if strategy is None or strategy not in experts:
         return {}

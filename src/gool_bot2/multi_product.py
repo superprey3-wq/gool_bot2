@@ -4,13 +4,18 @@ import sys
 from pathlib import Path
 
 from . import telegram
+from .brain_card_restore import install_brain_card_patch
 from .brain_journal_tracking import install_brain_journal_tracking
+from .brain_primary_mode import install_runtime_patches
+from .journal_in_game import install_journal_in_game
 from .multi_analysis_view import analysis_text as _analysis_text
-from .multi_menu import in_game_sections as _multi_in_game_sections
 from .multi_menu import journal_path, reconcile_pending, report_text
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
+from .production_integrity import audit_production_bindings, repair_public_journal
 from .public_epoch_reset import reset_public_tracking_once
+from .result_delivery_guard import install_result_delivery_guard
+from .stale_replay_guard import install_stale_replay_guard
 
 
 _CLEAN_MENU_KEYBOARD = {
@@ -34,15 +39,7 @@ def _analysis_text_safe(*args, **kwargs) -> str:
 
 
 def _disable_exchange_money_runtime() -> None:
-    """Hard-disable legacy exchange FLOW emitters inside the production worker.
-
-    The signal worker imports these callables before ``install_multi_product`` is
-    executed. Replacing the module globals here guarantees that stale Matchbook or
-    BETDAQ state files cannot generate money-flow Telegram messages after the
-    exchange workers have been removed from the supervisor. The daily virtual-bank
-    push is disabled as well; the user-facing product is now only Journal/In Game/
-    Analysis plus GOOL Brain and autonomous 1xBet STEAM alerts.
-    """
+    """Hard-disable legacy exchange FLOW emitters inside the production worker."""
     modules = [
         sys.modules.get("gool_bot2.storage_market_signal_worker_var"),
         sys.modules.get("__main__"),
@@ -62,16 +59,29 @@ def _disable_exchange_money_runtime() -> None:
 
 
 def install_multi_product() -> None:
-    """Expose the two-system GOOL product: Brain + autonomous 1xBet STEAM."""
+    """Install the one public production pipeline: GOOL Brain + 1xBet STEAM.
+
+    Wiring is deliberately completed here, once, before the Telegram responder
+    thread starts. No match-routing function is allowed to install/stack journal
+    or result monkeypatches later.
+    """
     reset_public_tracking_once()
+
+    # Deterministic startup order. The former production bug had TWO Brain
+    # journal systems installed at different times; both could settle and send
+    # the same signal independently.
+    install_runtime_patches()
+    install_brain_card_patch()
+    install_stale_replay_guard()
     install_brain_journal_tracking()
+    repair_public_journal(journal_path())
+    install_result_delivery_guard()
     _disable_exchange_money_runtime()
 
     # Re-assert the exact three-button public menu. No money/exchange button is
     # appended anywhere in the active product.
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
     telegram.report_text = _report_text_clean
-    telegram.in_game_sections = _multi_in_game_sections
     telegram.analysis_text = _analysis_text_safe
 
     def _reconcile(_: Path) -> int:
@@ -87,7 +97,7 @@ def install_multi_product() -> None:
             "🧠 GOOL Brain — обычные LIVE-сигналы по футболу\n"
             "🔥 1xBet STEAM — отдельные сигналы прогруза\n\n"
             "📊 Отчёт — журнал Brain + STEAM\n"
-            "🟢 В игре — активные сигналы\n"
+            "🟢 В игре — отправленные, ещё не рассчитанные сигналы\n"
             "🧠 Анализ — текущий разбор матчей"
         )
     else:
@@ -95,6 +105,20 @@ def install_multi_product() -> None:
             "🟢 <b>GOOL работает в shadow</b>\n\n"
             "Активные системы: GOOL Brain + 1xBet STEAM.\n\n"
             "📊 Отчёт — журнал\n"
-            "🟢 В игре — активные сигналы\n"
+            "🟢 В игре — отправленные, ещё не рассчитанные сигналы\n"
             "🧠 Анализ — текущий разбор матчей"
         )
+
+    # Must be LAST among menu assignments: it intentionally ignores the legacy
+    # SIGNAL_JOURNAL path passed by the old Telegram responder and reads the
+    # canonical GOOL Multi journal instead.
+    install_journal_in_game()
+
+    # Fail closed if a future import/patch order breaks critical production
+    # bindings. Running no bot is safer than sending the same result five times.
+    audit_production_bindings()
+    print(
+        "GOOL_PRODUCT installed pipeline=unified_v1 systems=GOOL_BRAIN+1XBET_STEAM "
+        "journal=single result_sender=single in_game=journal",
+        flush=True,
+    )

@@ -8,6 +8,7 @@ from .brain_card_restore import install_brain_card_patch
 from .brain_journal_tracking import install_brain_journal_tracking
 from .brain_primary_mode import install_runtime_patches
 from .journal_in_game import install_journal_in_game
+from .journal_transaction_guard import install_journal_transaction_guard
 from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_menu import journal_path, reconcile_pending, report_text
 from .multi_result_reconcile import reconcile_finalized_first_half
@@ -69,7 +70,9 @@ def install_multi_product() -> None:
 
     # Deterministic startup order. The former production bug had TWO Brain
     # journal systems installed at different times; both could settle and send
-    # the same signal independently.
+    # the same signal independently. Journal transactions are serialized before
+    # Brain-primary captures any runtime function references.
+    install_journal_transaction_guard()
     install_runtime_patches()
     install_brain_card_patch()
     install_stale_replay_guard()
@@ -119,6 +122,6 @@ def install_multi_product() -> None:
     audit_production_bindings()
     print(
         "GOOL_PRODUCT installed pipeline=unified_v1 systems=GOOL_BRAIN+1XBET_STEAM "
-        "journal=single result_sender=single in_game=journal",
+        "journal=single result_sender=single in_game=journal tx=on",
         flush=True,
     )

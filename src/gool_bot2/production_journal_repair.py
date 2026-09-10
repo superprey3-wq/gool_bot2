@@ -52,13 +52,14 @@ def _is_brain(row: dict[str, Any]) -> bool:
     )
 
 
-def _rank(row: dict[str, Any]) -> tuple[int, int, str, str]:
+def _rank(row: dict[str, Any]) -> tuple[int, str, int, str]:
+    """Prefer settlement truth first; delivery metadata is secondary."""
     result = str(row.get("result") or "pending").lower()
     result_rank = 4 if result in FINAL_RESULTS else 3 if result == "pending" else 2 if result == "tracking" else 1
-    sent_rank = 1 if bool(row.get("result_telegram_sent")) else 0
     settled = str(row.get("settled_at") or "")
+    sent_rank = 1 if bool(row.get("result_telegram_sent")) else 0
     created = str(row.get("created_at") or row.get("telegram_sent_at") or "")
-    return result_rank, sent_rank, settled, created
+    return result_rank, settled, sent_rank, created
 
 
 def _copy_missing(target: dict[str, Any], source: dict[str, Any]) -> None:
@@ -100,6 +101,18 @@ def _normalize_brain(row: dict[str, Any], identity: str) -> None:
         row.pop(key, None)
 
 
+def _clear_result_delivery(row: dict[str, Any]) -> None:
+    for key in (
+        "result_telegram_sent",
+        "result_telegram_sent_at",
+        "result_telegram_delivery_count",
+        "result_notification_claim_id",
+        "result_notification_claimed_at",
+        "result_notification_claim_version",
+    ):
+        row.pop(key, None)
+
+
 def _suppress_old_unsent_result(row: dict[str, Any]) -> None:
     result = str(row.get("result") or "").lower()
     if result not in FINAL_RESULTS or bool(row.get("result_telegram_sent")):
@@ -133,21 +146,39 @@ def _merge_group(identity: str, group: list[dict[str, Any]]) -> dict[str, Any]:
             [int(row.get("telegram_delivery_count") or 0) for row in group] or [1]
         )
 
+    # Never copy delivery metadata from a different historical result onto the
+    # authoritative latest settlement. That would both corrupt audit history and
+    # suppress a real correction as if it had already been sent.
+    base_result = str(base.get("result") or "").lower()
     delivered = [row for row in group if bool(row.get("result_telegram_sent"))]
-    if delivered:
-        latest = max(delivered, key=lambda row: str(row.get("result_telegram_sent_at") or ""))
+    matching_delivery = [
+        row for row in delivered
+        if str(row.get("result") or "").lower() == base_result
+    ]
+    _clear_result_delivery(base)
+    if matching_delivery:
+        latest = max(matching_delivery, key=lambda row: str(row.get("result_telegram_sent_at") or ""))
         base["result_notification_pending"] = False
         base["result_telegram_sent"] = True
         base["result_telegram_sent_at"] = latest.get("result_telegram_sent_at")
         base["result_telegram_delivery_count"] = max(
-            [int(row.get("result_telegram_delivery_count") or 0) for row in delivered] or [1]
+            [int(row.get("result_telegram_delivery_count") or 0) for row in matching_delivery] or [1]
         )
-        for key in (
-            "result_notification_claim_id",
-            "result_notification_claimed_at",
-            "result_notification_claim_version",
-        ):
-            base.pop(key, None)
+    elif delivered and base_result in FINAL_RESULTS:
+        # The old dual pipeline disagreed about the final result. Keep the latest
+        # settlement in the journal, record the conflict, and do not replay a
+        # historical correction burst during startup.
+        base["result_notification_pending"] = False
+        base["result_notification_suppressed"] = True
+        base["result_notification_suppression_reason"] = "startup_repair_conflicting_delivered_result"
+        base["result_notification_suppressed_at"] = datetime.now(timezone.utc).isoformat()
+        base["result_delivery_conflict"] = [
+            {
+                "result": str(row.get("result") or "").lower(),
+                "sent_at": row.get("result_telegram_sent_at"),
+            }
+            for row in delivered
+        ]
 
     if _is_brain(base) or any(_is_brain(row) for row in group):
         _normalize_brain(base, identity)
@@ -162,8 +193,8 @@ def repair_public_journal(journal_path: Path) -> dict[str, int]:
     Older deployments could write the same Brain signal twice: one
     ``tracking_only/pending`` row and one ``result_only/tracking`` row. This
     startup repair collapses exact signal identities, preserves the most advanced
-    settlement, keeps already-delivered results delivered, and converts remaining
-    Brain rows to the one canonical tracking schema used by production now.
+    authoritative settlement, keeps matching already-delivered results delivered,
+    and converts remaining Brain rows to the one canonical tracking schema.
     """
     path = Path(journal_path)
     rows = load_signal_journal(path)

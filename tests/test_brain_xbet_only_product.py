@@ -39,6 +39,8 @@ def test_browser_is_support_process_not_signal_system():
 def test_public_menu_has_only_report_in_game_analysis(monkeypatch):
     monkeypatch.setattr(multi_product, "reset_public_tracking_once", lambda: None)
     monkeypatch.setattr(multi_product, "is_multi_telegram_active", lambda: True)
+    monkeypatch.setattr(multi_product, "repair_public_journal", lambda path: {})
+    monkeypatch.setattr(multi_product, "audit_production_bindings", lambda: {})
 
     multi_product.install_multi_product()
 
@@ -55,12 +57,18 @@ def test_public_menu_has_only_report_in_game_analysis(monkeypatch):
     assert "GOOL Brain" in telegram.START_TEXT
 
 
-def test_active_routing_does_not_install_betdaq_menu():
-    source = inspect.getsource(multi_concept.routing_experts).casefold()
-    assert "betdaq" not in source
-    assert "install_brain_card_patch" in source
-    assert "install_brain_journal_results" in source
-    assert "install_result_delivery_guard" in source
-    assert "install_journal_in_game" in source
-    assert "install_brain_in_game_patch" not in source
-    assert "install_strict_in_game_live" not in source
+def test_routing_is_side_effect_free_and_product_owns_wiring():
+    routing = inspect.getsource(multi_concept.routing_experts).casefold()
+    product = inspect.getsource(multi_product.install_multi_product).casefold()
+
+    assert "betdaq" not in routing
+    assert "install_" not in routing
+    assert "install_runtime_patches" in product
+    assert "install_brain_card_patch" in product
+    assert "install_brain_journal_tracking" in product
+    assert "install_pending_reconcile_guard" in product
+    assert "install_result_delivery_guard" in product
+    assert "install_journal_in_game" in product
+    assert "install_brain_journal_results" not in product
+    assert "install_brain_in_game_patch" not in product
+    assert "install_strict_in_game_live" not in product

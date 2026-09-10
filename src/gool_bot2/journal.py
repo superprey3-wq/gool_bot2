@@ -2,13 +2,31 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+
+_JOURNAL_LOCK = threading.RLock()
 
 
 def _legacy_journal_silenced() -> bool:
     return str(os.getenv("GOOL_LEGACY_JOURNAL_SILENT", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@contextmanager
+def journal_transaction(_path: Path | None = None) -> Iterator[None]:
+    """Serialize one journal read-modify-write sequence inside the worker process.
+
+    The production worker has a LIVE processing loop and a Telegram responder
+    thread. Both can reconcile/write the same Multi journal. A shared re-entrant
+    lock prevents one thread from saving an old snapshot over the other's newer
+    signal/settlement state.
+    """
+    with _JOURNAL_LOCK:
+        yield
 
 
 def load_signal_journal(path: Path) -> list[dict[str, Any]]:
@@ -18,22 +36,24 @@ def load_signal_journal(path: Path) -> list[dict[str, Any]]:
     # silenced.
     if _legacy_journal_silenced():
         return []
-    if not path.exists():
-        return []
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, list) else []
-    except Exception:
-        return []
+    with _JOURNAL_LOCK:
+        if not path.exists():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, list) else []
+        except Exception:
+            return []
 
 
 def save_signal_journal(path: Path, rows: list[dict[str, Any]]) -> None:
     if _legacy_journal_silenced():
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    with _JOURNAL_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
 
 
 def _trim_analysis_if_needed(path: Path) -> None:
@@ -71,29 +91,40 @@ def append_analysis(path: Path, row: dict[str, Any]) -> None:
 
 def mark_in_game(path: Path, match_id: str, head: str, chat_id: str | int | None = None) -> bool:
     """Mark the newest matching signal as an actual user entry."""
-    rows = load_signal_journal(path)
-    target: dict[str, Any] | None = None
-    for row in reversed(rows):
-        if str(row.get("match_id")) != str(match_id):
-            continue
-        if str(row.get("head")) != str(head):
-            continue
-        if str(row.get("result") or "pending").lower() != "pending":
-            continue
-        target = row
-        break
-    if target is None:
-        return False
-    if bool(target.get("in_game")):
+    with journal_transaction(path):
+        rows = load_signal_journal(path)
+        target: dict[str, Any] | None = None
+        for row in reversed(rows):
+            if str(row.get("match_id")) != str(match_id):
+                continue
+            if str(row.get("head")) != str(head):
+                continue
+            if str(row.get("result") or "pending").lower() != "pending":
+                continue
+            target = row
+            break
+        if target is None:
+            return False
+        if bool(target.get("in_game")):
+            return True
+        target["in_game"] = True
+        target["entered_at"] = datetime.now(timezone.utc).isoformat()
+        if chat_id is not None:
+            target["entered_by_chat_id"] = str(chat_id)
+        save_signal_journal(path, rows)
         return True
-    target["in_game"] = True
-    target["entered_at"] = datetime.now(timezone.utc).isoformat()
-    if chat_id is not None:
-        target["entered_by_chat_id"] = str(chat_id)
-    save_signal_journal(path, rows)
-    return True
 
 
 def entry_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return actual entries; legacy rows without in_game remain compatible."""
     return [row for row in rows if bool(row.get("in_game"))]
+
+
+__all__ = [
+    "append_analysis",
+    "entry_rows",
+    "journal_transaction",
+    "load_signal_journal",
+    "mark_in_game",
+    "save_signal_journal",
+]

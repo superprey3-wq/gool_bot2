@@ -37,6 +37,14 @@ def _locked(journal_path: Path) -> Iterator[None]:
             handle.close()
 
 
+def _entry_from_decision(*args: Any, **kwargs: Any) -> dict[str, Any] | None:
+    """New active entries are explicitly private until Telegram accepts them."""
+    row = _ORIGINALS["entry_from_decision"](*args, **kwargs)
+    if isinstance(row, dict) and str(row.get("mode") or "").lower() == "active":
+        row["telegram_sent"] = False
+    return row
+
+
 def _settle(record: dict[str, Any], journal_path: Path):
     with _locked(Path(journal_path)):
         return _ORIGINALS["settle"](record, journal_path)
@@ -92,6 +100,7 @@ def install_production_journal_serialization() -> None:
         from . import multi_runtime
         from . import multi_telegram
 
+        _ORIGINALS["entry_from_decision"] = journal.entry_from_decision
         _ORIGINALS["settle"] = journal.settle_multi_journal
         _ORIGINALS["record"] = journal.record_multi_entry
         _ORIGINALS["persist_brain"] = tracking._persist_tracking_row
@@ -99,6 +108,7 @@ def install_production_journal_serialization() -> None:
         _ORIGINALS["pending_results"] = delivery.pending_result_notifications
         _ORIGINALS["finalize_result"] = delivery.finalize_result_delivery
 
+        journal.entry_from_decision = _entry_from_decision
         journal.settle_multi_journal = _settle
         multi_runtime.settle_multi_journal = _settle
         multi_menu.settle_multi_journal = _settle
@@ -117,7 +127,11 @@ def install_production_journal_serialization() -> None:
         multi_telegram.finalize_result_delivery = _finalize_result
 
         _INSTALLED = True
-        print("GOOL_JOURNAL_SERIALIZATION installed lock=pipeline read_modify_write=serialized", flush=True)
+        print(
+            "GOOL_JOURNAL_SERIALIZATION installed lock=pipeline "
+            "read_modify_write=serialized new_entries=telegram_unsent_until_delivery",
+            flush=True,
+        )
 
 
 __all__ = ["install_production_journal_serialization"]

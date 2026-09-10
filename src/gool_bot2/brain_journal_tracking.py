@@ -82,6 +82,7 @@ def _tracking_row(entry: dict[str, Any], sent: int, *, historical: bool = False)
             "mode": "active",
             "head": "multi",
             "entry_key": f"brain:{signal_key}",
+            "brain_signal_key": signal_key,
             "market_key": market_key,
             "market_family": family,
             "market": market,
@@ -92,13 +93,15 @@ def _tracking_row(entry: dict[str, Any], sent: int, *, historical: bool = False)
             "source": str(entry.get("source") or f"brain_primary:{strategy}"),
             "tracking_only": True,
             "bank_tracking": False,
+            "non_monetary": True,
+            "pipeline_version": "unified_v1",
             "result": "pending",
             "profit_units": None,
             "telegram_sent": True,
             "telegram_sent_at": sent_at,
             "telegram_delivery_count": max(1, int(sent or entry.get("telegram_delivery_count") or 1)),
-            # Existing signal_only rows are migrated for journal counts, but do
-            # not replay a burst of historical result cards after deployment.
+            # Historical migration is disabled by default. If explicitly enabled
+            # for a one-off repair, never replay its old result card.
             "result_card_eligible": not historical,
         }
     )
@@ -264,11 +267,18 @@ def _reconcile_and_deliver_results() -> int:
 
 
 def _backfill_recent_signal_only() -> int:
-    """Move recent already-sent Brain signal_only rows into the public journal.
+    """Optional one-off migration from the obsolete Brain signal-state file.
 
-    This fixes today's/yesterday's counts after deployment. Historical migrated
-    rows settle normally but are marked not to replay old Telegram result cards.
+    Production defaults to OFF. The canonical Multi journal is the only public
+    source of truth, and resurrecting state-file rows after every restart caused
+    old matches/results to reappear. Set GOOL_BRAIN_JOURNAL_BACKFILL=1 only for a
+    controlled migration; migrated rows can never emit historical result cards.
     """
+    enabled = str(os.getenv("GOOL_BRAIN_JOURNAL_BACKFILL", "0")).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    if not enabled:
+        return 0
     try:
         from . import brain_primary_mode as brain
 
@@ -348,7 +358,7 @@ def install_brain_journal_tracking() -> None:
         migrated = _backfill_recent_signal_only()
         print(
             f"GOOL_BRAIN_JOURNAL_TRACKING installed result_cards=on migrated={migrated} "
-            "bank_tracking=off steam_independent=1",
+            "bank_tracking=off steam_independent=1 backfill_default=off",
             flush=True,
         )
 

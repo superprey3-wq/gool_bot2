@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 from typing import Any
@@ -134,7 +135,7 @@ def repair_public_journal(path: Path) -> dict[str, int]:
             ),
             reverse=True,
         )[0]
-        keep_index, keep = structural[0], dict(structural[1])
+        keep = dict(structural[1])
 
         finals = [
             row for _, row in items
@@ -212,18 +213,29 @@ def repair_public_journal(path: Path) -> dict[str, int]:
 def audit_production_bindings(*, strict: bool | None = None) -> dict[str, bool]:
     """Verify the public worker has exactly one Brain/result/menu pipeline."""
     from . import brain_card_restore as card
+    from . import brain_journal_results as legacy_results
     from . import brain_journal_tracking as tracking
     from . import brain_primary_mode as brain
     from . import journal_in_game
+    from . import journal_transaction_guard as tx
+    from . import multi_concept
+    from . import multi_journal
     from . import multi_runtime
     from . import multi_telegram
+    from . import pending_reconcile_guard as pending_guard
     from . import result_delivery_guard as delivery_guard
     from . import telegram
 
+    routing_source = inspect.getsource(multi_concept.routing_experts)
     checks = {
         "brain_runtime": multi_runtime.sync_multi_journal is brain.sync_brain_or_market_journal,
         "brain_card": multi_runtime.emit_multi_signal is card.emit_brain_card_signal,
         "brain_tracking": brain._mark_brain_sent is tracking._mark_brain_sent_with_journal,
+        "legacy_brain_results_off": not bool(getattr(legacy_results, "_INSTALLED", False)),
+        "routing_side_effect_free": "install_" not in routing_source,
+        "journal_tx_installed": bool(getattr(tx, "_INSTALLED", False)),
+        "journal_settle_tx": multi_journal.settle_multi_journal is tx._settle,
+        "pending_reconcile_guard": bool(getattr(pending_guard, "_INSTALLED", False)),
         "result_live_guard": multi_runtime.emit_multi_results is delivery_guard._guarded_emit,
         "result_menu_guard": multi_telegram.emit_multi_results is delivery_guard._guarded_emit,
         "in_game_journal": telegram.in_game_sections is journal_in_game.journal_in_game_sections,

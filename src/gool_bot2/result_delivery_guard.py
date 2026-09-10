@@ -18,8 +18,7 @@ def _guarded_emit(record: dict[str, Any], rows: list[dict[str, Any]], *, journal
     if journal_path is None or _ORIGINAL_EMIT is None:
         return int(_ORIGINAL_EMIT(record, rows, journal_path=journal_path) or 0) if _ORIGINAL_EMIT else 0
 
-    allowed: list[dict[str, Any]] = []
-    reservations: list[tuple[dict[str, Any], str]] = []
+    total = 0
     for row in rows:
         token = reserve_result_delivery(Path(journal_path), row)
         if token is None:
@@ -29,27 +28,16 @@ def _guarded_emit(record: dict[str, Any], rows: list[dict[str, Any]], *, journal
                 flush=True,
             )
             continue
-        allowed.append(row)
-        reservations.append((row, token))
 
-    if not allowed:
-        return 0
-
-    try:
-        sent = int(_ORIGINAL_EMIT(record, allowed, journal_path=journal_path) or 0)
-    except Exception:
-        for row, token in reservations:
+        try:
+            sent = int(_ORIGINAL_EMIT(record, [row], journal_path=journal_path) or 0)
+        except Exception:
             finalize_result_reservation(Path(journal_path), row, token, 0)
-        raise
+            raise
 
-    # The original sender broadcasts every allowed row to the same subscriber
-    # set. Any positive total means Telegram accepted at least one delivery. In
-    # normal operation this wrapper receives one settled row at a time. Mark all
-    # reservations sent only when the batch produced a successful delivery;
-    # otherwise release them for a later retry.
-    for row, token in reservations:
         finalize_result_reservation(Path(journal_path), row, token, sent)
-    return sent
+        total += sent
+    return total
 
 
 def install_result_delivery_guard() -> None:
@@ -65,8 +53,8 @@ def install_result_delivery_guard() -> None:
         _ORIGINAL_EMIT = multi_runtime.emit_multi_results
         multi_runtime.emit_multi_results = _guarded_emit
         # brain_journal_results._menu_reconcile resolves this module global
-        # dynamically, so patch it too. That makes LIVE and menu reconciliation
-        # pass through exactly the same final at-most-once barrier.
+        # dynamically, so patch it too. LIVE settlement and menu reconciliation
+        # therefore hit the same final sidecar reservation before Telegram.
         brain_journal_results._emit_results = _guarded_emit
         _INSTALLED = True
         print("GOOL_RESULT_DELIVERY_GUARD installed mode=at_most_once sidecar=on", flush=True)

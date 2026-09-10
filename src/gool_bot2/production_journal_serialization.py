@@ -88,6 +88,7 @@ def install_production_journal_serialization() -> None:
         from . import multi_delivery as delivery
         from . import multi_journal as journal
         from . import multi_menu
+        from . import multi_result_reconcile
         from . import multi_runtime
         from . import multi_telegram
 
@@ -101,6 +102,7 @@ def install_production_journal_serialization() -> None:
         journal.settle_multi_journal = _settle
         multi_runtime.settle_multi_journal = _settle
         multi_menu.settle_multi_journal = _settle
+        multi_result_reconcile.settle_multi_journal = _settle
 
         journal.record_multi_entry = _record
         tracking._persist_tracking_row = _persist_brain

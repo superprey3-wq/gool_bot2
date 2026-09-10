@@ -14,6 +14,7 @@ from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 from .orphan_pending_reconcile import reconcile_orphaned_pending
 from .production_journal_repair import repair_public_journal
+from .production_journal_serialization import install_production_journal_serialization
 from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
 from .stale_replay_guard import install_stale_replay_guard
@@ -77,8 +78,10 @@ def install_multi_product() -> None:
     install_stale_replay_guard()
     install_brain_journal_tracking()
 
-    # Repair rows created by older dual-pipeline deployments before any menu or
-    # result sender can read them. Then install one final at-most-once sender.
+    # From here on every journal read-modify-write transaction is serialized
+    # across the LIVE worker and Telegram responder. Then repair old dual-pipeline
+    # rows before any public menu/result sender reads them.
+    install_production_journal_serialization()
     repair = repair_public_journal(journal_path())
     install_result_delivery_guard()
     _disable_exchange_money_runtime()

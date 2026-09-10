@@ -55,24 +55,31 @@ def test_failed_result_delivery_is_released_for_retry(tmp_path, monkeypatch):
     assert guard._guarded_emit({}, [dict(row)], journal_path=journal) == 1
 
 
-def test_in_game_membership_comes_from_delivered_unsettled_journal(tmp_path, monkeypatch):
-    journal = tmp_path / "journal.json"
-    analysis = tmp_path / "analysis.jsonl"
+def test_in_game_membership_comes_from_canonical_delivered_unsettled_journal(tmp_path, monkeypatch):
+    canonical = tmp_path / "gool_multi_journal.json"
+    legacy = tmp_path / "signal_journal.json"
+    analysis = tmp_path / "gool_multi_analysis.jsonl"
     rows = [
         {**_row("pending-1", result="pending"), "home": "Pending Home", "away": "Pending Away"},
         {**_row("tracking-1", result="tracking"), "home": "Brain Home", "away": "Brain Away", "accounting_mode": "result_only"},
         {**_row("won-1", result="won"), "home": "Won Home", "away": "Won Away"},
         {**_row("unsent-1", result="pending"), "home": "Never Sent", "telegram_sent": False},
     ]
-    journal.write_text(json.dumps(rows), "utf-8")
+    canonical.write_text(json.dumps(rows), "utf-8")
+    # The legacy path intentionally contains a fake open row. Telegram passes
+    # this path into the callback, but the public Multi renderer must ignore it.
+    legacy.write_text(json.dumps([{**_row("legacy", result="pending"), "home": "Legacy Ghost"}]), "utf-8")
     analysis.write_text("", "utf-8")
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(canonical))
+    monkeypatch.setenv("GOOL_MULTI_ANALYSIS_PATH", str(analysis))
     monkeypatch.setattr("gool_bot2.multi_menu.reconcile_pending", lambda: 0)
 
-    text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
+    text = "\n".join(journal_in_game.journal_in_game_sections(legacy, tmp_path / "legacy-analysis.jsonl"))
 
     assert "Открыто: <b>2</b>" in text
     assert "Pending Home" in text
     assert "Brain Home" in text
     assert "Won Home" not in text
     assert "Never Sent" not in text
+    assert "Legacy Ghost" not in text
     assert "@ —" in text

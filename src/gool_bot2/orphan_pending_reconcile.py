@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import load_signal_journal, save_signal_journal
+from .production_journal_serialization import _locked
 
 
 def _parse_dt(value: Any) -> datetime | None:
@@ -53,35 +54,65 @@ def _timeline_final_score(timeline: list[dict[str, Any]]) -> list[int] | None:
     return final
 
 
+def _suppress_orphan_notification(path: Path, match_id: str, reason: str) -> int:
+    """Recovered historical rows update stats but never replay Telegram cards."""
+    changed = 0
+    now = datetime.now(timezone.utc).isoformat()
+    with _locked(path):
+        rows = load_signal_journal(path)
+        for row in rows:
+            if str(row.get("match_id") or "") != match_id:
+                continue
+            if str(row.get("result") or "").lower() not in {"won", "lost", "push", "void"}:
+                continue
+            if not bool(row.get("result_notification_pending")):
+                continue
+            row["result_notification_pending"] = False
+            row["result_notification_suppressed"] = True
+            row["result_notification_suppression_reason"] = reason
+            row["result_notification_suppressed_at"] = now
+            for key in (
+                "result_notification_claim_id",
+                "result_notification_claimed_at",
+                "result_notification_claim_version",
+            ):
+                row.pop(key, None)
+            changed += 1
+        if changed:
+            save_signal_journal(path, rows)
+    return changed
+
+
 def _void_unverifiable(path: Path, match_id: str) -> int:
     """Remove a very old orphan from In Game without inventing a win/loss."""
     from . import multi_journal
     from .multi_bank import apply_settlement_fields
 
-    rows = load_signal_journal(path)
     changed = 0
     now = datetime.now(timezone.utc).isoformat()
-    for row in rows:
-        if str(row.get("match_id") or "") != match_id:
-            continue
-        if str(row.get("result") or "pending").lower() not in {"pending", "tracking"}:
-            continue
-        score = _score(row.get("score"))
-        multi_journal._finish_row(
-            row,
-            result="void",
-            minute=90,
-            score=score,
-            reason="flashscore_orphan_unverifiable",
-        )
-        apply_settlement_fields(row)
-        row["result_notification_pending"] = False
-        row["result_notification_suppressed"] = True
-        row["result_notification_suppression_reason"] = "orphan_unverifiable_no_replay"
-        row["result_notification_suppressed_at"] = now
-        changed += 1
-    if changed:
-        save_signal_journal(path, rows)
+    with _locked(path):
+        rows = load_signal_journal(path)
+        for row in rows:
+            if str(row.get("match_id") or "") != match_id:
+                continue
+            if str(row.get("result") or "pending").lower() not in {"pending", "tracking"}:
+                continue
+            score = _score(row.get("score"))
+            multi_journal._finish_row(
+                row,
+                result="void",
+                minute=90,
+                score=score,
+                reason="flashscore_orphan_unverifiable",
+            )
+            apply_settlement_fields(row)
+            row["result_notification_pending"] = False
+            row["result_notification_suppressed"] = True
+            row["result_notification_suppression_reason"] = "orphan_unverifiable_no_replay"
+            row["result_notification_suppressed_at"] = now
+            changed += 1
+        if changed:
+            save_signal_journal(path, rows)
     return changed
 
 
@@ -94,6 +125,9 @@ def reconcile_orphaned_pending(journal_path: Path) -> int:
     a row older than four hours is reconstructed from its goal timeline. When the
     timeline itself is unavailable or inconsistent we mark VOID rather than invent
     a win/loss, so the row leaves ``В игре`` without corrupting statistics.
+
+    Orphan recovery is historical repair, not a live result event: recovered rows
+    update the journal but never generate a delayed Telegram result-card burst.
     """
     from .multi_journal import settle_multi_journal
     from .providers.flashscore import FlashscoreProvider
@@ -101,13 +135,17 @@ def reconcile_orphaned_pending(journal_path: Path) -> int:
     path = Path(journal_path)
     rows = load_signal_journal(path)
     threshold = _minimum_age_hours()
-    candidates = [
-        row for row in rows
-        if str(row.get("result") or "pending").lower() in {"pending", "tracking"}
-        and bool(row.get("telegram_sent"))
-        and (_age_hours(row) is not None and float(_age_hours(row) or 0.0) >= threshold)
-        and str(row.get("match_id") or "")
-    ]
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("result") or "pending").lower() not in {"pending", "tracking"}:
+            continue
+        if not bool(row.get("telegram_sent")) or not str(row.get("match_id") or ""):
+            continue
+        age = _age_hours(row)
+        if age is None or age < threshold:
+            continue
+        candidates.append(row)
+
     ids = {str(row.get("match_id") or "") for row in candidates}
     if not ids:
         return 0
@@ -156,9 +194,10 @@ def reconcile_orphaned_pending(journal_path: Path) -> int:
         settled = settle_multi_journal(record, path)
         changed += len(settled)
         if settled:
+            _suppress_orphan_notification(path, mid, "orphan_historical_no_replay")
             print(
                 f"GOOL_ORPHAN_RECONCILE match={mid} closed={len(settled)} "
-                f"score={final_score[0]}:{final_score[1]} source=timeline",
+                f"score={final_score[0]}:{final_score[1]} source=timeline result_cards=suppressed",
                 flush=True,
             )
     return changed

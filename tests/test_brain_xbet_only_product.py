@@ -39,9 +39,11 @@ def test_browser_is_support_process_not_signal_system():
 def test_public_menu_has_only_report_in_game_analysis(tmp_path, monkeypatch):
     monkeypatch.setattr(multi_product, "reset_public_tracking_once", lambda: None)
     monkeypatch.setattr(multi_product, "install_runtime_patches", lambda: None)
+    monkeypatch.setattr(multi_product, "install_production_guard_compat", lambda: None)
     monkeypatch.setattr(multi_product, "install_brain_card_patch", lambda: None)
     monkeypatch.setattr(multi_product, "install_stale_replay_guard", lambda: None)
     monkeypatch.setattr(multi_product, "install_brain_journal_tracking", lambda: None)
+    monkeypatch.setattr(multi_product, "install_production_journal_serialization", lambda: None)
     monkeypatch.setattr(multi_product, "install_result_delivery_guard", lambda: None)
     monkeypatch.setattr(multi_product, "install_journal_in_game", lambda: None)
     monkeypatch.setattr(
@@ -83,6 +85,7 @@ def test_product_bootstrap_owns_single_journal_and_result_pipeline():
     source = inspect.getsource(multi_product.install_multi_product).casefold()
     assert "install_brain_journal_tracking" in source
     assert "install_brain_journal_results" not in source
+    assert "install_production_journal_serialization" in source
     assert "install_result_delivery_guard" in source
     assert "install_journal_in_game" in source
     assert "repair_public_journal" in source

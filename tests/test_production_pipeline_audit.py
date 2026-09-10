@@ -4,6 +4,7 @@ import inspect
 from datetime import datetime, timedelta, timezone
 
 import gool_bot2.multi_product as product
+import gool_bot2.production_journal_serialization as serialization
 import gool_bot2.result_delivery_guard as delivery_guard
 import gool_bot2.result_delivery_once as delivery_once
 import gool_bot2.stale_replay_guard as stale_guard
@@ -46,9 +47,23 @@ def test_product_pipeline_has_one_brain_journal_owner_and_one_result_sender():
 
     assert "install_brain_journal_tracking" in product_source
     assert "install_brain_journal_results" not in product_source
+    assert "install_production_journal_serialization" in product_source
     assert "multi_telegram.emit_multi_results = _guarded_emit" in guard_source
     assert "multi_runtime.emit_multi_results = _guarded_emit" in guard_source
     assert "brain_journal_results" not in stale_source
+
+
+def test_new_active_market_entry_is_not_public_before_telegram(monkeypatch):
+    monkeypatch.setitem(
+        serialization._ORIGINALS,
+        "entry_from_decision",
+        lambda *args, **kwargs: {"mode": "active", "entry_key": "steam:m1", "result": "pending"},
+    )
+
+    row = serialization._entry_from_decision(None, None, {}, data_quality=0.8)
+
+    assert row is not None
+    assert row["telegram_sent"] is False
 
 
 def test_startup_repair_collapses_dual_brain_rows_to_one_pending(tmp_path):
@@ -107,7 +122,7 @@ def test_startup_repair_preserves_delivered_result_and_blocks_replay(tmp_path):
     assert delivery_once.reserve_result_delivery(path, row) is None
 
 
-def test_old_orphan_with_timeline_is_settled_and_leaves_in_game(tmp_path, monkeypatch):
+def test_old_orphan_with_timeline_is_settled_without_late_result_card(tmp_path, monkeypatch):
     path = tmp_path / "journal.json"
     old = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
     save_signal_journal(
@@ -154,6 +169,9 @@ def test_old_orphan_with_timeline_is_settled_and_leaves_in_game(tmp_path, monkey
     row = load_signal_journal(path)[0]
     assert row["result"] == "won"
     assert row["settled_score"] == [1, 0]
+    assert row["result_notification_pending"] is False
+    assert row["result_notification_suppressed"] is True
+    assert row["result_notification_suppression_reason"] == "orphan_historical_no_replay"
 
 
 def test_old_orphan_without_reliable_timeline_becomes_void_not_fake_loss(tmp_path, monkeypatch):

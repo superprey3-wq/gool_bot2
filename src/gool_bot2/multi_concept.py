@@ -7,6 +7,7 @@ from .brain_in_game import install_brain_in_game_patch
 from .brain_journal_results import install_brain_journal_results
 from .brain_primary_mode import install_runtime_patches
 from .multi_router import RouterDecision
+from .stale_replay_guard import install_stale_replay_guard
 from .value_bet_policy import ABSOLUTE_MIN_BET_ODD
 
 FIRST_HALF_STRATEGY = "goal_before_ht"
@@ -15,6 +16,11 @@ FIRST_HALF_MAX_MINUTE = 35
 SECOND_HALF_MIN_MINUTE = 46
 SECOND_HALF_MAX_MINUTE = 75
 MIN_BET_ODD = ABSOLUTE_MIN_BET_ODD
+
+# multi_runtime imports this module before importing multi_delivery, so install
+# the stale/replay guard here. That ensures the runtime receives the guarded
+# pending-result function from its very first event after process startup.
+install_stale_replay_guard()
 
 
 def ordinary_strategy(match: dict[str, Any]) -> str | None:

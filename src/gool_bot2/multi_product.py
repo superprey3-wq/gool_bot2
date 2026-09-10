@@ -13,6 +13,7 @@ from .multi_menu import journal_path, reconcile_pending, report_text
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 from .orphan_pending_reconcile import reconcile_orphaned_pending
+from .production_guard_compat import install_production_guard_compat
 from .production_journal_repair import repair_public_journal
 from .production_journal_serialization import install_production_journal_serialization
 from .public_epoch_reset import reset_public_tracking_once
@@ -71,9 +72,10 @@ def install_multi_product() -> None:
     """
     reset_public_tracking_once()
 
-    # Decision/card routing first. The stale guard is installed before journal
-    # tracking so historical signal_only state cannot be backfilled on startup.
+    # Decision/card routing first. The compatibility wrapper preserves the
+    # original LIVE-only helper for non-RouterDecision diagnostic calls.
     install_runtime_patches()
+    install_production_guard_compat()
     install_brain_card_patch()
     install_stale_replay_guard()
     install_brain_journal_tracking()

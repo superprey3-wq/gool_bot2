@@ -13,6 +13,7 @@ from .multi_analysis_view import analysis_text as _analysis_text
 from .multi_menu import journal_path, reconcile_pending, report_text
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
+from .pending_reconcile_guard import install_pending_reconcile_guard
 from .production_integrity import audit_production_bindings, repair_public_journal
 from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
@@ -76,6 +77,9 @@ def install_multi_product() -> None:
     install_runtime_patches()
     install_brain_card_patch()
     install_stale_replay_guard()
+    # Must run before Brain tracking so the tracking reconcile wrapper captures
+    # the safe missing-state reconciler as its one underlying settlement pass.
+    install_pending_reconcile_guard()
     install_brain_journal_tracking()
     repair_public_journal(journal_path())
     install_result_delivery_guard()
@@ -122,6 +126,6 @@ def install_multi_product() -> None:
     audit_production_bindings()
     print(
         "GOOL_PRODUCT installed pipeline=unified_v1 systems=GOOL_BRAIN+1XBET_STEAM "
-        "journal=single result_sender=single in_game=journal tx=on",
+        "journal=single result_sender=single in_game=journal tx=on stale_pending=guarded",
         flush=True,
     )

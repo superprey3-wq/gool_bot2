@@ -39,13 +39,7 @@ def _signal_age_hours(row: dict[str, Any]) -> float | None:
 
 
 def _strict_pre_send_reason(record: dict[str, Any], decision: Any, entry: dict[str, Any]) -> str | None:
-    """Fail closed when an outgoing Brain signal cannot be revalidated as LIVE.
-
-    Old worker snapshots can survive restarts. Previously a missing Flashscore
-    event state was fail-open, so an event that had already disappeared from the
-    LIVE feed could still produce a fresh Telegram signal. No authoritative LIVE
-    state now means no signal.
-    """
+    """Fail closed when an outgoing Brain signal cannot be revalidated as LIVE."""
     from . import brain_card_restore as card
 
     match = record.get("match") or {}
@@ -57,13 +51,14 @@ def _strict_pre_send_reason(record: dict[str, Any], decision: Any, entry: dict[s
     coarse = str(state.get("coarse_status") or "")
     if bool(state.get("is_finished")) or coarse == "3":
         return "match_finished"
-    # Real Flashscore event_states always contains is_live/coarse_status. Some
-    # unit-test fixtures intentionally provide only score + is_finished; keep
-    # those compatible without weakening production handling of real states.
     if ("is_live" in state or coarse) and not bool(state.get("is_live")) and coarse != "2":
         return f"match_not_live_{coarse or 'unknown'}"
 
-    expected = card._score_pair(getattr(decision, "score", None)) or card._score_pair(entry.get("score")) or card._score_pair(match)
+    expected = (
+        card._score_pair(getattr(decision, "score", None))
+        or card._score_pair(entry.get("score"))
+        or card._score_pair(match)
+    )
     fresh = card._score_pair(state)
     if expected is not None and fresh is not None and fresh != expected:
         return f"score_changed_{expected[0]}-{expected[1]}_to_{fresh[0]}-{fresh[1]}"
@@ -72,8 +67,8 @@ def _strict_pre_send_reason(record: dict[str, Any], decision: Any, entry: dict[s
 
 def _suppress_stale_result_replays(journal_path: Path) -> int:
     """Clear result notifications that are historical replays, not fresh results."""
-    from .journal import load_signal_journal, save_signal_journal
     from . import multi_delivery as delivery
+    from .journal import load_signal_journal, save_signal_journal
 
     changed = 0
     now = datetime.now(timezone.utc).isoformat()
@@ -113,6 +108,7 @@ def _pending_without_stale_replay(
 
 
 def install_stale_replay_guard() -> None:
+    """Install one stale-signal/result guard without touching legacy journal code."""
     global _INSTALLED, _ORIGINAL_PENDING
     if _INSTALLED:
         return
@@ -121,18 +117,18 @@ def install_stale_replay_guard() -> None:
             return
 
         from . import brain_card_restore as card
-        from . import brain_journal_results as brain_journal
+        from . import brain_journal_tracking as brain_tracking
         from . import multi_delivery as delivery
 
         _ORIGINAL_PENDING = delivery.pending_result_notifications
         card._pre_send_stale_reason = _strict_pre_send_reason
         delivery.pending_result_notifications = _pending_without_stale_replay
 
-        # Legacy state migration was useful once, but replaying historical Brain
-        # signals after every fresh installation is not worth the Telegram risk.
-        # Existing journal rows are preserved; only automatic state backfill is
-        # disabled. New Brain signals are journaled normally at delivery time.
-        brain_journal._backfill_signal_state = lambda: 0
+        # The old signal-only state is not a second source of truth anymore.
+        # New public history comes only from successful Telegram delivery into
+        # the canonical Multi journal. This prevents restart-time resurrection
+        # of old matches and duplicate Brain rows.
+        brain_tracking._backfill_recent_signal_only = lambda: 0
 
         runtime = sys.modules.get("gool_bot2.multi_runtime")
         if runtime is not None:
@@ -140,7 +136,8 @@ def install_stale_replay_guard() -> None:
 
         _INSTALLED = True
         print(
-            "GOOL_STALE_REPLAY_GUARD installed presend_flashscore=required historical_backfill=off result_replay_max_age_h=4",
+            "GOOL_STALE_REPLAY_GUARD installed presend_flashscore=required "
+            "historical_backfill=off result_replay_max_age_h=4",
             flush=True,
         )
 

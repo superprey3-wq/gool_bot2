@@ -28,29 +28,6 @@ def _truthy(name: str, default: bool = True) -> bool:
     return str(raw).strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _fresh_flashscore_state(match_id: str) -> dict[str, Any] | None:
-    """Fetch one last authoritative event state immediately before delivery.
-
-    This check runs only for an outgoing Brain-primary signal, so it cannot slow
-    the normal collector loop. Failure is deliberately fail-open: the existing
-    record remains usable when Flashscore is temporarily unavailable.
-    """
-    if not match_id or not _truthy("GOOL_BRAIN_PRE_SEND_SCORE_CHECK", True):
-        return None
-    try:
-        from .providers.flashscore import FlashscoreProvider
-
-        state = (FlashscoreProvider().event_states({match_id}) or {}).get(match_id)
-        return dict(state) if isinstance(state, dict) else None
-    except Exception as exc:
-        print(
-            f"GOOL_BRAIN_PRE_SEND_SCORE_CHECK_ERROR match={match_id} "
-            f"error={type(exc).__name__}:{exc}",
-            flush=True,
-        )
-        return None
-
-
 def _score_pair(value: Any) -> tuple[int, int] | None:
     if isinstance(value, (list, tuple)) and len(value) >= 2:
         try:
@@ -65,6 +42,85 @@ def _score_pair(value: Any) -> tuple[int, int] | None:
                 return None
         return _score_pair(value.get("score"))
     return None
+
+
+def _latest_timeline_score(timeline: Any) -> tuple[int, int] | None:
+    """Return the newest confirmed cumulative score from Flashscore goal incidents."""
+    latest: tuple[int, int] | None = None
+    latest_minute = -1
+    for raw in timeline or []:
+        if not isinstance(raw, dict) or str(raw.get("event_type") or "goal").lower() != "goal":
+            continue
+        score = _score_pair(raw.get("score"))
+        if score is None:
+            continue
+        try:
+            minute = int(raw.get("minute") or 0)
+        except (TypeError, ValueError):
+            minute = 0
+        if latest is None or minute >= latest_minute:
+            latest = score
+            latest_minute = minute
+    return latest
+
+
+def _fresh_flashscore_state(match_id: str) -> dict[str, Any] | None:
+    """Fetch one last authoritative state and reconcile it with confirmed goals.
+
+    Flashscore's master feed can lag its incident/summary feed by a few minutes.
+    A Brain card must therefore not trust the master scoreboard alone: when the
+    confirmed goal timeline already contains a later cumulative score, that score
+    wins for the pre-send stale check. If master and timeline disagree at the same
+    total, mark a conflict so production can fail closed instead of guessing.
+    """
+    if not match_id or not _truthy("GOOL_BRAIN_PRE_SEND_SCORE_CHECK", True):
+        return None
+    try:
+        from .providers.flashscore import FlashscoreProvider
+
+        provider = FlashscoreProvider()
+        state = (provider.event_states({match_id}) or {}).get(match_id)
+        if not isinstance(state, dict):
+            return None
+        fresh = dict(state)
+    except Exception as exc:
+        print(
+            f"GOOL_BRAIN_PRE_SEND_SCORE_CHECK_ERROR match={match_id} "
+            f"error={type(exc).__name__}:{exc}",
+            flush=True,
+        )
+        return None
+
+    try:
+        timeline_score = _latest_timeline_score(provider.fetch_goal_timeline(match_id))
+    except Exception as exc:
+        print(
+            f"GOOL_BRAIN_PRE_SEND_TIMELINE_ERROR match={match_id} "
+            f"error={type(exc).__name__}:{exc}",
+            flush=True,
+        )
+        timeline_score = None
+
+    master_score = _score_pair(fresh)
+    fresh["score_source"] = "master"
+    if timeline_score is not None:
+        fresh["goal_timeline_score"] = [timeline_score[0], timeline_score[1]]
+        if master_score is None or sum(timeline_score) > sum(master_score):
+            fresh["home_score"], fresh["away_score"] = timeline_score
+            fresh["score_source"] = "goal_timeline"
+            print(
+                f"GOOL_BRAIN_PRE_SEND_SCORE_ADVANCE match={match_id} "
+                f"master={master_score} timeline={timeline_score}",
+                flush=True,
+            )
+        elif sum(timeline_score) == sum(master_score) and timeline_score != master_score:
+            fresh["score_conflict"] = True
+            print(
+                f"GOOL_BRAIN_PRE_SEND_SCORE_CONFLICT match={match_id} "
+                f"master={master_score} timeline={timeline_score}",
+                flush=True,
+            )
+    return fresh
 
 
 def _pre_send_stale_reason(
@@ -86,6 +142,8 @@ def _pre_send_stale_reason(
 
     if bool(state.get("is_finished")):
         return "match_finished"
+    if bool(state.get("score_conflict")):
+        return "flashscore_score_conflict"
 
     expected = _score_pair(decision.score) or _score_pair(entry.get("score")) or _score_pair(match)
     fresh = _score_pair(state)
@@ -189,7 +247,7 @@ def install_brain_card_patch() -> None:
         # so patch it too for the rare Brain + autonomous STEAM same-tick path.
         brain.emit_brain_or_market_signal = emit_brain_card_signal
         _INSTALLED = True
-        print("GOOL_BRAIN_CARD restored png=on missing_price=dash presend_score_check=on", flush=True)
+        print("GOOL_BRAIN_CARD restored png=on missing_price=dash presend_score_check=master+timeline", flush=True)
 
 
 __all__ = [

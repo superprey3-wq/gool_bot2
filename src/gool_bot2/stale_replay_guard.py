@@ -53,6 +53,8 @@ def _strict_pre_send_reason(record: dict[str, Any], decision: Any, entry: dict[s
         return "match_finished"
     if ("is_live" in state or coarse) and not bool(state.get("is_live")) and coarse != "2":
         return f"match_not_live_{coarse or 'unknown'}"
+    if bool(state.get("score_conflict")):
+        return "flashscore_master_timeline_score_conflict"
 
     expected = card._score_pair(getattr(decision, "score", None)) or card._score_pair(entry.get("score")) or card._score_pair(match)
     fresh = card._score_pair(state)
@@ -131,7 +133,7 @@ def install_stale_replay_guard() -> None:
 
         _INSTALLED = True
         print(
-            "GOOL_STALE_REPLAY_GUARD installed presend_flashscore=required "
+            "GOOL_STALE_REPLAY_GUARD installed presend_flashscore=master+timeline-required "
             "historical_backfill=off result_replay_max_age_h=4",
             flush=True,
         )

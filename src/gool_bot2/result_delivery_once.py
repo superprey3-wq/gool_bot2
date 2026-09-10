@@ -98,7 +98,14 @@ def reserve_result_delivery(journal_path: Path, row: dict[str, Any]) -> str | No
     reconciliation. Those writers can overwrite journal claim fields because
     they loaded an older journal snapshot. This sidecar ledger is never written
     by settlement, so the same entry_key+result cannot pass this final gate twice.
+
+    Rows already marked ``result_telegram_sent`` are rejected even if a legacy
+    deployment predates the sidecar ledger. This prevents one extra replay on the
+    first restart after upgrading the delivery guard.
     """
+    if bool(row.get("result_telegram_sent")):
+        return None
+
     path = _ledger_path(Path(journal_path))
     key = _row_identity(row)
     if not key or key.endswith("|"):

@@ -4,13 +4,22 @@ import sys
 from pathlib import Path
 
 from . import telegram
+from .brain_card_restore import install_brain_card_patch
 from .brain_journal_tracking import install_brain_journal_tracking
+from .brain_primary_mode import install_runtime_patches
+from .journal_in_game import install_journal_in_game
+from .journal_report import production_report_text
 from .multi_analysis_view import analysis_text as _analysis_text
-from .multi_menu import in_game_sections as _multi_in_game_sections
-from .multi_menu import journal_path, reconcile_pending, report_text
+from .multi_menu import journal_path, reconcile_pending
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
+from .orphan_pending_reconcile import reconcile_orphaned_pending
+from .production_guard_compat import install_production_guard_compat
+from .production_journal_repair import repair_public_journal
+from .production_journal_serialization import install_production_journal_serialization
 from .public_epoch_reset import reset_public_tracking_once
+from .result_delivery_guard import install_result_delivery_guard
+from .stale_replay_guard import install_stale_replay_guard
 
 
 _CLEAN_MENU_KEYBOARD = {
@@ -20,13 +29,6 @@ _CLEAN_MENU_KEYBOARD = {
 }
 
 
-def _report_text_clean(*args, **kwargs) -> str:
-    """Public journal contains only the ordinary Brain and 1xBet STEAM lanes."""
-    path = journal_path()
-    reconcile_finalized_first_half(path)
-    return report_text(*args, **kwargs)
-
-
 def _analysis_text_safe(*args, **kwargs) -> str:
     """Keep diagnostic comparison signs from being parsed as Telegram HTML tags."""
     text = _analysis_text(*args, **kwargs)
@@ -34,15 +36,7 @@ def _analysis_text_safe(*args, **kwargs) -> str:
 
 
 def _disable_exchange_money_runtime() -> None:
-    """Hard-disable legacy exchange FLOW emitters inside the production worker.
-
-    The signal worker imports these callables before ``install_multi_product`` is
-    executed. Replacing the module globals here guarantees that stale Matchbook or
-    BETDAQ state files cannot generate money-flow Telegram messages after the
-    exchange workers have been removed from the supervisor. The daily virtual-bank
-    push is disabled as well; the user-facing product is now only Journal/In Game/
-    Analysis plus GOOL Brain and autonomous 1xBet STEAM alerts.
-    """
+    """Hard-disable legacy exchange FLOW emitters inside the production worker."""
     modules = [
         sys.modules.get("gool_bot2.storage_market_signal_worker_var"),
         sys.modules.get("__main__"),
@@ -62,24 +56,48 @@ def _disable_exchange_money_runtime() -> None:
 
 
 def install_multi_product() -> None:
-    """Expose the two-system GOOL product: Brain + autonomous 1xBet STEAM."""
+    """Install the complete two-system product once, in deterministic order.
+
+    Production has one ordinary GOOL Brain journal pipeline and one autonomous
+    1xBet STEAM pipeline. The previous lazy installation mixed two separate Brain
+    journal bridges and several result senders; this startup sequence makes the
+    journal, settlement, result delivery and menu ownership explicit before the
+    Telegram responder thread starts.
+    """
     reset_public_tracking_once()
+
+    # Decision/card routing first. The compatibility wrapper preserves the
+    # original LIVE-only helper for non-RouterDecision diagnostic calls.
+    install_runtime_patches()
+    install_production_guard_compat()
+    install_brain_card_patch()
+    install_stale_replay_guard()
     install_brain_journal_tracking()
+
+    # From here on every journal read-modify-write transaction is serialized
+    # across the LIVE worker and Telegram responder. Then repair old dual-pipeline
+    # rows before any public menu/result sender reads them.
+    install_production_journal_serialization()
+    repair = repair_public_journal(journal_path())
+    install_result_delivery_guard()
     _disable_exchange_money_runtime()
 
-    # Re-assert the exact three-button public menu. No money/exchange button is
-    # appended anywhere in the active product.
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
-    telegram.report_text = _report_text_clean
-    telegram.in_game_sections = _multi_in_game_sections
+    telegram.report_text = production_report_text
     telegram.analysis_text = _analysis_text_safe
 
     def _reconcile(_: Path) -> int:
         path = journal_path()
         corrected = reconcile_finalized_first_half(path)
-        return corrected + reconcile_pending()
+        regular = reconcile_pending()
+        orphaned = reconcile_orphaned_pending(path)
+        return int(corrected or 0) + int(regular or 0) + int(orphaned or 0)
 
+    # Every menu command performs settlement exactly once before rendering.
+    # Both Report and In Game are read-only views after this point.
     telegram._force_reconcile_pending = _reconcile
+    install_journal_in_game()
+
     if is_multi_telegram_active():
         telegram.START_TEXT = (
             "🟢 <b>GOOL работает</b>\n\n"
@@ -87,7 +105,7 @@ def install_multi_product() -> None:
             "🧠 GOOL Brain — обычные LIVE-сигналы по футболу\n"
             "🔥 1xBet STEAM — отдельные сигналы прогруза\n\n"
             "📊 Отчёт — журнал Brain + STEAM\n"
-            "🟢 В игре — активные сигналы\n"
+            "🟢 В игре — отправленные, ещё не рассчитанные сигналы\n"
             "🧠 Анализ — текущий разбор матчей"
         )
     else:
@@ -98,3 +116,10 @@ def install_multi_product() -> None:
             "🟢 В игре — активные сигналы\n"
             "🧠 Анализ — текущий разбор матчей"
         )
+
+    print(
+        "GOOL_PRODUCT_PIPELINE installed version=2026-09-10-single-journal "
+        f"journal_before={repair['before']} journal_after={repair['after']} "
+        f"duplicates_removed={repair['duplicates_removed']}",
+        flush=True,
+    )

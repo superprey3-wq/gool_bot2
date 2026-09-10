@@ -102,9 +102,24 @@ def test_provider_quality_remains_a_football_data_guard(monkeypatch):
 
 def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(tmp_path / "brain-signals.json"))
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(tmp_path / "public-journal.json"))
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
     monkeypatch.setattr("gool_bot2.telegram.broadcast", lambda text: 1)
     monkeypatch.setattr("gool_bot2.multi_telegram.is_multi_telegram_active", lambda: True)
+    monkeypatch.setattr(
+        card_restore,
+        "_fresh_flashscore_state",
+        lambda match_id: {
+            "event_id": match_id,
+            "coarse_status": "2",
+            "is_live": True,
+            "is_finished": False,
+            "home_score": 1,
+            "away_score": 0,
+        },
+    )
+    monkeypatch.setattr("gool_bot2.multi_steam_card.render_multi_signal_card", lambda *args, **kwargs: b"brain-png")
+    monkeypatch.setattr("gool_bot2.telegram.broadcast_photo", lambda png: 1 if png == b"brain-png" else 0)
 
     record = {"match": _match()}
     decision = mode.analyze_brain_primary_match(

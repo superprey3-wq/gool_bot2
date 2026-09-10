@@ -55,7 +55,7 @@ def test_failed_result_delivery_is_released_for_retry(tmp_path, monkeypatch):
     assert guard._guarded_emit({}, [dict(row)], journal_path=journal) == 1
 
 
-def test_in_game_membership_comes_from_delivered_unsettled_journal(tmp_path, monkeypatch):
+def test_in_game_membership_comes_from_delivered_unsettled_journal_and_renderer_is_read_only(tmp_path, monkeypatch):
     journal = tmp_path / "journal.json"
     analysis = tmp_path / "analysis.jsonl"
     rows = [
@@ -66,7 +66,10 @@ def test_in_game_membership_comes_from_delivered_unsettled_journal(tmp_path, mon
     ]
     journal.write_text(json.dumps(rows), "utf-8")
     analysis.write_text("", "utf-8")
-    monkeypatch.setattr("gool_bot2.multi_menu.reconcile_pending", lambda: 0)
+    monkeypatch.setattr(
+        "gool_bot2.multi_menu.reconcile_pending",
+        lambda: (_ for _ in ()).throw(AssertionError("In Game renderer must not settle journal")),
+    )
 
     text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
 

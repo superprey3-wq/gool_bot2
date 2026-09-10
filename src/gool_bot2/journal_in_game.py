@@ -68,19 +68,14 @@ def _is_open(row: dict[str, Any]) -> bool:
 
 
 def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = None) -> list[str]:
-    """Show delivered journal entries that are not settled yet.
+    """Render delivered, unsettled journal entries only.
 
-    The journal is the source of truth for membership. Flashscore may be used by
-    reconciliation to update/settle a journal row, but an unrelated current LIVE
-    list never decides whether a bet existed.
+    This pure renderer accepts explicit paths for tests/library callers. Production
+    installs a wrapper below that always resolves the canonical GOOL Multi paths,
+    because the legacy Telegram responder still passes its old signal_journal path.
+    Settlement is performed before rendering by the command pipeline, so this view
+    never creates or settles a signal itself.
     """
-    from . import multi_menu
-
-    try:
-        multi_menu.reconcile_pending()
-    except Exception as exc:
-        print(f"GOOL_IN_GAME_RECONCILE_ERROR {type(exc).__name__}:{exc}", flush=True)
-
     rows = [dict(row) for row in load_signal_journal(Path(journal_path)) if _is_open(row)]
     latest: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -127,15 +122,22 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
     return ["\n\n".join(parts)]
 
 
+def production_in_game_sections(_: Path | None = None, __: Path | None = None) -> list[str]:
+    """Production adapter: ignore legacy responder paths and use Multi storage."""
+    from . import multi_menu
+
+    return journal_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
+
+
 def install_journal_in_game() -> None:
     global _INSTALLED
     if _INSTALLED:
         return
     from . import telegram
 
-    telegram.in_game_sections = journal_in_game_sections
+    telegram.in_game_sections = production_in_game_sections
     _INSTALLED = True
-    print("GOOL_IN_GAME installed source=delivered_journal settlement=flashscore", flush=True)
+    print("GOOL_IN_GAME installed source=canonical_multi_journal settlement=external", flush=True)
 
 
-__all__ = ["install_journal_in_game", "journal_in_game_sections"]
+__all__ = ["install_journal_in_game", "journal_in_game_sections", "production_in_game_sections"]

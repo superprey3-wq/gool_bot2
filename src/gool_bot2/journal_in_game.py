@@ -68,19 +68,14 @@ def _is_open(row: dict[str, Any]) -> bool:
 
 
 def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = None) -> list[str]:
-    """Show delivered journal entries that are not settled yet.
+    """Render delivered, unsettled journal entries only.
 
-    The journal is the source of truth for membership. Flashscore may be used by
-    reconciliation to update/settle a journal row, but an unrelated current LIVE
-    list never decides whether a bet existed.
+    Settlement is deliberately performed before this renderer by the Telegram
+    command pipeline. Keeping the view read-only removes a second hidden
+    reconciliation path that previously raced the LIVE worker and could produce
+    duplicate result cards. Flashscore can update/settle a journal entry, but the
+    current Flashscore LIVE list never decides whether a signal existed.
     """
-    from . import multi_menu
-
-    try:
-        multi_menu.reconcile_pending()
-    except Exception as exc:
-        print(f"GOOL_IN_GAME_RECONCILE_ERROR {type(exc).__name__}:{exc}", flush=True)
-
     rows = [dict(row) for row in load_signal_journal(Path(journal_path)) if _is_open(row)]
     latest: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -135,7 +130,7 @@ def install_journal_in_game() -> None:
 
     telegram.in_game_sections = journal_in_game_sections
     _INSTALLED = True
-    print("GOOL_IN_GAME installed source=delivered_journal settlement=flashscore", flush=True)
+    print("GOOL_IN_GAME installed source=delivered_journal settlement=external", flush=True)
 
 
 __all__ = ["install_journal_in_game", "journal_in_game_sections"]

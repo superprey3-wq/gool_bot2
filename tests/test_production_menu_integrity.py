@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import gool_bot2.journal_in_game as in_game
 import gool_bot2.journal_report as report
-from gool_bot2.journal import save_signal_journal
+from gool_bot2.journal import load_signal_journal, save_signal_journal
+from gool_bot2.production_journal_repair import repair_public_journal
 
 
 def _row(key: str, *, result: str = "pending", sent: bool = True, home: str = "Home") -> dict:
@@ -72,3 +73,46 @@ def test_production_report_is_read_only_and_excludes_unsent_rows(tmp_path, monke
 
     assert "✅ <b>1</b> · ❌ <b>0</b>" in text
     assert "⏳ <b>0</b>" in text
+
+
+def test_startup_repair_prefers_latest_settlement_not_old_delivered_result(tmp_path):
+    path = tmp_path / "journal.json"
+    now = datetime.now(timezone.utc)
+    old_won = _row("brain:m1:another_goal", result="won")
+    old_won.update(
+        {
+            "signal_key": "m1:another_goal",
+            "match_id": "m1",
+            "settled_at": (now - timedelta(minutes=2)).isoformat(),
+            "settled_score": [1, 1],
+            "result_notification_pending": False,
+            "result_telegram_sent": True,
+            "result_telegram_sent_at": (now - timedelta(minutes=2)).isoformat(),
+            "result_telegram_delivery_count": 1,
+        }
+    )
+    corrected_lost = {**old_won}
+    corrected_lost.update(
+        {
+            "result": "lost",
+            "settled_at": (now - timedelta(minutes=1)).isoformat(),
+            "settled_score": [1, 0],
+            "result_notification_pending": True,
+            "result_telegram_sent": False,
+        }
+    )
+    corrected_lost.pop("result_telegram_sent_at", None)
+    corrected_lost.pop("result_telegram_delivery_count", None)
+    save_signal_journal(path, [old_won, corrected_lost])
+
+    repair_public_journal(path)
+    repaired = load_signal_journal(path)
+
+    assert len(repaired) == 1
+    row = repaired[0]
+    assert row["result"] == "lost"
+    assert row["settled_score"] == [1, 0]
+    assert row.get("result_telegram_sent") is not True
+    assert row["result_notification_pending"] is False
+    assert row["result_notification_suppressed"] is True
+    assert row["result_notification_suppression_reason"] == "startup_repair_conflicting_delivered_result"

@@ -8,8 +8,9 @@ from .brain_card_restore import install_brain_card_patch
 from .brain_journal_tracking import install_brain_journal_tracking
 from .brain_primary_mode import install_runtime_patches
 from .journal_in_game import install_journal_in_game
+from .journal_report import production_report_text
 from .multi_analysis_view import analysis_text as _analysis_text
-from .multi_menu import journal_path, reconcile_pending, report_text
+from .multi_menu import journal_path, reconcile_pending
 from .multi_result_reconcile import reconcile_finalized_first_half
 from .multi_telegram import is_multi_telegram_active
 from .orphan_pending_reconcile import reconcile_orphaned_pending
@@ -26,13 +27,6 @@ _CLEAN_MENU_KEYBOARD = {
     "resize_keyboard": True,
     "is_persistent": True,
 }
-
-
-def _report_text_clean(*args, **kwargs) -> str:
-    """Public journal contains only the ordinary Brain and 1xBet STEAM lanes."""
-    path = journal_path()
-    reconcile_finalized_first_half(path)
-    return report_text(*args, **kwargs)
 
 
 def _analysis_text_safe(*args, **kwargs) -> str:
@@ -62,7 +56,7 @@ def _disable_exchange_money_runtime() -> None:
 
 
 def install_multi_product() -> None:
-    """Install the complete two-system product once, in a deterministic order.
+    """Install the complete two-system product once, in deterministic order.
 
     Production has one ordinary GOOL Brain journal pipeline and one autonomous
     1xBet STEAM pipeline. The previous lazy installation mixed two separate Brain
@@ -89,7 +83,7 @@ def install_multi_product() -> None:
     _disable_exchange_money_runtime()
 
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
-    telegram.report_text = _report_text_clean
+    telegram.report_text = production_report_text
     telegram.analysis_text = _analysis_text_safe
 
     def _reconcile(_: Path) -> int:
@@ -99,8 +93,8 @@ def install_multi_product() -> None:
         orphaned = reconcile_orphaned_pending(path)
         return int(corrected or 0) + int(regular or 0) + int(orphaned or 0)
 
-    # Telegram commands perform settlement once, before rendering. The In Game
-    # renderer itself is read-only and therefore cannot race the LIVE worker.
+    # Every menu command performs settlement exactly once before rendering.
+    # Both Report and In Game are read-only views after this point.
     telegram._force_reconcile_pending = _reconcile
     install_journal_in_game()
 

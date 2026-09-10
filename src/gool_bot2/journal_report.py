@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import load_signal_journal
+from .multi_delivery import was_publicly_sent
 from .multi_public_metrics import strategy_bucket
 
 
@@ -18,12 +19,16 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
 
     Telegram's command handler calls the single production reconcile function
     before invoking this renderer. Keeping the report read-only prevents a second
-    hidden settlement/result-delivery pass from racing the LIVE worker.
+    hidden settlement/result-delivery pass from racing the LIVE worker. Rows that
+    were created before Telegram delivery but never actually sent are excluded.
     """
     del experiment_path
     from . import multi_menu
 
-    rows = load_signal_journal(multi_menu.journal_path())
+    rows = [
+        row for row in load_signal_journal(multi_menu.journal_path())
+        if was_publicly_sent(row)
+    ]
     tz = multi_menu._tz()
     today = datetime.now(tz).date()
     today_rows = [

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from . import telegram
+from .analysis_pipeline_guard import install_analysis_pipeline_guard, pipeline_diagnostic_text
 from .brain_card_restore import install_brain_card_patch
 from .brain_journal_tracking import install_brain_journal_tracking
 from .brain_primary_mode import install_runtime_patches
@@ -19,6 +20,7 @@ from .production_journal_repair import repair_public_journal
 from .production_journal_serialization import install_production_journal_serialization
 from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
+from .runtime_hardening import install_runtime_hardening
 from .stale_replay_guard import install_stale_replay_guard
 
 
@@ -30,8 +32,13 @@ _CLEAN_MENU_KEYBOARD = {
 
 
 def _analysis_text_safe(*args, **kwargs) -> str:
-    """Keep diagnostic comparison signs from being parsed as Telegram HTML tags."""
+    """Render analysis and expose a real pipeline fault instead of fake zero LIVE."""
     text = _analysis_text(*args, **kwargs)
+    empty = "Сейчас нет свежих матчей для анализа" in text or "нет свежих оценок" in text
+    if empty:
+        diagnostic = pipeline_diagnostic_text()
+        if diagnostic:
+            text = diagnostic
     return text.replace("PRICE<", "PRICE&lt;").replace("RATING<", "RATING&lt;")
 
 
@@ -82,6 +89,13 @@ def install_multi_product() -> None:
     install_result_delivery_guard()
     _disable_exchange_money_runtime()
 
+    # runtime_hardening owns the production _process implementation. Install it
+    # before the health wrapper so no later monkeypatch can silently remove the
+    # watchdog/heartbeat layer. storage_market_signal_worker_var calls the same
+    # installer again after this function; it is idempotent.
+    install_runtime_hardening()
+    install_analysis_pipeline_guard()
+
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
     telegram.report_text = production_report_text
     telegram.analysis_text = _analysis_text_safe
@@ -118,7 +132,7 @@ def install_multi_product() -> None:
         )
 
     print(
-        "GOOL_PRODUCT_PIPELINE installed version=2026-09-10-single-journal "
+        "GOOL_PRODUCT_PIPELINE installed version=2026-09-11-analysis-watchdog "
         f"journal_before={repair['before']} journal_after={repair['after']} "
         f"duplicates_removed={repair['duplicates_removed']}",
         flush=True,

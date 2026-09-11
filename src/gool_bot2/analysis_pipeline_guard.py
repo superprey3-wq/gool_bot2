@@ -195,7 +195,11 @@ def pipeline_diagnostic_text() -> str | None:
             "Supervisor продолжает работу и должен восстановить поток автоматически."
         )
     if live <= 0:
-        return None
+        return (
+            "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\n"
+            "⚠️ Flashscore collector работает, но сейчас сообщает <b>0 LIVE</b>.\n"
+            "Это уже уровень входного LIVE-feed, а не порогов GOOL Brain."
+        )
     if analysis_age is None or analysis_age > analysis_stale:
         detail = html.escape(str(worker.get("error") or "").strip()[:180], quote=False)
         suffix = f"\nПоследняя ошибка: <code>{detail}</code>" if detail else ""

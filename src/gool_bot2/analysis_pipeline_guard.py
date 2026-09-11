@@ -1,19 +1,20 @@
 from __future__ import annotations
 
+import html
 import json
 import os
-import sys
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 _INSTALLED = False
 _WATCHDOG_STARTED = False
 _PROCESS_LOCK = threading.RLock()
 _STARTED_MONOTONIC = time.monotonic()
+_ORIGINAL_PROCESS: Callable[..., Any] | None = None
 
 
 def _runtime() -> Path:
@@ -68,6 +69,13 @@ def _file_age_seconds(path: Path) -> float | None:
         return None
 
 
+def _file_mtime_ns(path: Path) -> int | None:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
 def _collector_snapshot() -> dict[str, Any]:
     payload = _read_json(_collector_health_path())
     captured = _parse_dt(payload.get("captured_at"))
@@ -99,44 +107,33 @@ def _write_worker_heartbeat(record: dict[str, Any], *, status: str, error: str =
         print(f"GOOL_ANALYSIS_HEARTBEAT_ERROR {type(exc).__name__}:{exc}", flush=True)
 
 
-def _robust_process(self: Any, record: dict[str, Any]):
-    """Run GOOL analysis even when a legacy/helper stage fails.
-
-    The old wrapper put late-model refresh, GOOL analysis and optional money-flow
-    handling in one try block. A failure before ``observe_multi_shadow`` therefore
-    silently disabled every Brain snapshot and signal while the Telegram responder
-    thread stayed alive. The production Brain is now an independent mandatory
-    stage; helper failures are logged but cannot skip it.
-    """
-    module = sys.modules.get("gool_bot2.storage_market_signal_worker_var")
-    if module is None:
+def _health_wrapped_process(self: Any, record: dict[str, Any]):
+    """Observe the already-hardened production process without changing its logic."""
+    if _ORIGINAL_PROCESS is None:
         return 0
-
-    emitted = 0
+    before = _file_mtime_ns(_analysis_path())
     try:
-        with module.silence_legacy_telegram():
-            emitted = module._ORIG_PROCESS(self, record)
+        result = _ORIGINAL_PROCESS(self, record)
     except Exception as exc:
-        print(f"GOOL_LEGACY_PROCESS_ERROR {type(exc).__name__}:{exc}", flush=True)
+        _write_worker_heartbeat(record, status="process_error", error=f"{type(exc).__name__}:{exc}")
+        raise
 
-    try:
-        module.refresh_late_another_goal_model(self, record)
-    except Exception as exc:
-        print(f"GOOL_LATE_REFRESH_ERROR {type(exc).__name__}:{exc}", flush=True)
-
-    try:
-        module.observe_multi_shadow(self, record)
+    after = _file_mtime_ns(_analysis_path())
+    match = record.get("match") or {}
+    minute = int(match.get("minute") or 0)
+    finished = bool(match.get("is_finished"))
+    # A normal LIVE record should reach observe_multi_shadow and append one row.
+    # Final/invalid-minute records are allowed to leave analysis unchanged.
+    if minute > 0 and not finished and after == before:
+        _write_worker_heartbeat(record, status="analysis_not_updated", error="process_returned_without_analysis_snapshot")
+        print(
+            f"GOOL_ANALYSIS_NOT_UPDATED match={match.get('flashscore_event_id')} minute={minute} score="
+            f"{int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)}",
+            flush=True,
+        )
+    else:
         _write_worker_heartbeat(record, status="ok")
-    except Exception as exc:
-        message = f"{type(exc).__name__}:{exc}"
-        _write_worker_heartbeat(record, status="error", error=message)
-        print(f"GOOL_MULTI_ANALYSIS_ERROR {message}", flush=True)
-
-    try:
-        module.maybe_emit_money_flow(record)
-    except Exception as exc:
-        print(f"GOOL_OPTIONAL_POST_PROCESS_ERROR {type(exc).__name__}:{exc}", flush=True)
-    return emitted
+    return result
 
 
 def _watchdog_limits() -> tuple[float, float, float]:
@@ -180,7 +177,7 @@ def watchdog_should_restart() -> tuple[bool, dict[str, Any]]:
 
 
 def pipeline_diagnostic_text() -> str | None:
-    """Explain an empty Analysis screen using the collector/worker health files."""
+    """Explain an empty Analysis screen using collector and worker health."""
     collector = _collector_snapshot()
     collector_age = collector.get("age_seconds")
     analysis_age = _file_age_seconds(_analysis_path())
@@ -200,8 +197,8 @@ def pipeline_diagnostic_text() -> str | None:
     if live <= 0:
         return None
     if analysis_age is None or analysis_age > analysis_stale:
-        detail = str(worker.get("error") or "").strip()
-        suffix = f"\nПоследняя ошибка: <code>{detail[:180]}</code>" if detail else ""
+        detail = html.escape(str(worker.get("error") or "").strip()[:180], quote=False)
+        suffix = f"\nПоследняя ошибка: <code>{detail}</code>" if detail else ""
         return (
             "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\n"
             f"⚠️ Flashscore collector видит <b>{live}</b> LIVE, но analysis-worker не обновляет оценки.\n"
@@ -212,7 +209,10 @@ def pipeline_diagnostic_text() -> str | None:
 
 
 def _watchdog_loop() -> None:
-    interval = max(10.0, float(os.getenv("GOOL_ANALYSIS_WATCHDOG_INTERVAL_SECONDS", "30")))
+    try:
+        interval = max(10.0, float(os.getenv("GOOL_ANALYSIS_WATCHDOG_INTERVAL_SECONDS", "30")))
+    except (TypeError, ValueError):
+        interval = 30.0
     while True:
         time.sleep(interval)
         restart, info = watchdog_should_restart()
@@ -226,29 +226,30 @@ def _watchdog_loop() -> None:
             f"process_age={info['process_age_seconds']}",
             flush=True,
         )
-        # monkey_start.py already supervises this child and restarts it on exit.
-        # Exiting the whole worker process is the only reliable recovery when the
-        # main processing thread is stuck in a blocking provider/helper call.
+        # monkey_start.py supervises the child and restarts it on exit. A full
+        # process exit is the only reliable recovery if its main thread is stuck
+        # in a blocking provider/helper call while Telegram's responder still runs.
         os._exit(86)
 
 
 def install_analysis_pipeline_guard() -> bool:
-    global _INSTALLED, _WATCHDOG_STARTED
+    global _INSTALLED, _WATCHDOG_STARTED, _ORIGINAL_PROCESS
     if _INSTALLED:
         return True
     with _PROCESS_LOCK:
         if _INSTALLED:
             return True
-        module = sys.modules.get("gool_bot2.storage_market_signal_worker_var")
-        if module is None or not hasattr(module, "_ORIG_PROCESS"):
-            return False
         from . import storage_signal_worker as storage
 
-        storage.StorageCardAllMatchSignalWorker._process = _robust_process
+        current = storage.StorageCardAllMatchSignalWorker._process
+        if current is _health_wrapped_process:
+            _INSTALLED = True
+            return True
+        _ORIGINAL_PROCESS = current
+        storage.StorageCardAllMatchSignalWorker._process = _health_wrapped_process
         _INSTALLED = True
         print(
-            "GOOL_ANALYSIS_PIPELINE_GUARD installed brain_stage=independent "
-            "helper_failures=isolated watchdog=enabled",
+            "GOOL_ANALYSIS_PIPELINE_GUARD installed mode=health_wrapper watchdog=enabled",
             flush=True,
         )
 

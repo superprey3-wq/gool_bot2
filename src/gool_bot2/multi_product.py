@@ -20,6 +20,7 @@ from .production_journal_repair import repair_public_journal
 from .production_journal_serialization import install_production_journal_serialization
 from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
+from .runtime_hardening import install_runtime_hardening
 from .stale_replay_guard import install_stale_replay_guard
 
 
@@ -88,9 +89,11 @@ def install_multi_product() -> None:
     install_result_delivery_guard()
     _disable_exchange_money_runtime()
 
-    # The storage worker has already installed its legacy wrapper by the time
-    # install_multi_product() runs. Replace that wrapper with the resilient
-    # production pipeline so late-refresh/legacy failures cannot skip Brain.
+    # runtime_hardening owns the production _process implementation. Install it
+    # before the health wrapper so no later monkeypatch can silently remove the
+    # watchdog/heartbeat layer. storage_market_signal_worker_var calls the same
+    # installer again after this function; it is idempotent.
+    install_runtime_hardening()
     install_analysis_pipeline_guard()
 
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
@@ -129,7 +132,7 @@ def install_multi_product() -> None:
         )
 
     print(
-        "GOOL_PRODUCT_PIPELINE installed version=2026-09-11-analysis-guard "
+        "GOOL_PRODUCT_PIPELINE installed version=2026-09-11-analysis-watchdog "
         f"journal_before={repair['before']} journal_after={repair['after']} "
         f"duplicates_removed={repair['duplicates_removed']}",
         flush=True,

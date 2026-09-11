@@ -1,0 +1,267 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+_INSTALLED = False
+_WATCHDOG_STARTED = False
+_PROCESS_LOCK = threading.RLock()
+_STARTED_MONOTONIC = time.monotonic()
+
+
+def _runtime() -> Path:
+    return Path(os.getenv("RUNTIME_DATA_DIR", "data"))
+
+
+def _analysis_path() -> Path:
+    raw = os.getenv("GOOL_MULTI_ANALYSIS_PATH", "").strip() or os.getenv("GOOL_MULTI_SHADOW_PATH", "").strip()
+    return Path(raw) if raw else _runtime() / "live" / "gool_multi_analysis.jsonl"
+
+
+def _collector_health_path() -> Path:
+    raw = os.getenv("LIVE_COVERAGE_HEALTH_PATH", "").strip()
+    return Path(raw) if raw else _runtime() / "live" / "collector_health.json"
+
+
+def _worker_health_path() -> Path:
+    raw = os.getenv("GOOL_ANALYSIS_WORKER_HEALTH_PATH", "").strip()
+    return Path(raw) if raw else _runtime() / "live" / "analysis_worker_health.json"
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    tmp.replace(path)
+
+
+def _file_age_seconds(path: Path) -> float | None:
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _collector_snapshot() -> dict[str, Any]:
+    payload = _read_json(_collector_health_path())
+    captured = _parse_dt(payload.get("captured_at"))
+    age = None
+    if captured is not None:
+        age = max(0.0, (datetime.now(timezone.utc) - captured.astimezone(timezone.utc)).total_seconds())
+    collector = payload.get("collector") if isinstance(payload.get("collector"), dict) else {}
+    try:
+        live = max(0, int(collector.get("live") or 0))
+    except (TypeError, ValueError):
+        live = 0
+    return {"live": live, "age_seconds": age, "payload": payload}
+
+
+def _write_worker_heartbeat(record: dict[str, Any], *, status: str, error: str = "") -> None:
+    match = record.get("match") or {}
+    payload = {
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "error": error,
+        "match_id": str(match.get("flashscore_event_id") or ""),
+        "minute": int(match.get("minute") or 0),
+        "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
+        "analysis_path": str(_analysis_path()),
+    }
+    try:
+        _write_json(_worker_health_path(), payload)
+    except Exception as exc:
+        print(f"GOOL_ANALYSIS_HEARTBEAT_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+
+def _robust_process(self: Any, record: dict[str, Any]):
+    """Run GOOL analysis even when a legacy/helper stage fails.
+
+    The old wrapper put late-model refresh, GOOL analysis and optional money-flow
+    handling in one try block. A failure before ``observe_multi_shadow`` therefore
+    silently disabled every Brain snapshot and signal while the Telegram responder
+    thread stayed alive. The production Brain is now an independent mandatory
+    stage; helper failures are logged but cannot skip it.
+    """
+    module = sys.modules.get("gool_bot2.storage_market_signal_worker_var")
+    if module is None:
+        return 0
+
+    emitted = 0
+    try:
+        with module.silence_legacy_telegram():
+            emitted = module._ORIG_PROCESS(self, record)
+    except Exception as exc:
+        print(f"GOOL_LEGACY_PROCESS_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+    try:
+        module.refresh_late_another_goal_model(self, record)
+    except Exception as exc:
+        print(f"GOOL_LATE_REFRESH_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+    try:
+        module.observe_multi_shadow(self, record)
+        _write_worker_heartbeat(record, status="ok")
+    except Exception as exc:
+        message = f"{type(exc).__name__}:{exc}"
+        _write_worker_heartbeat(record, status="error", error=message)
+        print(f"GOOL_MULTI_ANALYSIS_ERROR {message}", flush=True)
+
+    try:
+        module.maybe_emit_money_flow(record)
+    except Exception as exc:
+        print(f"GOOL_OPTIONAL_POST_PROCESS_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return emitted
+
+
+def _watchdog_limits() -> tuple[float, float, float]:
+    try:
+        collector_fresh = max(60.0, float(os.getenv("GOOL_COLLECTOR_HEALTH_MAX_AGE_SECONDS", "180")))
+    except (TypeError, ValueError):
+        collector_fresh = 180.0
+    try:
+        analysis_stale = max(90.0, float(os.getenv("GOOL_ANALYSIS_WATCHDOG_STALE_SECONDS", "180")))
+    except (TypeError, ValueError):
+        analysis_stale = 180.0
+    try:
+        startup_grace = max(60.0, float(os.getenv("GOOL_ANALYSIS_WATCHDOG_STARTUP_GRACE_SECONDS", "150")))
+    except (TypeError, ValueError):
+        startup_grace = 150.0
+    return collector_fresh, analysis_stale, startup_grace
+
+
+def watchdog_should_restart() -> tuple[bool, dict[str, Any]]:
+    collector_fresh, analysis_stale, startup_grace = _watchdog_limits()
+    collector = _collector_snapshot()
+    analysis_age = _file_age_seconds(_analysis_path())
+    process_age = max(0.0, time.monotonic() - _STARTED_MONOTONIC)
+    collector_age = collector.get("age_seconds")
+    collector_ok = collector_age is not None and float(collector_age) <= collector_fresh
+    stale = analysis_age is None or analysis_age > analysis_stale
+    restart = bool(
+        process_age >= startup_grace
+        and collector_ok
+        and int(collector.get("live") or 0) > 0
+        and stale
+    )
+    return restart, {
+        "collector_live": int(collector.get("live") or 0),
+        "collector_age_seconds": collector_age,
+        "analysis_age_seconds": analysis_age,
+        "process_age_seconds": process_age,
+        "collector_fresh": collector_ok,
+        "analysis_stale": stale,
+    }
+
+
+def pipeline_diagnostic_text() -> str | None:
+    """Explain an empty Analysis screen using the collector/worker health files."""
+    collector = _collector_snapshot()
+    collector_age = collector.get("age_seconds")
+    analysis_age = _file_age_seconds(_analysis_path())
+    worker = _read_json(_worker_health_path())
+    try:
+        live = int(collector.get("live") or 0)
+    except (TypeError, ValueError):
+        live = 0
+
+    collector_fresh, analysis_stale, _ = _watchdog_limits()
+    if collector_age is None or float(collector_age) > collector_fresh:
+        return (
+            "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\n"
+            "⚠️ Нет свежего heartbeat от Flashscore collector. "
+            "Supervisor продолжает работу и должен восстановить поток автоматически."
+        )
+    if live <= 0:
+        return None
+    if analysis_age is None or analysis_age > analysis_stale:
+        detail = str(worker.get("error") or "").strip()
+        suffix = f"\nПоследняя ошибка: <code>{detail[:180]}</code>" if detail else ""
+        return (
+            "🧠 <b>GOOL MULTI · АНАЛИЗ</b>\n\n"
+            f"⚠️ Flashscore collector видит <b>{live}</b> LIVE, но analysis-worker не обновляет оценки.\n"
+            "Автовосстановление включено: зависший worker будет перезапущен supervisor'ом."
+            f"{suffix}"
+        )
+    return None
+
+
+def _watchdog_loop() -> None:
+    interval = max(10.0, float(os.getenv("GOOL_ANALYSIS_WATCHDOG_INTERVAL_SECONDS", "30")))
+    while True:
+        time.sleep(interval)
+        restart, info = watchdog_should_restart()
+        if not restart:
+            continue
+        print(
+            "GOOL_ANALYSIS_WATCHDOG_RESTART "
+            f"collector_live={info['collector_live']} "
+            f"collector_age={info['collector_age_seconds']} "
+            f"analysis_age={info['analysis_age_seconds']} "
+            f"process_age={info['process_age_seconds']}",
+            flush=True,
+        )
+        # monkey_start.py already supervises this child and restarts it on exit.
+        # Exiting the whole worker process is the only reliable recovery when the
+        # main processing thread is stuck in a blocking provider/helper call.
+        os._exit(86)
+
+
+def install_analysis_pipeline_guard() -> bool:
+    global _INSTALLED, _WATCHDOG_STARTED
+    if _INSTALLED:
+        return True
+    with _PROCESS_LOCK:
+        if _INSTALLED:
+            return True
+        module = sys.modules.get("gool_bot2.storage_market_signal_worker_var")
+        if module is None or not hasattr(module, "_ORIG_PROCESS"):
+            return False
+        from . import storage_signal_worker as storage
+
+        storage.StorageCardAllMatchSignalWorker._process = _robust_process
+        _INSTALLED = True
+        print(
+            "GOOL_ANALYSIS_PIPELINE_GUARD installed brain_stage=independent "
+            "helper_failures=isolated watchdog=enabled",
+            flush=True,
+        )
+
+        enabled = str(os.getenv("GOOL_ANALYSIS_WATCHDOG_ENABLED", "1")).strip().lower() not in {"0", "false", "no", "off"}
+        if enabled and not _WATCHDOG_STARTED:
+            thread = threading.Thread(target=_watchdog_loop, name="gool-analysis-watchdog", daemon=True)
+            thread.start()
+            _WATCHDOG_STARTED = True
+        return True
+
+
+__all__ = [
+    "install_analysis_pipeline_guard",
+    "pipeline_diagnostic_text",
+    "watchdog_should_restart",
+]

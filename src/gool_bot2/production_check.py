@@ -36,14 +36,15 @@ def main() -> None:
     hazard_heads = set((hazard.get("heads") or {}).keys())
     fd_heads = set((football_data.get("heads") or {}).keys())
 
-    required_event = {"another_goal", "goal_before_ht"}
+    required_event = {"another_goal", "goal_before_ht", "two_plus_goals_second_half"}
+    required_hazard = {"future_goals_count", "future_first_half_goals", "second_half_goals_total"}
     required_fd = {"over_2_5_ht", "both_teams_to_score_ht"}
 
     errors: list[str] = []
     if not required_event.issubset(direct_heads):
         errors.append(f"direct_missing={sorted(required_event - direct_heads)}")
-    if not required_event.issubset(hazard_heads):
-        errors.append(f"hazard_missing={sorted(required_event - hazard_heads)}")
+    if not required_hazard.issubset(hazard_heads):
+        errors.append(f"hazard_missing={sorted(required_hazard - hazard_heads)}")
     if not required_fd.issubset(fd_heads):
         errors.append(f"football_data_missing={sorted(required_fd - fd_heads)}")
 

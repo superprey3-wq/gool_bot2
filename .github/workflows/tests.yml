@@ -22,18 +22,20 @@ jobs:
           rm -rf deploy_bundle GOOL_BOT2_MONKEY_CODE.zip
           mkdir -p deploy_bundle
           cp -R src deploy_bundle/
-          cp pyproject.toml README.md .env.example monkey_start.py requirements.txt deploy_bundle/
+          cp pyproject.toml README.md .env.example monkey_start.py monkey_autoupdate.py requirements.txt deploy_bundle/
           cp -R docs deploy_bundle/
           test -f deploy_bundle/monkey_start.py
+          test -f deploy_bundle/monkey_autoupdate.py
           test -f deploy_bundle/requirements.txt
           test -f deploy_bundle/src/gool_bot2/storage_market_signal_worker_var.py
           (cd deploy_bundle && zip -qr ../GOOL_BOT2_MONKEY_CODE.zip .)
       - name: Verify Monkey deployment bundle is bootable
         run: |
           unzip -Z1 GOOL_BOT2_MONKEY_CODE.zip | grep -qx 'monkey_start.py'
+          unzip -Z1 GOOL_BOT2_MONKEY_CODE.zip | grep -qx 'monkey_autoupdate.py'
           unzip -Z1 GOOL_BOT2_MONKEY_CODE.zip | grep -qx 'requirements.txt'
           unzip -Z1 GOOL_BOT2_MONKEY_CODE.zip | grep -qx 'src/gool_bot2/storage_market_signal_worker_var.py'
-          python -m py_compile deploy_bundle/monkey_start.py
+          python -m py_compile deploy_bundle/monkey_start.py deploy_bundle/monkey_autoupdate.py
       - uses: actions/upload-artifact@v4
         with:
           name: gool-bot2-monkey-code

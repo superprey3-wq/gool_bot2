@@ -6,11 +6,12 @@ from .brain_v3_browser_support import apply_browser_support
 from .brain_v3_decision import apply_brain_v3_to_experts
 from .brain_v3_decision_audit import audit_brain_v3_decision
 from .brain_v3_external_trends import apply_external_trend_context
+from .brain_v3_strong_live import apply_strong_live_entry
 from .brain_v3_trend_learning import install_brain_v3_trend_learning
 
 
 _INSTALLED = False
-_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + Chromium fallback + время/счёт + capped history/trends · 1xBet только кэф"
+_BRAIN_V3_FORMULA = "Brain V3: LIVE multi-source + guarded strong-live + Chromium fallback + время/счёт + capped history/trends · 1xBet только кэф"
 
 
 def install_brain_v3_activation() -> None:
@@ -47,6 +48,7 @@ def install_brain_v3_activation() -> None:
             data_quality=quality,
             prematch_profile=profile,
         )
+        decision = apply_strong_live_entry(record, experts, decision)
         decision = apply_external_trend_context(record, experts, decision)
         decision = apply_browser_support(record, experts, decision)
         decision = audit_brain_v3_decision(record, experts, decision)
@@ -60,6 +62,7 @@ def install_brain_v3_activation() -> None:
                 f"GOOL_BRAIN_V3 match={match.get('flashscore_event_id') or '-'} "
                 f"minute={int(match.get('minute') or 0)} score={int(match.get('home_score') or 0)}:{int(match.get('away_score') or 0)} "
                 f"state={decision.get('match_state') or '-'} stage={decision.get('status') or 'WATCH'} "
+                f"mode={decision.get('entry_mode') or 'STANDARD'} "
                 f"p={float(decision.get('probability') or 0):.3f} "
                 f"live={float(decision.get('live_probability') or 0):.3f} "
                 f"prematch={float(((decision.get('prematch') or {}).get('adjustment_pp')) or 0):+.1f}pp "
@@ -116,7 +119,7 @@ def install_brain_v3_activation() -> None:
     runtime._restore_live_only_brain = restore_v3_probability
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative decision_audit=selection+under_countercase live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate",
+        "GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative strong_live=guarded_live_only decision_audit=selection+under_countercase live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate",
         flush=True,
     )
 

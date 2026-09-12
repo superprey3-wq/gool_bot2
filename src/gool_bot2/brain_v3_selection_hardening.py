@@ -53,6 +53,8 @@ def _sync_expert(experts: dict[str, Any], decision: dict[str, Any]) -> None:
 
 
 def _selection_floor(decision: dict[str, Any]) -> float:
+    if str(decision.get("entry_mode") or "STANDARD") == "STRONG_LIVE":
+        return max(0.50, min(0.70, _env_float("GOOL_BRAIN_V3_SELECTION_MIN_STRONG_LIVE", 0.54)))
     period = str(decision.get("period") or "")
     if period == "1H":
         return max(0.60, min(0.90, _env_float("GOOL_BRAIN_V3_SELECTION_MIN_1H", 0.72)))
@@ -65,6 +67,8 @@ def _self_check(decision: dict[str, Any]) -> dict[str, Any]:
     This intentionally ignores PREMATCH/trend boosts when deciding whether the
     clock is still good enough.  A historical trend may support a real LIVE
     scenario, but it must never rescue a match whose current goal rate is too thin.
+    Strong-live entries may use their already-qualified LIVE floors, but never a
+    bookmaker price or historical shortcut.
     """
     period = str(decision.get("period") or "")
     minute = int(_number(decision.get("minute"), 0.0))
@@ -89,6 +93,13 @@ def _self_check(decision: dict[str, Any]) -> dict[str, Any]:
         if minute >= 70:
             live_floor = max(live_floor, 0.67)
             expected_floor = max(expected_floor, 1.10)
+
+    if str(decision.get("entry_mode") or "STANDARD") == "STRONG_LIVE":
+        strong = dict(decision.get("strong_live") or {})
+        strong_live_floor = _number(strong.get("pure_live_floor"), live_floor)
+        strong_expected_floor = _number(strong.get("expected_remaining_floor"), expected_floor)
+        live_floor = min(live_floor, strong_live_floor)
+        expected_floor = min(expected_floor, strong_expected_floor)
 
     live_floor = max(0.55, min(0.85, live_floor))
     expected_floor = max(0.70, min(1.60, expected_floor))
@@ -224,6 +235,7 @@ def _apply_tournament(
             "minute": int(_number(decision.get("minute"), 0.0)),
             "period": str(decision.get("period") or ""),
             "strategy": strategy,
+            "entry_mode": str(decision.get("entry_mode") or "STANDARD"),
             "score": round(score, 4),
             "probability": round(_number(decision.get("probability"), 0.0), 4),
             "eligible": eligible,
@@ -292,6 +304,7 @@ def _apply_tournament(
 
     tournament = {
         "version": 3,
+        "entry_mode": str(decision.get("entry_mode") or "STANDARD"),
         "score": round(score, 4),
         "floor": round(floor, 4),
         "observations": observations,
@@ -324,7 +337,8 @@ def _apply_tournament(
 
     print(
         f"GOOL_BRAIN_V3_SELECT match={match_id} strategy={strategy} "
-        f"stage={status_before}->{decision.get('status')} score={score:.3f} floor={floor:.3f} "
+        f"stage={status_before}->{decision.get('status')} mode={decision.get('entry_mode') or 'STANDARD'} "
+        f"score={score:.3f} floor={floor:.3f} "
         f"scans={fresh_scans}/{min_scans} round={last_scan_id}/{confirmed_round} "
         f"age={age:.1f}s rivals={len(rivals)} better={(stronger or {}).get('match_id') or '-'} "
         f"time={float(self_check.get('minutes_left') or 0):.0f}m "
@@ -359,6 +373,7 @@ def install_brain_v3_selection_hardening() -> None:
         "GOOL_BRAIN_V3_SELECTION installed mode=two_full_field_scans+self_check+tournament "
         f"1h_floor={_env_float('GOOL_BRAIN_V3_SELECTION_MIN_1H', 0.72):.2f} "
         f"2h_floor={_env_float('GOOL_BRAIN_V3_SELECTION_MIN_2H', 0.69):.2f} "
+        f"strong_live_floor={_env_float('GOOL_BRAIN_V3_SELECTION_MIN_STRONG_LIVE', 0.54):.2f} "
         f"field_scans={_env_int('GOOL_BRAIN_V3_SELECTION_MIN_FIELD_SCANS', 2)}",
         flush=True,
     )

@@ -16,15 +16,26 @@ PLAYWRIGHT_ROOT = ROOT / ".cache" / "ms-playwright"
 MULTI_RESET_ID = "brain_v3_market_systems_clean_epoch_2026_09_06"
 
 
-def load_env(path: Path) -> None:
+def load_env(path: Path, *, required: bool = False) -> bool:
+    """Load KEY=VALUE pairs without overriding variables injected by the host.
+
+    Monkey/Pterodactyl deployments often provide secrets as process environment
+    variables. A missing local env file must therefore not prevent the runtime
+    from booting when those variables are already present.
+    """
     if not path.exists():
-        raise RuntimeError(f"missing_env={path}")
+        if required:
+            raise RuntimeError(f"missing_env={path}")
+        print(f"GOOL_BOOT env_file=missing path={path} source=process_environment", flush=True)
+        return False
     for raw in path.read_text("utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip())
+    print(f"GOOL_BOOT env_file=loaded path={path}", flush=True)
+    return True
 
 
 def _truthy(name: str, default: bool = False) -> bool:
@@ -232,6 +243,7 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
+    os.environ.setdefault("TELEGRAM_SUBSCRIBERS_FILE", str(runtime / "telegram_subscribers.json"))
     os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
 
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
@@ -286,7 +298,10 @@ def main() -> None:
     os.environ["FOOTBALL_DATA_GOAL_MODELS_PATH"] = os.environ["FOOTBALL_DATA_GOAL_MODEL"]
 
     if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or not os.getenv("TELEGRAM_CHAT_ID", "").strip():
-        raise RuntimeError("telegram_not_configured")
+        raise RuntimeError(
+            "telegram_not_configured: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
+            f"in {ENV_FILE} or in the server environment"
+        )
     print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(

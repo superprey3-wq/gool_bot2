@@ -175,10 +175,13 @@ def test_runtime_has_no_duplicate_confidence_brain():
     assert "_enforce_min_rating" not in text
 
 
-def test_storage_collector_keeps_ordinary_windows_separate_from_market_watch():
+def test_storage_collector_gives_ordinary_gool_detail_for_full_match():
     assert StorageLiveSnapshotCollector._entry_window(35)
-    assert not StorageLiveSnapshotCollector._entry_window(36)
+    assert StorageLiveSnapshotCollector._entry_window(36)
+    assert StorageLiveSnapshotCollector._entry_window(45)
     assert StorageLiveSnapshotCollector._entry_window(46)
     assert StorageLiveSnapshotCollector._entry_window(75)
-    assert not StorageLiveSnapshotCollector._entry_window(76)
-    # Market hunters are intentionally tested separately above at 89/90/95.
+    assert StorageLiveSnapshotCollector._entry_window(76)
+    assert StorageLiveSnapshotCollector._entry_window(95)
+    assert not StorageLiveSnapshotCollector._entry_window(96)
+    # Market hunters still run independently of ordinary GOOL and are tested above.

@@ -18,6 +18,7 @@ from .orphan_pending_reconcile import reconcile_orphaned_pending
 from .production_guard_compat import install_production_guard_compat
 from .production_journal_repair import repair_public_journal
 from .production_journal_serialization import install_production_journal_serialization
+from .production_signal_throughput import install_production_signal_throughput
 from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
 from .runtime_hardening import install_runtime_hardening
@@ -96,6 +97,11 @@ def install_multi_product() -> None:
     install_runtime_hardening()
     install_analysis_pipeline_guard()
 
+    # Final production decision policy: full-match football detail, Brain V3's
+    # own dynamic PASS floor, no accidental 1xBet refresh dependency, and no
+    # global "only the best match may signal" tournament veto.
+    install_production_signal_throughput()
+
     telegram.MENU_KEYBOARD = dict(_CLEAN_MENU_KEYBOARD)
     telegram.report_text = production_report_text
     telegram.analysis_text = _analysis_text_safe
@@ -132,7 +138,7 @@ def install_multi_product() -> None:
         )
 
     print(
-        "GOOL_PRODUCT_PIPELINE installed version=2026-09-11-analysis-watchdog "
+        "GOOL_PRODUCT_PIPELINE installed version=2026-09-13-throughput-audit "
         f"journal_before={repair['before']} journal_after={repair['after']} "
         f"duplicates_removed={repair['duplicates_removed']}",
         flush=True,

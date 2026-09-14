@@ -98,6 +98,25 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
         return state
 
 
+class ScoreEpochMultiSportSteamWorker(MultiSportSteamWorker):
+    """Never carry pre-score market movement into a new hockey/basketball epoch.
+
+    A goal, two-pointer, three-pointer or any other score change causes the
+    bookmaker to reprice totals mechanically. Mixing those pre-score quotes with
+    post-score quotes can look like genuine STEAM. Clear the complete per-match
+    movement window first, then let the base worker append the first fresh quote.
+    A new signal therefore needs a full set of clean post-score observations.
+    """
+
+    def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
+        key = f"{row['sport']}:{row['event_id']}"
+        score = (int(row["score"][0]), int(row["score"][1]))
+        previous_score = self._last_score.get(key)
+        if previous_score is not None and previous_score != score:
+            self._history[key].clear()
+        return super()._append_history(row)
+
+
 def main() -> None:
     runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
     parser = argparse.ArgumentParser(description="GOOL 1xBet all-LIVE market-pressure collector")
@@ -124,7 +143,7 @@ def main() -> None:
     multisport: MultiSportSteamWorker | None = None
     multisport_thread: threading.Thread | None = None
     if _enabled("XBET_MULTISPORT_STEAM_ENABLED", True):
-        multisport = MultiSportSteamWorker(runtime)
+        multisport = ScoreEpochMultiSportSteamWorker(runtime)
         multisport_interval = max(8.0, float(os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "20")))
         multisport_thread = threading.Thread(
             target=multisport.run,
@@ -154,7 +173,8 @@ def main() -> None:
         f"timeline_epoch_guard={os.getenv('XBET_TIMELINE_REPRICE_GUARD_SECONDS', '45')}s "
         f"odds_shock_guard={os.getenv('XBET_ODDS_SHOCK_GUARD_PP', '12')}pp "
         f"prematch_state={prematch_state} prematch_interval={prematch_interval:.0f}s "
-        f"multisport_steam={'on' if multisport is not None else 'off'}",
+        f"multisport_steam={'on' if multisport is not None else 'off'} "
+        "multisport_score_epoch_reset=history_clear",
         flush=True,
     )
     collector.run(args.interval)

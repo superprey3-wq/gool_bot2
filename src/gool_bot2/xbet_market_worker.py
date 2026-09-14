@@ -10,10 +10,18 @@ from typing import Any
 from .storage_runtime import trim_file_tail
 from .xbet_market_demand import load_active_demands
 from .xbet_market_robust import RobustXBetMarketCollector
+from .xbet_multisport_steam import MultiSportSteamWorker
 from .xbet_prematch_market import XBetPrematchCollector
 from .xbet_robust_event_guard import install as install_robust_event_guard
 from .xbet_score_epoch_guard import install as install_score_epoch_guard
 from .xbet_timeline_score_guard import install as install_timeline_score_guard
+
+
+def _enabled(name: str, default: bool = True) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().casefold() not in {"0", "false", "no", "off"}
 
 
 class BoundedRobustXBetMarketCollector(RobustXBetMarketCollector):
@@ -113,13 +121,29 @@ def main() -> None:
         daemon=True,
     )
 
+    multisport: MultiSportSteamWorker | None = None
+    multisport_thread: threading.Thread | None = None
+    if _enabled("XBET_MULTISPORT_STEAM_ENABLED", True):
+        multisport = MultiSportSteamWorker(runtime)
+        multisport_interval = max(8.0, float(os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "20")))
+        multisport_thread = threading.Thread(
+            target=multisport.run,
+            args=(multisport_interval,),
+            name="xbet-multisport-steam",
+            daemon=True,
+        )
+
     def stop_all(*_: object) -> None:
         prematch.stop()
+        if multisport is not None:
+            multisport.stop()
         collector.stop()
 
     signal.signal(signal.SIGINT, stop_all)
     signal.signal(signal.SIGTERM, stop_all)
     prematch_thread.start()
+    if multisport_thread is not None:
+        multisport_thread.start()
     print(
         f"XBET_MARKET started interval={args.interval}s state={args.state} "
         f"collector=all_live_robust workers={os.getenv('XBET_GAME_WORKERS', '24')} "
@@ -129,11 +153,14 @@ def main() -> None:
         f"event_reprice_guard={os.getenv('XBET_EVENT_REPRICE_GUARD_SECONDS', '45')}s "
         f"timeline_epoch_guard={os.getenv('XBET_TIMELINE_REPRICE_GUARD_SECONDS', '45')}s "
         f"odds_shock_guard={os.getenv('XBET_ODDS_SHOCK_GUARD_PP', '12')}pp "
-        f"prematch_state={prematch_state} prematch_interval={prematch_interval:.0f}s",
+        f"prematch_state={prematch_state} prematch_interval={prematch_interval:.0f}s "
+        f"multisport_steam={'on' if multisport is not None else 'off'}",
         flush=True,
     )
     collector.run(args.interval)
     prematch.stop()
+    if multisport is not None:
+        multisport.stop()
 
 
 if __name__ == "__main__":

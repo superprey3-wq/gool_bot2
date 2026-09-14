@@ -9,11 +9,16 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
 from . import telegram
 from . import xbet_market_pressure as market
+from .providers.common import norm_team
+from .providers.flashscore import FlashscoreProvider, _as_int, _fields
+from .storage_runtime import trim_file_tail
+from .xbet_multisport_card import render_multisport_steam_card
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,9 @@ SPORTS: dict[str, SportConfig] = {
         window_seconds=3 * 60.0,
     ),
 }
+
+# Flashscore: basketball=3, ice hockey=4. 1xBet uses hockey=2, basketball=3.
+FLASHSCORE_SPORT_IDS = {"basketball": 3, "hockey": 4}
 
 _EXCLUDED_MARKERS = (
     "esports",
@@ -147,14 +155,7 @@ def _balanced_total(game: dict[str, Any]) -> dict[str, float] | None:
         if not (1.08 <= over <= 8.0 and 1.08 <= under <= 8.0):
             continue
         probability = _fair(over, under)
-        candidates.append(
-            {
-                "line": line,
-                "over": over,
-                "under": under,
-                "probability": probability,
-            }
-        )
+        candidates.append({"line": line, "over": over, "under": under, "probability": probability})
     if not candidates:
         return None
     return min(candidates, key=lambda row: abs(float(row["probability"]) - 0.5))
@@ -168,10 +169,7 @@ def _metric(total: dict[str, float], score: tuple[int, int], cfg: SportConfig) -
 
 
 def _event_allowed(game: dict[str, Any]) -> bool:
-    text = " ".join(
-        str(game.get(key) or "")
-        for key in ("L", "LE", "SN", "O1", "O2")
-    ).casefold()
+    text = " ".join(str(game.get(key) or "") for key in ("L", "LE", "SN", "O1", "O2")).casefold()
     return not any(marker in text for marker in _EXCLUDED_MARKERS)
 
 
@@ -212,7 +210,6 @@ def detect_steam(
 
     if delta < cfg.min_metric_delta or (moves < cfg.min_moves and not extreme):
         return None
-
     try:
         odd = float(end["over"])
     except (TypeError, ValueError):
@@ -232,29 +229,109 @@ def detect_steam(
     }
 
 
-class MultiSportSteamWorker:
-    """Independent 1xBet steam scanner for real ice hockey and basketball.
+def _team_similarity(left: str, right: str) -> float:
+    a, b = norm_team(left), norm_team(right)
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    return SequenceMatcher(None, a, b).ratio()
 
-    It does not touch GOOL football Brain or football STEAM state. The signal is
-    based on the bookmaker's implied *remaining* total, so ordinary score changes
-    are largely removed from the pressure metric instead of being treated as
-    money movement. A short post-score guard suppresses transient repricing.
+
+def parse_flashscore_live(body: str) -> list[dict[str, Any]]:
+    """Parse a generic Flashscore sport master feed and keep LIVE events only."""
+    league = ""
+    rows: dict[str, dict[str, Any]] = {}
+    for chunk in (body or "").split("~"):
+        if not chunk:
+            continue
+        if chunk.startswith("ZA÷"):
+            league = str(_fields(chunk).get("ZA") or "").strip()
+            continue
+        if not chunk.startswith("AA÷"):
+            continue
+        event_id, sep, rest = chunk[3:].partition("¬")
+        if not sep or len(event_id) != 8 or not event_id.isalnum():
+            continue
+        fields = _fields(rest)
+        if str(fields.get("AB") or "") != "2":
+            continue
+        home = str(fields.get("AE") or fields.get("CX") or "").strip()
+        away = str(fields.get("AF") or "").strip()
+        if not home or not away:
+            continue
+        rows[event_id] = {
+            "flashscore_event_id": event_id,
+            "home": home,
+            "away": away,
+            "score": [
+                _as_int(fields.get("AG"), _as_int(fields.get("AT"))),
+                _as_int(fields.get("AH"), _as_int(fields.get("AU"))),
+            ],
+            "league": league,
+            "status_code": str(fields.get("AC") or ""),
+            "coarse_status": "2",
+        }
+    return list(rows.values())
+
+
+def _match_quality(xbet: dict[str, Any], fs: dict[str, Any]) -> tuple[float, bool, float]:
+    xh = str(xbet.get("O1") or "")
+    xa = str(xbet.get("O2") or "")
+    fh = str(fs.get("home") or "")
+    fa = str(fs.get("away") or "")
+    direct_sides = (_team_similarity(xh, fh), _team_similarity(xa, fa))
+    reverse_sides = (_team_similarity(xh, fa), _team_similarity(xa, fh))
+    direct = sum(direct_sides) / 2.0
+    reverse = sum(reverse_sides) / 2.0
+    if reverse > direct:
+        return reverse, True, min(reverse_sides)
+    return direct, False, min(direct_sides)
+
+
+def map_xbet_to_flashscore(
+    xbet_events: list[dict[str, Any]],
+    flashscore_events: list[dict[str, Any]],
+    *,
+    min_score: float | None = None,
+    min_side: float | None = None,
+) -> list[tuple[dict[str, Any], dict[str, Any], bool, float]]:
+    """One-to-one whitelist mapping. Unmatched 1xBet events are never scanned."""
+    threshold = _float_env("XBET_MULTISPORT_FS_MATCH_MIN", 0.70) if min_score is None else float(min_score)
+    side_floor = _float_env("XBET_MULTISPORT_FS_SIDE_MIN", 0.52) if min_side is None else float(min_side)
+    candidates: list[tuple[float, int, int, bool]] = []
+    for xi, xbet in enumerate(xbet_events):
+        if not _event_allowed(xbet):
+            continue
+        for fi, fs in enumerate(flashscore_events):
+            quality, reversed_order, weakest = _match_quality(xbet, fs)
+            if quality >= threshold and weakest >= side_floor:
+                candidates.append((quality, xi, fi, reversed_order))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    used_xbet: set[int] = set()
+    used_fs: set[int] = set()
+    out: list[tuple[dict[str, Any], dict[str, Any], bool, float]] = []
+    for quality, xi, fi, reversed_order in candidates:
+        if xi in used_xbet or fi in used_fs:
+            continue
+        used_xbet.add(xi)
+        used_fs.add(fi)
+        out.append((xbet_events[xi], flashscore_events[fi], reversed_order, quality))
+    return out
+
+
+class MultiSportSteamWorker:
+    """Flashscore-whitelisted hockey/basketball 1xBet STEAM scanner.
+
+    Flashscore is the canonical LIVE universe and score source. 1xBet contributes
+    market movement only. No Flashscore match -> no scan -> no signal.
     """
 
     def __init__(self, runtime: Path | None = None) -> None:
         runtime = runtime or Path(os.getenv("RUNTIME_DATA_DIR", "data"))
-        self.state_path = Path(
-            os.getenv(
-                "XBET_MULTISPORT_STATE",
-                str(runtime / "live" / "xbet_multisport_steam_state.json"),
-            )
-        )
-        self.history_path = Path(
-            os.getenv(
-                "XBET_MULTISPORT_HISTORY",
-                str(runtime / "live" / "xbet_multisport_steam_history.jsonl"),
-            )
-        )
+        self.state_path = Path(os.getenv("XBET_MULTISPORT_STATE", str(runtime / "live" / "xbet_multisport_steam_state.json")))
+        self.history_path = Path(os.getenv("XBET_MULTISPORT_HISTORY", str(runtime / "live" / "xbet_multisport_steam_history.jsonl")))
         self._stop = threading.Event()
         self._history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=40))
         self._last_score: dict[str, tuple[int, int]] = {}
@@ -262,24 +339,34 @@ class MultiSportSteamWorker:
         self._last_period: dict[str, str] = {}
         self._last_alert_at: dict[str, float] = {}
         self._roots: dict[str, str] = {key: market.ROOTS[0] for key in SPORTS}
+        self._flashscore = FlashscoreProvider()
 
     def stop(self) -> None:
         self._stop.set()
 
     @staticmethod
     def _query(sport_id: int) -> str:
-        return urllib.parse.urlencode(
-            {
-                "sports": int(sport_id),
-                "count": max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000)),
-                "lng": "en",
-                "mode": 4,
-                "country": 1,
-                "getEmpty": "true",
-            }
-        )
+        return urllib.parse.urlencode({
+            "sports": int(sport_id),
+            "count": max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000)),
+            "lng": "en",
+            "mode": 4,
+            "country": 1,
+            "getEmpty": "true",
+        })
 
-    def _index(self, cfg: SportConfig) -> list[dict[str, Any]]:
+    def _flashscore_live(self, cfg: SportConfig) -> list[dict[str, Any]]:
+        sport_id = FLASHSCORE_SPORT_IDS[cfg.key]
+        merged: dict[str, dict[str, Any]] = {}
+        for path in (f"f_{sport_id}_0_3_en_1", f"f_{sport_id}_0_0_en_1"):
+            body = self._flashscore._feed(path)
+            if not body:
+                continue
+            for row in parse_flashscore_live(body):
+                merged[str(row["flashscore_event_id"])] = row
+        return list(merged.values())
+
+    def _xbet_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         query = self._query(cfg.sport_id)
         for root in roots:
@@ -287,7 +374,7 @@ class MultiSportSteamWorker:
             values = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(values, list) and values:
                 self._roots[cfg.key] = root
-                return [row for row in values if isinstance(row, dict) and row.get("I")]
+                return [row for row in values if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")]
         return []
 
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
@@ -303,55 +390,60 @@ class MultiSportSteamWorker:
         }
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         for root in roots:
-            payload = market._http_json(
-                f"{root}/GetGameZip?{urllib.parse.urlencode(params)}",
-                timeout=7.0,
-            )
+            payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = root
                 return value
         return None
 
-    def _event_snapshot(self, event: dict[str, Any], cfg: SportConfig) -> dict[str, Any] | None:
+    def _snapshot(
+        self,
+        event: dict[str, Any],
+        fs: dict[str, Any],
+        reversed_order: bool,
+        match_score: float,
+        cfg: SportConfig,
+    ) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
         if not event_id:
-            return None
+            return None, "missing_event_id"
         game = event
         total = _balanced_total(game)
-        score = _score(game)
-        if total is None or score is None:
-            fetched = self._game(event_id, cfg)
-            if not fetched:
-                return None
-            game = fetched
+        xbet_score = _score(game)
+        if total is None or xbet_score is None:
+            game = self._game(event_id, cfg) or {}
             total = _balanced_total(game)
-            score = _score(game)
-        if total is None or score is None or not _event_allowed(game):
-            return None
+            xbet_score = _score(game)
+        if total is None or xbet_score is None or not _event_allowed(game):
+            return None, "market_decode"
 
-        home = str(game.get("O1") or event.get("O1") or "?").strip()
-        away = str(game.get("O2") or event.get("O2") or "?").strip()
-        league = str(game.get("LE") or game.get("L") or event.get("LE") or event.get("L") or "").strip()
-        period = _period(game)
-        clock = _clock_seconds(game)
+        canonical_xbet = (xbet_score[1], xbet_score[0]) if reversed_order else xbet_score
+        fs_score_raw = list(fs.get("score") or [0, 0])
+        fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
+        if canonical_xbet != fs_score:
+            return None, "score_mismatch"
+
         return {
             "event_id": event_id,
             "sport": cfg.key,
-            "home": home,
-            "away": away,
-            "league": league,
-            "score": [score[0], score[1]],
-            "period": period,
-            "clock_seconds": clock,
+            "home": str(fs.get("home") or "?"),
+            "away": str(fs.get("away") or "?"),
+            "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
+            "score": [fs_score[0], fs_score[1]],
+            "period": _period(game),
+            "clock_seconds": _clock_seconds(game),
             "line": float(total["line"]),
             "over": float(total["over"]),
             "under": float(total["under"]),
             "probability": float(total["probability"]),
-            "metric": _metric(total, score, cfg),
+            "metric": _metric(total, fs_score, cfg),
+            "flashscore_event_id": str(fs.get("flashscore_event_id") or ""),
+            "flashscore_match_score": round(float(match_score), 4),
+            "flashscore_score_verified": True,
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "ts": time.time(),
-        }
+        }, None
 
     def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
         key = f"{row['sport']}:{row['event_id']}"
@@ -368,7 +460,6 @@ class MultiSportSteamWorker:
         if previous_score is not None and previous_score != score:
             self._score_changed_at[key] = now
         self._last_score[key] = score
-
         self._history[key].append(dict(row))
         return list(self._history[key]), self._score_changed_at.get(key)
 
@@ -388,115 +479,118 @@ class MultiSportSteamWorker:
         return f"{row.get('period') or 'LIVE'} · {seconds // 60:02d}:{seconds % 60:02d}"
 
     def _message(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> str:
-        end = signal["end"]
-        score = row.get("score") or [0, 0]
+        end = dict(signal.get("end") or {})
+        score = list(row.get("score") or [0, 0])
         strength = "EXTREME" if signal.get("extreme") else "STRONG"
-        unit = "гола" if cfg.key == "hockey" else "очка"
         return (
-            f"{cfg.icon} <b>1xBet {cfg.title} · {strength}</b>\n\n"
-            f"<b>{row.get('home','?')} — {row.get('away','?')}</b>\n"
-            f"{int(score[0])}:{int(score[1])} · {self._format_clock(row)}\n"
-            f"🏆 {row.get('league') or 'LIVE'}\n\n"
-            f"📈 Тотал: <b>{float(end['line']):g}</b> · ТБ {float(end['over']):.2f}\n"
-            f"🔥 Давление на будущий тотал: <b>+{float(signal['metric_delta']):.2f} {unit}</b>\n"
-            f"📊 Δ fair P(ТБ): {float(signal['probability_delta_pp']):+.1f} п.п. · "
-            f"линия {float(signal['line_delta']):+.1f} · импульсов {int(signal['moves'])}\n"
-            "⚠️ Это отдельный рыночный STEAM-сигнал; футбольный GOOL Brain он не меняет."
+            f"{cfg.icon} <b>1xBet {cfg.title} · {strength}</b>\n"
+            f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}\n"
+            f"⏱ {self._format_clock(row)} · ✅ Flashscore LIVE\n"
+            f"📈 ТБ {float(end.get('line') or row.get('line') or 0):g} @ {float(end.get('over') or row.get('over') or 0):.2f}\n"
+            f"🔥 движение +{float(signal.get('metric_delta') or 0):.2f} · импульсов {int(signal.get('moves') or 0)}"
         )
 
-    def _emit(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> int:
+    def _deliver(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> int:
         if not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
             return 0
-        sent = telegram.broadcast(self._message(row, signal, cfg))
-        print(
-            f"XBET_{cfg.key.upper()}_STEAM_SENT event={row.get('event_id')} "
-            f"delta={signal.get('metric_delta')} moves={signal.get('moves')} sent={sent}",
-            flush=True,
-        )
-        return int(sent or 0)
+        message = self._message(row, signal, cfg)
+        if _truthy("XBET_MULTISPORT_CARDS_ENABLED", True):
+            try:
+                png = render_multisport_steam_card(row, signal, cfg)
+                sent = telegram.broadcast_photo(png, caption=message)
+                if sent:
+                    return sent
+            except Exception as exc:
+                print(f"XBET_{cfg.key.upper()}_CARD_ERROR error={type(exc).__name__}:{exc}", flush=True)
+        return telegram.broadcast(message)
+
+    def _scan_sport(self, cfg: SportConfig) -> dict[str, Any]:
+        fs_live = self._flashscore_live(cfg)
+        xbet_live = self._xbet_index(cfg)
+        mapped = map_xbet_to_flashscore(xbet_live, fs_live)
+        max_events = max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))
+        mapped = mapped[:max_events]
+
+        decoded = 0
+        score_mismatch = 0
+        market_decode = 0
+        alerts = 0
+        latest: list[dict[str, Any]] = []
+        workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
+        futures = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for event, fs, reversed_order, match_score in mapped:
+                futures.append(pool.submit(self._snapshot, event, fs, reversed_order, match_score, cfg))
+            for future in as_completed(futures):
+                try:
+                    row, error = future.result(timeout=18)
+                except Exception:
+                    row, error = None, "market_decode"
+                if row is None:
+                    if error == "score_mismatch":
+                        score_mismatch += 1
+                    else:
+                        market_decode += 1
+                    continue
+                decoded += 1
+                history, score_changed_at = self._append_history(row)
+                signal = detect_steam(history, cfg, now=float(row["ts"]), score_changed_at=score_changed_at)
+                if signal is not None and self._cooldown_ok(row, cfg, float(row["ts"])):
+                    sent = self._deliver(row, signal, cfg)
+                    if sent > 0 or not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
+                        self._mark_alert(row, float(row["ts"]))
+                    alerts += 1
+                    row["steam"] = signal
+                latest.append(row)
+
+        return {
+            "flashscore_live": len(fs_live),
+            "xbet_live": len(xbet_live),
+            "mapped": len(mapped),
+            "decoded": decoded,
+            "score_mismatch": score_mismatch,
+            "market_decode_failed": market_decode,
+            "alerts": alerts,
+            "matches": latest,
+        }
 
     def collect_once(self) -> dict[str, Any]:
         started = time.time()
-        state: dict[str, Any] = {
-            "captured_at": datetime.now(timezone.utc).isoformat(),
-            "sports": {},
-            "alerts": [],
-        }
-        workers = max(2, min(24, _int_env("XBET_MULTISPORT_GAME_WORKERS", 12)))
-        max_games = max(10, _int_env("XBET_MULTISPORT_MAX_GAMES_PER_SPORT", 160))
-
-        for sport_key, base_cfg in SPORTS.items():
-            enabled = _truthy(f"XBET_{sport_key.upper()}_STEAM_ENABLED", True)
-            if not enabled:
-                state["sports"][sport_key] = {"enabled": False, "indexed": 0, "sampled": 0}
+        sports: dict[str, Any] = {}
+        for key, cfg in SPORTS.items():
+            if not _truthy(f"XBET_{key.upper()}_STEAM_ENABLED", True):
+                sports[key] = {"enabled": False}
                 continue
-            cfg = SportConfig(
-                **{
-                    **base_cfg.__dict__,
-                    "min_metric_delta": _float_env(
-                        f"XBET_{sport_key.upper()}_STEAM_MIN_DELTA",
-                        base_cfg.min_metric_delta,
-                    ),
-                    "min_moves": max(
-                        2,
-                        _int_env(f"XBET_{sport_key.upper()}_STEAM_MIN_MOVES", base_cfg.min_moves),
-                    ),
-                }
-            )
-            index = self._index(cfg)
-            rows: list[dict[str, Any]] = []
-            alerts = 0
-            selected = index[:max_games]
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = [pool.submit(self._event_snapshot, event, cfg) for event in selected]
-                for future in as_completed(futures):
-                    try:
-                        row = future.result()
-                    except Exception as exc:
-                        print(f"XBET_{sport_key.upper()}_STEAM_EVENT_ERROR {type(exc).__name__}:{exc}", flush=True)
-                        continue
-                    if not row:
-                        continue
-                    history, score_changed_at = self._append_history(row)
-                    signal = detect_steam(history, cfg, now=float(row["ts"]), score_changed_at=score_changed_at)
-                    if signal and self._cooldown_ok(row, cfg, float(row["ts"])):
-                        sent = self._emit(row, signal, cfg)
-                        if sent > 0 or not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
-                            self._mark_alert(row, float(row["ts"]))
-                        alerts += 1
-                        state["alerts"].append({**row, "signal": signal, "sent": sent})
-                    rows.append(row)
-            state["sports"][sport_key] = {
-                "enabled": True,
-                "sport_id": cfg.sport_id,
-                "indexed": len(index),
-                "sampled": len(selected),
-                "decoded": len(rows),
-                "alerts": alerts,
-                "root": self._roots[cfg.key],
-                "matches": rows,
-            }
+            stats = self._scan_sport(cfg)
+            sports[key] = {"enabled": True, **stats}
             print(
-                f"XBET_{sport_key.upper()}_STEAM indexed={len(index)} sampled={len(selected)} "
-                f"decoded={len(rows)} alerts={alerts}",
+                f"XBET_{key.upper()}_STEAM flashscore={stats['flashscore_live']} xbet={stats['xbet_live']} "
+                f"mapped={stats['mapped']} decoded={stats['decoded']} score_mismatch={stats['score_mismatch']} "
+                f"alerts={stats['alerts']} cards={'on' if _truthy('XBET_MULTISPORT_CARDS_ENABLED', True) else 'off'}",
                 flush=True,
             )
 
-        state["latency_ms"] = int((time.time() - started) * 1000)
+        state = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "latency_ms": int((time.time() - started) * 1000),
+            "flashscore_whitelist_required": True,
+            "sports": sports,
+        }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
-        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        tmp = self.state_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         tmp.replace(self.state_path)
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         with self.history_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
+        trim_file_tail(self.history_path, max(1024 * 1024, _int_env("XBET_MULTISPORT_HISTORY_KEEP_BYTES", 4 * 1024 * 1024)))
         return state
 
     def run(self, interval: float = 20.0) -> None:
         interval = max(8.0, float(interval))
         print(
-            "XBET_MULTISPORT_STEAM started sports=hockey,basketball "
-            f"interval={interval:.1f}s telegram={int(_truthy('XBET_MULTISPORT_TELEGRAM_ENABLED', True))}",
+            f"XBET_MULTISPORT_STEAM started sports=hockey,basketball interval={interval:g}s "
+            "flashscore_whitelist=required score_sync=required cards=on",
             flush=True,
         )
         while not self._stop.is_set():
@@ -504,17 +598,5 @@ class MultiSportSteamWorker:
             try:
                 self.collect_once()
             except Exception as exc:
-                print(f"XBET_MULTISPORT_STEAM_ERROR {type(exc).__name__}:{exc}", flush=True)
-            delay = max(0.5, interval - (time.monotonic() - started))
-            self._stop.wait(delay)
-
-
-__all__ = [
-    "MultiSportSteamWorker",
-    "SPORTS",
-    "SportConfig",
-    "_balanced_total",
-    "_metric",
-    "_score",
-    "detect_steam",
-]
+                print(f"XBET_MULTISPORT_STEAM_ERROR error={type(exc).__name__}:{exc}", flush=True)
+            self._stop.wait(max(1.0, interval - (time.monotonic() - started)))

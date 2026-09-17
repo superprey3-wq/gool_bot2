@@ -1,0 +1,60 @@
+name: multisport live diagnostic
+
+on:
+  push:
+    branches:
+      - diag/multisport-live-probe
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q -e .
+      - name: Probe live hockey and basketball pipeline
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+          from gool_bot2 import xbet_market_pressure as market
+          from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS, map_xbet_to_flashscore
+
+          worker = MultiSportSteamWorker(Path('/tmp/gool_multisport_diag'))
+          for key, cfg in SPORTS.items():
+              print(f'=== {key.upper()} ===')
+              fs = worker._flashscore_live(cfg)
+              xb = worker._xbet_index(cfg)
+              mapped = map_xbet_to_flashscore(xb, fs)
+              relaxed = map_xbet_to_flashscore(xb, fs, min_score=0.55, min_side=0.35)
+              print(f'flashscore={len(fs)} xbet={len(xb)} mapped={len(mapped)} relaxed_mapped={len(relaxed)}')
+              print('fs_sample=', [(r.get('home'), r.get('away'), r.get('score')) for r in fs[:5]])
+              print('xbet_sample=', [(r.get('O1'), r.get('O2'), r.get('I')) for r in xb[:5]])
+              errors = Counter()
+              decoded = []
+              for event, fsrow, rev, quality in mapped[:20]:
+                  row, err = worker._snapshot(event, fsrow, rev, quality, cfg)
+                  if row is None:
+                      errors[err or 'unknown'] += 1
+                  else:
+                      decoded.append((row['home'], row['away'], row['score'], row['line'], row['over'], row['under'], row['period']))
+              print('snapshot_errors=', dict(errors))
+              print('decoded_sample=', decoded[:5])
+
+              schema = Counter()
+              totals = []
+              for event, fsrow, rev, quality in (mapped[:3] or relaxed[:3]):
+                  game = worker._game(str(event.get('I')), cfg) or event
+                  nodes = market._nodes(game)
+                  for n in nodes:
+                      schema[(int(n.get('G') or -1), int(n.get('T') or -1), n.get('P') is not None)] += 1
+                  decoded_market = market.decode_markets(game)
+                  totals.append((event.get('O1'), event.get('O2'), decoded_market.get('match_total')))
+              print('top_schema=', schema.most_common(25))
+              print('decoded_totals=', totals)
+          PY

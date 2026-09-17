@@ -99,20 +99,28 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
 
 
 class ScoreEpochMultiSportSteamWorker(MultiSportSteamWorker):
-    """Never carry pre-score market movement into a new hockey/basketball epoch.
+    """Protect multisport STEAM from score-event repricing without starving basketball.
 
-    A goal, two-pointer, three-pointer or any other score change causes the
-    bookmaker to reprice totals mechanically. Mixing those pre-score quotes with
-    post-score quotes can look like genuine STEAM. Clear the complete per-match
-    movement window first, then let the base worker append the first fresh quote.
-    A new signal therefore needs a full set of clean post-score observations.
+    Hockey goals are relatively rare and cause a large mechanical repricing, so a
+    hockey score change starts a fresh market epoch and clears pre-goal history.
+
+    Basketball is different: points arrive too often for a full history reset on
+    every basket. The multisport metric is already score-normalized
+    (live total minus current points, plus the de-vigged probability bias), so a
+    normal 2/3-point score update should not look like fresh OVER pressure. Keep
+    that normalized history across basketball score changes, while the base worker
+    still marks score_changed_at and applies the immediate post-score guard.
     """
 
     def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
         key = f"{row['sport']}:{row['event_id']}"
         score = (int(row["score"][0]), int(row["score"][1]))
         previous_score = self._last_score.get(key)
-        if previous_score is not None and previous_score != score:
+        if (
+            str(row.get("sport") or "").casefold() == "hockey"
+            and previous_score is not None
+            and previous_score != score
+        ):
             self._history[key].clear()
         return super()._append_history(row)
 
@@ -144,7 +152,7 @@ def main() -> None:
     multisport_thread: threading.Thread | None = None
     if _enabled("XBET_MULTISPORT_STEAM_ENABLED", True):
         multisport = ScoreEpochMultiSportSteamWorker(runtime)
-        multisport_interval = max(8.0, float(os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "20")))
+        multisport_interval = max(8.0, float(os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "12")))
         multisport_thread = threading.Thread(
             target=multisport.run,
             args=(multisport_interval,),
@@ -174,7 +182,8 @@ def main() -> None:
         f"odds_shock_guard={os.getenv('XBET_ODDS_SHOCK_GUARD_PP', '12')}pp "
         f"prematch_state={prematch_state} prematch_interval={prematch_interval:.0f}s "
         f"multisport_steam={'on' if multisport is not None else 'off'} "
-        "multisport_score_epoch_reset=history_clear",
+        f"multisport_interval={multisport_interval if multisport is not None else 0:g}s "
+        "multisport_score_epoch_reset=hockey_only basketball=score_normalized",
         flush=True,
     )
     collector.run(args.interval)

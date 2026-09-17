@@ -8,7 +8,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,14 +18,18 @@ jobs:
       - name: Probe live hockey and basketball pipeline
         env:
           PYTHONUNBUFFERED: '1'
+          XBET_MULTISPORT_TELEGRAM_ENABLED: '0'
         run: |
           python - <<'PY'
+          import time
           from collections import Counter
           from pathlib import Path
           from gool_bot2 import xbet_market_pressure as market
-          from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS, map_xbet_to_flashscore
+          from gool_bot2.xbet_market_worker import ScoreEpochMultiSportSteamWorker
+          from gool_bot2.xbet_multisport_steam import SPORTS, map_xbet_to_flashscore, detect_steam
 
-          worker = MultiSportSteamWorker(Path('/tmp/gool_multisport_diag'))
+          worker = ScoreEpochMultiSportSteamWorker(Path('/tmp/gool_multisport_diag'))
+          print('--- ONE-SHOT PIPELINE ---')
           for key, cfg in SPORTS.items():
               print(f'=== {key.upper()} ===')
               fs = worker._flashscore_live(cfg)
@@ -45,7 +49,6 @@ jobs:
                       decoded.append((row['home'], row['away'], row['score'], row['line'], row['over'], row['under'], row['period']))
               print('snapshot_errors=', dict(errors))
               print('decoded_sample=', decoded[:5])
-
               schema = Counter()
               totals = []
               for event, fsrow, rev, quality in (mapped[:3] or relaxed[:3]):
@@ -55,6 +58,32 @@ jobs:
                       schema[(int(n.get('G') or -1), int(n.get('T') or -1), n.get('P') is not None)] += 1
                   decoded_market = market.decode_markets(game)
                   totals.append((event.get('O1'), event.get('O2'), decoded_market.get('match_total')))
-              print('top_schema=', schema.most_common(25))
+              print('top_schema=', schema.most_common(15))
               print('decoded_totals=', totals)
+
+          print('--- TEMPORAL HISTORY: 6 CYCLES x 20s ---')
+          for cycle in range(6):
+              print(f'### cycle={cycle} ###')
+              for key, cfg in SPORTS.items():
+                  fs = worker._flashscore_live(cfg)
+                  xb = worker._xbet_index(cfg)
+                  mapped = map_xbet_to_flashscore(xb, fs)
+                  decoded = 0
+                  errors = Counter()
+                  for event, fsrow, rev, quality in mapped[:20]:
+                      row, err = worker._snapshot(event, fsrow, rev, quality, cfg)
+                      if row is None:
+                          errors[err or 'unknown'] += 1
+                          continue
+                      decoded += 1
+                      history, changed_at = worker._append_history(row)
+                      signal = detect_steam(history, cfg, now=float(row['ts']), score_changed_at=changed_at)
+                      print(
+                          f"{key} {row['home']}--{row['away']} score={row['score']} period={row['period']} "
+                          f"hist={len(history)} metric={row['metric']:.3f} line={row['line']:.1f} "
+                          f"over={row['over']:.3f} changed_at={changed_at} signal={bool(signal)}"
+                      )
+                  print(f'{key}_cycle flashscore={len(fs)} xbet={len(xb)} mapped={len(mapped)} decoded={decoded} errors={dict(errors)}')
+              if cycle < 5:
+                  time.sleep(20)
           PY

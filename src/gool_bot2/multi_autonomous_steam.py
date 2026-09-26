@@ -341,7 +341,7 @@ def build_autonomous_steam_candidates(
 
     common = {"row": market_row, "age": age, "quality": data_quality, "hs": hs, "aws": aws}
 
-    if 10 <= minute <= _i("XBET_STEAM_ANOTHER_GOAL_MAX_MINUTE", 82):
+    if 10 <= minute <= _i("XBET_STEAM_ANOTHER_GOAL_MAX_MINUTE", 90):
         line = total + 0.5
         target = _line(list(markets.get("match_total") or []), line)
         if target and target.get("over") is not None:

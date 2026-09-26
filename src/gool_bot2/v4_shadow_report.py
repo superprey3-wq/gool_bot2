@@ -167,7 +167,7 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0]); quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
-            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or []})
+            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}})
         except Exception as exc:
             reasons[str(match.provider_match_id)] = f"PROFILE_{type(exc).__name__}"
     analysed.sort(key=lambda row: (row["brain_score"], row["quality"]), reverse=True)

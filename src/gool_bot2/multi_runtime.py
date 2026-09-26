@@ -27,6 +27,7 @@ from .prematch_goal_profile import apply_half_goal_prior
 from .journal import load_signal_journal, save_signal_journal
 from .v4_prematch_lifecycle import sync_prematch_with_live_record
 from .v4_prematch_settlement import settle_prematch_row, settle_parlay
+from .v4_prematch_delivery import emit_prematch_result
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -333,7 +334,17 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         print(f"V4_PREMATCH_LIVE_SYNC_ERROR {type(exc).__name__}:{exc}", flush=True)
 
     settled = settle_multi_journal(record, journal_path)
-    result_rows = pending_result_notifications(journal_path, match_id=mid)
+    # V4 PREMATCH uses the same atomic result-notification claim mechanism as
+    # LIVE. Send its legacy-style result card, then finalize the same claim.
+    v4_result_rows = pending_result_notifications(journal_path, match_id=mid)
+    for v4_row in [r for r in v4_result_rows if str(r.get("origin") or "").lower() == "prematch"]:
+        try:
+            sent_v4 = emit_prematch_result(v4_row, record)
+            finalize_result_delivery(journal_path, v4_row, sent_v4)
+        except Exception as exc:
+            print(f"V4_PREMATCH_RESULT_DELIVERY_ERROR {type(exc).__name__}:{exc}", flush=True)
+    result_rows = [r for r in pending_result_notifications(journal_path, match_id=mid)
+                   if str(r.get("origin") or "").lower() != "prematch"]
     if result_rows:
         emit_multi_results(record, result_rows, journal_path=journal_path)
     for row in settled:

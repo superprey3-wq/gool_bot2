@@ -26,6 +26,7 @@ from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
 from .journal import load_signal_journal, save_signal_journal
 from .v4_prematch_lifecycle import sync_prematch_with_live_record
+from .v4_prematch_settlement import settle_prematch_row, settle_parlay
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -304,7 +305,29 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # the menu can show real score/minute without creating a second bet.
     try:
         v4_rows = load_signal_journal(journal_path)
-        if sync_prematch_with_live_record(v4_rows, record):
+        v4_changed = sync_prematch_with_live_record(v4_rows, record)
+        if bool(match.get("is_finished")):
+            for v4_row in v4_rows:
+                v4_changed += int(settle_prematch_row(v4_row, record))
+            # Parlay legs are journal rows too when emitted separately. Mirror
+            # their settled state into parent parlays and settle the parent once
+            # every leg is final.
+            settled_by_event = {
+                str(r.get("event_id") or ""): r for r in v4_rows
+                if str(r.get("origin") or "").lower() == "prematch"
+                and str(r.get("result") or "pending").lower() != "pending"
+            }
+            for parent in v4_rows:
+                if str(parent.get("origin") or "").lower() not in {"prematch_parlay", "parlay"}:
+                    continue
+                for leg in list(parent.get("legs") or []):
+                    child = settled_by_event.get(str(leg.get("event_id") or ""))
+                    if child:
+                        leg["result"] = child.get("result")
+                        leg["settled_score"] = child.get("settled_score")
+                        leg["settled_at"] = child.get("settled_at")
+                v4_changed += int(settle_parlay(parent))
+        if v4_changed:
             save_signal_journal(journal_path, v4_rows)
     except Exception as exc:
         print(f"V4_PREMATCH_LIVE_SYNC_ERROR {type(exc).__name__}:{exc}", flush=True)

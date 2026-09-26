@@ -80,8 +80,7 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
         matched += 1
         lines.append(f"    1xBet id={row.get('event_id','?')} match={score:.3f}")
         try:
-            history = fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
-            history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
+            history = fusion.context(match, limit=10)
             record = {"match": {"home": match.home, "away": match.away}, "prematch_context": history}
             profile = build_prematch_goal_profile(record)
             full = profile.get("full_match") or {}
@@ -128,7 +127,7 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
 
 def _brain_score(profile: dict, quality: float) -> float:
     """Price-free football-interest score. Odds must not decide what we analyse."""
-    periods = [profile.get("first_half") or {}, profile.get("second_half") or {}, profile.get("full_match") or {}]
+    periods = [profile.get("first_half") or {}, profile.get("second_half") or {}]
     signals: list[float] = []
     for period in periods:
         if not period.get("available"):
@@ -148,6 +147,16 @@ def _brain_score(profile: dict, quality: float) -> float:
                 except (TypeError, ValueError):
                     continue
                 signals.append(abs(p - 0.5) * 2.0)
+    full = profile.get("full_match") or {}
+    if full.get("available"):
+        try:
+            total = float(full.get("expected_total"))
+            home_x = float(full.get("home_expected_goals"))
+            away_x = float(full.get("away_expected_goals"))
+            signals.append(min(1.0, abs(total - 2.5) / 1.5))
+            signals.append(min(1.0, abs(home_x - away_x) / 1.5))
+        except (TypeError, ValueError):
+            pass
     if not signals:
         return 0.0
     signals.sort(reverse=True)
@@ -178,13 +187,21 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", default="/tmp/gool_v4_shadow_xbet.json")
     parser.add_argument("--limit", type=int, default=30)
+    parser.add_argument("--one-tomorrow", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider(); live = fs.live_matches(); fixtures = fs.scheduled_matches()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
-    remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == now_msk.date() and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
+    target_date = now_msk.date() + timedelta(days=1) if args.one_tomorrow else now_msk.date()
+    remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
+    if args.one_tomorrow and remaining:
+        remaining = remaining[:1]
 
     # Stage 1: GOOL brain analyses every Flashscore fixture with no bookmaker input.
     analysed, failures = _analyse_fixtures(fs, remaining)
+    for row in analysed:
+        m = row["match"]
+        full = row["profile"].get("full_match") or {}
+        print("ONE_DEBUG", m.home, "--", m.away, "sources=", row.get("sources"), "coverage=", row.get("source_coverage"), "sample=", row["sample"], "quality=", round(row["quality"], 2), "full=", full, "brain=", round(row["brain_score"], 3), flush=True)
     # Rank football evidence first. Do not let an arbitrary absolute threshold
     # starve the price stage: strong tendencies qualify directly; otherwise the
     # best evidence-backed fixtures form a small exploration floor.

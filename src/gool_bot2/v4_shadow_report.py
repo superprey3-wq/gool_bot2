@@ -124,19 +124,77 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None) 
     lines.insert(2, f"matched_to_xbet={matched}/{min(len(fixtures), max(1, limit))}")
     return "\n".join(lines)
 
+def _brain_score(profile: dict, quality: float) -> float:
+    """Price-free football-interest score. Odds must not decide what we analyse."""
+    periods = [profile.get("first_half") or {}, profile.get("second_half") or {}, profile.get("full_match") or {}]
+    signals: list[float] = []
+    for period in periods:
+        if not period.get("available"):
+            continue
+        over = period.get("over") or {}
+        for value in over.values():
+            try:
+                p = float(value)
+            except (TypeError, ValueError):
+                continue
+            signals.append(abs(p - 0.5) * 2.0)
+        for key in ("home", "away"):
+            team = period.get(key) or {}
+            for metric in ("scored_rate", "conceded_rate"):
+                try:
+                    p = float(team.get(metric))
+                except (TypeError, ValueError):
+                    continue
+                signals.append(abs(p - 0.5) * 2.0)
+    if not signals:
+        return 0.0
+    signals.sort(reverse=True)
+    tendency = sum(signals[:4]) / min(4, len(signals))
+    return max(0.0, min(1.0, 0.70 * tendency + 0.30 * quality))
+
+
+def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict], dict[str, str]]:
+    analysed: list[dict] = []
+    reasons: dict[str, str] = {}
+    for match in fixtures:
+        try:
+            history = fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
+            history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
+            profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
+            samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
+            sample = max(samples or [0]); quality = min(1.0, sample / 8.0)
+            score = _brain_score(profile, quality)
+            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score})
+        except Exception as exc:
+            reasons[str(match.provider_match_id)] = f"PROFILE_{type(exc).__name__}"
+    analysed.sort(key=lambda row: (row["brain_score"], row["quality"]), reverse=True)
+    return analysed, reasons
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", default="/tmp/gool_v4_shadow_xbet.json")
     parser.add_argument("--limit", type=int, default=30)
     args = parser.parse_args()
-    fs = FlashscoreProvider()
-    live = fs.live_matches()
-    fixtures = fs.scheduled_matches()
-    msk = timezone(timedelta(hours=3))
-    now_msk = datetime.now(msk)
-    remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == now_msk.date() and float((m.meta or {}).get("scheduled_start_ts")) > datetime.now(timezone.utc).timestamp()]
-    state = XBetPrematchCollector(Path(args.state)).collect_once(targets=remaining)
-    print(build_market_report(state, args.limit, fixtures=fixtures, live=live), flush=True)
+    fs = FlashscoreProvider(); live = fs.live_matches(); fixtures = fs.scheduled_matches()
+    msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
+    remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == now_msk.date() and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
+
+    # Stage 1: GOOL brain analyses every Flashscore fixture with no bookmaker input.
+    analysed, failures = _analyse_fixtures(fs, remaining)
+    min_brain = 0.42
+    brain_candidates = [row for row in analysed if row["brain_score"] >= min_brain and row["quality"] >= 0.55]
+    # Keep breadth, but only price fixtures with a real football tendency.
+    brain_candidates = brain_candidates[:max(6, min(12, len(brain_candidates)))]
+
+    # Stage 2: only now ask 1xBet for prices on selected football candidates.
+    state = XBetPrematchCollector(Path(args.state)).collect_once(targets=[row["match"] for row in brain_candidates])
+    report = build_market_report(state, args.limit, fixtures=fixtures, live=live)
+    print(f"PREMATCH_FUNNEL fs={len(remaining)} analysed={len(analysed)} brain_selected={len(brain_candidates)} odds_requested={len(brain_candidates)} profile_failures={len(failures)}", flush=True)
+    for row in brain_candidates:
+        m=row["match"]
+        print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']}", flush=True)
+    print(report, flush=True)
 
 
 if __name__ == "__main__":

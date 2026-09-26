@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .providers.common import pair_score
 from .providers.flashscore import FlashscoreProvider
+from .providers.prematch_fusion import PrematchDataFusion
 from .prematch_goal_profile import build_prematch_goal_profile
 from .v4_prematch_engine import (
     build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery,
@@ -157,6 +158,7 @@ def _brain_score(profile: dict, quality: float) -> float:
 def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict], dict[str, str]]:
     analysed: list[dict] = []
     reasons: dict[str, str] = {}
+    fusion = PrematchDataFusion(fs)
     for match in fixtures:
         try:
             history = fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
@@ -165,7 +167,7 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0]); quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
-            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score})
+            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or []})
         except Exception as exc:
             reasons[str(match.provider_match_id)] = f"PROFILE_{type(exc).__name__}"
     analysed.sort(key=lambda row: (row["brain_score"], row["quality"]), reverse=True)

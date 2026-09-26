@@ -20,4 +20,4 @@ jobs:
         env:
           XBET_PREMATCH_FETCH_EVENTS: "60"
           XBET_PREMATCH_WORKERS: "6"
-        run: python -m gool_bot2.v4_shadow_report --count-next-24h
+        run: python -m gool_bot2.v4_shadow_report --count-today

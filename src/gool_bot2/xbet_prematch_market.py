@@ -203,7 +203,7 @@ class XBetPrematchCollector:
         value = payload.get("Value") if isinstance(payload, dict) else None
         return value if isinstance(value, dict) else None
 
-    def collect_once(self) -> dict[str, Any]:
+    def collect_once(self, targets: list[Any] | None = None) -> dict[str, Any]:
         started = time.time()
         root, index = self._index()
         previous = _load(self.state_path)
@@ -219,8 +219,38 @@ class XBetPrematchCollector:
             if not event_id or not home or not away:
                 continue
             candidates.append({"event": event, "event_id": event_id, "home": home, "away": away})
-            if len(candidates) >= limit:
-                break
+
+        if targets:
+            # Flashscore is the fixture authority. Rank the wide 1xBet index
+            # against today's exact fixtures before spending detail requests.
+            ranked: list[tuple[float, dict[str, Any]]] = []
+            seen: set[str] = set()
+            for target in targets:
+                target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
+                for row in candidates:
+                    event = row["event"]
+                    names = pair_score(getattr(target, "home", ""), getattr(target, "away", ""), row["home"], row["away"])
+                    xb_ts = _event_start(event) or 0.0
+                    if target_ts and xb_ts:
+                        delta = abs(target_ts - xb_ts)
+                        if delta > 3 * 3600:
+                            continue
+                        score = 0.82 * names + 0.18 * max(0.0, 1.0 - delta / (3 * 3600))
+                    else:
+                        score = names
+                    if score >= 0.55:
+                        ranked.append((score, row))
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            selected: list[dict[str, Any]] = []
+            for _, row in ranked:
+                if row["event_id"] in seen:
+                    continue
+                seen.add(row["event_id"]); selected.append(row)
+                if len(selected) >= limit:
+                    break
+            candidates = selected
+        else:
+            candidates = candidates[:limit]
 
         refreshed = 0
         if root and candidates:

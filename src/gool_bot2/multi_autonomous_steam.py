@@ -262,7 +262,7 @@ def _candidate(
     tags = [
         "autonomous_steam",
         "market_steam",
-        "confidence_metric",
+        "steam_strength_metric",
         f"market_breadth:{breadth_count}",
     ]
     if breadth_count:
@@ -328,6 +328,10 @@ def build_autonomous_steam_candidates(
     if age is None or age > max(5.0, _f("XBET_AUTONOMOUS_STEAM_MAX_AGE_SECONDS", 30.0)):
         return []
 
+    min_quality = max(0.0, min(1.0, _f("XBET_AUTONOMOUS_STEAM_MIN_DATA_QUALITY", 0.55)))
+    if float(data_quality) < min_quality:
+        return []
+
     markets, total, out = market_row.get("markets") or {}, hs + aws, []
 
     def add(candidate: MarketCandidate | None) -> None:
@@ -336,7 +340,7 @@ def build_autonomous_steam_candidates(
 
     common = {"row": market_row, "age": age, "quality": data_quality, "hs": hs, "aws": aws}
 
-    if minute > 0:
+    if 10 <= minute <= _i("XBET_STEAM_ANOTHER_GOAL_MAX_MINUTE", 82):
         line = total + 0.5
         target = _line(list(markets.get("match_total") or []), line)
         if target and target.get("over") is not None:
@@ -353,7 +357,7 @@ def build_autonomous_steam_candidates(
                 correlation="any_next_goal",
             ))
 
-    if minute > 0:
+    if 10 <= minute <= _i("XBET_STEAM_TWO_MORE_MAX_MINUTE", 60):
         line = total + 1.5
         target = _line(list(markets.get("match_total") or []), line)
         if target and target.get("over") is not None:
@@ -370,7 +374,7 @@ def build_autonomous_steam_candidates(
                 correlation="two_goal_path",
             ))
 
-    if minute > 0:
+    if 10 <= minute <= _i("XBET_STEAM_TEAM_GOAL_MAX_MINUTE", 75):
         for side, score, name, prefix in (
             ("home", hs, "home_total", "ИТБ1"),
             ("away", aws, "away_total", "ИТБ2"),
@@ -391,7 +395,7 @@ def build_autonomous_steam_candidates(
                     correlation=f"{side}_next_goal",
                 ))
 
-    if minute > 0 and not (hs > 0 and aws > 0):
+    if 10 <= minute <= _i("XBET_STEAM_BTTS_MAX_MINUTE", 72) and not (hs > 0 and aws > 0):
         btts = markets.get("btts") or {}
         if btts.get("yes") is not None:
             correlation = "home_next_goal" if hs == 0 < aws else (
@@ -410,7 +414,7 @@ def build_autonomous_steam_candidates(
                 correlation=correlation,
             ))
 
-    if 0 < minute <= 45 and not bool(match.get("is_halftime")):
+    if 10 <= minute <= _i("XBET_STEAM_FIRST_HALF_MAX_MINUTE", 40) and not bool(match.get("is_halftime")):
         line = total + 0.5
         target = _line(list(markets.get("first_half_total") or []), line)
         if target and target.get("over") is not None:

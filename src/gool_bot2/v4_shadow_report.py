@@ -41,7 +41,7 @@ def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.72) -> tup
     return (best, best_score) if best_score >= min_score else (None, best_score)
 
 
-def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None) -> str:
+def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, allowed_event_ids: set[str] | None = None) -> str:
     fs = FlashscoreProvider()
     live = fs.live_matches() if live is None else live
     fixtures = fs.scheduled_matches() if fixtures is None else fixtures
@@ -64,7 +64,8 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None) 
     ])
     matched = 0
     all_candidates = []
-    for i, match in enumerate(fixtures[:max(1, limit)], 1):
+    report_fixtures = [m for m in fixtures if allowed_event_ids is None or str(m.provider_match_id) in allowed_event_ids]
+    for i, match in enumerate(report_fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)
         ts = (match.meta or {}).get("scheduled_start_ts")
         try:
@@ -121,7 +122,7 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None) 
             f"{tier} | model={_pct(pick.model_probability)} market={_pct(pick.market_probability)} "
             f"edge={100*pick.edge:+.1f}pp EV={100*pick.expected_value:+.1f}% quality={pick.data_quality:.2f}"
         )
-    lines.insert(2, f"matched_to_xbet={matched}/{min(len(fixtures), max(1, limit))}")
+    lines.insert(2, f"matched_to_xbet={matched}/{min(len(report_fixtures), max(1, limit))}")
     return "\n".join(lines)
 
 def _brain_score(profile: dict, quality: float) -> float:
@@ -182,14 +183,20 @@ def main() -> None:
 
     # Stage 1: GOOL brain analyses every Flashscore fixture with no bookmaker input.
     analysed, failures = _analyse_fixtures(fs, remaining)
-    min_brain = 0.42
-    brain_candidates = [row for row in analysed if row["brain_score"] >= min_brain and row["quality"] >= 0.55]
-    # Keep breadth, but only price fixtures with a real football tendency.
-    brain_candidates = brain_candidates[:max(6, min(12, len(brain_candidates)))]
+    # Rank football evidence first. Do not let an arbitrary absolute threshold
+    # starve the price stage: strong tendencies qualify directly; otherwise the
+    # best evidence-backed fixtures form a small exploration floor.
+    eligible = [row for row in analysed if row["quality"] >= 0.50 and row["brain_score"] > 0.0]
+    strong = [row for row in eligible if row["brain_score"] >= 0.42]
+    if strong:
+        brain_candidates = strong[:12]
+    else:
+        brain_candidates = eligible[:min(6, len(eligible))]
 
     # Stage 2: only now ask 1xBet for prices on selected football candidates.
+    selected_ids = {str(row["match"].provider_match_id) for row in brain_candidates}
     state = XBetPrematchCollector(Path(args.state)).collect_once(targets=[row["match"] for row in brain_candidates])
-    report = build_market_report(state, args.limit, fixtures=fixtures, live=live)
+    report = build_market_report(state, args.limit, fixtures=fixtures, live=live, allowed_event_ids=selected_ids)
     print(f"PREMATCH_FUNNEL fs={len(remaining)} analysed={len(analysed)} brain_selected={len(brain_candidates)} odds_requested={len(brain_candidates)} profile_failures={len(failures)}", flush=True)
     for row in brain_candidates:
         m=row["match"]

@@ -226,3 +226,53 @@ def build_prematch_candidates(
             market=market, data_quality=data_quality,
         ),
     ]
+
+
+def blend_with_market(
+    pick: PrematchPick,
+    *,
+    model_weight: float = 0.65,
+) -> PrematchPick:
+    """Shrink raw model probabilities toward the de-vig market prior.
+
+    The weight is deliberately configurable and must ultimately be selected
+    only from chronological out-of-sample calibration/CLV results.
+    """
+    w = max(0.0, min(1.0, float(model_weight)))
+    p = w * pick.model_probability + (1.0 - w) * pick.market_probability
+    return PrematchPick(
+        event_id=pick.event_id,
+        home=pick.home,
+        away=pick.away,
+        market=pick.market,
+        selection=pick.selection,
+        odds=pick.odds,
+        model_probability=p,
+        market_probability=pick.market_probability,
+        data_quality=pick.data_quality,
+    )
+
+
+def rank_prematch_singles(
+    picks: Iterable[PrematchPick],
+    *,
+    model_weight: float = 0.65,
+    limit: int = 12,
+) -> list[PrematchPick]:
+    blended = [blend_with_market(p, model_weight=model_weight) for p in picks]
+    qualified = [p for p in blended if qualified_pick(p)]
+    qualified.sort(
+        key=lambda p: (p.expected_value, p.edge, p.model_probability, p.data_quality),
+        reverse=True,
+    )
+    seen: set[tuple[str, str]] = set()
+    out: list[PrematchPick] = []
+    for p in qualified:
+        key = (p.event_id, p.market)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+        if len(out) >= max(1, int(limit)):
+            break
+    return out

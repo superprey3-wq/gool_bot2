@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles
 
 
 def test_devig_two_way_removes_margin():
@@ -60,3 +60,19 @@ def test_1x2_profile_builds_three_priced_selections():
     assert [p.selection for p in picks] == ["home", "draw", "away"]
     assert abs(sum(p.market_probability for p in picks) - 1.0) < 1e-9
     assert abs(sum(p.model_probability for p in picks) - 1.0) < 1e-6
+
+
+def test_market_blend_shrinks_overconfident_model():
+    pick = PrematchPick("m3", "A", "B", "match_total", "over 2.5", 2.0, 0.80, 0.50, 0.9)
+    blended = blend_with_market(pick, model_weight=0.65)
+    assert 0.50 < blended.model_probability < 0.80
+    assert blended.edge < pick.edge
+
+
+def test_rank_singles_dedupes_same_event_market():
+    picks = [
+        PrematchPick("m4", "A", "B", "match_total", "over 2.5", 1.8, 0.78, 0.55, 0.9),
+        PrematchPick("m4", "A", "B", "match_total", "under 2.5", 2.0, 0.72, 0.45, 0.9),
+    ]
+    rows = rank_prematch_singles(picks, model_weight=1.0)
+    assert len(rows) <= 1

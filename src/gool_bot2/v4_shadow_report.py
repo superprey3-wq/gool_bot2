@@ -12,6 +12,7 @@ from .v4_prematch_engine import (
     build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery,
 )
 from .xbet_prematch_market import XBetPrematchCollector
+from .pinnacle_prematch_market import pinnacle_market_for_match
 
 
 def _pct(x: float) -> str:
@@ -44,6 +45,7 @@ def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.72) -> tup
 
 def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, allowed_event_ids: set[str] | None = None, target_date=None) -> str:
     fs = FlashscoreProvider()
+    fusion = PrematchDataFusion(fs)
     live = fs.live_matches() if live is None else live
     fixtures = fs.scheduled_matches() if fixtures is None else fixtures
     msk = timezone(timedelta(hours=3))
@@ -75,11 +77,21 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
         except (TypeError, ValueError, OSError):
             kickoff = "?"
         lines.append(f"{i:02d}. {match.home} — {match.away} | {match.league or '?'} | {kickoff} | FS={match.provider_match_id}")
+        odds_source = "1xBet"
         if not row:
             lines.append(f"    1xBet: no confident match (best_match={score:.3f})")
-            continue
+            try:
+                row, pin_score = pinnacle_market_for_match(match)
+            except Exception as exc:
+                row, pin_score = None, 0.0
+                lines.append(f"    Pinnacle: unavailable ({type(exc).__name__})")
+            if not row:
+                lines.append(f"    Pinnacle: no confident market (best_match={pin_score:.3f})")
+                continue
+            odds_source = "Pinnacle"
+            score = pin_score
         matched += 1
-        lines.append(f"    1xBet id={row.get('event_id','?')} match={score:.3f}")
+        lines.append(f"    {odds_source} id={row.get('event_id','?')} match={score:.3f}")
         try:
             history = fusion.context(match, limit=10)
             record = {"match": {"home": match.home, "away": match.away}, "prematch_context": history}

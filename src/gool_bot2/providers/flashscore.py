@@ -12,6 +12,7 @@ from .common import ProviderMatch, UA, http_text, pair_score
 FSIGN = os.getenv("FLASHSCORE_FSIGN", "SW9D1eZo")
 FEED_HOSTS = ("global", "2", "46")
 MASTER_PATHS = ("f_1_0_3_en_1", "f_1_0_0_en_1")
+SCHEDULE_PATHS = ("f_1_0_1_en_1", "f_1_0_2_en_1", *MASTER_PATHS)
 LIVE_COARSE_STATUS = "2"
 FINISHED_COARSE_STATUS = "3"
 FIRST_HALF_STATUS = "12"
@@ -159,7 +160,7 @@ class FlashscoreProvider:
 
     def scheduled_matches(self) -> list[ProviderMatch]:
         merged: dict[str, ProviderMatch] = {}
-        for path in MASTER_PATHS:
+        for path in SCHEDULE_PATHS:
             body = self._feed(path)
             if not body: continue
             for match in self.parse_master_scheduled(body): merged[match.provider_match_id] = match

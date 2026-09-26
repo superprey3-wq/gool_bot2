@@ -189,6 +189,60 @@ class XBetPrematchCollector:
                         return root, rows
         return None, []
 
+    @staticmethod
+    def _search_rows(payload: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        def walk(obj: Any) -> None:
+            if isinstance(obj, dict):
+                if obj.get("I") and obj.get("O1") and obj.get("O2"):
+                    rows.append(obj)
+                for value in obj.values():
+                    walk(value)
+            elif isinstance(obj, list):
+                for value in obj:
+                    walk(value)
+        walk(payload)
+        unique: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            unique[str(row.get("I"))] = row
+        return list(unique.values())
+
+    def _search_target(self, target: Any) -> dict[str, Any] | None:
+        home = str(getattr(target, "home", "") or "").strip()
+        away = str(getattr(target, "away", "") or "").strip()
+        if not home or not away:
+            return None
+        roots = [self.active_root, *[root for root in ROOTS if root != self.active_root]]
+        best: dict[str, Any] | None = None
+        best_score = 0.0
+        target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
+        # Address 1xBet from the Flashscore fixture instead of downloading the
+        # whole bookmaker catalogue. One query is normally enough; away is a fallback.
+        for term in (home, away):
+            params = urllib.parse.urlencode({"text": term, "limit": 50, "lng": "en"})
+            for root in roots:
+                payload = _http_json(f"{root}/Web_SearchZip?{params}")
+                for event in self._search_rows(payload):
+                    eh = _safe_team_name(event.get("O1")); ea = _safe_team_name(event.get("O2"))
+                    if not eh or not ea:
+                        continue
+                    names = pair_score(home, away, eh, ea)
+                    xb_ts = _event_start(event) or 0.0
+                    if target_ts and xb_ts:
+                        delta = abs(target_ts - xb_ts)
+                        if delta > 3 * 3600:
+                            continue
+                        score = 0.85 * names + 0.15 * max(0.0, 1.0 - delta / (3 * 3600))
+                    else:
+                        score = names
+                    if score > best_score:
+                        best_score = score
+                        best = {"event": event, "event_id": str(event.get("I")), "home": eh, "away": ea, "root": root, "match_score": score}
+                if best_score >= 0.82:
+                    self.active_root = root
+                    return best
+        return best if best_score >= 0.68 else None
+
     def _game(self, root: str, event_id: str) -> dict[str, Any] | None:
         params = {
             "id": event_id,
@@ -222,42 +276,36 @@ class XBetPrematchCollector:
             candidates.append({"event": event, "event_id": event_id, "home": home, "away": away})
 
         if targets:
-            # Flashscore is the fixture authority. Rank the wide 1xBet index
-            # against today's exact fixtures before spending detail requests.
-            ranked: list[tuple[float, dict[str, Any]]] = []
+            # Flashscore drives discovery: search every concrete fixture directly
+            # in 1xBet. Fall back to the broad index only when address search misses.
+            selected: list[dict[str, Any]] = []
             seen: set[str] = set()
             for target in targets:
-                target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
-                for row in candidates:
-                    event = row["event"]
-                    names = pair_score(getattr(target, "home", ""), getattr(target, "away", ""), row["home"], row["away"])
-                    xb_ts = _event_start(event) or 0.0
-                    if target_ts and xb_ts:
-                        delta = abs(target_ts - xb_ts)
-                        if delta > 3 * 3600:
-                            continue
-                        score = 0.82 * names + 0.18 * max(0.0, 1.0 - delta / (3 * 3600))
-                    else:
-                        score = names
-                    if score >= 0.55:
-                        ranked.append((score, row))
-            ranked.sort(key=lambda item: item[0], reverse=True)
-            selected: list[dict[str, Any]] = []
-            for _, row in ranked:
-                if row["event_id"] in seen:
+                row = self._search_target(target)
+                if row and row["event_id"] not in seen:
+                    seen.add(row["event_id"]); selected.append(row)
                     continue
-                seen.add(row["event_id"]); selected.append(row)
-                if len(selected) >= limit:
-                    break
-            candidates = selected
+                target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
+                best = None; best_score = 0.0
+                for candidate in candidates:
+                    names = pair_score(getattr(target, "home", ""), getattr(target, "away", ""), candidate["home"], candidate["away"])
+                    xb_ts = _event_start(candidate["event"]) or 0.0
+                    if target_ts and xb_ts and abs(target_ts - xb_ts) > 3 * 3600:
+                        continue
+                    if names > best_score:
+                        best = candidate; best_score = names
+                if best and best_score >= 0.68 and best["event_id"] not in seen:
+                    best = {**best, "root": root}
+                    seen.add(best["event_id"]); selected.append(best)
+            candidates = selected[:limit]
         else:
-            candidates = candidates[:limit]
+            candidates = [{**row, "root": root} for row in candidates[:limit]]
 
         refreshed = 0
         if root and candidates:
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {
-                    pool.submit(self._game, root, row["event_id"]): row
+                    pool.submit(self._game, row.get("root") or root, row["event_id"]): row
                     for row in candidates
                 }
                 for future in as_completed(futures):
@@ -280,7 +328,7 @@ class XBetPrematchCollector:
                         "away": row["away"],
                         "scheduled_start_ts": _event_start(event),
                         "source": "1xbet:LineFeed",
-                        "root": root,
+                        "root": row.get("root") or root,
                         "first_captured_at": old.get("first_captured_at") or _iso_now(),
                         "captured_at": _iso_now(),
                         "match_1x2": dict(markets.get("match_1x2") or {}),

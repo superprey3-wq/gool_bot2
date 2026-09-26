@@ -1,0 +1,42 @@
+name: V4 reference feeds smoke
+
+on:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - "src/gool_bot2/reference_feeds.py"
+      - "tests/test_reference_feeds.py"
+      - ".github/workflows/v4-reference-feeds.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Probe read-only reference feeds
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from gool_bot2.reference_feeds import PinnacleReference, NHLReference, ESPNReference, BetfairReference
+          p = PinnacleReference()
+          sports = p.sports()
+          print("PINNACLE sports=", len(sports), "names=", [x.get("name") for x in sports[:8]])
+          nhl = NHLReference().scores()
+          print("NHL games=", len(nhl.get("games") or []), "date=", nhl.get("currentDate"))
+          espn = ESPNReference().scoreboard("soccer", "eng.1")
+          print("ESPN events=", len(espn.get("events") or []))
+          bf = BetfairReference().navigation(1, max_results=20)
+          print("BETFAIR_AU nodes=", len(bf.get("nodes") or []), "available=", bool(bf))
+          if not sports:
+              raise SystemExit("Pinnacle unavailable: do not integrate as reference yet")
+          if not nhl:
+              raise SystemExit("NHL unavailable")
+          if not espn:
+              raise SystemExit("ESPN unavailable")
+          PY

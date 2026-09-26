@@ -46,6 +46,7 @@ def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.72) -> tup
 def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, allowed_event_ids: set[str] | None = None, target_date=None) -> str:
     fs = FlashscoreProvider()
     fusion = PrematchDataFusion(fs)
+    fusion = PrematchDataFusion(fs)
     live = fs.live_matches() if live is None else live
     fixtures = fs.scheduled_matches() if fixtures is None else fixtures
     msk = timezone(timedelta(hours=3))

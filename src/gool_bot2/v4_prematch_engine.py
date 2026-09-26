@@ -140,3 +140,89 @@ def picks_from_goal_profile(
             PrematchPick(event_id, home, away, "match_total", f"under {line:g}", under_odd, 1.0 - model_over, fair_under, data_quality),
         ])
     return out
+
+
+def devig_three_way(home_odds: float, draw_odds: float, away_odds: float) -> tuple[float, float, float]:
+    raw = (1.0 / home_odds, 1.0 / draw_odds, 1.0 / away_odds)
+    margin = sum(raw)
+    if margin <= 0:
+        return 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0
+    return tuple(x / margin for x in raw)
+
+
+def poisson_1x2(home_lambda: float, away_lambda: float, max_goals: int = 10) -> tuple[float, float, float]:
+    import math
+    home_lambda = max(0.01, float(home_lambda))
+    away_lambda = max(0.01, float(away_lambda))
+    hp = [math.exp(-home_lambda) * home_lambda ** k / math.factorial(k) for k in range(max_goals + 1)]
+    ap = [math.exp(-away_lambda) * away_lambda ** k / math.factorial(k) for k in range(max_goals + 1)]
+    home = draw = away = 0.0
+    for h, ph in enumerate(hp):
+        for a, pa in enumerate(ap):
+            p = ph * pa
+            if h > a:
+                home += p
+            elif h == a:
+                draw += p
+            else:
+                away += p
+    mass = home + draw + away
+    if mass <= 0:
+        return 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0
+    return home / mass, draw / mass, away / mass
+
+
+def picks_from_1x2_profile(
+    *,
+    event_id: str,
+    home: str,
+    away: str,
+    profile: dict,
+    market: dict,
+    data_quality: float = 1.0,
+) -> list[PrematchPick]:
+    first = profile.get("first_half") or {}
+    second = profile.get("second_half") or {}
+    if not first.get("available") or not second.get("available"):
+        return []
+    try:
+        home_lambda = float(first["home_expected_goals"]) + float(second["home_expected_goals"])
+        away_lambda = float(first["away_expected_goals"]) + float(second["away_expected_goals"])
+        prices = market.get("match_1x2") or {}
+        home_odd = float(prices["home"])
+        draw_odd = float(prices["draw"])
+        away_odd = float(prices["away"])
+    except (TypeError, ValueError, KeyError):
+        return []
+    if min(home_odd, draw_odd, away_odd) <= 1.0:
+        return []
+
+    model = poisson_1x2(home_lambda, away_lambda)
+    fair = devig_three_way(home_odd, draw_odd, away_odd)
+    labels = ("home", "draw", "away")
+    odds = (home_odd, draw_odd, away_odd)
+    return [
+        PrematchPick(event_id, home, away, "match_1x2", label, odd, mp, fp, data_quality)
+        for label, odd, mp, fp in zip(labels, odds, model, fair)
+    ]
+
+
+def build_prematch_candidates(
+    *,
+    event_id: str,
+    home: str,
+    away: str,
+    profile: dict,
+    market: dict,
+    data_quality: float = 1.0,
+) -> list[PrematchPick]:
+    return [
+        *picks_from_goal_profile(
+            event_id=event_id, home=home, away=away, profile=profile,
+            market=market, data_quality=data_quality,
+        ),
+        *picks_from_1x2_profile(
+            event_id=event_id, home=home, away=away, profile=profile,
+            market=market, data_quality=data_quality,
+        ),
+    ]

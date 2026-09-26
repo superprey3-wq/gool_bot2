@@ -209,9 +209,13 @@ def main() -> None:
     target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow) else now_msk.date()
     remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
     if args.nations_today:
-        for m in remaining:
-            print(f"LEAGUE_DEBUG {m.home} — {m.away} | league={m.league!r} | FS={m.provider_match_id}", flush=True)
-        remaining = [m for m in remaining if any(tag in str(m.league or "").casefold() for tag in ("nations league", "лига наций"))]
+        anchor = next((m for m in fixtures if pair_score(m.home, m.away, "Norway", "Portugal") >= 0.72), None)
+        if anchor is not None:
+            print(f"NATIONS_ANCHOR {anchor.home} — {anchor.away} | league={anchor.league!r} | FS={anchor.provider_match_id}", flush=True)
+            remaining = [m for m in remaining if str(m.league or "").casefold() == str(anchor.league or "").casefold()]
+        else:
+            print("NATIONS_ANCHOR Norway — Portugal NOT FOUND", flush=True)
+            remaining = []
     elif args.nations_tomorrow:
         nations = {("Georgia","Ukraine"),("Armenia","Montenegro"),("Latvia","Cyprus"),("Belgium","France"),("Türkiye","Italy"),("Turkey","Italy"),("Northern Ireland","Hungary"),("Romania","Bosnia and Herzegovina"),("Sweden","Poland")}
         remaining = [m for m in remaining if any(pair_score(m.home, m.away, h, a) >= 0.72 for h, a in nations)]

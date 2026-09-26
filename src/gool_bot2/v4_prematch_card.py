@@ -112,3 +112,16 @@ def _center_in_box(draw, text: str, box, font, fill):
     x = left + ((right - left) - (bb[2] - bb[0])) / 2
     y = top + ((bottom - top) - (bb[3] - bb[1])) / 2 - bb[1]
     draw.text((x, y), text, font=font, fill=fill)
+
+
+def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] | None = None) -> str:
+    """Result card reusing the established badge/tournament visual identity."""
+    result = str(row.get("result") or "void").lower()
+    labels = {"won": "ЗАШЛА", "lost": "НЕ ЗАШЛА", "push": "ВОЗВРАТ", "void": "VOID"}
+    settled = list(row.get("settled_score") or [0, 0])
+    clone = dict(row)
+    clone["lifecycle"] = "in_game"
+    clone["current_minute"] = int(row.get("settled_minute") or 90)
+    clone["current_score"] = settled
+    clone["tier"] = labels.get(result, "RESULT")
+    return render_v4_prematch_card(clone, record=record, in_game=True)

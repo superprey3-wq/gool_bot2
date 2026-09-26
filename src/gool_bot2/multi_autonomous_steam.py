@@ -262,7 +262,8 @@ def _candidate(
     tags = [
         "autonomous_steam",
         "market_steam",
-        "steam_strength_metric",
+        "confidence_metric",
+                "steam_strength_metric",
         f"market_breadth:{breadth_count}",
     ]
     if breadth_count:
@@ -328,7 +329,7 @@ def build_autonomous_steam_candidates(
     if age is None or age > max(5.0, _f("XBET_AUTONOMOUS_STEAM_MAX_AGE_SECONDS", 30.0)):
         return []
 
-    min_quality = max(0.0, min(1.0, _f("XBET_AUTONOMOUS_STEAM_MIN_DATA_QUALITY", 0.55)))
+    min_quality = max(0.0, min(1.0, _f("XBET_AUTONOMOUS_STEAM_MIN_DATA_QUALITY", 0.0)))
     if float(data_quality) < min_quality:
         return []
 

@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles, build_super_accumulator
 
 
 def test_devig_two_way_removes_margin():
@@ -76,3 +76,24 @@ def test_rank_singles_dedupes_same_event_market():
     ]
     rows = rank_prematch_singles(picks, model_weight=1.0)
     assert len(rows) <= 1
+
+
+def test_super_accumulator_requires_ten_distinct_low_price_legs():
+    picks = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.80, 0.9)
+        for i in range(10)
+    ]
+    row = build_super_accumulator(picks)
+    assert row is not None
+    assert row["kind"] == "SUPER"
+    assert len(row["legs"]) == 10
+    assert len({leg.event_id for leg in row["legs"]}) == 10
+
+
+def test_super_accumulator_never_pads_weak_or_expensive_legs():
+    good = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.80, 0.9)
+        for i in range(9)
+    ]
+    bad = PrematchPick("bad", "X", "Y", "match_total", "over 1.5", 1.80, 0.86, 0.80, 0.9)
+    assert build_super_accumulator([*good, bad]) is None

@@ -12,7 +12,7 @@ from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_concept import enforce_entry_cutoff, routing_experts
-from .multi_delivery import finalize_multi_delivery, pending_result_notifications
+from .multi_delivery import finalize_multi_delivery, pending_result_notifications, finalize_result_delivery
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_exchange_confirmation import apply_matchbook_confirmation
 from .multi_journal import settle_multi_journal, sync_multi_journal

@@ -269,12 +269,13 @@ def in_game_sections(_: Path | None = None, analysis_path_arg: Path | None = Non
         entry_score = row.get("score") or [0, 0]
         pressure = float(row.get("market_pressure_pp") or 0.0)
         reason = str(row.get("selection_reason") or row.get("reason") or "")
+        entry_label = "ставка до матча" if is_prematch else f"вход {row.get('minute', 0)}' {entry_score[0]}:{entry_score[1]}"
         block = (
             f"<b>{index}. {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
             f"сейчас <b>{live_minute}' · {live_score[0]}:{live_score[1]}</b>\n"
             f"🎯 <b>{_h(row.get('market'))} @ {float(row.get('odd') or 0):.2f}</b>\n"
             f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence(row):.0f}/100</b> · {_h('PREMATCH' if is_prematch else source_label(row.get('signal_source')))}\n"
-            f"📈 1xBet {pressure:+.1f} п.п. · {_h('ставка до матча' if is_prematch else 'вход '+str(row.get('minute',0))+\"' \"+str(entry_score[0])+':'+str(entry_score[1]))}\n"
+            f"📈 1xBet {pressure:+.1f} п.п. · {_h(entry_label)}\n"
             f"↳ {_h(reason)}"
         )
         if len("\n\n".join(parts + [block])) > 3800:

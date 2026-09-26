@@ -41,10 +41,10 @@ def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.72) -> tup
     return (best, best_score) if best_score >= min_score else (None, best_score)
 
 
-def build_market_report(state: dict, limit: int = 30) -> str:
+def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None) -> str:
     fs = FlashscoreProvider()
-    live = fs.live_matches()
-    fixtures = fs.scheduled_matches()
+    live = fs.live_matches() if live is None else live
+    fixtures = fs.scheduled_matches() if fixtures is None else fixtures
     msk = timezone(timedelta(hours=3))
     now_msk = datetime.now(msk)
     fixtures = [m for m in fixtures if (lambda ts: ts and datetime.fromtimestamp(float(ts), tz=msk).date() == now_msk.date() and float(ts) > datetime.now(timezone.utc).timestamp())((m.meta or {}).get("scheduled_start_ts"))]
@@ -129,8 +129,14 @@ def main() -> None:
     parser.add_argument("--state", default="/tmp/gool_v4_shadow_xbet.json")
     parser.add_argument("--limit", type=int, default=30)
     args = parser.parse_args()
-    state = XBetPrematchCollector(Path(args.state)).collect_once()
-    print(build_market_report(state, args.limit), flush=True)
+    fs = FlashscoreProvider()
+    live = fs.live_matches()
+    fixtures = fs.scheduled_matches()
+    msk = timezone(timedelta(hours=3))
+    now_msk = datetime.now(msk)
+    remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == now_msk.date() and float((m.meta or {}).get("scheduled_start_ts")) > datetime.now(timezone.utc).timestamp()]
+    state = XBetPrematchCollector(Path(args.state)).collect_once(targets=remaining)
+    print(build_market_report(state, args.limit, fixtures=fixtures, live=live), flush=True)
 
 
 if __name__ == "__main__":

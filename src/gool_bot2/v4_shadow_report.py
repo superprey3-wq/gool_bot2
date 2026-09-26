@@ -206,6 +206,7 @@ def main() -> None:
     parser.add_argument("--nations-today", action="store_true")
     parser.add_argument("--count-tomorrow", action="store_true")
     parser.add_argument("--count-today", action="store_true")
+    parser.add_argument("--count-next-24h", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider()
     if args.count_today or args.count_tomorrow:

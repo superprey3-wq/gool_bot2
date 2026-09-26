@@ -24,6 +24,8 @@ from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
+from .journal import load_signal_journal, save_signal_journal
+from .v4_prematch_lifecycle import sync_prematch_with_live_record
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -296,6 +298,16 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         return
 
     analysis_path, journal_path = _paths()
+
+    # V4 PREMATCH entries share the production journal. As soon as the same
+    # fixture appears in the live collector, promote/update that exact row so
+    # the menu can show real score/minute without creating a second bet.
+    try:
+        v4_rows = load_signal_journal(journal_path)
+        if sync_prematch_with_live_record(v4_rows, record):
+            save_signal_journal(journal_path, v4_rows)
+    except Exception as exc:
+        print(f"V4_PREMATCH_LIVE_SYNC_ERROR {type(exc).__name__}:{exc}", flush=True)
 
     settled = settle_multi_journal(record, journal_path)
     result_rows = pending_result_notifications(journal_path, match_id=mid)

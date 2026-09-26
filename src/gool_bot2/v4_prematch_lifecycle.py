@@ -82,3 +82,31 @@ def prematch_in_game_rows(
         and str(row.get("result") or "pending").lower() in OPEN_RESULTS
         and str(row.get("lifecycle") or "") == "in_game"
     ]
+
+
+def sync_prematch_with_live_record(rows: list[dict[str, Any]], record: dict[str, Any], *, min_match_score: float = 0.78) -> int:
+    """Update matching PREMATCH rows from one live/final collector snapshot."""
+    match = record.get("match") or {}
+    if not match:
+        return 0
+    changed = attach_live_state_to_prematch(rows, [record], min_match_score=min_match_score)
+    match_id = str(match.get("flashscore_event_id") or match.get("match_id") or "")
+    minute = int(match.get("minute") or 0)
+    score = [int(match.get("home_score") or 0), int(match.get("away_score") or 0)]
+    finished = bool(match.get("is_finished"))
+    for row in rows:
+        if str(row.get("origin") or "").lower() != "prematch":
+            continue
+        if str(row.get("match_id") or "") != match_id:
+            continue
+        before = (row.get("current_minute"), row.get("current_score"), row.get("lifecycle"))
+        row["current_minute"] = minute
+        row["current_score"] = score
+        if finished and str(row.get("result") or "pending").lower() == "pending":
+            row["lifecycle"] = "finished_waiting_settlement"
+        elif not finished:
+            row["lifecycle"] = "in_game"
+        after = (row.get("current_minute"), row.get("current_score"), row.get("lifecycle"))
+        if after != before:
+            changed += 1
+    return changed

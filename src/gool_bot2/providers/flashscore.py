@@ -138,6 +138,33 @@ class FlashscoreProvider:
             matches.append(ProviderMatch(provider=self.name, provider_match_id=event_id, home=home, away=away, minute=minute, home_score=_as_int(f.get("AG"), _as_int(f.get("AT"))), away_score=_as_int(f.get("AH"), _as_int(f.get("AU"))), league=league, is_halftime=is_ht, meta=meta))
         return list({m.provider_match_id: m for m in matches}.values())
 
+    def parse_master_scheduled(self, body: str) -> list[ProviderMatch]:
+        """Parse upcoming football fixtures from the same Flashscore master feed used by LIVE."""
+        matches: list[ProviderMatch] = []; league = ""
+        for chunk in (body or "").split("~"):
+            if not chunk: continue
+            if chunk.startswith("ZA÷"): league = _fields(chunk).get("ZA", "").strip(); continue
+            if not chunk.startswith("AA÷"): continue
+            event_id, sep, rest = chunk[3:].partition("¬")
+            if not sep or len(event_id) != 8 or not event_id.isalnum(): continue
+            f = _fields(rest); coarse = str(f.get("AB") or "")
+            # Flashscore master uses coarse status 1 for scheduled/not-started events.
+            if coarse != "1": continue
+            home = (f.get("AE") or f.get("CX") or "").strip(); away = (f.get("AF") or "").strip()
+            if not home or not away: continue
+            start_ts = _as_int(f.get("AD") or f.get("AO"), 0)
+            meta = {"status_code": f.get("AC", ""), "coarse_status": coarse, "scheduled_start_ts": start_ts, "home_team_id": (f.get("JA") or "").strip(), "away_team_id": (f.get("JB") or "").strip(), "home_team_slug": (f.get("WU") or "").strip(), "away_team_slug": (f.get("WV") or "").strip(), "round": (f.get("ER") or "").strip()}
+            matches.append(ProviderMatch(provider=self.name, provider_match_id=event_id, home=home, away=away, league=league, meta=meta))
+        return list({m.provider_match_id: m for m in matches}.values())
+
+    def scheduled_matches(self) -> list[ProviderMatch]:
+        merged: dict[str, ProviderMatch] = {}
+        for path in MASTER_PATHS:
+            body = self._feed(path)
+            if not body: continue
+            for match in self.parse_master_scheduled(body): merged[match.provider_match_id] = match
+        return sorted(merged.values(), key=lambda m: (int((m.meta or {}).get("scheduled_start_ts") or 0), m.league or "", m.home))
+
     def live_matches(self) -> list[ProviderMatch]:
         merged: dict[str, ProviderMatch] = {}
         for path in MASTER_PATHS:

@@ -231,6 +231,20 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
    continue
   cb=update.get("callback_query") or {};data=str(cb.get("data") or "")
+  if data.startswith("v4ig:"):
+   entry_id=data.split(":",1)[1]
+   cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id");mid=cm.get("message_id")
+   try:
+    from .v4_prematch_delivery import mark_prematch_in_game,prematch_keyboard
+    marked=mark_prematch_in_game(journal_path,entry_id,chat_id=cid)
+   except Exception as exc:
+    print(f"V4_PREMATCH_CALLBACK_ERROR {type(exc).__name__}:{exc}",flush=True);marked=False
+   if marked:
+    changed+=1
+    if cid is not None and mid is not None:edit_message_reply_markup(cid,int(mid),prematch_keyboard(entry_id,entered=True))
+    answer_callback_query(str(cb.get("id") or ""),"Отмечено: в игре")
+   else:answer_callback_query(str(cb.get("id") or ""),"Ставка уже рассчитана или не найдена")
+   continue
   if not data.startswith("ig:"):continue
   parts=data.split(":",2)
   if len(parts)!=3:continue

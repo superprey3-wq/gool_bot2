@@ -94,6 +94,56 @@ def build_accumulators(
     return out
 
 
+
+def build_super_accumulator(
+    picks: Iterable[PrematchPick],
+    *,
+    target_legs: int = 10,
+    min_leg_odds: float = 1.15,
+    max_leg_odds: float = 1.55,
+    min_leg_probability: float = 0.72,
+    min_quality: float = 0.60,
+    min_edge: float = 0.015,
+) -> dict | None:
+    """Build the V4 SUPER accumulator from independently analysed fixtures.
+
+    This deliberately uses a separate low-price policy from normal singles and
+    parlays. It never pads the ticket: if fewer than target_legs pass football
+    evidence + price/value checks, no 10-leg SUPER ticket is emitted.
+    """
+    pool = [
+        p for p in picks
+        if min_leg_odds <= p.odds <= max_leg_odds
+        and p.model_probability >= min_leg_probability
+        and p.data_quality >= min_quality
+        and p.edge >= min_edge
+        and p.expected_value > 0.0
+    ]
+    pool.sort(
+        key=lambda p: (p.model_probability * p.data_quality, p.edge, p.expected_value),
+        reverse=True,
+    )
+    chosen: list[PrematchPick] = []
+    seen: set[str] = set()
+    for pick in pool:
+        if pick.event_id in seen:
+            continue
+        seen.add(pick.event_id)
+        chosen.append(pick)
+        if len(chosen) >= max(2, int(target_legs)):
+            break
+    if len(chosen) < max(2, int(target_legs)):
+        return None
+    combined_probability = prod(p.model_probability for p in chosen)
+    combined_odds = prod(p.odds for p in chosen)
+    return {
+        "kind": "SUPER",
+        "legs": chosen,
+        "combined_probability": combined_probability,
+        "combined_odds": combined_odds,
+        "expected_value": combined_probability * combined_odds - 1.0,
+    }
+
 def picks_from_goal_profile(
     *,
     event_id: str,

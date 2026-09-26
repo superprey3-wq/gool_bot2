@@ -17,10 +17,25 @@ def _pct(x: float) -> str:
     return f"{100.0*x:.1f}%"
 
 
-def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.78) -> tuple[dict | None, float]:
-    best = None; best_score = 0.0
+def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.72) -> tuple[dict | None, float]:
+    """Match by teams plus kickoff proximity; never accept a weak name-only collision."""
+    fs_ts = float((fs_match.meta or {}).get("scheduled_start_ts") or 0)
+    best = None
+    best_score = 0.0
     for row in xbet_rows:
-        score = pair_score(fs_match.home, fs_match.away, str(row.get("home") or ""), str(row.get("away") or ""))
+        names = pair_score(fs_match.home, fs_match.away, str(row.get("home") or ""), str(row.get("away") or ""))
+        try:
+            xb_ts = float(row.get("scheduled_start_ts") or 0)
+        except (TypeError, ValueError):
+            xb_ts = 0.0
+        if fs_ts and xb_ts:
+            delta = abs(fs_ts - xb_ts)
+            if delta > 3 * 3600:
+                continue
+            time_score = max(0.0, 1.0 - delta / (3 * 3600))
+            score = 0.82 * names + 0.18 * time_score
+        else:
+            score = names
         if score > best_score:
             best, best_score = row, score
     return (best, best_score) if best_score >= min_score else (None, best_score)

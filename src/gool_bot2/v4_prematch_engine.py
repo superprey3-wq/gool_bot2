@@ -92,3 +92,51 @@ def build_accumulators(
     walk(0, [])
     out.sort(key=lambda row: (row["score"], row["expected_value"]), reverse=True)
     return out
+
+
+def picks_from_goal_profile(
+    *,
+    event_id: str,
+    home: str,
+    away: str,
+    profile: dict,
+    market: dict,
+    data_quality: float = 1.0,
+) -> list[PrematchPick]:
+    """Convert existing GOOL prematch history + 1xBet snapshot into priced V4 picks.
+
+    V4 intentionally starts with full-match totals. 1X2 needs a separate
+    home/draw/away probability head; it must not be inferred from total goals.
+    """
+    first = profile.get("first_half") or {}
+    second = profile.get("second_half") or {}
+    if not first.get("available") or not second.get("available"):
+        return []
+    try:
+        lam = float(first["expected_total"]) + float(second["expected_total"])
+    except (TypeError, ValueError, KeyError):
+        return []
+    if lam <= 0:
+        return []
+
+    rows = market.get("match_totals") or []
+    out: list[PrematchPick] = []
+    import math
+    for row in rows:
+        try:
+            line = float(row.get("line"))
+            over_odd = float(row.get("over"))
+            under_odd = float(row.get("under"))
+        except (TypeError, ValueError):
+            continue
+        if over_odd <= 1 or under_odd <= 1:
+            continue
+        threshold = int(math.floor(line)) + 1
+        cdf = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(threshold))
+        model_over = max(0.0, min(1.0, 1.0 - cdf))
+        fair_over, fair_under = devig_two_way(over_odd, under_odd)
+        out.extend([
+            PrematchPick(event_id, home, away, "match_total", f"over {line:g}", over_odd, model_over, fair_over, data_quality),
+            PrematchPick(event_id, home, away, "match_total", f"under {line:g}", under_odd, 1.0 - model_over, fair_under, data_quality),
+        ])
+    return out

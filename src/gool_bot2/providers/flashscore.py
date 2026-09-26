@@ -69,10 +69,11 @@ def _to_number(value: Any) -> float:
 class FlashscoreProvider:
     name = "flashscore"
 
-    def _feed(self, path: str) -> str:
+    def _feed(self, path: str, *, timeout: int = 12, max_hosts: int | None = None) -> str:
         headers = {"User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com", "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache"}
-        for host in FEED_HOSTS:
-            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=12)
+        hosts = FEED_HOSTS if max_hosts is None else FEED_HOSTS[:max(1, max_hosts)]
+        for host in hosts:
+            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=timeout)
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 
@@ -159,7 +160,7 @@ class FlashscoreProvider:
         return list({m.provider_match_id: m for m in matches}.values())
 
     def scheduled_matches_for_day(self, day: int = 0) -> list[ProviderMatch]:
-        body = self._feed(f"f_1_{day}_3_en_1")
+        body = self._feed(f"f_1_{day}_3_en_1", timeout=4, max_hosts=1)
         if not body:
             return []
         matches = self.parse_master_scheduled(body)

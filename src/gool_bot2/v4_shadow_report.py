@@ -209,6 +209,8 @@ def main() -> None:
     target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow) else now_msk.date()
     remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
     if args.nations_today:
+        for m in remaining:
+            print(f"LEAGUE_DEBUG {m.home} — {m.away} | league={m.league!r} | FS={m.provider_match_id}", flush=True)
         remaining = [m for m in remaining if any(tag in str(m.league or "").casefold() for tag in ("nations league", "лига наций"))]
     elif args.nations_tomorrow:
         nations = {("Georgia","Ukraine"),("Armenia","Montenegro"),("Latvia","Cyprus"),("Belgium","France"),("Türkiye","Italy"),("Turkey","Italy"),("Northern Ireland","Hungary"),("Romania","Bosnia and Herzegovina"),("Sweden","Poland")}

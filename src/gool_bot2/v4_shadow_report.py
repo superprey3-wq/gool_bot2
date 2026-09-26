@@ -43,7 +43,7 @@ def build_market_report(state: dict, limit: int = 30) -> str:
     lines.extend([
         "",
         "=== PREMATCH TODAY REMAINING ===",
-    ]
+    ])
     matched = 0
     for i, match in enumerate(fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)

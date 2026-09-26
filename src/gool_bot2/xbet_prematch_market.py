@@ -101,10 +101,10 @@ def _main_total(markets: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _usable_snapshot(markets: dict[str, Any]) -> bool:
+    """A candidate is usable when at least one supported market can be priced."""
     one_x_two = markets.get("match_1x2") or {}
-    if not all(one_x_two.get(name) for name in ("home", "draw", "away")):
-        return False
-    return bool(_main_total(markets))
+    has_1x2 = all(one_x_two.get(name) for name in ("home", "draw", "away"))
+    return bool(has_1x2 or _main_total(markets))
 
 
 def _safe_team_name(value: Any) -> str:
@@ -297,12 +297,12 @@ class XBetPrematchCollector:
                 if best and best_score >= 0.68 and best["event_id"] not in seen:
                     best = {**best, "root": root}
                     seen.add(best["event_id"]); selected.append(best)
-            candidates = selected[:limit]
+            candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
         else:
             candidates = [{**row, "root": root} for row in candidates[:limit]]
 
         refreshed = 0
-        if root and candidates:
+        if candidates:
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {
                     pool.submit(self._game, row.get("root") or root, row["event_id"]): row

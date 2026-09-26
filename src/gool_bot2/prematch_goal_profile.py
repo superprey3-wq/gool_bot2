@@ -353,6 +353,27 @@ def _active_profile(record: dict[str, Any], first_half: dict[str, Any], second_h
     }
 
 
+def _full_match_profile(context: dict[str, Any], home: str, away: str) -> dict[str, Any]:
+    """Full-time fallback for prematch pricing when historical HT splits are unavailable."""
+    def team(rows: list[dict[str, Any]], name: str) -> dict[str, Any]:
+        gf=[]; ga=[]
+        for row in _dedupe(rows):
+            hs=_number(row.get("home_score")); aws=_number(row.get("away_score"))
+            if hs is None or aws is None: continue
+            if _similar(str(row.get("home") or ""), name): gf.append(hs); ga.append(aws)
+            elif _similar(str(row.get("away") or ""), name): gf.append(aws); ga.append(hs)
+        if not gf: return {"matches":0,"avg_for":None,"avg_against":None}
+        return {"matches":len(gf),"avg_for":sum(gf)/len(gf),"avg_against":sum(ga)/len(ga)}
+    hp=team(list(context.get("home_recent") or []), home); ap=team(list(context.get("away_recent") or []), away)
+    hl=_mean([_number(hp.get("avg_for")),_number(ap.get("avg_against"))])
+    al=_mean([_number(ap.get("avg_for")),_number(hp.get("avg_against"))])
+    sample=min(int(hp.get("matches") or 0),int(ap.get("matches") or 0))
+    return {"available": hl is not None and al is not None and sample>0,
+            "home_expected_goals": None if hl is None else round(hl,4),
+            "away_expected_goals": None if al is None else round(al,4),
+            "expected_total": None if hl is None or al is None else round(hl+al,4),
+            "pair_sample": sample, "home":hp, "away":ap}
+
 def build_prematch_goal_profile(record: dict[str, Any]) -> dict[str, Any]:
     context = record.get("prematch_context") or {}
     match = record.get("match") or {}
@@ -367,6 +388,7 @@ def build_prematch_goal_profile(record: dict[str, Any]) -> dict[str, Any]:
         "sources": list(context.get("sources") or []),
         "first_half": first_half,
         "second_half": second_half,
+        "full_match": _full_match_profile(context, home, away),
         "active": active,
         "scores365_trend_flags": {
             "has_trends": bool(context.get("has_trends")),

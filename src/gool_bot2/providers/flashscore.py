@@ -12,7 +12,7 @@ from .common import ProviderMatch, UA, http_text, pair_score
 FSIGN = os.getenv("FLASHSCORE_FSIGN", "SW9D1eZo")
 FEED_HOSTS = ("global", "2", "46")
 MASTER_PATHS = ("f_1_0_3_en_1", "f_1_0_0_en_1")
-SCHEDULE_PATHS = ("f_1_0_1_en_1", "f_1_0_2_en_1", *MASTER_PATHS)
+SCHEDULE_DAY_OFFSETS = (-1, 0, 1, 2, 3, 4, 5, 6, 7)
 LIVE_COARSE_STATUS = "2"
 FINISHED_COARSE_STATUS = "3"
 FIRST_HALF_STATUS = "12"
@@ -160,10 +160,14 @@ class FlashscoreProvider:
 
     def scheduled_matches(self) -> list[ProviderMatch]:
         merged: dict[str, ProviderMatch] = {}
-        for path in SCHEDULE_PATHS:
-            body = self._feed(path)
+        # Flashscore daily football feed: f_1_{day}_3_en_1.  Day 0 is today,
+        # positive offsets are future dates. Unlike the LIVE/master feed this
+        # endpoint returns the complete calendar day (all competitions).
+        for day in SCHEDULE_DAY_OFFSETS:
+            body = self._feed(f"f_1_{day}_3_en_1")
             if not body: continue
-            for match in self.parse_master_scheduled(body): merged[match.provider_match_id] = match
+            for match in self.parse_master_scheduled(body):
+                merged[match.provider_match_id] = match
         return sorted(merged.values(), key=lambda m: (int((m.meta or {}).get("scheduled_start_ts") or 0), m.league or "", m.home))
 
     def live_matches(self) -> list[ProviderMatch]:

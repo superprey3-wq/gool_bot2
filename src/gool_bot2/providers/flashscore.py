@@ -158,6 +158,13 @@ class FlashscoreProvider:
             matches.append(ProviderMatch(provider=self.name, provider_match_id=event_id, home=home, away=away, league=league, meta=meta))
         return list({m.provider_match_id: m for m in matches}.values())
 
+    def scheduled_matches_for_day(self, day: int = 0) -> list[ProviderMatch]:
+        body = self._feed(f"f_1_{day}_3_en_1")
+        if not body:
+            return []
+        matches = self.parse_master_scheduled(body)
+        return sorted(matches, key=lambda m: (int((m.meta or {}).get("scheduled_start_ts") or 0), m.league or "", m.home))
+
     def scheduled_matches(self) -> list[ProviderMatch]:
         merged: dict[str, ProviderMatch] = {}
         # Flashscore daily football feed: f_1_{day}_3_en_1.  Day 0 is today,

@@ -208,8 +208,8 @@ class XBetPrematchCollector:
         root, index = self._index()
         previous = _load(self.state_path)
         stored = dict(previous.get("matches") or {}) if isinstance(previous.get("matches"), dict) else {}
-        limit = max(50, min(500, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "250"))))
-        workers = max(4, min(16, int(os.getenv("XBET_PREMATCH_WORKERS", "8"))))
+        limit = max(40, min(120, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "80"))))
+        workers = max(2, min(6, int(os.getenv("XBET_PREMATCH_WORKERS", "4"))))
         now = time.time()
         candidates: list[dict[str, Any]] = []
         for event in index:

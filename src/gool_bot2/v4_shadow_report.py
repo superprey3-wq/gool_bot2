@@ -204,6 +204,7 @@ def main() -> None:
     parser.add_argument("--nations-tomorrow", action="store_true")
     parser.add_argument("--nations-today", action="store_true")
     parser.add_argument("--count-tomorrow", action="store_true")
+    parser.add_argument("--count-today", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider(); live = fs.live_matches(); fixtures = fs.scheduled_matches()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()

@@ -6,7 +6,7 @@ from typing import Any, Iterable
 
 from . import telegram
 from .journal import load_signal_journal, save_signal_journal
-from .v4_prematch_card import render_v4_prematch_card
+from .v4_prematch_card import render_v4_prematch_card, render_v4_prematch_result_card
 
 
 def _now() -> str:
@@ -86,3 +86,15 @@ def parlay_leg_states(row: dict[str, Any], live_rows: Iterable[dict[str, Any]]) 
             state["result"] = matching.get("result") or "pending"
         states.append(state)
     return states
+
+
+def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = None) -> int:
+    png = render_v4_prematch_result_card(row, record=record)
+    result = str(row.get("result") or "void").lower()
+    icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")
+    caption = (
+        f"{icon} <b>GOOL V4 · PREMATCH RESULT</b>\n"
+        f"{row.get('home','?')} — {row.get('away','?')}\n"
+        f"<b>{row.get('market','?')} @ {float(row.get('odd') or 0):.2f}</b>"
+    )
+    return telegram.broadcast_photo(png, caption=caption)

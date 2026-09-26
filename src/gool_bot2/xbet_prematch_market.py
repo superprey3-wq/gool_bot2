@@ -23,8 +23,8 @@ ROOTS = (
     "https://1xbet.fi/LineFeed",
 )
 INDEX_QUERIES = (
-    "sports=1&count=200&lng=en&mode=4&country=1&getEmpty=true",
-    "sports=1&count=200&lng=en&tf=2200000&tz=0&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&tf=2200000&tz=0&mode=4&country=1&getEmpty=true",
 )
 
 
@@ -208,8 +208,8 @@ class XBetPrematchCollector:
         root, index = self._index()
         previous = _load(self.state_path)
         stored = dict(previous.get("matches") or {}) if isinstance(previous.get("matches"), dict) else {}
-        limit = max(10, min(100, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "40"))))
-        workers = max(2, min(8, int(os.getenv("XBET_PREMATCH_WORKERS", "4"))))
+        limit = max(50, min(500, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "250"))))
+        workers = max(4, min(16, int(os.getenv("XBET_PREMATCH_WORKERS", "8"))))
         now = time.time()
         candidates: list[dict[str, Any]] = []
         for event in index:

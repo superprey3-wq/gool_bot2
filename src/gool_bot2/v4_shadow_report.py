@@ -201,12 +201,16 @@ def main() -> None:
     parser.add_argument("--state", default="/tmp/gool_v4_shadow_xbet.json")
     parser.add_argument("--limit", type=int, default=30)
     parser.add_argument("--one-tomorrow", action="store_true")
+    parser.add_argument("--nations-tomorrow", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider(); live = fs.live_matches(); fixtures = fs.scheduled_matches()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
-    target_date = now_msk.date() + timedelta(days=1) if args.one_tomorrow else now_msk.date()
+    target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow) else now_msk.date()
     remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
-    if args.one_tomorrow and remaining:
+    if args.nations_tomorrow:
+        nations = {("Georgia","Ukraine"),("Armenia","Montenegro"),("Latvia","Cyprus"),("Belgium","France"),("Türkiye","Italy"),("Turkey","Italy"),("Northern Ireland","Hungary"),("Romania","Bosnia and Herzegovina"),("Sweden","Poland")}
+        remaining = [m for m in remaining if any(pair_score(m.home, m.away, h, a) >= 0.72 for h, a in nations)]
+    elif args.one_tomorrow and remaining:
         remaining = remaining[:1]
 
     # Stage 1: GOOL brain analyses every Flashscore fixture with no bookmaker input.

@@ -23,7 +23,7 @@ jobs:
           PYTHONPATH: src
         run: |
           python - <<'PY'
-          from gool_bot2.reference_feeds import PinnacleReference, NHLReference, ESPNReference, BetfairReference
+          from gool_bot2.reference_feeds import PinnacleReference, ESPNReference, BetfairReference
           p = PinnacleReference()
           sports = p.sports()
           print("PINNACLE sports=", len(sports), "names=", [x.get("name") for x in sports[:8]])

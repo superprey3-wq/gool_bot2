@@ -6,7 +6,10 @@ from pathlib import Path
 
 from .providers.common import pair_score
 from .providers.flashscore import FlashscoreProvider
-from .v4_prematch_engine import devig_three_way, devig_two_way
+from .prematch_goal_profile import build_prematch_goal_profile
+from .v4_prematch_engine import (
+    build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery,
+)
 from .xbet_prematch_market import XBetPrematchCollector
 
 
@@ -45,6 +48,7 @@ def build_market_report(state: dict, limit: int = 30) -> str:
         "=== PREMATCH TODAY REMAINING ===",
     ])
     matched = 0
+    all_candidates = []
     for i, match in enumerate(fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)
         ts = (match.meta or {}).get("scheduled_start_ts")
@@ -58,6 +62,22 @@ def build_market_report(state: dict, limit: int = 30) -> str:
             continue
         matched += 1
         lines.append(f"    1xBet id={row.get('event_id','?')} match={score:.3f}")
+        try:
+            history = fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
+            history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
+            record = {"match": {"home": match.home, "away": match.away}, "prematch_context": history}
+            profile = build_prematch_goal_profile(record)
+            full = profile.get("full_match") or {}
+            sample = int(full.get("pair_sample") or 0)
+            quality = min(1.0, sample / 8.0)
+            candidates = build_prematch_candidates(
+                event_id=match.provider_match_id, home=match.home, away=match.away,
+                profile=profile, market=row, data_quality=quality,
+            )
+            all_candidates.extend(candidates)
+            lines.append(f"    GOOL profile: sample={sample} quality={quality:.2f} candidates={len(candidates)}")
+        except Exception as exc:
+            lines.append(f"    GOOL profile: unavailable ({type(exc).__name__})")
         x = row.get("match_1x2") or {}
         try:
             oh, od, oa = float(x["home"]), float(x["draw"]), float(x["away"])
@@ -76,6 +96,16 @@ def build_market_report(state: dict, limit: int = 30) -> str:
             shown += 1
             if shown >= 3: break
         if not shown: lines.append("    Totals: unavailable")
+    shortlist = rank_prematch_for_delivery(all_candidates, limit=8, max_per_event=1)
+    lines.extend(["", "=== GOOL PREMATCH SHORTLIST ==="])
+    if not shortlist:
+        lines.append("NO QUALIFIED PICKS")
+    for i, (pick, tier) in enumerate(shortlist, 1):
+        lines.append(
+            f"P{i:02d}. {pick.home} — {pick.away} | {pick.selection} @ {pick.odds:.2f} | "
+            f"{tier} | model={_pct(pick.model_probability)} market={_pct(pick.market_probability)} "
+            f"edge={100*pick.edge:+.1f}pp EV={100*pick.expected_value:+.1f}% quality={pick.data_quality:.2f}"
+        )
     lines.insert(2, f"matched_to_xbet={matched}/{min(len(fixtures), max(1, limit))}")
     return "\n".join(lines)
 

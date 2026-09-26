@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -207,12 +208,19 @@ def main() -> None:
     parser.add_argument("--count-today", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider()
-    if args.count_today:
+    if args.count_today or args.count_tomorrow:
+        day = 0 if args.count_today else 1
         live = []
-        fixtures = fs.scheduled_matches_for_day(0)
-    elif args.count_tomorrow:
-        live = []
-        fixtures = fs.scheduled_matches_for_day(1)
+        def _calendar_alarm(signum, frame):
+            raise TimeoutError("Flashscore calendar hard timeout")
+        signal.signal(signal.SIGALRM, _calendar_alarm)
+        signal.alarm(15)
+        print(f"CALENDAR_FETCH_START day={day}", flush=True)
+        try:
+            fixtures = fs.scheduled_matches_for_day(day)
+        finally:
+            signal.alarm(0)
+        print(f"CALENDAR_FETCH_DONE day={day} raw={len(fixtures)}", flush=True)
     else:
         live = fs.live_matches(); fixtures = fs.scheduled_matches()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()

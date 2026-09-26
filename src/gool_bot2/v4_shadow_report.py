@@ -209,8 +209,7 @@ def main() -> None:
     target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow) else now_msk.date()
     remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
     if args.nations_today:
-        nations = {("Lithuania","Azerbaijan"),("Serbia","Netherlands"),("Denmark","Wales"),("Austria","Kosovo"),("Gibraltar","Andorra"),("Germany","Greece"),("Norway","Portugal"),("Israel","Republic of Ireland"),("Israel","Ireland")}
-        remaining = [m for m in remaining if any(pair_score(m.home, m.away, h, a) >= 0.72 for h, a in nations)]
+        remaining = [m for m in remaining if "nations league" in str(m.league or "").casefold()]
     elif args.nations_tomorrow:
         nations = {("Georgia","Ukraine"),("Armenia","Montenegro"),("Latvia","Cyprus"),("Belgium","France"),("Türkiye","Italy"),("Turkey","Italy"),("Northern Ireland","Hungary"),("Romania","Bosnia and Herzegovina"),("Sweden","Poland")}
         remaining = [m for m in remaining if any(pair_score(m.home, m.away, h, a) >= 0.72 for h, a in nations)]

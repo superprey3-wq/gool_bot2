@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile
 
 
 def test_devig_two_way_removes_margin():
@@ -38,3 +38,25 @@ def test_goal_profile_builds_priced_prematch_totals():
     assert 0 < over.model_probability < 1
     assert abs((over.market_probability + under.market_probability) - 1.0) < 1e-9
     assert over.event_id == "m1"
+
+
+def test_three_way_devig_and_poisson_are_normalized():
+    fair = devig_three_way(1.90, 3.60, 4.20)
+    model = poisson_1x2(1.8, 0.9)
+    assert abs(sum(fair) - 1.0) < 1e-9
+    assert abs(sum(model) - 1.0) < 1e-6
+    assert model[0] > model[2]
+
+
+def test_1x2_profile_builds_three_priced_selections():
+    profile = {
+        "first_half": {"available": True, "home_expected_goals": 0.8, "away_expected_goals": 0.4},
+        "second_half": {"available": True, "home_expected_goals": 1.0, "away_expected_goals": 0.5},
+    }
+    market = {"match_1x2": {"home": 1.90, "draw": 3.60, "away": 4.20}}
+    picks = picks_from_1x2_profile(
+        event_id="m2", home="A", away="B", profile=profile, market=market, data_quality=0.9
+    )
+    assert [p.selection for p in picks] == ["home", "draw", "away"]
+    assert abs(sum(p.market_probability for p in picks) - 1.0) < 1e-9
+    assert abs(sum(p.model_probability for p in picks) - 1.0) < 1e-6

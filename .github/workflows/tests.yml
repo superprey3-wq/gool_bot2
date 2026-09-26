@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [main, archive-foundation, experiment/ht-one-goal-over25]
+    branches: [main, archive-foundation, experiment/ht-one-goal-over25, gool-v4-rebuild]
   pull_request:
 
 jobs:

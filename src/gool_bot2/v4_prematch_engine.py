@@ -41,7 +41,7 @@ def qualified_pick(
     min_edge: float = 0.04,
     min_ev: float = 0.02,
     min_quality: float = 0.60,
-    min_odds: float = 1.20,
+    min_odds: float = 1.50,
     max_odds: float = 2.40,
 ) -> bool:
     return (
@@ -299,7 +299,7 @@ def signal_tier(
     min_quality: float = 0.55,
 ) -> str | None:
     """Two-tier throughput gate: reject junk without starving useful signals."""
-    if pick.data_quality < min_quality or pick.odds < 1.20 or pick.odds > 3.25:
+    if pick.data_quality < min_quality or pick.odds < 1.50 or pick.odds > 3.25:
         return None
     if (
         pick.model_probability >= strong_min_probability

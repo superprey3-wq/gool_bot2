@@ -128,4 +128,11 @@ class PrematchDataFusion:
             s365 = self._scores365(match, limit)
         except Exception:
             s365 = {"source": "365scores"}
-        merged = merge_contexts(fs, fm, fm_team, s365, limit=limit)\n        merged[\"source_coverage\"] = {\n            \"flashscore\": max(len(fs.get(\"home_recent\") or []), len(fs.get(\"away_recent\") or [])),\n            \"fotmob_embedded\": max(len(fm.get(\"home_recent\") or []), len(fm.get(\"away_recent\") or [])),\n            \"fotmob_team\": max(len(fm_team.get(\"home_recent\") or []), len(fm_team.get(\"away_recent\") or [])),\n            \"365scores\": max(len(s365.get(\"home_recent\") or []), len(s365.get(\"away_recent\") or [])),\n        }\n        return merged
+        merged = merge_contexts(fs, fm, fm_team, s365, limit=limit)
+        merged["source_coverage"] = {
+            "flashscore": max(len(fs.get("home_recent") or []), len(fs.get("away_recent") or [])),
+            "fotmob_embedded": max(len(fm.get("home_recent") or []), len(fm.get("away_recent") or [])),
+            "fotmob_team": max(len(fm_team.get("home_recent") or []), len(fm_team.get("away_recent") or [])),
+            "365scores": max(len(s365.get("home_recent") or []), len(s365.get("away_recent") or [])),
+        }
+        return merged

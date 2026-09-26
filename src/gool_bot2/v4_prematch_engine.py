@@ -311,9 +311,10 @@ def rank_prematch_for_delivery(
     picks: Iterable[PrematchPick],
     *,
     model_weight: float = 0.65,
-    limit: int = 20,
+    limit: int = 8,
+    max_per_event: int = 1,
 ) -> list[tuple[PrematchPick, str]]:
-    """Rank deliverable singles while preserving throughput.
+    """Rank a selective daily shortlist without turning every fixture into a bet.
 
     One selection per event+market is kept, but NORMAL signals remain public;
     STRONG is a label, not a second hard filter.
@@ -330,13 +331,13 @@ def rank_prematch_for_delivery(
         ),
         reverse=True,
     )
-    seen: set[tuple[str, str]] = set()
+    event_counts: dict[str, int] = {}
     out: list[tuple[PrematchPick, str]] = []
     for p, tier in rows:
-        key = (p.event_id, p.market)
-        if key in seen:
+        event_id = str(p.event_id)
+        if event_counts.get(event_id, 0) >= max(1, int(max_per_event)):
             continue
-        seen.add(key)
+        event_counts[event_id] = event_counts.get(event_id, 0) + 1
         out.append((p, tier))
         if len(out) >= max(1, int(limit)):
             break

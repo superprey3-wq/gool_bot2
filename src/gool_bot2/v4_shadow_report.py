@@ -48,7 +48,8 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     fixtures = fs.scheduled_matches() if fixtures is None else fixtures
     msk = timezone(timedelta(hours=3))
     now_msk = datetime.now(msk)
-    report_date = target_date or now_msk.date()\n    fixtures = [m for m in fixtures if (lambda ts: ts and datetime.fromtimestamp(float(ts), tz=msk).date() == report_date and float(ts) > datetime.now(timezone.utc).timestamp())((m.meta or {}).get("scheduled_start_ts"))]
+    report_date = target_date or now_msk.date()
+    fixtures = [m for m in fixtures if (lambda ts: ts and datetime.fromtimestamp(float(ts), tz=msk).date() == report_date and float(ts) > datetime.now(timezone.utc).timestamp())((m.meta or {}).get("scheduled_start_ts"))]
     xbet_rows = [r for r in (state.get("matches") or {}).values() if isinstance(r, dict)]
     lines = [
         "GOOL V4 SHADOW · FLASHSCORE LIVE + TODAY PREMATCH · MSK",

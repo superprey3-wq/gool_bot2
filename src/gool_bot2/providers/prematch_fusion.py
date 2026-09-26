@@ -125,6 +125,10 @@ class PrematchDataFusion:
         except Exception:
             fm = {"source": "fotmob"}
         try:
+            fm_team = fotmob_team_history(self.fotmob, match.home, match.away, limit=limit)
+        except Exception:
+            fm_team = {"source": "fotmob_team_history"}
+        try:
             s365 = self._scores365(match, limit)
         except Exception:
             s365 = {"source": "365scores"}

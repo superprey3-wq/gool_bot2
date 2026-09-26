@@ -110,10 +110,14 @@ def picks_from_goal_profile(
     """
     first = profile.get("first_half") or {}
     second = profile.get("second_half") or {}
-    if not first.get("available") or not second.get("available"):
-        return []
+    full = profile.get("full_match") or {}
     try:
-        lam = float(first["expected_total"]) + float(second["expected_total"])
+        if first.get("available") and second.get("available"):
+            lam = float(first["expected_total"]) + float(second["expected_total"])
+        elif full.get("available"):
+            lam = float(full["expected_total"])
+        else:
+            return []
     except (TypeError, ValueError, KeyError):
         return []
     if lam <= 0:
@@ -183,11 +187,16 @@ def picks_from_1x2_profile(
 ) -> list[PrematchPick]:
     first = profile.get("first_half") or {}
     second = profile.get("second_half") or {}
-    if not first.get("available") or not second.get("available"):
-        return []
+    full = profile.get("full_match") or {}
     try:
-        home_lambda = float(first["home_expected_goals"]) + float(second["home_expected_goals"])
-        away_lambda = float(first["away_expected_goals"]) + float(second["away_expected_goals"])
+        if first.get("available") and second.get("available"):
+            home_lambda = float(first["home_expected_goals"]) + float(second["home_expected_goals"])
+            away_lambda = float(first["away_expected_goals"]) + float(second["away_expected_goals"])
+        elif full.get("available"):
+            home_lambda = float(full["home_expected_goals"])
+            away_lambda = float(full["away_expected_goals"])
+        else:
+            return []
         prices = market.get("match_1x2") or {}
         home_odd = float(prices["home"])
         draw_odd = float(prices["draw"])

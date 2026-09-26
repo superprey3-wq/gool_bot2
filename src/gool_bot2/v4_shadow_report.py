@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from .providers.common import pair_score
@@ -25,19 +25,31 @@ def _match_xbet(fs_match, xbet_rows: list[dict], min_score: float = 0.78) -> tup
 
 def build_market_report(state: dict, limit: int = 30) -> str:
     fs = FlashscoreProvider()
+    live = fs.live_matches()
     fixtures = fs.scheduled_matches()
+    msk = timezone(timedelta(hours=3))
+    now_msk = datetime.now(msk)
+    fixtures = [m for m in fixtures if (lambda ts: ts and datetime.fromtimestamp(float(ts), tz=msk).date() == now_msk.date() and float(ts) > datetime.now(timezone.utc).timestamp())((m.meta or {}).get("scheduled_start_ts"))]
     xbet_rows = [r for r in (state.get("matches") or {}).values() if isinstance(r, dict)]
     lines = [
-        "GOOL V4 SHADOW · FLASHSCORE FIXTURES + 1XBET PRICES",
-        f"flashscore_scheduled={len(fixtures)} xbet_usable={len(xbet_rows)} captured={state.get('captured_at')} latency_ms={state.get('latency_ms',0)}",
+        "GOOL V4 SHADOW · FLASHSCORE LIVE + TODAY PREMATCH · MSK",
+        f"flashscore_live={len(live)} today_remaining={len(fixtures)} xbet_usable={len(xbet_rows)} captured={state.get('captured_at')} latency_ms={state.get('latency_ms',0)}",
+        f"report_time_msk={now_msk.strftime('%Y-%m-%d %H:%M:%S MSK')}",
         "",
+        "=== LIVE NOW ===",
+    ]
+    for i, m in enumerate(live, 1):
+        lines.append(f"L{i:02d}. {m.home} — {m.away} | {m.league or '?'} | {int(m.minute or 0)}' | {int(m.home_score or 0)}:{int(m.away_score or 0)} | FS={m.provider_match_id}")
+    lines.extend([
+        "",
+        "=== PREMATCH TODAY REMAINING ===",
     ]
     matched = 0
     for i, match in enumerate(fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)
         ts = (match.meta or {}).get("scheduled_start_ts")
         try:
-            kickoff = datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            kickoff = datetime.fromtimestamp(float(ts), tz=msk).strftime("%Y-%m-%d %H:%M MSK")
         except (TypeError, ValueError, OSError):
             kickoff = "?"
         lines.append(f"{i:02d}. {match.home} — {match.away} | {match.league or '?'} | {kickoff} | FS={match.provider_match_id}")

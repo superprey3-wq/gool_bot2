@@ -23,8 +23,9 @@ ROOTS = (
     "https://1xbet.fi/LineFeed",
 )
 INDEX_QUERIES = (
-    "sports=1&count=500&lng=en&mode=4&country=1&getEmpty=true",
-    "sports=1&count=500&lng=en&tf=2200000&tz=0&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=19&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=19&tf=2200000&tz=0&getEmpty=true",
 )
 
 

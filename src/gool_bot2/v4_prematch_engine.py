@@ -276,3 +276,68 @@ def rank_prematch_singles(
         if len(out) >= max(1, int(limit)):
             break
     return out
+
+
+def signal_tier(
+    pick: PrematchPick,
+    *,
+    normal_min_probability: float = 0.60,
+    normal_min_edge: float = 0.025,
+    normal_min_ev: float = 0.01,
+    strong_min_probability: float = 0.68,
+    strong_min_edge: float = 0.055,
+    strong_min_ev: float = 0.04,
+    min_quality: float = 0.55,
+) -> str | None:
+    """Two-tier throughput gate: reject junk without starving useful signals."""
+    if pick.data_quality < min_quality or pick.odds < 1.20 or pick.odds > 3.25:
+        return None
+    if (
+        pick.model_probability >= strong_min_probability
+        and pick.edge >= strong_min_edge
+        and pick.expected_value >= strong_min_ev
+    ):
+        return "STRONG"
+    if (
+        pick.model_probability >= normal_min_probability
+        and pick.edge >= normal_min_edge
+        and pick.expected_value >= normal_min_ev
+    ):
+        return "NORMAL"
+    return None
+
+
+def rank_prematch_for_delivery(
+    picks: Iterable[PrematchPick],
+    *,
+    model_weight: float = 0.65,
+    limit: int = 20,
+) -> list[tuple[PrematchPick, str]]:
+    """Rank deliverable singles while preserving throughput.
+
+    One selection per event+market is kept, but NORMAL signals remain public;
+    STRONG is a label, not a second hard filter.
+    """
+    blended = [blend_with_market(p, model_weight=model_weight) for p in picks]
+    rows = [(p, signal_tier(p)) for p in blended]
+    rows = [(p, tier) for p, tier in rows if tier is not None]
+    rows.sort(
+        key=lambda row: (
+            row[1] == "STRONG",
+            row[0].expected_value,
+            row[0].edge,
+            row[0].model_probability,
+        ),
+        reverse=True,
+    )
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[PrematchPick, str]] = []
+    for p, tier in rows:
+        key = (p.event_id, p.market)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((p, tier))
+        if len(out) >= max(1, int(limit)):
+            break
+    return out

@@ -244,11 +244,15 @@ def main() -> None:
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
     if args.count_today or args.first_acca:
         live = []
-        source_counts, fixtures = all_fixture_sources(now_msk.date().isoformat())
         fs_daily = fs.parse_master_scheduled(fs._feed("f_1_0_3_en_1", timeout=12, max_hosts=1))
-        source_counts["flashscore"] = len(fs_daily)
-        from .providers.fixture_sources import dedupe
-        fixtures = dedupe(fixtures + fs_daily)
+        if os.getenv("GOOL_FIXTURE_SOURCE", "").strip().lower() == "flashscore":
+            source_counts = {"flashscore": len(fs_daily)}
+            fixtures = fs_daily
+        else:
+            source_counts, fixtures = all_fixture_sources(now_msk.date().isoformat())
+            source_counts["flashscore"] = len(fs_daily)
+            from .providers.fixture_sources import dedupe
+            fixtures = dedupe(fixtures + fs_daily)
         print("FIXTURE_SOURCES " + " ".join(f"{k}={v}" for k,v in source_counts.items()) + f" unique={len(fixtures)}", flush=True)
         if args.count_today and not args.first_acca:
             return
@@ -287,8 +291,9 @@ def main() -> None:
     # Stage 2 must price the full evidence-backed field, not an arbitrary top 12.
     # Football quality remains the first gate; bookmaker value decides only after it.
     brain_candidates = eligible
-    price_cap = max(1, int(os.getenv("GOOL_PREMATCH_PRICE_CAP", "250")))
-    brain_candidates = brain_candidates[:price_cap]
+    price_cap = int(os.getenv("GOOL_PREMATCH_PRICE_CAP", "250"))
+    if price_cap > 0:
+        brain_candidates = brain_candidates[:price_cap]
 
     selected_ids = {str(row["match"].provider_match_id) for row in brain_candidates}
     state = XBetPrematchCollector(Path(args.state)).collect_once(targets=[row["match"] for row in brain_candidates])

@@ -206,16 +206,22 @@ def emit_brain_card_signal(
     except (TypeError, ValueError):
         price_available = False
 
+    if not price_available:
+        print(
+            f"GOOL_BRAIN_SIGNAL_NO_PRICE_DROP match={entry.get('match_id')} "
+            f"strategy={entry.get('strategy')} market={entry.get('market')}",
+            flush=True,
+        )
+        # Public BEST BET requires a real current 1xBet price. Do not mark
+        # delivery/dedupe: a later fresh market snapshot may price it correctly.
+        return 0
+
     sent = 0
     try:
-        if not price_available:
-            winner.odd = None  # renderer shows "—"; restore immediately below
         png = render_multi_signal_card(record, decision, entry=entry, market_row=market_row)
         sent = telegram.broadcast_photo(png)
     except Exception as exc:
         print(f"GOOL_BRAIN_SIGNAL_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
-    finally:
-        winner.odd = original_odd
 
     if sent == 0:
         sent = telegram.broadcast(fallback)

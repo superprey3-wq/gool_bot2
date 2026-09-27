@@ -101,14 +101,21 @@ def settle_parlay(row: dict[str, Any]) -> bool:
     if not legs:
         return False
     results = [str(leg.get("result") or "pending").casefold() for leg in legs]
-    # Parent result is public only after every leg is final. Even when one leg\n    # has already lost, do not publish a premature accumulator result.\n    if any(x not in FINAL_RESULTS for x in results):\n        return False\n    if any(x == "lost" for x in results):\n        result = "lost"\n    elif all(x in {"push", "void"} for x in results):
+    # Never publish the accumulator result until every displayed leg is final.
+    if any(x not in FINAL_RESULTS for x in results):
+        return False
+    if any(x == "lost" for x in results):
+        result = "lost"
+    elif all(x in {"push", "void"} for x in results):
         result = "push"
     else:
         result = "won"
+
     effective_odds = 1.0
     for leg in legs:
         if str(leg.get("result") or "").casefold() == "won":
             effective_odds *= float(leg.get("odd") or 1.0)
+
     row["result"] = result
     row["settled_at"] = _now()
     row["lifecycle"] = "settled"
@@ -119,7 +126,6 @@ def settle_parlay(row: dict[str, Any]) -> bool:
     row["result_notification_created_at"] = _now()
     apply_settlement_fields(row)
     return True
-
 
 def sync_and_settle_parlays(rows: list[dict[str, Any]]) -> int:
     """Copy settled child-leg results into parent parlays, then settle parents."""

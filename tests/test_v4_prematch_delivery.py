@@ -51,3 +51,20 @@ def test_parlay_parent_is_never_rendered_as_match_in_game(tmp_path):
     path=tmp_path/"journal.json"
     save_signal_journal(path,[{"mode":"active","origin":"prematch_parlay","result":"pending","telegram_sent":True,"home":"","away":"","odd":2.2}])
     assert "Открытых сигналов сейчас нет" in journal_in_game_sections(path)[0]
+
+
+def test_prematch_result_delivery_finalizes_by_entry_id(tmp_path):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    from gool_bot2.multi_delivery import pending_result_notifications, finalize_result_delivery
+    path=tmp_path/"journal.json"
+    row={"entry_id":"prematch:abc:FT_UNDER_2.5","origin":"prematch","mode":"active",
+         "result":"won","telegram_sent":True,"result_notification_pending":True,
+         "result_notification_created_at":"2026-09-27T20:00:00+00:00"}
+    save_signal_journal(path,[row])
+    claimed=pending_result_notifications(path)
+    assert len(claimed)==1
+    assert finalize_result_delivery(path,claimed[0],1) is True
+    stored=load_signal_journal(path)[0]
+    assert stored["result_notification_pending"] is False
+    assert stored["result_telegram_sent"] is True
+    assert pending_result_notifications(path)==[]

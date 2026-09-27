@@ -79,3 +79,73 @@ def total_probability(forecast: ChallengerForecast, line: float, over: bool = Tr
     threshold = int(math.floor(float(line))) + 1
     p_over = 1.0 - sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(threshold))
     return p_over if over else 1.0 - p_over
+
+
+def challenger_market_candidates(*, event_id: str, home: str, away: str, profile: dict[str, Any],
+                                 market: dict[str, Any], data_quality: float = 1.0) -> list[dict[str, Any]]:
+    """Price independent challenger probabilities against the same bookmaker snapshot."""
+    forecast = poisson_profile_challenger(profile)
+    if forecast is None:
+        return []
+    out: list[dict[str, Any]] = []
+    x = market.get("match_1x2") or {}
+    probs = {"home": forecast.home, "draw": forecast.draw, "away": forecast.away}
+    for selection, probability in probs.items():
+        try:
+            odds = float(x[selection])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if odds <= 1:
+            continue
+        out.append({"event_id": event_id, "home": home, "away": away, "market": "match_1x2",
+                    "selection": selection, "odds": odds, "probability": probability,
+                    "market_probability": 1.0 / odds, "quality": data_quality, "model": forecast.name})
+    for row in market.get("match_totals") or []:
+        try:
+            line, over, under = float(row["line"]), float(row["over"]), float(row["under"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if min(over, under) <= 1:
+            continue
+        raw_o, raw_u = 1.0 / over, 1.0 / under
+        margin = raw_o + raw_u
+        fair_o, fair_u = raw_o / margin, raw_u / margin
+        po = total_probability(forecast, line, True)
+        for selection, odds, probability, fair in (
+            (f"over {line:g}", over, po, fair_o), (f"under {line:g}", under, 1.0-po, fair_u)
+        ):
+            out.append({"event_id": event_id, "home": home, "away": away, "market": "match_total",
+                        "selection": selection, "odds": odds, "probability": probability,
+                        "market_probability": fair, "quality": data_quality, "model": forecast.name})
+    return out
+
+
+def rank_challenger(candidates: list[dict[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+    rows = []
+    for row in candidates:
+        p, odds, market_p, q = float(row["probability"]), float(row["odds"]), float(row["market_probability"]), float(row["quality"])
+        edge, ev = p-market_p, p*odds-1.0
+        if 1.50 <= odds <= 3.25 and q >= .55 and p >= .60 and edge >= .025 and ev >= .01:
+            rows.append({**row, "edge": edge, "expected_value": ev})
+    rows.sort(key=lambda r:(r["expected_value"],r["edge"],r["probability"],r["quality"]),reverse=True)
+    out=[]; seen=set()
+    for row in rows:
+        if row["event_id"] in seen: continue
+        seen.add(row["event_id"]); out.append(row)
+        if len(out)>=limit: break
+    return out
+
+
+def build_challenger_double(shortlist: list[dict[str, Any]]) -> dict[str, Any] | None:
+    eligible=[r for r in shortlist if r["probability"] >= .64 and r["quality"] >= .60 and r["edge"] >= .04]
+    best=None
+    for i,a in enumerate(eligible):
+        for b in eligible[i+1:]:
+            if a["event_id"] == b["event_id"]: continue
+            odds=a["odds"]*b["odds"]; probability=a["probability"]*b["probability"]
+            if not 1.70 <= odds <= 4.00 or probability < .42: continue
+            row={"legs":[a,b],"combined_odds":odds,"combined_probability":probability,
+                 "expected_value":probability*odds-1.0}
+            if best is None or (row["expected_value"],probability) > (best["expected_value"],best["combined_probability"]):
+                best=row
+    return best

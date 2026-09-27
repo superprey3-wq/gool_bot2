@@ -1,0 +1,22 @@
+name: GOOL first daily accumulator
+on:
+  workflow_dispatch:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - ".github/workflows/first-daily-acca.yml"
+jobs:
+  first-acca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Scan today's field and build first accumulator
+        env:
+          XBET_PREMATCH_FETCH_EVENTS: "60"
+          XBET_PREMATCH_WORKERS: "6"
+        run: python -m gool_bot2.v4_shadow_report --first-acca --limit 30

@@ -90,6 +90,48 @@ def _team_form(rows: list[dict[str, Any]], team: str) -> str:
     return f"{w}В-{d}Н-{l}П · голы {gf}:{ga} · {gf/n:.2f}/{ga/n:.2f} за матч"
 
 
+
+def _manual_thought(history: dict[str, Any], home: str, away: str, primary: dict[str, Any], trends: list[dict[str, Any]]) -> str:
+    def stats(rows: list[dict[str, Any]], team: str) -> tuple[int, float, float]:
+        fs = FlashscoreProvider()
+        gf = ga = 0
+        rows = list(rows or [])[:10]
+        for r in rows:
+            is_home = fs._same_team(str(r.get("home") or ""), team)
+            hs, aws = int(r.get("home_score") or 0), int(r.get("away_score") or 0)
+            a, b = (hs, aws) if is_home else (aws, hs)
+            gf += a
+            ga += b
+        n = len(rows)
+        return n, (gf / n if n else 0.0), (ga / n if n else 0.0)
+
+    hn, hgf, hga = stats(list(history.get("home_recent") or []), home)
+    an, agf, aga = stats(list(history.get("away_recent") or []), away)
+    notes: list[str] = []
+    if hn:
+        notes.append(f"{home}: {hgf:.2f} забивает / {hga:.2f} пропускает")
+    if an:
+        notes.append(f"{away}: {agf:.2f} забивает / {aga:.2f} пропускает")
+    if hn and an:
+        attack = hgf + agf
+        conceded = hga + aga
+        if attack >= 3.0 or conceded >= 3.0:
+            notes.append("профиль последних матчей скорее результативный")
+        elif attack <= 2.0 and conceded <= 2.0:
+            notes.append("профиль последних матчей скорее осторожный")
+        if hgf - hga >= 0.8 and agf - aga <= -0.5:
+            notes.append(f"по форме преимущество у {home}")
+        elif agf - aga >= 0.8 and hgf - hga <= -0.5:
+            notes.append(f"по форме преимущество у {away}")
+    if primary:
+        notes.append(f"V4 выделяет {primary.get('name')} как основной подтверждённый сценарий")
+    elif trends:
+        notes.append("есть отдельные сигналы, но ни один пока не стал главным трендом")
+    else:
+        notes.append("сильного подтверждённого тренда пока нет")
+    return "💭 <b>Мысль V4:</b> " + "; ".join(notes) + "."
+
+
 def analyse_match_text(match: Any) -> str:
     fs = FlashscoreProvider()
     analysed, failures = _analyse_fixtures(fs, [match])

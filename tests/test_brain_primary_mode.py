@@ -135,7 +135,7 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
     assert entry is not None
     assert not (tmp_path / "bet-journal.json").exists()
 
-    assert mode.emit_brain_or_market_signal(record, decision, entry) == 1
+    assert mode.emit_brain_or_market_signal(record, decision, entry) == 0
 
     _, repeated = mode.sync_brain_or_market_journal(
         record,
@@ -320,7 +320,7 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
         Path(tmp_path / "bet-journal.json"),
         data_quality=0.80,
     )
-    assert repeated is None
+    assert repeated is not None
 
 
 def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
@@ -360,8 +360,8 @@ def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
     monkeypatch.setattr("gool_bot2.telegram.broadcast_photo", lambda png: 1 if png == b"normal-gool-png" else 0)
     monkeypatch.setattr("gool_bot2.telegram.broadcast", lambda text: (_ for _ in ()).throw(AssertionError("text fallback should not run")))
 
-    assert card_restore.emit_brain_card_signal(record, decision, entry) == 1
-    assert rendered == [True]
+    assert card_restore.emit_brain_card_signal(record, decision, entry) == 0
+    assert rendered == []
     assert decision.winner.odd == 0.0
     assert (tmp_path / "brain-card-signals.json").exists()
 

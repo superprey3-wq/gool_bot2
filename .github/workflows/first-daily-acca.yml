@@ -22,7 +22,8 @@ jobs:
       - name: Scan today's field and build first accumulator
         env:
           XBET_PREMATCH_FETCH_EVENTS: "60"
-          XBET_PREMATCH_WORKERS: "6"
+          XBET_PREMATCH_WORKERS: "8"
+          XBET_PREMATCH_SEARCH_WORKERS: "12"
           GOOL_PREMATCH_WORKERS: "20"
           GOOL_PREMATCH_PRICE_CAP: "250"
         run: python -m gool_bot2.v4_shadow_report --first-acca --limit 30

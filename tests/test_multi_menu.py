@@ -91,3 +91,45 @@ def test_multi_analysis_shows_prematch_live_and_market(tmp_path: Path, monkeypat
     assert "LIVE xG 1.84" in text
     assert "ИТБ1 1.5 @ 4.76" in text
     assert "override won ranking" in text
+
+
+def test_reconcile_never_settles_prematch_before_finished(tmp_path: Path, monkeypatch):
+    import gool_bot2.multi_menu as mm
+    journal=tmp_path/"multi.json"
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH",str(journal))
+    save_signal_journal(journal,[{
+        "entry_id":"pre:a","created_at":datetime.now(timezone.utc).isoformat(),
+        "mode":"active","origin":"prematch","match_id":"a","event_id":"a",
+        "home":"Home","away":"Away","market":"FT_UNDER_2.5",
+        "market_family":"match_total","market_key":"under:2.5","odd":1.5,
+        "result":"pending","telegram_sent":True,"score":[0,0],"minute":0,
+    }])
+    class FS:
+        def event_states(self, ids):
+            return {"a":{"status_code":"","coarse_status":"scheduled","is_finished":False,"home_score":0,"away_score":0}}
+        def fetch_goal_timeline(self, mid): return []
+    monkeypatch.setattr(mm,"FlashscoreProvider",FS)
+    assert mm.reconcile_pending()==0
+    rows=mm.load_signal_journal(journal)
+    assert rows[0]["result"]=="pending"
+
+
+def test_reconcile_settles_prematch_only_when_finished(tmp_path: Path, monkeypatch):
+    import gool_bot2.multi_menu as mm
+    journal=tmp_path/"multi.json"
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH",str(journal))
+    save_signal_journal(journal,[{
+        "entry_id":"pre:a","created_at":datetime.now(timezone.utc).isoformat(),
+        "mode":"active","origin":"prematch","match_id":"a","event_id":"a",
+        "home":"Home","away":"Away","market":"FT_UNDER_2.5",
+        "market_family":"match_total","market_key":"under:2.5","odd":1.5,
+        "result":"pending","telegram_sent":True,"score":[0,0],"minute":0,
+    }])
+    class FS:
+        def event_states(self, ids):
+            return {"a":{"status_code":"FINISHED","coarse_status":"finished","is_finished":True,"home_score":1,"away_score":0}}
+        def fetch_goal_timeline(self, mid): return []
+    monkeypatch.setattr(mm,"FlashscoreProvider",FS)
+    assert mm.reconcile_pending()==1
+    rows=mm.load_signal_journal(journal)
+    assert rows[0]["result"]=="won"

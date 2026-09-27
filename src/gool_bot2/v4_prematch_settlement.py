@@ -101,11 +101,7 @@ def settle_parlay(row: dict[str, Any]) -> bool:
     if not legs:
         return False
     results = [str(leg.get("result") or "pending").casefold() for leg in legs]
-    if any(x == "lost" for x in results):
-        result = "lost"
-    elif any(x not in FINAL_RESULTS for x in results):
-        return False
-    elif all(x in {"push", "void"} for x in results):
+    # Parent result is public only after every leg is final. Even when one leg\n    # has already lost, do not publish a premature accumulator result.\n    if any(x not in FINAL_RESULTS for x in results):\n        return False\n    if any(x == "lost" for x in results):\n        result = "lost"\n    elif all(x in {"push", "void"} for x in results):
         result = "push"
     else:
         result = "won"

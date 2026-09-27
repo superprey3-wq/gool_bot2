@@ -1,4 +1,4 @@
-from gool_bot2.football_model_challengers import poisson_profile_challenger, total_probability, choose_challenger_delivery
+from gool_bot2.football_model_challengers import poisson_profile_challenger, total_probability, choose_challenger_delivery, dixon_coles_profile_challenger, model_market_candidates, consensus_candidates
 
 
 def test_poisson_challenger_returns_normalized_probabilities():
@@ -52,3 +52,19 @@ def test_three_plus_requires_stricter_leg_confidence():
     ticket=choose_challenger_delivery(rows, max_legs=4)
     assert ticket is not None
     assert all(x["probability"] >= .67 for x in ticket["legs"]) if ticket["type"].startswith("ACCA") else True
+
+
+def test_dixon_coles_is_normalized_and_distinct():
+    profile={"full_match":{"home_expected_goals":1.4,"away_expected_goals":1.1}}
+    p=poisson_profile_challenger(profile); d=dixon_coles_profile_challenger(profile)
+    assert d is not None and abs(d.home+d.draw+d.away-1)<1e-9
+    assert abs(d.draw-p.draw)>1e-4
+
+
+def test_consensus_requires_independent_models():
+    a=[{"event_id":"1","home":"A","away":"B","market":"match_total","selection":"under 2.5","odds":1.8,
+        "probability":.70,"market_probability":.52,"quality":.9,"model":"poisson"}]
+    b=[{**a[0],"probability":.66,"model":"dixon_coles"}]
+    assert consensus_candidates([a],min_models=2)==[]
+    out=consensus_candidates([a,b],min_models=2)
+    assert len(out)==1 and out[0]["model_count"]==2 and abs(out[0]["probability"]-.68)<1e-9

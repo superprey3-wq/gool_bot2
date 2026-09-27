@@ -18,7 +18,7 @@ from . import xbet_market_pressure as market
 from .providers.common import norm_team
 from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
-from .xbet_multisport_card import render_multisport_steam_card
+from .xbet_multisport_card import render_multisport_steam_card, render_multisport_result_card\nfrom .journal import load_signal_journal, save_signal_journal
 
 
 @dataclass(frozen=True)
@@ -538,9 +538,13 @@ class MultiSportSteamWorker:
                 history, score_changed_at = self._append_history(row)
                 signal = detect_steam(history, cfg, now=float(row["ts"]), score_changed_at=score_changed_at)
                 if signal is not None and self._cooldown_ok(row, cfg, float(row["ts"])):
+                    detected += 1
                     sent = self._deliver(row, signal, cfg)
                     if sent > 0 or not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
                         self._mark_alert(row, float(row["ts"]))
+                    if sent > 0:
+                        delivered += 1
+                        self._record_public_signal(row, signal, cfg, sent)
                     alerts += 1
                     row["steam"] = signal
                 latest.append(row)
@@ -565,8 +569,9 @@ class MultiSportSteamWorker:
             if not _truthy(f"XBET_{key.upper()}_STEAM_ENABLED", True):
                 sports[key] = {"enabled": False}
                 continue
+            settled = self._settle_public_signals(cfg)
             stats = self._scan_sport(cfg)
-            sports[key] = {"enabled": True, **stats}
+            sports[key] = {"enabled": True, "settled": settled, **stats}
             print(
                 f"XBET_{key.upper()}_STEAM flashscore={stats['flashscore_live']} xbet={stats['xbet_live']} "
                 f"mapped={stats['mapped']} decoded={stats['decoded']} score_mismatch={stats['score_mismatch']} detected={stats['detected']} delivered={stats['delivered']} "

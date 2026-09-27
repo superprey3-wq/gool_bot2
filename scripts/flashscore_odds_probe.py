@@ -29,10 +29,10 @@ def get(event_id, geo):
     return "",{}
 
 fs=FlashscoreProvider()
-fixtures=fs.scheduled_matches_for_day(0)[:4]
+fixtures=fs.scheduled_matches_for_day(0)
 geo=os.getenv("FS_ODDS_GEO","US")
-print("FS_ODDS_PROBE fixtures=",len(fixtures),"geo=",geo,flush=True)
+print("FS_ODDS_PROBE_ALL fixtures=",len(fixtures),"geo=",geo,flush=True)
 for m in fixtures:
     variant,data=get(m.provider_match_id,geo)
     print("ODDS_EVENT",m.provider_match_id,m.home,"--",m.away,"variant=",variant,"type=",type(data).__name__,flush=True)
-    print("ODDS_JSON",json.dumps(data,ensure_ascii=False)[:12000],flush=True)
+    odds=data.get("odds") or []\n    scopes={}\n    for e in odds:\n        key=f"{e.get(\'bettingScope\')}:{e.get(\'bettingType\')}"\n        scopes[key]=scopes.get(key,0)+1\n    print("ODDS_COUNT",m.provider_match_id,"entries=",len(odds),"markets=",scopes,flush=True)

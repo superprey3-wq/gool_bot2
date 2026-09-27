@@ -14,10 +14,9 @@ def _norm(value: str) -> str:
 
 
 def find_today_matches(query: str, *, limit: int = 6) -> list[Any]:
-    q = _norm(query)
-    if len(q) < 2:
+    queries = _search_forms(query)
+    if not queries or max(map(len, queries)) < 2:
         return []
-    tokens = [x for x in q.split() if len(x) >= 2]
     fs = FlashscoreProvider()
     rows = fs.scheduled_matches_for_day(0) + fs.live_matches()
     found = []
@@ -26,13 +25,20 @@ def find_today_matches(query: str, *, limit: int = 6) -> list[Any]:
         if m.provider_match_id in seen:
             continue
         hay = _norm(f"{m.home} {m.away}")
-        if q in hay:
-            score = 100 + len(q)
-        else:
-            hits = sum(1 for t in tokens if t in hay)
-            if not hits:
-                continue
-            score = hits * 20 - abs(len(hay) - len(q)) * .02
+        best = None
+        for q in queries:
+            tokens = [x for x in q.split() if len(x) >= 2]
+            if q in hay:
+                candidate = 100 + len(q)
+            else:
+                hits = sum(1 for t in tokens if t in hay)
+                if not hits:
+                    continue
+                candidate = hits * 20 - abs(len(hay) - len(q)) * .02
+            best = candidate if best is None else max(best, candidate)
+        if best is None:
+            continue
+        score = best
         seen.add(m.provider_match_id)
         found.append((score, m))
     found.sort(key=lambda x: x[0], reverse=True)
@@ -99,7 +105,8 @@ def analyse_match_text(match: Any) -> str:
         *(trend_lines or ["• сильных трендов не найдено"]),
         "",
         verdict,
-        "ℹ️ Это ручной анализ: NO BET тоже показывается, а не скрывается.",
+        _manual_thought(history, match.home, match.away, primary, trends),
+        "ℹ️ Ручной анализ показывает мнение V4 даже при NO BET; ставка появляется только при достаточном подтверждении.",
     ])
 
 

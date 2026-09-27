@@ -35,3 +35,19 @@ def test_parlay_legs_keep_individual_live_states():
     assert states[0]["lifecycle"] == "in_game"
     assert states[0]["current_minute"] == 22
     assert states[1].get("lifecycle") is None
+
+
+def test_scheduled_prematch_is_not_in_game(tmp_path):
+    from gool_bot2.journal import save_signal_journal
+    from gool_bot2.journal_in_game import journal_in_game_sections
+    path=tmp_path/"journal.json"
+    save_signal_journal(path,[{"mode":"active","origin":"prematch","result":"pending","telegram_sent":True,"lifecycle":"scheduled","home":"A","away":"B","market":"ТМ 2.5","odd":1.5}])
+    assert "Открытых сигналов сейчас нет" in journal_in_game_sections(path)[0]
+
+
+def test_parlay_parent_is_never_rendered_as_match_in_game(tmp_path):
+    from gool_bot2.journal import save_signal_journal
+    from gool_bot2.journal_in_game import journal_in_game_sections
+    path=tmp_path/"journal.json"
+    save_signal_journal(path,[{"mode":"active","origin":"prematch_parlay","result":"pending","telegram_sent":True,"home":"","away":"","odd":2.2}])
+    assert "Открытых сигналов сейчас нет" in journal_in_game_sections(path)[0]

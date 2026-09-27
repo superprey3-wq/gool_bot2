@@ -157,25 +157,26 @@ def build_super_accumulator(
 def choose_delivery(
     picks: Iterable[PrematchPick],
     *,
-    max_singles: int = 6,
-    max_doubles: int = 2,
+    max_singles: int | None = None,
+    max_doubles: int | None = None,
 ) -> dict:
-    """Choose the safest useful delivery format; never force an accumulator."""
+    """Choose delivery by confidence, not by an arbitrary ticket-count ceiling."""
     rows=list(picks)
-    singles=rank_prematch_for_delivery(rows, limit=max_singles)
-    # SUPER is exceptional: all 10 calibrated legs must clear stricter gates.
+    single_limit = len(rows) if max_singles is None else max(0, int(max_singles))
+    singles=rank_prematch_for_delivery(rows, limit=single_limit)
+
+    # SUPER remains exceptional: exactly ten individually exceptional legs.
     super_ticket=build_super_accumulator(
         rows, target_legs=10, min_leg_probability=.74,
         min_quality=.80, min_edge=.035, min_ev=.02, max_same_market=6,
     )
-    if super_ticket:
-        return {"mode":"SUPER","super":super_ticket,"doubles":[],"singles":[]}
 
     doubles=build_accumulators(
         rows, legs=2, min_combined_probability=.50,
         min_combined_odds=1.70, max_combined_odds=3.20,
     )
-    # Require both legs to be strong individually and avoid reusing events.
+    # Keep every high-confidence non-overlapping double. On a huge match day
+    # this can naturally be more than two; weak legs are never used to fill quota.
     strong=[]
     used=set()
     for acc in doubles:
@@ -184,10 +185,18 @@ def choose_delivery(
             continue
         if any(p.event_id in used for p in legs):
             continue
-        strong.append(acc); used.update(p.event_id for p in legs)
-        if len(strong)>=max_doubles:break
+        strong.append(acc)
+        used.update(p.event_id for p in legs)
+        if max_doubles is not None and len(strong) >= max(0, int(max_doubles)):
+            break
+
+    # SUPER is an additional exceptional product on rich days; ordinary high-
+    # confidence doubles remain useful rather than disappearing merely because
+    # ten SUPER legs happened to qualify.
+    if super_ticket:
+        return {"mode":"SUPER","super":super_ticket,"doubles":strong,"singles":singles}
     if strong:
-        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":[]}
+        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":singles}
     if singles:
         return {"mode":"SINGLES","super":None,"doubles":[],"singles":singles}
     return {"mode":"NO_BET","super":None,"doubles":[],"singles":[]}

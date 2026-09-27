@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Callable
 
 from .fotmob import FotMobProvider
@@ -105,8 +106,8 @@ def _enrich_with_lineup(self: FotMobProvider, home: str, away: str):
     meta = dict(result.meta or {})
     meta["lineup_summary"] = summary
     meta["has_lineup"] = bool(summary.get("available") or meta.get("has_lineup"))
-    result.meta = meta
-    return result
+    # ProviderMatch is frozen; rebuild it instead of mutating the instance.
+    return type(result)(**{**asdict(result), "meta": meta})
 
 
 def install() -> None:

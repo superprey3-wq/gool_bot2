@@ -111,7 +111,7 @@ def build_super_accumulator(
     min_edge: float = 0.025,
     min_ev: float = 0.015,
     model_weight: float = 0.65,
-    max_same_market: int = 6,
+    max_same_market: int = 10,
 ) -> dict | None:
     """Build a calibrated, diversified SUPER ticket; never pad weak legs."""
     pool = [blend_with_market(p, model_weight=model_weight) for p in picks]
@@ -169,7 +169,7 @@ def choose_delivery(
         min_quality=.80, min_edge=.035, min_ev=.02, max_same_market=6,
     )
     if super_ticket:
-        return {"mode":"SUPER","super":super_ticket,"doubles":[],"singles":singles[:3]}
+        return {"mode":"SUPER","super":super_ticket,"doubles":[],"singles":[]}
 
     doubles=build_accumulators(
         rows, legs=2, min_combined_probability=.50,
@@ -187,7 +187,7 @@ def choose_delivery(
         strong.append(acc); used.update(p.event_id for p in legs)
         if len(strong)>=max_doubles:break
     if strong:
-        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":singles[:4]}
+        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":[]}
     if singles:
         return {"mode":"SINGLES","super":None,"doubles":[],"singles":singles}
     return {"mode":"NO_BET","super":None,"doubles":[],"singles":[]}

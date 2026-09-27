@@ -207,6 +207,8 @@ def _force_reconcile_pending(journal_path:Path)->int:
   print(f"force_reconcile_pending closed={changed} checked={len(ids)} stale_hours={stale_hours:g}",flush=True)
  return changed
 
+_MATCH_SEARCH_WAITING:set[str]=set()
+
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
  result=_api_call("getUpdates",{"offset":offset,"timeout":timeout,"allowed_updates":["message","callback_query"]},timeout=max(5,timeout+5))
  if not result or not result.get("ok"):return offset,0
@@ -217,7 +219,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ"}:
+  if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -225,12 +227,34 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path);replies=in_game_sections(journal_path,_analysis_path(journal_path))
+   elif text=="🔎 найти матч":
+    _MATCH_SEARCH_WAITING.add(str(chat_id));replies=["🔎 <b>Поиск матча GOOL V4</b>\n\nНапиши название одной команды или обеих команд.\nНапример: <code>Арсенал</code> или <code>Арсенал — Манчестер Сити</code>.\n\nИщу только среди сегодняшних матчей."]
    else:
     replies=[analysis_text(_analysis_path(journal_path))]
    for reply in replies:
     if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
    continue
+  if chat_id is not None and str(chat_id) in _MATCH_SEARCH_WAITING and raw_text and not raw_text.startswith("/"):
+   from .manual_match_analysis import analyse_match_text,find_today_matches,match_choices
+   matches=find_today_matches(raw_text,limit=6)
+   if not matches:
+    send_message(chat_id,"❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.",reply_markup=MENU_KEYBOARD);changed+=1
+   elif len(matches)==1:
+    _MATCH_SEARCH_WAITING.discard(str(chat_id));send_message(chat_id,analyse_match_text(matches[0]),reply_markup=MENU_KEYBOARD);changed+=1
+   else:
+    send_message(chat_id,f"Нашёл совпадений: <b>{len(matches)}</b>. Выбери нужный матч:",reply_markup=match_choices(matches));changed+=1
+   continue
   cb=update.get("callback_query") or {};data=str(cb.get("data") or "")
+  if data.startswith("ma:"):
+   from .manual_match_analysis import analyse_match_text,find_today_by_id
+   event_id=data.split(":",1)[1];cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id")
+   match=find_today_by_id(event_id)
+   if cid is not None:
+    if match is None: send_message(cid,"❌ Матч уже не найден в сегодняшнем списке.",reply_markup=MENU_KEYBOARD)
+    else: send_message(cid,analyse_match_text(match),reply_markup=MENU_KEYBOARD)
+    _MATCH_SEARCH_WAITING.discard(str(cid));changed+=1
+   answer_callback_query(str(cb.get("id") or ""),"Запускаю V4-анализ")
+   continue
   if data.startswith("v4ig:"):
    entry_id=data.split(":",1)[1]
    cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id");mid=cm.get("message_id")

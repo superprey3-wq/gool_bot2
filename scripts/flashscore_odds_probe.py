@@ -2,6 +2,7 @@ import json, os, urllib.parse, urllib.request, urllib.error
 from gool_bot2.providers.flashscore import FlashscoreProvider
 
 VARIANTS=(
+ ("p5-oce","https://global.ds.lsapp.eu/odds/pq_graphql","oce","5"),
  ("p2-oce","https://global.ds.lsapp.eu/odds/pq_graphql","oce","2"),
  ("p2-oce-2host","https://2.ds.lsapp.eu/pq_graphql","oce","2"),
  ("p46-ope","https://46.ds.lsapp.eu/pq_graphql","ope","46"),
@@ -10,7 +11,7 @@ HEAD={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 def get(event_id, geo):
     for label,base,hsh,project in VARIANTS:
-        params={"_hash":hsh,"eventId":event_id,"projectId":project,"geoIpCode":geo}
+        params={"_hash":hsh,"eventId":event_id,"projectId":project,"geoIpCode":geo,"geoIpSubdivisionCode":os.getenv("FS_ODDS_GEO_SUB","USCA")}
         try:
             req=urllib.request.Request(base+"?"+urllib.parse.urlencode(params),headers=HEAD)
             with urllib.request.urlopen(req,timeout=12) as r:
@@ -29,7 +30,7 @@ def get(event_id, geo):
 
 fs=FlashscoreProvider()
 fixtures=fs.scheduled_matches_for_day(0)[:4]
-geo=os.getenv("FS_ODDS_GEO","SE")
+geo=os.getenv("FS_ODDS_GEO","US")
 print("FS_ODDS_PROBE fixtures=",len(fixtures),"geo=",geo,flush=True)
 for m in fixtures:
     variant,data=get(m.provider_match_id,geo)

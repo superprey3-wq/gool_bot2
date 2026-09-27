@@ -27,8 +27,8 @@ from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
 from .journal import load_signal_journal, save_signal_journal
 from .v4_prematch_lifecycle import sync_prematch_with_live_record
-from .v4_prematch_settlement import settle_prematch_row, settle_parlay
-from .v4_prematch_delivery import emit_prematch_result
+from .v4_prematch_settlement import sync_prematch_journal
+from .v4_prematch_delivery import emit_prematch_result, emit_parlay_result
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -370,48 +370,26 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # fixture appears in the live collector, promote/update that exact row so
     # the menu can show real score/minute without creating a second bet.
     try:
-        v4_rows = load_signal_journal(journal_path)
-        v4_changed = sync_prematch_with_live_record(v4_rows, record)
-        if bool(match.get("is_finished")):
-            for v4_row in v4_rows:
-                v4_changed += int(settle_prematch_row(v4_row, record))
-            # Parlay legs are journal rows too when emitted separately. Mirror
-            # their settled state into parent parlays and settle the parent once
-            # every leg is final.
-            settled_by_event = {
-                str(r.get("event_id") or ""): r for r in v4_rows
-                if str(r.get("origin") or "").lower() == "prematch"
-                and str(r.get("result") or "pending").lower() != "pending"
-            }
-            for parent in v4_rows:
-                if str(parent.get("origin") or "").lower() not in {"prematch_parlay", "parlay"}:
-                    continue
-                for leg in list(parent.get("legs") or []):
-                    child = settled_by_event.get(str(leg.get("event_id") or ""))
-                    if child:
-                        leg["result"] = child.get("result")
-                        leg["settled_score"] = child.get("settled_score")
-                        leg["settled_at"] = child.get("settled_at")
-                v4_changed += int(settle_parlay(parent))
-        if v4_changed:
-            save_signal_journal(journal_path, v4_rows)
+        sync_prematch_journal(journal_path, record)
     except Exception as exc:
         print(f"V4_PREMATCH_LIVE_SYNC_ERROR {type(exc).__name__}:{exc}", flush=True)
 
     settled = settle_multi_journal(record, journal_path)
-    # V4 PREMATCH uses the same atomic result-notification claim mechanism as
-    # LIVE. Send its legacy-style result card, then finalize the same claim.
-    v4_result_rows = pending_result_notifications(journal_path, match_id=mid)
-    for v4_row in [r for r in v4_result_rows if str(r.get("origin") or "").lower() == "prematch"]:
+    # Claim once. Claiming then filtering twice starves LIVE result delivery.
+    result_rows = pending_result_notifications(journal_path, match_id=mid)
+    live_results = []
+    for row in result_rows:
+        origin = str(row.get("origin") or "").lower()
+        if origin not in {"prematch", "prematch_parlay", "parlay"}:
+            live_results.append(row)
+            continue
         try:
-            sent_v4 = emit_prematch_result(v4_row, record)
-            finalize_result_delivery(journal_path, v4_row, sent_v4)
+            sent = emit_prematch_result(row, record) if origin == "prematch" else emit_parlay_result(row)
+            finalize_result_delivery(journal_path, row, sent)
         except Exception as exc:
             print(f"V4_PREMATCH_RESULT_DELIVERY_ERROR {type(exc).__name__}:{exc}", flush=True)
-    result_rows = [r for r in pending_result_notifications(journal_path, match_id=mid)
-                   if str(r.get("origin") or "").lower() != "prematch"]
-    if result_rows:
-        emit_multi_results(record, result_rows, journal_path=journal_path)
+    if live_results:
+        emit_multi_results(record, live_results, journal_path=journal_path)
     for row in settled:
         print(
             f"GOOL_MULTI_SETTLED match={mid} market={row.get('market')} result={row.get('result')} "

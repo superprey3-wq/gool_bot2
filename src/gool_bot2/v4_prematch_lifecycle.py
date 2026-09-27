@@ -38,10 +38,15 @@ def attach_live_state_to_prematch(
         best: tuple[float, dict[str, Any]] | None = None
         for record in records:
             match = record.get("match") or record
+            candidate_id = str(match.get("flashscore_event_id") or match.get("match_id") or "")
+            if row.get("event_source") == "flashscore" and candidate_id != str(row.get("event_id") or ""):
+                continue
             score = pair_score(
                 str(row.get("home") or ""), str(row.get("away") or ""),
                 str(match.get("home") or ""), str(match.get("away") or ""),
             )
+            if row.get("event_source") == "flashscore" and candidate_id == str(row.get("event_id") or ""):
+                score = 1.0
             if best is None or score > best[0]:
                 best = (score, record)
         if best is None or best[0] < min_match_score:
@@ -91,6 +96,8 @@ def sync_prematch_with_live_record(rows: list[dict[str, Any]], record: dict[str,
         return 0
     changed = attach_live_state_to_prematch(rows, [record], min_match_score=min_match_score)
     match_id = str(match.get("flashscore_event_id") or match.get("match_id") or "")
+    if not match_id:
+        return changed
     minute = int(match.get("minute") or 0)
     score = [int(match.get("home_score") or 0), int(match.get("away_score") or 0)]
     finished = bool(match.get("is_finished"))
@@ -99,9 +106,14 @@ def sync_prematch_with_live_record(rows: list[dict[str, Any]], record: dict[str,
             continue
         if str(row.get("match_id") or "") != match_id:
             continue
+        if str(row.get("result") or "pending").lower() not in OPEN_RESULTS:
+            continue
         before = (row.get("current_minute"), row.get("current_score"), row.get("lifecycle"))
         row["current_minute"] = minute
         row["current_score"] = score
+        if match.get("is_halftime") and row.get("confirmed_half_time_score") != score:
+            row["confirmed_half_time_score"] = list(score)
+            changed += 1
         if finished and str(row.get("result") or "pending").lower() == "pending":
             row["lifecycle"] = "finished_waiting_settlement"
         elif not finished:

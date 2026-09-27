@@ -22,6 +22,7 @@ def _line(row: dict[str, Any]) -> float | None:
         except (TypeError, ValueError):
             pass
     text = " ".join(str(row.get(k) or "") for k in ("market", "selection"))
+    text = re.sub(r"(?i)\b[12]H[_ ]|[12]-й\s*тайм\s*:", "", text)
     m = re.search(r"(\d+(?:[.,]\d+)?)", text)
     return float(m.group(1).replace(",", ".")) if m else None
 
@@ -35,7 +36,7 @@ def _side(row: dict[str, Any]) -> str:
     return ""
 
 
-def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int) -> str | None:
+def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, *, half_time_score: tuple[int, int] | None = None) -> str | None:
     """Settle supported V4 prematch 1X2 and full-match totals."""
     market = str(row.get("market") or "").casefold()
     selection = str(row.get("selection") or "").casefold()
@@ -51,6 +52,26 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int) 
         chosen = next((key for key, names in aliases.items() if selection.strip() in names), "")
         return "won" if chosen and chosen == outcome else "lost" if chosen else None
 
+    if family == "btts" or "btts" in market or "обе забьют" in market:
+        text = f"{market} {selection}"
+        yes = "yes" in text or "да" in text
+        no = "no" in text or "нет" in text
+        if yes == no:
+            return None
+        return "won" if (home_score > 0 and away_score > 0) == yes else "lost"
+
+    first_half = family == "first_half_total" or market.startswith("1h_") or "1-й тайм" in market
+    second_half = family == "second_half_total" or market.startswith("2h_") or "2-й тайм" in market
+    if first_half or second_half:
+        if half_time_score is None:
+            return None
+        if first_half:
+            home_score, away_score = half_time_score
+        else:
+            home_score -= half_time_score[0]
+            away_score -= half_time_score[1]
+            if min(home_score, away_score) < 0:
+                return None
     side = _side(row)
     line = _line(row)
     if side and line is not None:
@@ -65,7 +86,8 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int) 
 
 def settle_prematch_row(row: dict[str, Any], record: dict[str, Any]) -> bool:
     match = record.get("match") or {}
-    if not bool(match.get("is_finished")):
+    first_half = str(row.get("market_family") or "") == "first_half_total" or str(row.get("market") or "").upper().startswith("1H_")
+    if not bool(match.get("is_finished")) and not (first_half and bool(match.get("is_halftime"))):
         return False
     if str(row.get("origin") or "").casefold() != "prematch":
         return False
@@ -74,17 +96,25 @@ def settle_prematch_row(row: dict[str, Any], record: dict[str, Any]) -> bool:
     match_id = str(match.get("flashscore_event_id") or "")
     if str(row.get("match_id") or "") != match_id:
         return False
-    hs, aws = int(match.get("home_score") or 0), int(match.get("away_score") or 0)
-    result = settle_prematch_pick(row, hs, aws)
+    from .multi_journal import _authoritative_first_half_score
+    if match.get("home_score") is None or match.get("away_score") is None:
+        return False
+    hs, aws = int(match["home_score"]), int(match["away_score"])
+    if min(hs, aws) < 0:
+        return False
+    ht, _ = _authoritative_first_half_score(record)
+    if ht is None:
+        ht = row.get("confirmed_half_time_score")
+    result = settle_prematch_pick(row, hs, aws, half_time_score=tuple(ht) if ht is not None else None)
     if result is None:
         return False
     row.update({
         "result": result,
         "lifecycle": "settled",
         "settled_at": _now(),
-        "settled_minute": 90,
-        "settled_score": [hs, aws],
-        "settlement_source": "flashscore_final_score",
+        "settled_minute": 45 if first_half else 90,
+        "settled_score": list(ht) if first_half and ht is not None else [hs, aws],
+        "settlement_source": "flashscore_confirmed_half_time_score" if first_half else "flashscore_final_score",
         "result_notification_pending": True,
         "result_notification_created_at": _now(),
     })
@@ -148,3 +178,25 @@ def sync_and_settle_parlays(rows: list[dict[str, Any]]) -> int:
         if settle_parlay(parent):
             changed += 1
     return changed
+
+
+def sync_prematch_journal(journal_path, record: dict[str, Any]) -> None:
+    from .journal import load_signal_journal, save_signal_journal
+    from .production_journal_serialization import _locked
+    from .v4_prematch_lifecycle import sync_prematch_with_live_record
+    with _locked(journal_path):
+        rows = load_signal_journal(journal_path)
+        changed = sync_prematch_with_live_record(rows, record)
+        for row in rows:
+            changed += int(settle_prematch_row(row, record))
+            if str(row.get("origin") or "").lower() not in {"prematch_parlay", "parlay"}:
+                continue
+            if str(row.get("result") or "pending").lower() != "pending":
+                continue
+            legs = row.get("legs") or []
+            changed += sync_prematch_with_live_record(legs, record)
+            for leg in legs:
+                changed += int(settle_prematch_row(leg, record))
+            changed += int(settle_parlay(row))
+        if changed:
+            save_signal_journal(journal_path, rows)

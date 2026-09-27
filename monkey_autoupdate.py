@@ -109,6 +109,8 @@ def _replace_file(source: Path, target: Path) -> None:
 
 def _install_snapshot(snapshot: Path, root: Path) -> None:
     """Update code only; never touch local secrets, runtime data or model files."""
+    for source in snapshot.rglob("*.py"):
+        compile(source.read_bytes(), str(source), "exec")
     _replace_tree(snapshot / "src" / "gool_bot2", root / "src" / "gool_bot2")
     if (snapshot / "scripts").is_dir():
         _replace_tree(snapshot / "scripts", root / "scripts")

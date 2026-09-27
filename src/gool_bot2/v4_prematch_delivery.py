@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from html import escape
+from hashlib import sha256
+import json
+from .production_journal_serialization import _locked
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -25,16 +29,23 @@ def append_prematch_entry(path: Path, row: dict[str, Any]) -> dict[str, Any]:
     entry.setdefault("origin", "prematch")
     entry.setdefault("head", "prematch")
     entry.setdefault("result", "pending")
+    entry.setdefault("telegram_sent", False)
     entry.setdefault("lifecycle", "scheduled")
     entry.setdefault("entry_id", str(entry.get("event_id") or f"prematch-{len(rows)+1}"))
-    if any(str(x.get("entry_id") or "") == str(entry["entry_id"]) for x in rows):
-        return entry
+    existing = next((x for x in rows if str(x.get("entry_id") or "") == str(entry["entry_id"])), None)
+    if existing is not None:
+        return existing
     rows.append(entry)
     save_signal_journal(path, rows)
     return entry
 
 
 def mark_prematch_in_game(path: Path, entry_id: str, chat_id: str | int | None = None) -> bool:
+    with _locked(path):
+        return _mark_prematch_in_game(path, entry_id, chat_id)
+
+
+def _mark_prematch_in_game(path: Path, entry_id: str, chat_id: str | int | None = None) -> bool:
     rows = load_signal_journal(path)
     for row in reversed(rows):
         if str(row.get("entry_id") or "") != str(entry_id):
@@ -51,13 +62,20 @@ def mark_prematch_in_game(path: Path, entry_id: str, chat_id: str | int | None =
 
 
 def emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
+    with _locked(journal_path):
+        return _emit_prematch_signal(row, journal_path)
+
+
+def _emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
     entry = append_prematch_entry(journal_path, row)
+    if entry.get("telegram_sent") or str(entry.get("result") or "pending").lower() != "pending":
+        return 0
     png = render_v4_prematch_card(entry)
     markup = prematch_keyboard(str(entry["entry_id"]))
     caption = (
         f"⚽ <b>GOOL V4 · PREMATCH</b>\n"
-        f"{entry.get('home','?')} — {entry.get('away','?')}\n"
-        f"<b>{entry.get('market','?')} @ {float(entry.get('odd') or 0):.2f}</b>"
+        f"{escape(str(entry.get('home','?')))} — {escape(str(entry.get('away','?')))}\n"
+        f"<b>{escape(str(entry.get('market','?')))} @ {float(entry.get('odd') or 0):.2f}</b>"
     )
     sent = telegram.broadcast_photo(png, caption=caption, reply_markup=markup)
     if sent:
@@ -94,8 +112,8 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
     icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")
     caption = (
         f"{icon} <b>GOOL V4 · PREMATCH RESULT</b>\n"
-        f"{row.get('home','?')} — {row.get('away','?')}\n"
-        f"<b>{row.get('market','?')} @ {float(row.get('odd') or 0):.2f}</b>"
+        f"{escape(str(row.get('home','?')))} — {escape(str(row.get('away','?')))}\n"
+        f"<b>{escape(str(row.get('market','?')))} @ {float(row.get('odd') or 0):.2f}</b>"
     )
     return telegram.broadcast_photo(png, caption=caption)
 
@@ -111,6 +129,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
     return {
         "entry_id": f"prematch:{pick.event_id}:{pick.market}",
         "event_id": str(pick.event_id),
+        "event_source": "flashscore",
         "match_id": str(pick.event_id),
         "home": str(pick.home),
         "away": str(pick.away),
@@ -118,7 +137,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
         "scheduled_start": scheduled,
         "kickoff_ts": kickoff_ts,
         "market": str(pick.market),
-        "market_family": ("first_half_total" if "1H_" in str(pick.market).upper() else "btts" if "BTTS" in str(pick.market).upper() else "match_total"),
+        "market_family": ("first_half_total" if "1H_" in str(pick.market).upper() else "second_half_total" if "2H_" in str(pick.market).upper() else "btts" if "BTTS" in str(pick.market).upper() else "match_total"),
         "market_key": ("btts:yes" if "BTTS" in str(pick.market).upper() else ("over:" if "OVER" in str(pick.market).upper() else "under:") + str(pick.market).split("_")[-1].replace("_", ".")),
         "selection": str(pick.selection),
         "odd": float(pick.odds),
@@ -148,6 +167,11 @@ def _market_label(value: str) -> str:
 
 
 def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
+    with _locked(journal_path):
+        return _emit_delivery_selection(delivery, meta, journal_path)
+
+
+def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
     """Send independent singles plus independent parlay products."""
     sent = {"cards": 0, "entries": 0, "parlays": 0}
 
@@ -162,10 +186,10 @@ def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jour
         info = meta.get(str(pick.event_id)) or {}
         row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""))
         before = len(load_signal_journal(journal_path))
-        delivered = emit_prematch_signal(row, journal_path)
+        delivered = _emit_prematch_signal(row, journal_path)
         after = len(load_signal_journal(journal_path))
-        if delivered and after > before:
-            sent["entries"] += 1
+        if delivered:
+            sent["entries"] += int(after > before)
             sent["cards"] += 1
 
     mode = str(delivery.get("mode") or "NO_BET").upper()
@@ -186,27 +210,36 @@ def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jour
         # Hard guard: an accumulator may never be a repackaging of sent singles.
         if any(f"{x['event_id']}:{x['market']}" in seen for x in legs):
             continue
-        pid = f"parlay:{kind.lower()}:{idx}:" + ":".join(x["event_id"] for x in legs)
-        if any(str(x.get("entry_id") or "") == pid for x in rows):
-            continue
-        parent = {
-            "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
-            "kind": kind, "result": "pending", "lifecycle": "scheduled",
-            "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
-            "effective_odd": float(acc.get("combined_odds") or 0.0),
-            "probability": float(acc.get("combined_probability") or 0.0),
-            "telegram_sent": False, "created_at": _now(),
-        }
-        rows.append(parent)
-        save_signal_journal(journal_path, rows)
+        # Stable identity includes every selection, independent of list order.
+        def identity(items):
+            return sorted((str(x.get("event_id") or ""), str(x.get("market") or ""), str(x.get("selection") or "")) for x in items)
+        key = identity(legs)
+        digest = sha256(json.dumps(key).encode()).hexdigest()[:24]
+        pid = f"parlay:{kind.lower()}:{digest}"
+        parent = next((x for x in rows if str(x.get("origin") or "") in {"prematch_parlay", "parlay"} and identity(x.get("legs") or []) == key), None)
+        if parent is not None:
+            if parent.get("telegram_sent") or str(parent.get("result") or "pending") != "pending":
+                continue
+        else:
+            parent = {
+                "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
+                "kind": kind, "result": "pending", "lifecycle": "scheduled",
+                "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
+                "effective_odd": float(acc.get("combined_odds") or 0.0),
+                "probability": float(acc.get("combined_probability") or 0.0),
+                "telegram_sent": False, "created_at": _now(),
+            }
+            rows.append(parent)
+            save_signal_journal(journal_path, rows)
+        legs = parent["legs"]
         caption_lines = [
             f"🔗 <b>{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'} · GOOL V4</b>",
             f"Общий кэф: <b>{parent['odd']:.2f}</b>", "",
         ]
         for n, leg in enumerate(legs, 1):
             caption_lines += [
-                f"<b>{n}. {leg['home']} — {leg['away']}</b>",
-                f"{leg['league']} · {leg['scheduled_start']}",
+                f"<b>{n}. {escape(str(leg['home']))} — {escape(str(leg['away']))}</b>",
+                f"{escape(str(leg['league']))} · {escape(str(leg['scheduled_start']))}",
                 f"{_market_label(leg['market'])} @ {leg['odd']:.2f}", "",
             ]
         png = render_v4_parlay_card(parent)

@@ -378,6 +378,8 @@ def settle_multi_journal(record: dict[str, Any], journal_path: Path) -> list[dic
     bank_changed = ensure_bank_fields(rows, journal_path)
     changed: list[dict[str, Any]] = []
     for row in rows:
+        if str(row.get("origin") or "").lower() in {"prematch", "prematch_parlay", "parlay"}:
+            continue
         corrected = _reconcile_final_first_half(row, record)
         settled = False if corrected else settle_entry(row, record)
         if corrected or settled:

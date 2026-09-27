@@ -134,7 +134,7 @@ def analyze_brain_primary_match(
     probability = max(0.0, min(1.0, probability))
     rating = probability * 100.0
     state = _expert_state(expert)
-    minimum = _number(os.getenv("GOOL_MULTI_MIN_RATING", "70"), 70.0)
+    minimum = max(78.0, _number(os.getenv("GOOL_MULTI_MIN_RATING", "78"), 78.0))
     min_quality = _number(os.getenv("GOOL_MATCH_SUITABILITY_HARD_DATA_QUALITY", "0.45"), 0.45)
 
     key, label, line = _target(match, strategy)

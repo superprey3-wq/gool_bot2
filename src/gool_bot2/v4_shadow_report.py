@@ -276,7 +276,7 @@ def main() -> None:
     strong = [row for row in eligible if row["brain_score"] >= 0.42]
     # Stage 2 must price the full evidence-backed field, not an arbitrary top 12.
     # Football quality remains the first gate; bookmaker value decides only after it.
-    brain_candidates = strong if strong else eligible
+    brain_candidates = eligible
     price_cap = max(1, int(os.getenv("GOOL_PREMATCH_PRICE_CAP", "250")))
     brain_candidates = brain_candidates[:price_cap]
 
@@ -293,7 +293,7 @@ def main() -> None:
         # V4 accumulator policy choose a 2-leg ticket. Never pad with an unqualified leg.
         priced = []
         xbet_rows = [r for r in (state.get("matches") or {}).values() if isinstance(r, dict)]
-        fusion = PrematchDataFusion(fs)
+        analysed_by_id = {str(row["match"].provider_match_id): row for row in analysed}
         for row0 in brain_candidates:
             match = row0["match"]
             market, _ = _match_xbet(match, xbet_rows)
@@ -302,9 +302,9 @@ def main() -> None:
                 except Exception: market = None
             if not market: continue
             try:
-                history = fusion.context(match, limit=10)
-                profile = build_prematch_goal_profile({"match":{"home":match.home,"away":match.away},"prematch_context":history})
-                full = profile.get("full_match") or {}; sample=int(full.get("pair_sample") or 0); quality=min(1.0,sample/8.0)
+                cached = analysed_by_id.get(str(match.provider_match_id)) or row0
+                profile = cached["profile"]
+                quality = float(cached["quality"])
                 priced.extend(build_prematch_candidates(event_id=match.provider_match_id,home=match.home,away=match.away,profile=profile,market=market,data_quality=quality))
             except Exception: continue
         accas = build_accumulators(priced, legs=2)

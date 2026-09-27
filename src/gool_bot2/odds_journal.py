@@ -28,3 +28,15 @@ def clv_summary(row: dict):
     first,last=snaps[0],snaps[-1]
     a=float(first["odds"]); b=float(last["odds"])
     return {"opening_odds":a,"closing_odds":b,"odds_move_pct":round((a/b-1)*100,2),"snapshots":len(snaps)}
+
+def append_sqlite_snapshot(*, event_id, home, away, league, kickoff_ts, trend, odds, bookmaker, market_probability, model_probability, data_quality=1.0, db_path=None):
+    import time
+    from .history_db import connect
+    db=connect(db_path or os.getenv("GOOL_HISTORY_DB","data/gool_history.sqlite"))
+    now=time.time(); kickoff=float(kickoff_ts or 0); hours=(kickoff-now)/3600 if kickoff else None
+    db.execute("""INSERT INTO picks(event_id,trend,home,away,league,kickoff_ts,created_ts,model_probability,data_quality)
+      VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id,trend) DO UPDATE SET model_probability=excluded.model_probability,data_quality=excluded.data_quality""",
+      (str(event_id),trend,home,away,league,kickoff,now,float(model_probability),float(data_quality)))
+    db.execute("""INSERT OR IGNORE INTO odds_snapshots(event_id,trend,captured_ts,hours_to_kickoff,odds,bookmaker,market_probability)
+      VALUES(?,?,?,?,?,?,?)""",(str(event_id),trend,now,hours,float(odds),bookmaker,float(market_probability)))
+    db.commit(); db.close()

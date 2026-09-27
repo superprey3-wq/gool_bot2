@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 
-PUBLIC_RESET_ID = "live_brain70_total_volume_v2_2026_09_06"
+PUBLIC_RESET_ID = "gool_v4_unified_cards_journal_2026_09_27"
 
 
 def _runtime_root() -> Path:

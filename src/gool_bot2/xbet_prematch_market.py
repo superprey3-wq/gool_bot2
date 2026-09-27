@@ -299,6 +299,9 @@ class XBetPrematchCollector:
                     return {**best, "root": root}
                 return None
 
+            search_total = len(targets)
+            search_done = 0
+            print(f"XBET_SEARCH_PROGRESS start total={search_total} workers={search_workers}", flush=True)
             with ThreadPoolExecutor(max_workers=search_workers, thread_name_prefix="xbet-search") as pool:
                 futures = [pool.submit(resolve_target, target) for target in targets]
                 for future in as_completed(futures):
@@ -309,12 +312,22 @@ class XBetPrematchCollector:
                     if row and row["event_id"] not in seen:
                         seen.add(row["event_id"])
                         selected.append(row)
+                    search_done += 1
+                    if search_done % 25 == 0 or search_done == search_total:
+                        print(
+                            f"XBET_SEARCH_PROGRESS checked={search_done}/{search_total} matched={len(selected)}",
+                            flush=True,
+                        )
             candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
         else:
             candidates = [{**row, "root": root} for row in candidates[:limit]]
 
         refreshed = 0
         if candidates:
+            price_total = len(candidates)
+            price_done = 0
+            price_failures = 0
+            print(f"XBET_PRICE_PROGRESS start total={price_total} workers={workers}", flush=True)
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {
                     pool.submit(self._game, row.get("root") or root, row["event_id"]): row
@@ -327,9 +340,19 @@ class XBetPrematchCollector:
                     except Exception:
                         game = None
                     if not game:
-                        continue
-                    markets = decode_markets(game)
-                    if not _usable_snapshot(markets):
+                        price_failures += 1
+                    else:
+                        markets = decode_markets(game)
+                        if not _usable_snapshot(markets):
+                            price_failures += 1
+                            game = None
+                    price_done += 1
+                    if price_done % 25 == 0 or price_done == price_total:
+                        print(
+                            f"XBET_PRICE_PROGRESS checked={price_done}/{price_total} usable={refreshed} failures={price_failures}",
+                            flush=True,
+                        )
+                    if not game:
                         continue
                     event = row["event"]
                     event_id = row["event_id"]

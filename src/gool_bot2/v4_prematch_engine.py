@@ -105,22 +105,21 @@ def build_super_accumulator(
     min_leg_odds: float = 1.15,
     max_leg_odds: float = 1.55,
     min_leg_probability: float = 0.72,
-    min_quality: float = 0.60,
-    min_edge: float = 0.015,
+    min_quality: float = 0.75,
+    min_edge: float = 0.025,
+    min_ev: float = 0.015,
+    model_weight: float = 0.65,
+    max_same_market: int = 6,
 ) -> dict | None:
-    """Build the V4 SUPER accumulator from independently analysed fixtures.
-
-    This deliberately uses a separate low-price policy from normal singles and
-    parlays. It never pads the ticket: if fewer than target_legs pass football
-    evidence + price/value checks, no 10-leg SUPER ticket is emitted.
-    """
+    """Build a calibrated, diversified SUPER ticket; never pad weak legs."""
+    pool = [blend_with_market(p, model_weight=model_weight) for p in picks]
     pool = [
-        p for p in picks
+        p for p in pool
         if min_leg_odds <= p.odds <= max_leg_odds
         and p.model_probability >= min_leg_probability
         and p.data_quality >= min_quality
         and p.edge >= min_edge
-        and p.expected_value > 0.0
+        and p.expected_value >= min_ev
     ]
     pool.sort(
         key=lambda p: (p.model_probability * p.data_quality, p.edge, p.expected_value),
@@ -128,10 +127,15 @@ def build_super_accumulator(
     )
     chosen: list[PrematchPick] = []
     seen: set[str] = set()
+    market_counts: dict[str, int] = {}
     for pick in pool:
         if pick.event_id in seen:
             continue
+        market_key = str(pick.market)
+        if market_counts.get(market_key, 0) >= max(1, int(max_same_market)):
+            continue
         seen.add(pick.event_id)
+        market_counts[market_key] = market_counts.get(market_key, 0) + 1
         chosen.append(pick)
         if len(chosen) >= max(2, int(target_legs)):
             break

@@ -20,5 +20,4 @@ jobs:
           XBET_PREMATCH_FETCH_EVENTS: "60"
           XBET_PREMATCH_WORKERS: "6"
           GOOL_PREMATCH_WORKERS: "20"
-          GOOL_PREMATCH_SCAN_LIMIT: "400"
         run: python -m gool_bot2.v4_shadow_report --first-acca --limit 30

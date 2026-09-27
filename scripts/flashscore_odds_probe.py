@@ -1,27 +1,37 @@
-import json, os, urllib.parse, urllib.request
+import json, os, urllib.parse, urllib.request, urllib.error
 from gool_bot2.providers.flashscore import FlashscoreProvider
 
-BASES=("https://global.ds.lsapp.eu/odds/pq_graphql","https://2.ds.lsapp.eu/pq_graphql")
-HEAD={"User-Agent":"Mozilla/5.0","Referer":"https://www.flashscore.com/","Origin":"https://www.flashscore.com","Accept":"application/json,*/*"}
+VARIANTS=(
+ ("p2-oce","https://global.ds.lsapp.eu/odds/pq_graphql","oce","2"),
+ ("p2-oce-2host","https://2.ds.lsapp.eu/pq_graphql","oce","2"),
+ ("p46-ope","https://46.ds.lsapp.eu/pq_graphql","ope","46"),
+)
+HEAD={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36","Referer":"https://www.flashscore.com/","Origin":"https://www.flashscore.com","Accept":"*/*","Accept-Language":"sv-SE,sv;q=0.9,en;q=0.8","x-fsign":"SW9D1eZo"}
 
 def get(event_id, geo):
-    params={"_hash":"oce","eventId":event_id,"projectId":"2","geoIpCode":geo}
-    for base in BASES:
+    for label,base,hsh,project in VARIANTS:
+        params={"_hash":hsh,"eventId":event_id,"projectId":project,"geoIpCode":geo}
         try:
             req=urllib.request.Request(base+"?"+urllib.parse.urlencode(params),headers=HEAD)
             with urllib.request.urlopen(req,timeout=12) as r:
-                data=json.load(r)
-            odds=(data.get("data") or {}).get("findOddsByEventId") or {}
-            if odds: return base,odds
+                raw=r.read().decode("utf-8","replace")
+            print("ODDS_HTTP",event_id,label,"status=200","body=",raw[:500],flush=True)
+            data=json.loads(raw)
+            found=(data.get("data") or {}).get("findOddsByEventId")
+            if found:
+                return label,found
+        except urllib.error.HTTPError as e:
+            raw=e.read().decode("utf-8","replace")
+            print("ODDS_HTTP",event_id,label,"status=",e.code,"body=",raw[:700],flush=True)
         except Exception as e:
-            print("ODDS_ERR",event_id,base,type(e).__name__,str(e)[:120],flush=True)
+            print("ODDS_ERR",event_id,label,type(e).__name__,str(e)[:160],flush=True)
     return "",{}
 
 fs=FlashscoreProvider()
-fixtures=fs.scheduled_matches_for_day(0)[:8]
+fixtures=fs.scheduled_matches_for_day(0)[:4]
 geo=os.getenv("FS_ODDS_GEO","SE")
 print("FS_ODDS_PROBE fixtures=",len(fixtures),"geo=",geo,flush=True)
 for m in fixtures:
-    base,data=get(m.provider_match_id,geo)
-    print("ODDS_EVENT",m.provider_match_id,m.home,"--",m.away,"base=",base,"keys=",list(data)[:20],flush=True)
-    print("ODDS_JSON",json.dumps(data,ensure_ascii=False)[:5000],flush=True)
+    variant,data=get(m.provider_match_id,geo)
+    print("ODDS_EVENT",m.provider_match_id,m.home,"--",m.away,"variant=",variant,"type=",type(data).__name__,flush=True)
+    print("ODDS_JSON",json.dumps(data,ensure_ascii=False)[:12000],flush=True)

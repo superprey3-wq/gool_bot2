@@ -13,6 +13,34 @@ def _norm(value: str) -> str:
     return re.sub(r"[^a-z0-9а-яё]+", " ", str(value or "").casefold()).strip()
 
 
+_RU_TEAM_ALIASES = {
+    "норвегия": "norway", "португалия": "portugal", "испания": "spain", "италия": "italy",
+    "германия": "germany", "франция": "france", "англия": "england", "бельгия": "belgium",
+    "нидерланды": "netherlands", "голландия": "netherlands", "хорватия": "croatia",
+    "швейцария": "switzerland", "австрия": "austria", "дания": "denmark", "швеция": "sweden",
+    "польша": "poland", "украина": "ukraine", "турция": "turkey", "греция": "greece",
+    "реал": "real", "барселона": "barcelona", "бавария": "bayern", "арсенал": "arsenal",
+    "ливерпуль": "liverpool", "челси": "chelsea", "ювентус": "juventus", "интер": "inter",
+    "милан": "milan", "атлетико": "atletico", "боруссия": "borussia",
+    "манчестер": "manchester", "сити": "city", "юнайтед": "united", "псж": "psg",
+}
+_RU_LAT = str.maketrans({
+    "а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ё":"e","ж":"zh","з":"z","и":"i","й":"y",
+    "к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f",
+    "х":"h","ц":"ts","ч":"ch","ш":"sh","щ":"sch","ы":"y","э":"e","ю":"yu","я":"ya","ь":"","ъ":"",
+})
+
+def _search_forms(value: str) -> set[str]:
+    base = _norm(value)
+    if not base:
+        return set()
+    words = base.split()
+    return {x for x in {
+        base,
+        " ".join(_RU_TEAM_ALIASES.get(w, w) for w in words),
+        _norm(base.translate(_RU_LAT)),
+    } if x}
+
 def find_today_matches(query: str, *, limit: int = 6) -> list[Any]:
     queries = _search_forms(query)
     if not queries or max(map(len, queries)) < 2:

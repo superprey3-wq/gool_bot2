@@ -27,3 +27,23 @@ def test_match_choices_are_bounded():
     kb=mma.match_choices(rows)
     assert len(kb["inline_keyboard"]) == 6
     assert kb["inline_keyboard"][0][0]["callback_data"] == "ma:0"
+
+
+class AnalysisFS(FS):
+    def fetch_match_history(self, event_id, home, away, limit=10):
+        return {"home_recent": [], "away_recent": [], "h2h": []}
+    def _same_team(self, a, b):
+        return a.casefold() == b.casefold()
+
+
+def test_analyse_match_text_builds_v4_thought_without_name_error(monkeypatch):
+    monkeypatch.setattr(mma, "FlashscoreProvider", AnalysisFS)
+    monkeypatch.setattr(mma, "_analyse_fixtures", lambda fs, matches: ([{
+        "primary_trend": {},
+        "trends": [],
+        "sample": 10,
+        "quality": 1.0,
+    }], {}))
+    text = mma.analyse_match_text(M("a", "Norway", "Portugal"))
+    assert "Мысль V4" in text
+    assert "NO BET" in text

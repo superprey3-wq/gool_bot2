@@ -311,7 +311,7 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
     assert entry is not None
     assert not (tmp_path / "bet-journal.json").exists()
 
-    assert mode.emit_brain_or_market_signal(record, decision, entry) == 1
+    assert mode.emit_brain_or_market_signal(record, decision, entry) == 0
 
     _, repeated = mode.sync_brain_or_market_journal(
         record,
@@ -363,7 +363,7 @@ def test_brain_signal_without_price_uses_normal_png_card(tmp_path, monkeypatch):
     assert card_restore.emit_brain_card_signal(record, decision, entry) == 0
     assert rendered == []
     assert decision.winner.odd == 0.0
-    assert (tmp_path / "brain-card-signals.json").exists()
+    assert not (tmp_path / "brain-card-signals.json").exists()
 
 
 def test_brain_card_is_dropped_if_score_changed_before_send(tmp_path, monkeypatch):

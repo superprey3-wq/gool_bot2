@@ -169,6 +169,10 @@ def pending_result_notifications(
         for row in rows:
             if not bool(row.get("result_notification_pending")):
                 continue
+            # Durable at-most-once barrier: a stale settlement writer may
+            # resurrect the pending flag, but a delivered result never replays.
+            if bool(row.get("result_telegram_sent")):
+                continue
             if str(row.get("result") or "").lower() not in FINAL_RESULTS:
                 continue
             if wanted and str(row.get("match_id") or "") != wanted:
@@ -202,14 +206,14 @@ def finalize_result_delivery(
     """
     if int(sent or 0) <= 0:
         return False
-    entry_key = str(row.get("entry_key") or "")
+    entry_key = str(row.get("entry_key") or row.get("entry_id") or "")
     if not entry_key:
         return False
 
     with _journal_delivery_lock(journal_path):
         rows = load_signal_journal(journal_path)
         index = next(
-            (i for i, item in enumerate(rows) if str(item.get("entry_key") or "") == entry_key),
+            (i for i, item in enumerate(rows) if str(item.get("entry_key") or item.get("entry_id") or "") == entry_key),
             None,
         )
         if index is None:

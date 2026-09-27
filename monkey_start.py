@@ -198,6 +198,7 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
             os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15"),
         ],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
+        "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
     if browser_enabled:
         commands["browser"] = [
@@ -250,6 +251,8 @@ def main() -> None:
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
+    os.environ["GOOL_PREMATCH_DELIVER"] = "1"
+    os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")

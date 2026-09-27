@@ -225,7 +225,7 @@ def test_decode_supports_current_betb2b_total_goals_group():
         {"G": 17, "T": 9, "P": 2.5, "C": 1.91},
         {"G": 17, "T": 10, "P": 2.5, "C": 1.89},
     ]}
-    markets = pressure.decode_markets(game)
+    markets = market.decode_markets(game)
     assert markets["match_total"] == [{"line": 2.5, "over": 1.91, "under": 1.89}]
 
 
@@ -234,5 +234,5 @@ def test_decode_keeps_legacy_total_group_fallback():
         {"G": 4, "T": 9, "P": 1.5, "C": 1.72},
         {"G": 4, "T": 10, "P": 1.5, "C": 2.08},
     ]}
-    markets = pressure.decode_markets(game)
+    markets = market.decode_markets(game)
     assert markets["match_total"] == [{"line": 1.5, "over": 1.72, "under": 2.08}]

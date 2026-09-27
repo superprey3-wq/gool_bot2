@@ -19,13 +19,13 @@ from .providers.flashscore import FlashscoreProvider
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
-    "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"
+    "🟢 <b>GOOL Bot 4 · V4 работает</b>\n\nАктивные стратегии:\n"
     "⚽ Ещё гол — обученная модель до 75'\n"
     "🔥 Ещё +2 гола — GOOL LIVE до 75'\n\n"
     "LIVE-сигналы приходят автоматически.\n"
     "Чтобы отключить сигналы: /stop"
 )
-STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 2.\nЧтобы включить их снова: /start"
+STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 4.\nЧтобы включить их снова: /start"
 
 def _token()->str:
  token=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
@@ -122,7 +122,7 @@ def broadcast_photo(png:bytes,caption:str="",reply_markup:dict[str,Any]|None=Non
  if sent==0 and caption.startswith(("✅ <b>ЗАШЁЛ","❌ <b>НЕ ЗАШЁЛ")):
   return broadcast(caption)
  return sent
-def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nАктивные стратегии: Ещё гол + Ещё +2 гола ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅",reply_markup=MENU_KEYBOARD)
+def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 4 · V4 ACTIVE запущен</b>\nLIVE Brain V4: ✅\nГол до перерыва: ✅\nЕщё гол: ✅\n1xBet odds + VALUE: ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅\n\n🧠 Кнопка «Анализ» — текущие матчи и решения V4.",reply_markup=MENU_KEYBOARD)
 def edit_message_reply_markup(chat_id:str|int,message_id:int,reply_markup:dict[str,Any])->bool:
  r=_api_call("editMessageReplyMarkup",{"chat_id":str(chat_id),"message_id":int(message_id),"reply_markup":reply_markup});return bool(r and r.get("ok"))
 def answer_callback_query(callback_query_id:str,text:str="")->bool:

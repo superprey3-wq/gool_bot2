@@ -61,7 +61,7 @@ jobs:
         env:
           XBET_MATCH_MIN_SCORE: '0.68'
           XBET_GAME_WORKERS: '8'
-          XBET_INDEX_CACHE_SECONDS: '75'
+          XBET_INDEX_CACHE_SECONDS: '300'
         run: python scripts/gool_multi_live_audit.py --snapshots 3 --interval 15 --out-dir artifacts/gool_multi_live_audit
 
       - name: Show report in job summary

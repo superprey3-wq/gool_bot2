@@ -1,0 +1,22 @@
+name: GOOL LIVE V4 fast audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - 'scripts/gool_live_v4_fast_audit.py'
+      - '.github/workflows/gool-live-v4-fast.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Run candidate-first fast LIVE V4
+        run: python scripts/gool_live_v4_fast_audit.py

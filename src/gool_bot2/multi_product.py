@@ -124,7 +124,7 @@ def install_multi_product() -> None:
             "Новый LIVE Brain V4: ✅\n"
             "⚽ Гол до перерыва: ✅\n"
             "⚽ Ещё гол: ✅\n"
-            "📡 1xBet odds + VALUE: ✅\n"
+            "🔥 1xBet STEAM: ✅\n📡 1xBet odds + VALUE: ✅\n"
             "🛡 Freshness / reentry guards: ✅\n\n"
             "📊 Отчёт — журнал сигналов\n"
             "🟢 В игре — активные отправленные сигналы\n"

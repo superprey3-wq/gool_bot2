@@ -32,6 +32,10 @@ HEADERS = {
     "Origin": "https://1xbet.com",
     "Referer": "https://1xbet.com/live/football/",
     "X-Requested-With": "XMLHttpRequest",
+    "is-srv": "false",
+    "x-app-n": "__BETTING_APP__",
+    "x-svc-source": "__BETTING_APP__",
+    "x-mobile-project-id": "0",
 }
 
 

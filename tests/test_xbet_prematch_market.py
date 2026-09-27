@@ -72,3 +72,18 @@ def test_true_prematch_replaces_live_fallback_and_recalculates_small_prior(monke
     # fair_over=.60 contributes +0.8pp, so total becomes +2.3pp.
     assert record["match_intelligence"]["probability_adjustment"]["total_pp"] == 2.3
     assert experts["another_goal"]["probability"] == 0.803
+
+
+def test_prematch_game_uses_current_betb2b_parameters(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    seen = []
+    monkeypatch.setattr(prematch, "_http_json", lambda url: seen.append(url) or {"Value": {"E": []}})
+    collector = prematch.XBetPrematchCollector(tmp_path / "state.json")
+    assert collector._game("https://1xbet.com/service-api/LineFeed", "123") == {"E": []}
+    assert len(seen) == 1
+    assert "grMode=4" in seen[0]
+    assert "marketType=1" in seen[0]
+    assert "isNewBuilder=true" in seen[0]
+    assert "isSubGames=true" in seen[0]
+    assert "GroupEvents=true" in seen[0]

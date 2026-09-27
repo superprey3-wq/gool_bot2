@@ -254,7 +254,7 @@ def main() -> None:
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
-
+    # MonkeyBytes/Pterodactyl is the production launcher here; make V4 authoritative here too.\n    os.environ["GOOL_LIVE_V4_MODE"] = "active"\n
     # Hard production kill-switches for every exchange-money lane. Values from an
     # old gool.env cannot re-enable them accidentally after this deployment.
     os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"
@@ -302,7 +302,7 @@ def main() -> None:
             "telegram_not_configured: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
             f"in {ENV_FILE} or in the server environment"
         )
-    print("GOOL_BOOT config=ok models=ok telegram=configured", flush=True)
+    print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
         "GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM exchange_money=off "

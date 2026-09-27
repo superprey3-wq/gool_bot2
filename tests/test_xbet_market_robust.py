@@ -193,3 +193,28 @@ def test_game_tries_event_source_root_before_other_mirrors(monkeypatch, tmp_path
     assert calls
     assert calls[0].startswith("https://b/LiveFeed/GetGameZip")
     assert collector.active_root == roots[1]
+
+
+def test_betting_headers_cover_betb2b_feed_contract():
+    assert market.HEADERS["X-Requested-With"] == "XMLHttpRequest"
+    assert market.HEADERS["is-srv"] == "false"
+    assert market.HEADERS["x-app-n"] == "__BETTING_APP__"
+    assert market.HEADERS["x-svc-source"] == "__BETTING_APP__"
+    assert market.HEADERS["x-mobile-project-id"] == "0"
+
+
+def test_game_uses_full_live_market_parameters(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(market, "ROOTS", ["https://a/service-api/LiveFeed"])
+    calls = []
+
+    def fake_http(url: str, timeout: float = 8.0):
+        calls.append(url)
+        return {"Value": {"I": "42", "GE": []}}
+
+    monkeypatch.setattr(market, "_http_json", fake_http)
+    collector = RobustXBetMarketCollector(tmp_path / "state.json", tmp_path / "history.jsonl")
+    assert collector._game("42") is not None
+    assert calls
+    assert "grMode=4" in calls[0]
+    assert "marketType=1" in calls[0]
+    assert "isNewBuilder=true" in calls[0]

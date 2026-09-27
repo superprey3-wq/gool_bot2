@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/gool-multi-router
+      - fix/xbet-live-index-blackout
     paths:
       - 'src/gool_bot2/__init__.py'
       - 'src/gool_bot2/architecture_isolation.py'

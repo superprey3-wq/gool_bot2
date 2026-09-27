@@ -98,3 +98,99 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
         f"<b>{row.get('market','?')} @ {float(row.get('odd') or 0):.2f}</b>"
     )
     return telegram.broadcast_photo(png, caption=caption)
+
+
+def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "") -> dict[str, Any]:
+    """Convert a calibrated PrematchPick into the shared production journal/card schema."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    kickoff_ts = float(getattr(pick, "kickoff_ts", 0.0) or 0.0)
+    scheduled = ""
+    if kickoff_ts:
+        scheduled = datetime.fromtimestamp(kickoff_ts, ZoneInfo("Europe/Moscow")).strftime("%d.%m %H:%M МСК")
+    return {
+        "entry_id": f"prematch:{pick.event_id}:{pick.market}",
+        "event_id": str(pick.event_id),
+        "match_id": str(pick.event_id),
+        "home": str(pick.home),
+        "away": str(pick.away),
+        "league": str(getattr(pick, "league", "") or "FOOTBALL"),
+        "scheduled_start": scheduled,
+        "kickoff_ts": kickoff_ts,
+        "market": str(pick.market),
+        "market_family": str(pick.market),
+        "selection": str(pick.selection),
+        "odd": float(pick.odds),
+        "bookmaker": str(bookmaker or ""),
+        "model_probability": float(pick.model_probability),
+        "probability": float(pick.model_probability),
+        "market_probability": float(pick.market_probability),
+        "edge": float(pick.edge),
+        "data_quality": float(pick.data_quality),
+        "tier": str(tier or "NORMAL"),
+        "origin": "prematch",
+        "head": "prematch",
+        "result": "pending",
+        "lifecycle": "scheduled",
+    }
+
+
+def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
+    """Persist/send only the format chosen by GOOL; do not duplicate singles inside a parlay."""
+    sent = {"cards": 0, "entries": 0, "parlays": 0}
+    mode = str(delivery.get("mode") or "NO_BET").upper()
+    selected: list[tuple[Any, str]] = []
+    if mode == "SUPER" and delivery.get("super"):
+        selected = [(p, "SUPER") for p in delivery["super"]["legs"]]
+    elif mode == "DOUBLES":
+        for acc in delivery.get("doubles") or []:
+            selected.extend((p, "STRONG") for p in acc.get("legs") or [])
+    elif mode == "SINGLES":
+        for item in delivery.get("singles") or []:
+            if isinstance(item, tuple):
+                selected.append((item[0], str(item[1])))
+            else:
+                selected.append((item, "NORMAL"))
+
+    seen: set[str] = set()
+    child_rows: list[dict[str, Any]] = []
+    for pick, tier in selected:
+        key = f"{pick.event_id}:{pick.market}"
+        if key in seen:
+            continue
+        seen.add(key)
+        info = meta.get(str(pick.event_id)) or {}
+        row = prematch_row_from_pick(pick, tier=tier, bookmaker=str(info.get("bookmaker") or ""))
+        before = len(load_signal_journal(journal_path))
+        emit_prematch_signal(row, journal_path)
+        after = len(load_signal_journal(journal_path))
+        if after > before:
+            sent["entries"] += 1
+            sent["cards"] += 1
+        child_rows.append(row)
+
+    # Parent parlay is journal-only for lifecycle/result accounting. Individual
+    # leg cards carry tournament/time/market and remain independently settleable.
+    if mode in {"SUPER", "DOUBLES"}:
+        groups = [delivery["super"]] if mode == "SUPER" else list(delivery.get("doubles") or [])
+        rows = load_signal_journal(journal_path)
+        for idx, acc in enumerate(groups, 1):
+            legs = []
+            for p in acc.get("legs") or []:
+                info = meta.get(str(p.event_id)) or {}
+                legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or "")))
+            if not legs:
+                continue
+            pid = f"parlay:{mode.lower()}:{idx}:" + ":".join(x["event_id"] for x in legs)
+            if any(str(x.get("entry_id") or "") == pid for x in rows):
+                continue
+            rows.append({
+                "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
+                "kind": mode, "result": "pending", "lifecycle": "scheduled",
+                "odd": float(acc.get("combined_odds") or 0.0),
+                "probability": float(acc.get("combined_probability") or 0.0),
+                "legs": legs, "created_at": _now(),
+            })
+            sent["parlays"] += 1
+        save_signal_journal(journal_path, rows)
+    return sent

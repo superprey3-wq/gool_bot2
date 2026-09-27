@@ -6,6 +6,8 @@ on:
       - scripts/flashscore_odds_probe.py
       - scripts/gool_flashscore_today.py
       - src/gool_bot2/flashscore_odds.py
+      - src/gool_bot2/v4_prematch_engine.py
+      - src/gool_bot2/v4_prematch_delivery.py
       - .github/workflows/flashscore-odds-probe.yml
   workflow_dispatch:
 jobs:

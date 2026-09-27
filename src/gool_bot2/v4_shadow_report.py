@@ -186,8 +186,7 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
     analysed: list[dict] = []
     reasons: dict[str, str] = {}
     workers = max(4, min(32, int(os.getenv("GOOL_PREMATCH_WORKERS", "20"))))
-    scan_limit = max(20, int(os.getenv("GOOL_PREMATCH_SCAN_LIMIT", "400")))
-    fixtures = list(fixtures)[:scan_limit]
+    fixtures = list(fixtures)
 
     def one(match):
         local_fs = FlashscoreProvider()

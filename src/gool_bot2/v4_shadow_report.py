@@ -142,43 +142,48 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     lines.insert(2, f"matched_to_xbet={matched}/{min(len(report_fixtures), max(1, limit))}")
     return "\n".join(lines)
 
+def _trend_signals(profile: dict, quality: float) -> list[dict]:
+    """Concrete price-free football tendencies. No trend => do not query bookmaker."""
+    if quality < 0.50:
+        return []
+    out: list[dict] = []
+    def add(name: str, p, sample: int, threshold: float) -> None:
+        try: prob=float(p)
+        except (TypeError, ValueError): return
+        if sample >= 4 and prob >= threshold:
+            out.append({"name":name,"probability":prob,"sample":sample,"strength":prob*quality})
+    first=profile.get("first_half") or {}; second=profile.get("second_half") or {}; full=profile.get("full_match") or {}
+    n1=int(first.get("pair_sample") or 0); n2=int(second.get("pair_sample") or 0); nf=int(full.get("pair_sample") or 0)
+    o1=first.get("over") or {}; o2=second.get("over") or {}
+    add("1H_OVER_0.5",o1.get("0.5"),n1,.68)
+    add("1H_OVER_1.5",o1.get("1.5"),n1,.58)
+    add("2H_OVER_0.5",o2.get("0.5"),n2,.70)
+    add("2H_OVER_1.5",o2.get("1.5"),n2,.60)
+    # Full-match goal probabilities from the model's expected total.
+    try:
+        import math
+        lam=float(full.get("expected_total"))
+        def pov(line):
+            k=int(line)+1
+            return 1.0-sum(math.exp(-lam)*lam**i/math.factorial(i) for i in range(k))
+        for line,thr in ((1.5,.72),(2.5,.64),(3.5,.56)):
+            add(f"FT_OVER_{line}",pov(line),nf,thr)
+        for line,thr in ((2.5,.66),(3.5,.72)):
+            add(f"FT_UNDER_{line}",1.0-pov(line),nf,thr)
+        hl=float(full.get("home_expected_goals")); al=float(full.get("away_expected_goals"))
+        add("HOME_TO_SCORE",1.0-math.exp(-hl),nf,.70)
+        add("AWAY_TO_SCORE",1.0-math.exp(-al),nf,.70)
+        add("BTTS_YES",(1.0-math.exp(-hl))*(1.0-math.exp(-al)),nf,.62)
+        add("BTTS_NO",1.0-(1.0-math.exp(-hl))*(1.0-math.exp(-al)),nf,.66)
+    except (TypeError, ValueError, KeyError):
+        pass
+    out.sort(key=lambda x:(x["strength"],x["probability"]),reverse=True)
+    return out
+
+
 def _brain_score(profile: dict, quality: float) -> float:
-    """Price-free football-interest score. Odds must not decide what we analyse."""
-    periods = [profile.get("first_half") or {}, profile.get("second_half") or {}]
-    signals: list[float] = []
-    for period in periods:
-        if not period.get("available"):
-            continue
-        over = period.get("over") or {}
-        for value in over.values():
-            try:
-                p = float(value)
-            except (TypeError, ValueError):
-                continue
-            signals.append(abs(p - 0.5) * 2.0)
-        for key in ("home", "away"):
-            team = period.get(key) or {}
-            for metric in ("scored_rate", "conceded_rate"):
-                try:
-                    p = float(team.get(metric))
-                except (TypeError, ValueError):
-                    continue
-                signals.append(abs(p - 0.5) * 2.0)
-    full = profile.get("full_match") or {}
-    if full.get("available"):
-        try:
-            total = float(full.get("expected_total"))
-            home_x = float(full.get("home_expected_goals"))
-            away_x = float(full.get("away_expected_goals"))
-            signals.append(min(1.0, abs(total - 2.5) / 1.5))
-            signals.append(min(1.0, abs(home_x - away_x) / 1.5))
-        except (TypeError, ValueError):
-            pass
-    if not signals:
-        return 0.0
-    signals.sort(reverse=True)
-    tendency = sum(signals[:4]) / min(4, len(signals))
-    return max(0.0, min(1.0, 0.70 * tendency + 0.30 * quality))
+    trends=_trend_signals(profile,quality)
+    return 0.0 if not trends else float(trends[0]["strength"])
 
 
 def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict], dict[str, str]]:
@@ -198,7 +203,8 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             sample = max(samples or [0])
             quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
-            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
+            trends = _trend_signals(profile, quality)
+            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "trends": trends, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
         except Exception as exc:
             return None, f"PROFILE_{type(exc).__name__}"
 
@@ -286,7 +292,7 @@ def main() -> None:
     # Rank football evidence first. Do not let an arbitrary absolute threshold
     # starve the price stage: strong tendencies qualify directly; otherwise the
     # best evidence-backed fixtures form a small exploration floor.
-    eligible = [row for row in analysed if row["quality"] >= 0.50 and row["brain_score"] > 0.0]
+    eligible = [row for row in analysed if row.get("trends")]
     strong = [row for row in eligible if row["brain_score"] >= 0.42]
     # Stage 2 must price the full evidence-backed field, not an arbitrary top 12.
     # Football quality remains the first gate; bookmaker value decides only after it.
@@ -301,7 +307,8 @@ def main() -> None:
     print(f"PREMATCH_FUNNEL fs={len(remaining)} analysed={len(analysed)} evidence_eligible={len(eligible)} strong={len(strong)} brain_selected={len(brain_candidates)} odds_requested={len(brain_candidates)} price_cap={price_cap} profile_failures={len(failures)}", flush=True)
     for row in brain_candidates:
         m=row["match"]
-        print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']}", flush=True)
+        trend_text=",".join(f"{t['name']}:{t['probability']:.2f}" for t in row.get("trends",[])[:5])
+        print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']} TREND={trend_text}", flush=True)
     print(report, flush=True)
     if args.first_acca:
         # Rebuild priced candidates for the selected football shortlist, then let the existing

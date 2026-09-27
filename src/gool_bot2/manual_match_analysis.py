@@ -176,11 +176,11 @@ def analyse_match_text(match: Any) -> str:
         h2h_text = f"{len(h2h)} матч. · средний тотал {hg/len(h2h):.2f}"
     trend_lines = [f"• {t.get('name')}: {float(t.get('probability') or 0)*100:.0f}%" for t in trends[:4]]
     if primary:
-        verdict = f"🎯 <b>Ставка V4: {primary.get('name')}</b> · {float(primary.get('probability') or 0)*100:.0f}%"
-        idea = "✅ Порог полноценного сигнала пройден."
+        verdict = f"🎯 <b>СТАВКА БОТА: {primary.get('name')}</b> · {float(primary.get('probability') or 0)*100:.0f}%"
+        idea = "✅ Официальный сигнал V4."
     else:
-        verdict = "⏸ <b>NO BET:</b> порог полноценного сигнала не пройден"
-        idea = f"💡 <b>Идея V4:</b> {_idea_bet(history, match.home, match.away)} · ориентир по форме, не официальный сигнал."
+        verdict = f"🎯 <b>СТАВКА БОТА: {_idea_bet(history, match.home, match.away)}</b>"
+        idea = "⚠️ Идея по ручному разбору · не официальный сигнал V4 и не записывается в статистику."
     return "\n".join([
         "🧠 <b>GOOL BOT 4 · V4 РАЗБОР МАТЧА</b>",
         f"⚽ <b>{match.home} — {match.away}</b>",
@@ -190,7 +190,7 @@ def analyse_match_text(match: Any) -> str:
         f"🤝 H2H: {h2h_text}",
         f"📚 Выборка: {int(row.get('sample') or 0)} · качество {float(row.get('quality') or 0)*100:.0f}%", "",
         "<b>Тренды V4:</b>", *(trend_lines or ["• сильных трендов не найдено"]), "",
-        verdict, idea, _manual_thought(history, match.home, match.away, primary, trends),
+        _manual_thought(history, match.home, match.away, primary, trends).replace("💭 <b>Мысль V4:</b>", "💭 <b>МЫСЛЬ БОТА:</b>"), "", verdict, idea,
     ])
 
 

@@ -17,7 +17,7 @@ from .v4_prematch_engine import (
 )
 from .xbet_prematch_market import XBetPrematchCollector
 from .pinnacle_prematch_market import pinnacle_market_for_match
-from .football_model_challengers import poisson_profile_challenger, challenger_market_candidates, rank_challenger, build_challenger_double, choose_challenger_delivery
+from .football_model_challengers import poisson_profile_challenger, challenger_market_candidates, rank_challenger, build_challenger_double, choose_challenger_delivery, dixon_coles_profile_challenger, model_market_candidates, consensus_candidates
 
 
 def _pct(x: float) -> str:
@@ -74,6 +74,7 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     matched = 0
     all_candidates = []
     challenger_candidates = []
+    dc_candidates = []
     report_fixtures = [m for m in fixtures if allowed_event_ids is None or str(m.provider_match_id) in allowed_event_ids]
     for i, match in enumerate(report_fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)
@@ -111,6 +112,10 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
             )
             all_candidates.extend(candidates)
             challenger_candidates.extend(challenger_market_candidates(event_id=match.provider_match_id, home=match.home, away=match.away, profile=profile, market=row, data_quality=quality))
+            dc = dixon_coles_profile_challenger(profile)
+            if dc is not None:
+                dc_candidates.extend(model_market_candidates(dc, event_id=match.provider_match_id, home=match.home, away=match.away, market=row, data_quality=quality))
+                lines.append(f"    CHALLENGER {dc.name}: 1X2={_pct(dc.home)}/{_pct(dc.draw)}/{_pct(dc.away)}")
             lines.append(f"    GOOL profile: sample={sample} quality={quality:.2f} candidates={len(candidates)}")
             challenger = poisson_profile_challenger(profile)
             if challenger is not None:
@@ -148,7 +153,23 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
             f"{tier} | model={_pct(pick.model_probability)} market={_pct(pick.market_probability)} "
             f"edge={100*pick.edge:+.1f}pp EV={100*pick.expected_value:+.1f}% quality={pick.data_quality:.2f}"
         )
-    challenger_shortlist = rank_challenger(challenger_candidates, limit=8)
+    consensus = consensus_candidates([challenger_candidates, dc_candidates], min_models=2)
+    consensus_shortlist = rank_challenger(consensus, limit=8)
+    lines.extend(["", "=== MULTI-MODEL CONSENSUS SHORTLIST ==="])
+    if not consensus_shortlist:
+        lines.append("NO QUALIFIED CONSENSUS PICKS")
+    for i, pick in enumerate(consensus_shortlist, 1):
+        lines.append(f"M{i:02d}. {pick['home']} — {pick['away']} | {pick['selection']} @ {pick['odds']:.2f} | models={pick.get('model_count',0)} | model={_pct(pick['probability'])} edge={100*pick['edge']:+.1f}pp EV={100*pick['expected_value']:+.1f}%")
+    consensus_delivery = choose_challenger_delivery(consensus_shortlist)
+    lines.extend(["", "=== MULTI-MODEL CONSENSUS DELIVERY ==="])
+    if consensus_delivery is None:
+        lines.append("NO CONFIDENT CONSENSUS DELIVERY")
+    else:
+        lines.append(f"CONSENSUS_DELIVERY {consensus_delivery['type']}")
+        for i, leg in enumerate(consensus_delivery["legs"], 1):
+            lines.append(f"MD{i}. {leg['home']} — {leg['away']} | {leg['selection']} @ {leg['odds']:.2f} | p={leg['probability']:.3f}")
+        lines.append(f"CONSENSUS_SUMMARY odds={consensus_delivery['combined_odds']:.2f} probability={consensus_delivery['combined_probability']:.3f} EV={consensus_delivery['expected_value']:+.3f}")
+        challenger_shortlist = rank_challenger(challenger_candidates, limit=8)
     lines.extend(["", "=== CHALLENGER SHADOW SHORTLIST ==="])
     if not challenger_shortlist:
         lines.append("NO QUALIFIED CHALLENGER PICKS")

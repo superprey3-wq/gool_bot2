@@ -149,3 +149,46 @@ def build_challenger_double(shortlist: list[dict[str, Any]]) -> dict[str, Any] |
             if best is None or (row["expected_value"],probability) > (best["expected_value"],best["combined_probability"]):
                 best=row
     return best
+
+
+def choose_challenger_delivery(shortlist: list[dict[str, Any]], max_legs: int = 4) -> dict[str, Any] | None:
+    """Choose SINGLE or 2..N leg ACCA without forcing extra legs.
+
+    Shadow-only. Confidence gates get stricter as legs are added so a strong
+    single is preferred to a weaker accumulator assembled just for higher odds.
+    """
+    if not shortlist:
+        return None
+    strong = [r for r in shortlist if r["quality"] >= .70 and r["edge"] >= .04 and r["expected_value"] >= .04]
+    singles = [r for r in strong if 1.70 <= r["odds"] <= 3.25 and r["probability"] >= .62]
+    best_single = max(singles, key=lambda r:(r["probability"], r["expected_value"], r["edge"]), default=None)
+
+    import itertools
+    tickets = []
+    for n in range(2, min(max_legs, len(strong)) + 1):
+        min_leg_p = .67 if n == 2 else (.70 if n == 3 else .72)
+        min_combined_p = .44 if n == 2 else (.32 if n == 3 else .24)
+        for legs in itertools.combinations(strong, n):
+            if len({r["event_id"] for r in legs}) != n or any(r["probability"] < min_leg_p for r in legs):
+                continue
+            odds = math.prod(r["odds"] for r in legs)
+            probability = math.prod(r["probability"] for r in legs)
+            if odds > 8.0 or probability < min_combined_p:
+                continue
+            tickets.append({"type": f"ACCA_{n}", "legs": list(legs), "combined_odds": odds,
+                            "combined_probability": probability, "expected_value": probability * odds - 1.0})
+
+    # Confidence first, then value. Do not prefer more legs merely for a bigger price.
+    best_acca = max(tickets, key=lambda t:(t["combined_probability"], t["expected_value"]), default=None)
+    if best_single is None and best_acca is None:
+        return None
+    if best_acca is None:
+        return {"type":"SINGLE","legs":[best_single],"combined_odds":best_single["odds"],
+                "combined_probability":best_single["probability"],"expected_value":best_single["expected_value"]}
+    if best_single is None:
+        return best_acca
+    # A multi must retain substantial confidence to displace a very strong single.
+    if best_acca["combined_probability"] >= .48 and best_acca["expected_value"] >= best_single["expected_value"] * 1.15:
+        return best_acca
+    return {"type":"SINGLE","legs":[best_single],"combined_odds":best_single["odds"],
+            "combined_probability":best_single["probability"],"expected_value":best_single["expected_value"]}

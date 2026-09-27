@@ -157,7 +157,10 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         draw.text((65, y + 13), f"{icons.get(lr, '•')} {i}.", font=sc._font(18, True), fill=accent)
         teams = f"{leg.get('home','?')} — {leg.get('away','?')}"
         draw.text((125, y + 10), teams, font=_fit(draw, teams, 590, 19, True), fill=TEXT)
+        result_label = {"won":"ЗАШЛА","lost":"НЕ ЗАШЛА","push":"ВОЗВРАТ","void":"VOID","pending":"ЖДЁМ"}.get(lr, "ЖДЁМ")
         detail = f"{leg.get('league','FOOTBALL')} · {leg.get('scheduled_start','')} · {_market_label(str(leg.get('market','?')))}"
+        if result:
+            detail += f" · {result_label}"
         draw.text((125, y + 43), detail, font=_fit(draw, detail, 700, 13, False), fill=MUTED)
         draw.text((875, y + 22), f"@ {float(leg.get('odd') or 0):.2f}", font=sc._font(18, True), fill=TEXT)
         y += 92

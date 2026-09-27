@@ -64,7 +64,17 @@ def _is_open(row: dict[str, Any]) -> bool:
         return False
     if str(row.get("result") or "pending").lower() not in {"pending", "tracking"}:
         return False
-    return was_publicly_sent(row)
+    if not was_publicly_sent(row):
+        return False
+    # Parent parlays are containers, not matches. Their legs appear only once
+    # the corresponding child match is genuinely live.
+    if str(row.get("origin") or "").casefold() == "prematch_parlay":
+        return False
+    if str(row.get("origin") or "").casefold() == "prematch":
+        lifecycle = str(row.get("lifecycle") or "scheduled").casefold()
+        if lifecycle not in {"in_game", "live"} and not bool(row.get("in_game")):
+            return False
+    return True
 
 
 def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = None) -> list[str]:

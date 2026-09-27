@@ -178,20 +178,25 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
     callback = update.get("callback_query") or {}
     data = str(callback.get("data") or "")
     if data.startswith("ma:"):
-        from .manual_match_analysis import analyse_match_text, find_today_by_id
-        event_id = data.split(":", 1)[1]
         callback_message = callback.get("message") or {}
         callback_chat_id = (callback_message.get("chat") or {}).get("id")
         callback_id = str(callback.get("id") or "")
-        match = find_today_by_id(event_id)
-        if callback_chat_id is not None:
-            if match is None:
-                _direct_send_message(token, callback_chat_id, "❌ Матч уже не найден в сегодняшнем списке.", reply_markup=telegram_mod.MENU_KEYBOARD)
-            else:
-                _direct_send_message(token, callback_chat_id, analyse_match_text(match), reply_markup=telegram_mod.MENU_KEYBOARD)
-            _DIRECT_MATCH_SEARCH_WAITING.discard(str(callback_chat_id))
-            changed += 1
-        _direct_answer_callback(token, callback_id, "Запускаю V4-анализ")
+        _direct_answer_callback(token, callback_id, "Запускаю V4-анализ…")
+        try:
+            from .manual_match_analysis import analyse_match_text, find_today_by_id
+            event_id = data.split(":", 1)[1]
+            match = find_today_by_id(event_id)
+            if callback_chat_id is not None:
+                if match is None:
+                    sent = _direct_send_message(token, callback_chat_id, "❌ Матч уже не найден в сегодняшнем списке.", reply_markup=telegram_mod.MENU_KEYBOARD)
+                else:
+                    sent = _direct_send_message(token, callback_chat_id, analyse_match_text(match), reply_markup=telegram_mod.MENU_KEYBOARD)
+                _DIRECT_MATCH_SEARCH_WAITING.discard(str(callback_chat_id))
+                changed += int(bool(sent))
+        except Exception as exc:
+            print(f"GOOL_MANUAL_MATCH_CALLBACK_ERROR event={data!r} error={type(exc).__name__}:{exc}", flush=True)
+            if callback_chat_id is not None and _direct_send_message(token, callback_chat_id, "⚠️ Не удалось подготовить V4-разбор этого матча. Попробуй нажать ещё раз.", reply_markup=telegram_mod.MENU_KEYBOARD):
+                changed += 1
         return changed
     if not data.startswith("ig:"):
         return changed

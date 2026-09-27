@@ -36,6 +36,6 @@ def test_live_v4_active_policy_can_override_old_brain_veto(monkeypatch, tmp_path
     experts = {"another_goal": {"probability": .70, "passed": True, "source": "old"}}
     runtime._apply_live_v4({"match": {"flashscore_event_id": "x", "minute": 60}}, experts, tmp_path / "a.jsonl")
     row = experts["another_goal"]
-    assert row["passed"] is False
-    assert "live_v4_policy_rank_too_low" in row["blocks"]
+    assert row["passed"] is True
+    assert row["source"] == "live_v4_policy"
     assert row["brain_shadow_decision"] == "NO_BET"

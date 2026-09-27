@@ -110,6 +110,8 @@ def _replace_file(source: Path, target: Path) -> None:
 def _install_snapshot(snapshot: Path, root: Path) -> None:
     """Update code only; never touch local secrets, runtime data or model files."""
     _replace_tree(snapshot / "src" / "gool_bot2", root / "src" / "gool_bot2")
+    if (snapshot / "scripts").is_dir():
+        _replace_tree(snapshot / "scripts", root / "scripts")
     for name in (
         "monkey_start.py",
         "monkey_autoupdate.py",

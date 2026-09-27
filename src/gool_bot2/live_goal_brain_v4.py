@@ -120,7 +120,13 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
             effective_threshold += 0.03
 
         score = probability * confidence
-        decision = "BET" if probability >= effective_threshold and confidence >= 0.70 else "NO_BET"
+        min_confidence = 0.78
+        decision = "BET" if (
+            momentum_ready
+            and recent_signals >= 2
+            and probability >= effective_threshold
+            and confidence >= min_confidence
+        ) else "NO_BET"
         reasons = (
             f"minute={minute}",
             f"score_total={score_total}",
@@ -131,7 +137,7 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
             f"sources={sources}",
             f"red_cards={red_total}",
             f"momentum_ready={int(momentum_ready)}",
-            f"recent_threat={int(recent_threat)}",
+            f"recent_threat={int(recent_threat)}",\n            f"recent_signals={recent_signals}",
             f"xg5={xg5}",
             f"shots5={shots5}",
             f"sot5={sot5}",

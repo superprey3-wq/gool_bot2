@@ -136,86 +136,88 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
     }
 
 
-def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
-    """Persist/send only the format chosen by GOOL; do not duplicate singles inside a parlay."""
-    sent = {"cards": 0, "entries": 0, "parlays": 0}
-    mode = str(delivery.get("mode") or "NO_BET").upper()
-    selected: list[tuple[Any, str]] = []
-    if mode == "SUPER" and delivery.get("super"):
-        selected = [(p, "SUPER") for p in delivery["super"]["legs"]]
-    elif mode == "DOUBLES":
-        for acc in delivery.get("doubles") or []:
-            selected.extend((p, "STRONG") for p in acc.get("legs") or [])
-    elif mode == "SINGLES":
-        for item in delivery.get("singles") or []:
-            if isinstance(item, tuple):
-                selected.append((item[0], str(item[1])))
-            else:
-                selected.append((item, "NORMAL"))
+def _market_label(value: str) -> str:
+    key = str(value or "").upper()
+    labels = {
+        "FT_OVER_2.5": "ТБ 2.5", "FT_UNDER_2.5": "ТМ 2.5",
+        "BTTS_YES": "Обе забьют — Да",
+        "1H_OVER_0.5": "1-й тайм: ТБ 0.5", "1H_OVER_1.5": "1-й тайм: ТБ 1.5",
+        "2H_OVER_0.5": "2-й тайм: ТБ 0.5", "2H_OVER_1.5": "2-й тайм: ТБ 1.5",
+    }
+    return labels.get(key, str(value or "?").replace("_", " "))
 
+
+def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
+    """Send independent singles plus independent parlay products."""
+    sent = {"cards": 0, "entries": 0, "parlays": 0}
+
+    # Singles are their own product, regardless of whether a separate parlay exists.
     seen: set[str] = set()
-    child_rows: list[dict[str, Any]] = []
-    for pick, tier in selected:
+    for item in delivery.get("singles") or []:
+        pick, tier = item if isinstance(item, tuple) else (item, "NORMAL")
         key = f"{pick.event_id}:{pick.market}"
         if key in seen:
             continue
         seen.add(key)
         info = meta.get(str(pick.event_id)) or {}
-        row = prematch_row_from_pick(pick, tier=tier, bookmaker=str(info.get("bookmaker") or ""))
+        row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""))
         before = len(load_signal_journal(journal_path))
-        emit_prematch_signal(row, journal_path)
+        delivered = emit_prematch_signal(row, journal_path)
         after = len(load_signal_journal(journal_path))
-        if after > before:
+        if delivered and after > before:
             sent["entries"] += 1
             sent["cards"] += 1
-        child_rows.append(row)
 
-    # Parent parlay is journal-only for lifecycle/result accounting. Individual
-    # leg cards carry tournament/time/market and remain independently settleable.
-    if mode in {"SUPER", "DOUBLES"}:
-        groups = [delivery["super"]] if mode == "SUPER" else list(delivery.get("doubles") or [])
-        rows = load_signal_journal(journal_path)
-        for idx, acc in enumerate(groups, 1):
-            legs = []
-            for p in acc.get("legs") or []:
-                info = meta.get(str(p.event_id)) or {}
-                legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or "")))
-            if not legs:
-                continue
-            pid = f"parlay:{mode.lower()}:{idx}:" + ":".join(x["event_id"] for x in legs)
-            if any(str(x.get("entry_id") or "") == pid for x in rows):
-                continue
-            parent = {
-                "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
-                "kind": mode, "result": "pending", "lifecycle": "scheduled",
-                "odd": float(acc.get("combined_odds") or 0.0),
-                "probability": float(acc.get("combined_probability") or 0.0),
-                "legs": legs, "created_at": _now(),
-            }
-            rows.append(parent)
-            leg_lines = []
-            for n, leg in enumerate(legs, 1):
-                when = str(leg.get("scheduled_start") or "").strip()
-                league = str(leg.get("league") or "FOOTBALL")
-                leg_lines.append(
-                    f"{n}. <b>{leg.get('home','?')} — {leg.get('away','?')}</b>\n"
-                    f"   {league} · {when}\n"
-                    f"   {leg.get('market','?')} @ {float(leg.get('odd') or 0):.2f}"
-                )
-            title = "💎 SUPER 10" if mode == "SUPER" else "🔗 ЭКСПРЕСС"
-            caption = (
-                f"{title} · <b>GOOL V4</b>\n"
-                f"Общий кэф: <b>{float(parent.get('odd') or 0):.2f}</b>\n\n"
-                + "\n\n".join(leg_lines)
-            )
-            png = render_v4_parlay_card(parent)
-            delivered = telegram.broadcast_photo(png, caption=caption, reply_markup=telegram.MENU_KEYBOARD)
-            if delivered:
-                parent["telegram_sent"] = True
-                parent["telegram_sent_at"] = _now()
-                parent["telegram_delivery_count"] = int(delivered)
-            sent["parlays"] += 1
+    mode = str(delivery.get("mode") or "NO_BET").upper()
+    groups = []
+    if delivery.get("super"):
+        groups.append(("SUPER", delivery["super"]))
+    for acc in delivery.get("doubles") or []:
+        groups.append(("DOUBLES", acc))
+
+    rows = load_signal_journal(journal_path)
+    for idx, (kind, acc) in enumerate(groups, 1):
+        legs = []
+        for p in acc.get("legs") or []:
+            info = meta.get(str(p.event_id)) or {}
+            legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or "")))
+        if not legs:
+            continue
+        # Hard guard: an accumulator may never be a repackaging of sent singles.
+        if any(f"{x['event_id']}:{x['market']}" in seen for x in legs):
+            continue
+        pid = f"parlay:{kind.lower()}:{idx}:" + ":".join(x["event_id"] for x in legs)
+        if any(str(x.get("entry_id") or "") == pid for x in rows):
+            continue
+        parent = {
+            "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
+            "kind": kind, "result": "pending", "lifecycle": "scheduled",
+            "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
+            "effective_odd": float(acc.get("combined_odds") or 0.0),
+            "probability": float(acc.get("combined_probability") or 0.0),
+            "telegram_sent": False, "created_at": _now(),
+        }
+        rows.append(parent)
         save_signal_journal(journal_path, rows)
+        caption_lines = [
+            f"🔗 <b>{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'} · GOOL V4</b>",
+            f"Общий кэф: <b>{parent['odd']:.2f}</b>", "",
+        ]
+        for n, leg in enumerate(legs, 1):
+            caption_lines += [
+                f"<b>{n}. {leg['home']} — {leg['away']}</b>",
+                f"{leg['league']} · {leg['scheduled_start']}",
+                f"{_market_label(leg['market'])} @ {leg['odd']:.2f}", "",
+            ]
+        png = render_v4_parlay_card(parent)
+        delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip(), reply_markup=telegram.MENU_KEYBOARD)
+        if delivered:
+            parent["telegram_sent"] = True
+            parent["telegram_sent_at"] = _now()
+            parent["telegram_delivery_count"] = int(delivered)
+            save_signal_journal(journal_path, rows)
+            sent["parlays"] += 1
+            sent["cards"] += 1
     return sent
 
 
@@ -223,7 +225,7 @@ def emit_parlay_result(row: dict[str, Any]) -> int:
     png = render_v4_parlay_card(row, result=True)
     result = str(row.get("result") or "void").lower()
     icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")
-    label = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "VOID"}.get(result, "РЕЗУЛЬТАТ")
+    label = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "ВОЗВРАТ"}.get(result, "РЕЗУЛЬТАТ")
     kind = "SUPER 10" if str(row.get("kind") or "").upper() == "SUPER" else "ЭКСПРЕСС"
     return telegram.broadcast_photo(
         png,

@@ -35,4 +35,9 @@ print("FS_ODDS_PROBE_ALL fixtures=",len(fixtures),"geo=",geo,flush=True)
 for m in fixtures:
     variant,data=get(m.provider_match_id,geo)
     print("ODDS_EVENT",m.provider_match_id,m.home,"--",m.away,"variant=",variant,"type=",type(data).__name__,flush=True)
-    odds=data.get("odds") or []\n    scopes={}\n    for e in odds:\n        key=f"{e.get(\'bettingScope\')}:{e.get(\'bettingType\')}"\n        scopes[key]=scopes.get(key,0)+1\n    print("ODDS_COUNT",m.provider_match_id,"entries=",len(odds),"markets=",scopes,flush=True)
+    odds=data.get("odds") or []
+    scopes={}
+    for e in odds:
+        key=str(e.get("bettingScope"))+":"+str(e.get("bettingType"))
+        scopes[key]=scopes.get(key,0)+1
+    print("ODDS_COUNT",m.provider_match_id,"entries=",len(odds),"markets=",scopes,flush=True)

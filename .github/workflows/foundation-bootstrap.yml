@@ -1,24 +1,8 @@
 name: foundation-bootstrap
 
+# Legacy model-training pipeline. GOOL V4 production does not depend on it.
+# Keep it available only for deliberate offline experiments; never retrain on main pushes.
 on:
-  push:
-    branches: [main, foundation-bootstrap, experiment/ht-one-goal-over25]
-    paths:
-      - 'src/gool_bot2/bootstrap_foundation.py'
-      - 'src/gool_bot2/prepare_foundation.py'
-      - 'src/gool_bot2/train_prepared_foundation.py'
-      - 'src/gool_bot2/external_first_half_model.py'
-      - 'src/gool_bot2/archive_wyscout.py'
-      - 'src/gool_bot2/archive_statsbomb.py'
-      - 'src/gool_bot2/archive_dataset.py'
-      - 'src/gool_bot2/train_archive_models.py'
-      - 'src/gool_bot2/train_hazard_models.py'
-      - 'src/gool_bot2/evaluate_ht_over25_proxy.py'
-      - 'src/gool_bot2/local_ensemble.py'
-      - 'src/gool_bot2/signal_worker.py'
-      - 'src/gool_bot2/signal_policy.py'
-      - 'src/gool_bot2/telegram.py'
-      - '.github/workflows/foundation-bootstrap.yml'
   workflow_dispatch:
 
 permissions:

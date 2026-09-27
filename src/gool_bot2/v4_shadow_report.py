@@ -340,7 +340,7 @@ def main() -> None:
         m=row["match"]
         trend_text=",".join(f"{t['name']}:{t['probability']:.2f}" for t in row.get("trends",[])[:5])
         primary=row.get("primary_trend") or {}
-        print(f"BRAIN {m.home} — {m.away} score={row[\'brain_score\']:.3f} quality={row[\'quality\']:.2f} sample={row[\'sample\']} PRIMARY_TREND={primary.get(\'name\')}:{float(primary.get(\'probability\') or 0):.2f} rank={float(primary.get(\'rank_score\') or 0):.3f} ALL_TRENDS={trend_text}", flush=True)
+        print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']} PRIMARY_TREND={primary.get('name')}:{float(primary.get('probability') or 0):.2f} rank={float(primary.get('rank_score') or 0):.3f} ALL_TRENDS={trend_text}", flush=True)
     print(report, flush=True)
     if args.first_acca:
         # Rebuild priced candidates for the selected football shortlist, then let the existing

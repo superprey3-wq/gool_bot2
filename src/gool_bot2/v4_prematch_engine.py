@@ -160,27 +160,28 @@ def choose_delivery(
     max_singles: int | None = None,
     max_doubles: int | None = None,
 ) -> dict:
-    """Choose delivery by confidence, not by an arbitrary ticket-count ceiling."""
-    rows=list(picks)
+    """Build independent products: singles are never auto-reused as parlay legs."""
+    rows = list(picks)
     single_limit = len(rows) if max_singles is None else max(0, int(max_singles))
-    singles=rank_prematch_for_delivery(rows, limit=single_limit)
+    singles = rank_prematch_for_delivery(rows, limit=single_limit)
+    single_event_ids = {str(item[0].event_id) for item in singles}
 
-    # SUPER remains exceptional: exactly ten individually exceptional legs.
-    super_ticket=build_super_accumulator(
-        rows, target_legs=10, min_leg_probability=.74,
+    # Parlays are a separate product. Do not simply glue publicly selected
+    # singles together; require a disjoint event pool with stricter legs.
+    parlay_pool = [p for p in rows if str(p.event_id) not in single_event_ids]
+
+    super_ticket = build_super_accumulator(
+        parlay_pool, target_legs=10, min_leg_probability=.74,
         min_quality=.80, min_edge=.035, min_ev=.02, max_same_market=6,
     )
-
-    doubles=build_accumulators(
-        rows, legs=2, min_combined_probability=.50,
+    doubles = build_accumulators(
+        parlay_pool, legs=2, min_combined_probability=.50,
         min_combined_odds=1.70, max_combined_odds=3.20,
     )
-    # Keep every high-confidence non-overlapping double. On a huge match day
-    # this can naturally be more than two; weak legs are never used to fill quota.
-    strong=[]
-    used=set()
+    strong = []
+    used = set()
     for acc in doubles:
-        legs=acc["legs"]
+        legs = acc["legs"]
         if any(p.model_probability < .69 or p.data_quality < .75 or p.edge < .045 for p in legs):
             continue
         if any(p.event_id in used for p in legs):
@@ -190,16 +191,16 @@ def choose_delivery(
         if max_doubles is not None and len(strong) >= max(0, int(max_doubles)):
             break
 
-    # SUPER is an additional exceptional product on rich days; ordinary high-
-    # confidence doubles remain useful rather than disappearing merely because
-    # ten SUPER legs happened to qualify.
+    # Delivery may contain independent singles and independent parlays together.
     if super_ticket:
-        return {"mode":"SUPER","super":super_ticket,"doubles":strong,"singles":singles}
-    if strong:
-        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":singles}
-    if singles:
-        return {"mode":"SINGLES","super":None,"doubles":[],"singles":singles}
-    return {"mode":"NO_BET","super":None,"doubles":[],"singles":[]}
+        mode = "SUPER"
+    elif strong:
+        mode = "DOUBLES"
+    elif singles:
+        mode = "SINGLES"
+    else:
+        mode = "NO_BET"
+    return {"mode": mode, "super": super_ticket, "doubles": strong, "singles": singles}
 
 def picks_from_goal_profile(
     *,

@@ -17,6 +17,7 @@ from .v4_prematch_engine import (
 )
 from .xbet_prematch_market import XBetPrematchCollector
 from .pinnacle_prematch_market import pinnacle_market_for_match
+from .football_model_challengers import poisson_profile_challenger
 
 
 def _pct(x: float) -> str:
@@ -109,6 +110,12 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
             )
             all_candidates.extend(candidates)
             lines.append(f"    GOOL profile: sample={sample} quality={quality:.2f} candidates={len(candidates)}")
+            challenger = poisson_profile_challenger(profile)
+            if challenger is not None:
+                lines.append(
+                    f"    CHALLENGER {challenger.name}: xG={challenger.home_lambda:.2f}-{challenger.away_lambda:.2f} "
+                    f"1X2={_pct(challenger.home)}/{_pct(challenger.draw)}/{_pct(challenger.away)}"
+                )
         except Exception as exc:
             lines.append(f"    GOOL profile: unavailable ({type(exc).__name__}: {exc})")
         x = row.get("match_1x2") or {}

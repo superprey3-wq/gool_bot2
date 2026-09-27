@@ -1,0 +1,23 @@
+name: GOOL LIVE Brain V4 audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - 'src/gool_bot2/live_goal_brain_v4.py'
+      - 'scripts/gool_live_brain_v4_audit.py'
+      - '.github/workflows/gool-live-brain-v4.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Run LIVE Brain V4 against real matches
+        run: python scripts/gool_live_brain_v4_audit.py

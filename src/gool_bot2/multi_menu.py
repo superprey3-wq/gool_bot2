@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from .journal import load_signal_journal
 from .multi_journal import settle_multi_journal
+from .v4_prematch_settlement import settle_prematch_row
 from .multi_public_metrics import source_label, strategy_bucket
 from .providers.flashscore import (
     FINISHED_COARSE_STATUS,
@@ -151,7 +152,20 @@ def reconcile_pending() -> int:
                 timeline = provider.fetch_goal_timeline(mid)
             except Exception:
                 timeline = []
-        changed += len(settle_multi_journal(_synthetic_record(row, state, timeline), path))
+        record = _synthetic_record(row, state, timeline)
+        if str(row.get("origin") or "").casefold() == "prematch":
+            # Prematch markets must NEVER use live early-win settlement.
+            # They are settled only from an authoritative finished match.
+            if not bool((record.get("match") or {}).get("is_finished")):
+                continue
+            fresh_rows = load_signal_journal(path)
+            target = next((x for x in fresh_rows if str(x.get("entry_id") or x.get("entry_key") or "") == str(row.get("entry_id") or row.get("entry_key") or "")), None)
+            if target is not None and settle_prematch_row(target, record):
+                from .journal import save_signal_journal
+                save_signal_journal(path, fresh_rows)
+                changed += 1
+        elif str(row.get("origin") or "").casefold() != "prematch_parlay":
+            changed += len(settle_multi_journal(record, path))
     return changed
 
 

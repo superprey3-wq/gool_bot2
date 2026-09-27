@@ -143,38 +143,57 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     return "\n".join(lines)
 
 def _trend_signals(profile: dict, quality: float) -> list[dict]:
-    """Concrete price-free football tendencies. No trend => do not query bookmaker."""
-    if quality < 0.50:
+    """High-conviction price-free tendencies. Require agreement, not one model probability."""
+    if quality < 0.75:
         return []
     out: list[dict] = []
-    def add(name: str, p, sample: int, threshold: float) -> None:
-        try: prob=float(p)
-        except (TypeError, ValueError): return
-        if sample >= 4 and prob >= threshold:
-            out.append({"name":name,"probability":prob,"sample":sample,"strength":prob*quality})
     first=profile.get("first_half") or {}; second=profile.get("second_half") or {}; full=profile.get("full_match") or {}
     n1=int(first.get("pair_sample") or 0); n2=int(second.get("pair_sample") or 0); nf=int(full.get("pair_sample") or 0)
-    o1=first.get("over") or {}; o2=second.get("over") or {}
-    add("1H_OVER_0.5",o1.get("0.5"),n1,.68)
-    add("1H_OVER_1.5",o1.get("1.5"),n1,.58)
-    add("2H_OVER_0.5",o2.get("0.5"),n2,.70)
-    add("2H_OVER_1.5",o2.get("1.5"),n2,.60)
-    # Full-match goal probabilities from the model's expected total.
+
+    def num(v):
+        try: return float(v)
+        except (TypeError, ValueError): return None
+
+    def consensus(name, model_p, sample, confirmations, *, min_p, min_confirm=3):
+        p=num(model_p)
+        vals=[num(x) for x in confirmations]
+        vals=[x for x in vals if x is not None]
+        positive=sum(x >= .65 for x in vals)
+        if p is None or sample < 6 or p < min_p or len(vals) < min_confirm or positive < min_confirm:
+            return
+        agreement=sum(vals)/len(vals)
+        strength=p * quality * (0.75 + 0.25*agreement)
+        out.append({"name":name,"probability":p,"sample":sample,"confirmations":positive,"agreement":agreement,"strength":strength})
+
+    for period,label,n in ((first,"1H",n1),(second,"2H",n2)):
+        h=period.get("home") or {}; a=period.get("away") or {}; ov=period.get("over") or {}
+        # A half-goal trend must be supported by both teams' scoring/conceding behaviour.
+        consensus(f"{label}_OVER_0.5",ov.get("0.5"),n,
+                  [h.get("scored_rate"),h.get("conceded_rate"),a.get("scored_rate"),a.get("conceded_rate")],
+                  min_p=.76,min_confirm=3)
+        consensus(f"{label}_OVER_1.5",ov.get("1.5"),n,
+                  [(h.get("over") or {}).get("1.5"),(a.get("over") or {}).get("1.5"),
+                   h.get("scored_rate"),a.get("scored_rate")],
+                  min_p=.64,min_confirm=3)
+
     try:
         import math
-        lam=float(full.get("expected_total"))
+        lam=float(full.get("expected_total")); hl=float(full.get("home_expected_goals")); al=float(full.get("away_expected_goals"))
         def pov(line):
             k=int(line)+1
             return 1.0-sum(math.exp(-lam)*lam**i/math.factorial(i) for i in range(k))
-        for line,thr in ((1.5,.72),(2.5,.64),(3.5,.56)):
-            add(f"FT_OVER_{line}",pov(line),nf,thr)
-        for line,thr in ((2.5,.66),(3.5,.72)):
-            add(f"FT_UNDER_{line}",1.0-pov(line),nf,thr)
-        hl=float(full.get("home_expected_goals")); al=float(full.get("away_expected_goals"))
-        add("HOME_TO_SCORE",1.0-math.exp(-hl),nf,.70)
-        add("AWAY_TO_SCORE",1.0-math.exp(-al),nf,.70)
-        add("BTTS_YES",(1.0-math.exp(-hl))*(1.0-math.exp(-al)),nf,.62)
-        add("BTTS_NO",1.0-(1.0-math.exp(-hl))*(1.0-math.exp(-al)),nf,.66)
+        # Full-time totals require expected-goal magnitude plus usable samples.
+        if nf >= 6 and lam >= 3.0:
+            consensus("FT_OVER_2.5",pov(2.5),nf,[min(1,lam/3.0),min(1,hl/1.25),min(1,al/1.25)],min_p=.66,min_confirm=3)
+        if nf >= 6 and lam >= 3.8:
+            consensus("FT_OVER_3.5",pov(3.5),nf,[min(1,lam/3.8),min(1,hl/1.45),min(1,al/1.45)],min_p=.58,min_confirm=3)
+        if nf >= 6 and lam <= 2.15:
+            consensus("FT_UNDER_2.5",1-pov(2.5),nf,[min(1,2.15/max(lam,.1)),min(1,1.15/max(hl,.1)),min(1,1.15/max(al,.1))],min_p=.64,min_confirm=3)
+        home_score=1-math.exp(-hl); away_score=1-math.exp(-al); btts=home_score*away_score
+        if hl >= 1.35 and al >= 1.20:
+            consensus("BTTS_YES",btts,nf,[home_score,away_score,min(1,lam/2.8)],min_p=.64,min_confirm=3)
+        if min(hl,al) <= .75:
+            consensus("BTTS_NO",1-btts,nf,[1-min(home_score,away_score),min(1,2.5/max(lam,.1)),min(1,.8/max(min(hl,al),.1))],min_p=.66,min_confirm=3)
     except (TypeError, ValueError, KeyError):
         pass
     out.sort(key=lambda x:(x["strength"],x["probability"]),reverse=True)

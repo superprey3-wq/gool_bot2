@@ -484,14 +484,10 @@ class MultiSportSteamWorker:
         score = list(row.get("score") or [0, 0])
         strength = "EXTREME" if signal.get("extreme") else "STRONG"
         return (
-            f"{cfg.icon} <b>1xBet {cfg.title} · {strength}</b>
-"
-            f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}
-"
-            f"⏱ {self._format_clock(row)} · ✅ Flashscore LIVE
-"
-            f"📈 ТБ {float(end.get('line') or row.get('line') or 0):g} @ {float(end.get('over') or row.get('over') or 0):.2f}
-"
+            f"{cfg.icon} <b>1xBet {cfg.title} · {strength}</b>\n"
+            f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}\n"
+            f"⏱ {self._format_clock(row)} · ✅ Flashscore LIVE\n"
+            f"📈 ТБ {float(end.get('line') or row.get('line') or 0):g} @ {float(end.get('over') or row.get('over') or 0):.2f}\n"
             f"🔥 движение +{float(signal.get('metric_delta') or 0):.2f} · импульсов {int(signal.get('moves') or 0)}"
         )
 
@@ -596,8 +592,7 @@ class MultiSportSteamWorker:
         tmp.replace(self.state_path)
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         with self.history_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "
-")
+            fh.write(json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
         trim_file_tail(self.history_path, max(1024 * 1024, _int_env("XBET_MULTISPORT_HISTORY_KEEP_BYTES", 4 * 1024 * 1024)))
         return state
 

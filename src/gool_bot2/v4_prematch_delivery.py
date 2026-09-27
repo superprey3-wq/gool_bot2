@@ -184,13 +184,34 @@ def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jour
             pid = f"parlay:{mode.lower()}:{idx}:" + ":".join(x["event_id"] for x in legs)
             if any(str(x.get("entry_id") or "") == pid for x in rows):
                 continue
-            rows.append({
+            parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
                 "kind": mode, "result": "pending", "lifecycle": "scheduled",
                 "odd": float(acc.get("combined_odds") or 0.0),
                 "probability": float(acc.get("combined_probability") or 0.0),
                 "legs": legs, "created_at": _now(),
-            })
+            }
+            rows.append(parent)
+            leg_lines = []
+            for n, leg in enumerate(legs, 1):
+                when = str(leg.get("scheduled_start") or "").strip()
+                league = str(leg.get("league") or "FOOTBALL")
+                leg_lines.append(
+                    f"{n}. <b>{leg.get('home','?')} — {leg.get('away','?')}</b>\n"
+                    f"   {league} · {when}\n"
+                    f"   {leg.get('market','?')} @ {float(leg.get('odd') or 0):.2f}"
+                )
+            title = "💎 SUPER 10" if mode == "SUPER" else "🔗 ЭКСПРЕСС"
+            caption = (
+                f"{title} · <b>GOOL V4</b>\n"
+                f"Общий кэф: <b>{float(parent.get('odd') or 0):.2f}</b>\n\n"
+                + "\n\n".join(leg_lines)
+            )
+            delivered = telegram.broadcast(caption, reply_markup=telegram.MENU_KEYBOARD)
+            if delivered:
+                parent["telegram_sent"] = True
+                parent["telegram_sent_at"] = _now()
+                parent["telegram_delivery_count"] = int(delivered)
             sent["parlays"] += 1
         save_signal_journal(journal_path, rows)
     return sent

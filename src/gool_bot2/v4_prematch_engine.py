@@ -61,8 +61,11 @@ def build_accumulators(
     min_combined_odds: float = 1.65,
     max_combined_odds: float = 4.00,
 ) -> list[dict]:
-    pool = [p for p in picks if qualified_pick(p)]
-    pool.sort(key=lambda p: (p.edge, p.expected_value, p.model_probability), reverse=True)
+    # Accumulators must use the same market-shrunk probabilities as singles.
+    # Otherwise a leg can look qualified in an ACCA while being rejected by delivery.
+    pool = [blend_with_market(p) for p in picks]
+    pool = [p for p in pool if qualified_pick(p)]
+    pool.sort(key=lambda p: (p.edge, p.expected_value, p.model_probability, p.data_quality), reverse=True)
     out: list[dict] = []
 
     def walk(start: int, chosen: list[PrematchPick]) -> None:

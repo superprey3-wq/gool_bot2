@@ -202,6 +202,10 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
         except Exception as exc:
             return None, f"PROFILE_{type(exc).__name__}"
 
+    total = len(fixtures)
+    progress_every = max(1, int(os.getenv("GOOL_PREMATCH_PROGRESS_EVERY", "100")))
+    completed = 0
+    print(f"PREMATCH_PROGRESS start total={total} workers={workers}", flush=True)
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="gool-pm") as pool:
         future_map = {pool.submit(one, m): m for m in fixtures}
         for fut in as_completed(future_map):
@@ -214,6 +218,12 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
                 analysed.append(row)
             elif err:
                 reasons[str(m.provider_match_id)] = err
+            completed += 1
+            if completed % progress_every == 0 or completed == total:
+                print(
+                    f"PREMATCH_PROGRESS checked={completed}/{total} analysed={len(analysed)} failures={len(reasons)}",
+                    flush=True,
+                )
     analysed.sort(key=lambda row: (row["brain_score"], row["quality"]), reverse=True)
     print(f"PREMATCH_PARALLEL scanned={len(fixtures)} workers={workers} analysed={len(analysed)} failures={len(reasons)}", flush=True)
     return analysed, reasons

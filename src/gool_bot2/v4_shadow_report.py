@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -180,21 +182,41 @@ def _brain_score(profile: dict, quality: float) -> float:
 
 
 def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict], dict[str, str]]:
+    """Analyse the full field concurrently, with bounded work per runner."""
     analysed: list[dict] = []
     reasons: dict[str, str] = {}
-    fusion = PrematchDataFusion(fs)
-    for match in fixtures:
+    workers = max(4, min(32, int(os.getenv("GOOL_PREMATCH_WORKERS", "20"))))
+    scan_limit = max(20, int(os.getenv("GOOL_PREMATCH_SCAN_LIMIT", "400")))
+    fixtures = list(fixtures)[:scan_limit]
+
+    def one(match):
+        local_fs = FlashscoreProvider()
         try:
-            history = fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
+            history = local_fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
             history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
             profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
-            sample = max(samples or [0]); quality = min(1.0, sample / 8.0)
+            sample = max(samples or [0])
+            quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
-            analysed.append({"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}})
+            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
         except Exception as exc:
-            reasons[str(match.provider_match_id)] = f"PROFILE_{type(exc).__name__}"
+            return None, f"PROFILE_{type(exc).__name__}"
+
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="gool-pm") as pool:
+        future_map = {pool.submit(one, m): m for m in fixtures}
+        for fut in as_completed(future_map):
+            m = future_map[fut]
+            try:
+                row, err = fut.result(timeout=1)
+            except Exception as exc:
+                row, err = None, f"PROFILE_{type(exc).__name__}"
+            if row is not None:
+                analysed.append(row)
+            elif err:
+                reasons[str(m.provider_match_id)] = err
     analysed.sort(key=lambda row: (row["brain_score"], row["quality"]), reverse=True)
+    print(f"PREMATCH_PARALLEL scanned={len(fixtures)} workers={workers} analysed={len(analysed)} failures={len(reasons)}", flush=True)
     return analysed, reasons
 
 

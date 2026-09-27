@@ -128,7 +128,7 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 self.active_root = best_root
             return self.active_root, rows
 
-        max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "75")))
+        max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "300")))
         age = now - self._last_index_at if self._last_index_at > 0 else 999999.0
         if self._last_index_rows and age <= max_cache_age:
             self._event_roots = {key: list(value) for key, value in self._last_event_roots.items()}

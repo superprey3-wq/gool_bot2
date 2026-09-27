@@ -1,0 +1,21 @@
+name: Today fixtures count
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - ".github/workflows/today-fixtures-count.yml"
+
+jobs:
+  count-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Count today's fixtures from all sources
+        run: python -m gool_bot2.v4_shadow_report --count-today

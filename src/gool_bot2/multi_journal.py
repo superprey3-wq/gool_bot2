@@ -195,7 +195,8 @@ def _wins_at_score(row: dict[str, Any], hs: int, aws: int) -> bool:
     key = str(row.get("market_key") or "")
     line = _line_from_key(key)
     if family in {"match_total", "first_half_total"} and line is not None:
-        return hs + aws > line
+        total = hs + aws
+        return total < line if key.startswith("under:") else total > line
     if family == "team_total" and line is not None:
         return (hs if key.startswith("home_total:") else aws) > line
     if family == "btts":

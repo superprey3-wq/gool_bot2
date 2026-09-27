@@ -50,6 +50,19 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
     score_total = max(0, int(match.get("home_score") or 0)) + max(0, int(match.get("away_score") or 0))
     cards = card_context(record)
     red_total = int(cards.get("home_red") or 0) + int(cards.get("away_red") or 0)
+    momentum = record.get("live_momentum") or {}
+    minutes_in_epoch = float(momentum.get("minutes_in_epoch") or 0.0)
+    xg5 = momentum.get("xg_total_last_5m")
+    shots5 = momentum.get("shots_total_last_5m")
+    sot5 = momentum.get("sot_total_last_5m")
+    big5 = momentum.get("big_total_last_5m")
+    momentum_ready = minutes_in_epoch >= 5.0 and any(v is not None for v in (xg5, shots5, sot5, big5))
+    recent_threat = bool(
+        (xg5 is not None and float(xg5) >= 0.16)
+        or (sot5 is not None and float(sot5) >= 1.0)
+        or (big5 is not None and float(big5) >= 1.0)
+        or (shots5 is not None and float(shots5) >= 3.0)
+    )
 
     elapsed = max(8.0, float(minute))
     threat = xg + 0.030 * shots + 0.075 * sot + 0.18 * big + 0.006 * box + 0.010 * corners
@@ -97,6 +110,12 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
         # Proxy-only decisions need a stronger probability margin because their
         # xG-like value is derived rather than supplied by a provider.
         effective_threshold = threshold + (0.05 if xg_source != "provider_xg" else 0.0)
+        # Once a genuine 5m window exists, stale cumulative pressure is vetoed.
+        # Strong recent pressure gets a small probability-margin reward.
+        if momentum_ready and not recent_threat:
+            effective_threshold += 0.10
+        elif momentum_ready and recent_threat:
+            effective_threshold = max(threshold, effective_threshold - 0.03)
         if red_total:
             effective_threshold += 0.03
 
@@ -111,6 +130,11 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
             f"big_chances={big:.0f}",
             f"sources={sources}",
             f"red_cards={red_total}",
+            f"momentum_ready={int(momentum_ready)}",
+            f"recent_threat={int(recent_threat)}",
+            f"xg5={xg5}",
+            f"shots5={shots5}",
+            f"sot5={sot5}",
             f"remaining={remaining}",
             f"threshold={effective_threshold:.2f}",
         )

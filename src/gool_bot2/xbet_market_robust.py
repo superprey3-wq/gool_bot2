@@ -150,7 +150,9 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
             "GroupEvents": "true",
             "allEventsGroupSubGames": "true",
             "countevents": 250,
-            "grMode": 2,
+            "grMode": 4,
+            "marketType": 1,
+            "isNewBuilder": "true",
         }
         roots: list[str] = []
         for root in [*(self._event_roots.get(str(event_id)) or []), self.active_root, *market.ROOTS]:

@@ -274,16 +274,16 @@ def main() -> None:
     # best evidence-backed fixtures form a small exploration floor.
     eligible = [row for row in analysed if row["quality"] >= 0.50 and row["brain_score"] > 0.0]
     strong = [row for row in eligible if row["brain_score"] >= 0.42]
-    if strong:
-        brain_candidates = strong[:12]
-    else:
-        brain_candidates = eligible[:min(6, len(eligible))]
+    # Stage 2 must price the full evidence-backed field, not an arbitrary top 12.
+    # Football quality remains the first gate; bookmaker value decides only after it.
+    brain_candidates = strong if strong else eligible
+    price_cap = max(1, int(os.getenv("GOOL_PREMATCH_PRICE_CAP", "250")))
+    brain_candidates = brain_candidates[:price_cap]
 
-    # Stage 2: only now ask 1xBet for prices on selected football candidates.
     selected_ids = {str(row["match"].provider_match_id) for row in brain_candidates}
     state = XBetPrematchCollector(Path(args.state)).collect_once(targets=[row["match"] for row in brain_candidates])
     report = build_market_report(state, args.limit, fixtures=fixtures, live=live, allowed_event_ids=selected_ids, target_date=target_date)
-    print(f"PREMATCH_FUNNEL fs={len(remaining)} analysed={len(analysed)} brain_selected={len(brain_candidates)} odds_requested={len(brain_candidates)} profile_failures={len(failures)}", flush=True)
+    print(f"PREMATCH_FUNNEL fs={len(remaining)} analysed={len(analysed)} evidence_eligible={len(eligible)} strong={len(strong)} brain_selected={len(brain_candidates)} odds_requested={len(brain_candidates)} price_cap={price_cap} profile_failures={len(failures)}", flush=True)
     for row in brain_candidates:
         m=row["match"]
         print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']}", flush=True)

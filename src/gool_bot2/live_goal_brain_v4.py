@@ -57,12 +57,13 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
     sot5 = momentum.get("sot_total_last_5m")
     big5 = momentum.get("big_total_last_5m")
     momentum_ready = minutes_in_epoch >= 5.0 and any(v is not None for v in (xg5, shots5, sot5, big5))
-    recent_threat = bool(
-        (xg5 is not None and float(xg5) >= 0.16)
-        or (sot5 is not None and float(sot5) >= 1.0)
-        or (big5 is not None and float(big5) >= 1.0)
-        or (shots5 is not None and float(shots5) >= 3.0)
-    )
+    recent_signals = sum((
+        int(xg5 is not None and float(xg5) >= 0.16),
+        int(sot5 is not None and float(sot5) >= 1.0),
+        int(big5 is not None and float(big5) >= 1.0),
+        int(shots5 is not None and float(shots5) >= 3.0),
+    ))
+    recent_threat = recent_signals >= 2
 
     elapsed = max(8.0, float(minute))
     threat = xg + 0.030 * shots + 0.075 * sot + 0.18 * big + 0.006 * box + 0.010 * corners

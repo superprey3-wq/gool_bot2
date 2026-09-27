@@ -125,3 +125,41 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     clone["current_score"] = settled
     clone["tier"] = labels.get(result, "RESULT")
     return render_v4_prematch_card(clone, record=record, in_game=True)
+
+
+def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
+    """Combined entry/result PNG for DOUBLE and SUPER parent bets."""
+    kind = str(row.get("kind") or "DOUBLES").upper()
+    legs = list(row.get("legs") or [])
+    final = str(row.get("result") or "pending").lower()
+    if result:
+        title = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "VOID"}.get(final, "РЕЗУЛЬТАТ")
+        accent = ACCENT if final == "won" else GOLD
+    else:
+        title = "SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС"
+        accent = GOLD if kind == "SUPER" else ACCENT
+    height = max(760, 330 + len(legs) * 92)
+    img = Image.new("RGBA", (W, height), BG + (255,))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((24, 20, 1056, 105), 22, fill=PANEL, outline=accent, width=3)
+    draw.text((50, 40), "GOOL V4", font=sc._font(30, True), fill=accent)
+    _center_in_box(draw, title, (700, 32, 1028, 92), sc._font(22, True), accent)
+    odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
+    _center(draw, f"{'ИТОГ · ' if result else ''}{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'}", 135, sc._font(31, True), TEXT)
+    _center(draw, f"Общий коэффициент {odd:.2f}", 180, sc._font(25, True), accent)
+    y = 245
+    icons = {"won": "✓", "lost": "×", "push": "↩", "void": "↩", "pending": "•"}
+    for i, leg in enumerate(legs, 1):
+        lr = str(leg.get("result") or "pending").lower()
+        draw.rounded_rectangle((45, y, 1035, y + 76), 16, fill=PANEL2)
+        draw.text((65, y + 13), f"{icons.get(lr, '•')} {i}.", font=sc._font(18, True), fill=accent)
+        teams = f"{leg.get('home','?')} — {leg.get('away','?')}"
+        draw.text((125, y + 10), teams, font=_fit(draw, teams, 590, 19, True), fill=TEXT)
+        detail = f"{leg.get('league','FOOTBALL')} · {leg.get('scheduled_start','')} · {leg.get('market','?')}"
+        draw.text((125, y + 43), detail, font=_fit(draw, detail, 700, 13, False), fill=MUTED)
+        draw.text((875, y + 22), f"@ {float(leg.get('odd') or 0):.2f}", font=sc._font(18, True), fill=TEXT)
+        y += 92
+    footer = "РЕЗУЛЬТАТ ЗАФИКСИРОВАН" if result else "ЕДИНАЯ СТАВКА · ВСЕ НОГИ В ЖУРНАЛЕ"
+    draw.rounded_rectangle((245, height - 78, 835, height - 25), 16, fill=accent)
+    _center_in_box(draw, footer, (245, height - 78, 835, height - 25), sc._font(15, True), BG)
+    return sc._save(img)

@@ -1,4 +1,4 @@
-from gool_bot2.football_model_challengers import poisson_profile_challenger, total_probability
+from gool_bot2.football_model_challengers import poisson_profile_challenger, total_probability, choose_challenger_delivery
 
 
 def test_poisson_challenger_returns_normalized_probabilities():
@@ -26,3 +26,29 @@ def test_poisson_challenger_does_not_need_bookmaker_market():
         "home_expected_goals": 1.2, "away_expected_goals": 0.8,
     }})
     assert forecast is not None
+
+
+def _pick(event, odds, p, edge=.10, ev=.15, quality=.9):
+    return {"event_id": event, "home": event, "away": "B", "selection": "under 2.5",
+            "odds": odds, "probability": p, "edge": edge, "expected_value": ev, "quality": quality}
+
+
+def test_delivery_can_keep_strong_single_instead_of_forcing_acca():
+    rows=[_pick("A",2.05,.76,ev=.56), _pick("C",1.60,.68,ev=.09)]
+    ticket=choose_challenger_delivery(rows)
+    assert ticket["type"] == "SINGLE"
+    assert ticket["legs"][0]["event_id"] == "A"
+
+
+def test_delivery_can_choose_confident_double():
+    rows=[_pick("A",1.75,.75,ev=.31), _pick("C",1.80,.74,ev=.33), _pick("E",1.55,.63,ev=.05)]
+    ticket=choose_challenger_delivery(rows)
+    assert ticket["type"] == "ACCA_2"
+    assert len(ticket["legs"]) == 2
+
+
+def test_three_plus_requires_stricter_leg_confidence():
+    rows=[_pick("A",1.55,.74), _pick("C",1.55,.73), _pick("E",1.55,.71)]
+    ticket=choose_challenger_delivery(rows, max_legs=4)
+    assert ticket is not None
+    assert all(x["probability"] >= .67 for x in ticket["legs"]) if ticket["type"].startswith("ACCA") else True

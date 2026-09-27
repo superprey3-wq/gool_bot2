@@ -264,7 +264,7 @@ class XBetPrematchCollector:
         previous = _load(self.state_path)
         stored = dict(previous.get("matches") or {}) if isinstance(previous.get("matches"), dict) else {}
         limit = max(40, min(120, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "80"))))
-        workers = max(2, min(6, int(os.getenv("XBET_PREMATCH_WORKERS", "4"))))
+        workers = max(2, min(16, int(os.getenv("XBET_PREMATCH_WORKERS", "8"))))
         now = time.time()
         candidates: list[dict[str, Any]] = []
         for event in index:
@@ -276,15 +276,16 @@ class XBetPrematchCollector:
             candidates.append({"event": event, "event_id": event_id, "home": home, "away": away})
 
         if targets:
-            # Flashscore drives discovery: search every concrete fixture directly
-            # in 1xBet. Fall back to the broad index only when address search misses.
+            # Fixture discovery is already complete before this stage. Resolve bookmaker
+            # addresses concurrently so pricing cannot serialize the full daily field.
             selected: list[dict[str, Any]] = []
             seen: set[str] = set()
-            for target in targets:
+            search_workers = max(4, min(24, int(os.getenv("XBET_PREMATCH_SEARCH_WORKERS", "12"))))
+
+            def resolve_target(target: Any) -> dict[str, Any] | None:
                 row = self._search_target(target)
-                if row and row["event_id"] not in seen:
-                    seen.add(row["event_id"]); selected.append(row)
-                    continue
+                if row:
+                    return row
                 target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
                 best = None; best_score = 0.0
                 for candidate in candidates:
@@ -294,9 +295,20 @@ class XBetPrematchCollector:
                         continue
                     if names > best_score:
                         best = candidate; best_score = names
-                if best and best_score >= 0.68 and best["event_id"] not in seen:
-                    best = {**best, "root": root}
-                    seen.add(best["event_id"]); selected.append(best)
+                if best and best_score >= 0.68:
+                    return {**best, "root": root}
+                return None
+
+            with ThreadPoolExecutor(max_workers=search_workers, thread_name_prefix="xbet-search") as pool:
+                futures = [pool.submit(resolve_target, target) for target in targets]
+                for future in as_completed(futures):
+                    try:
+                        row = future.result()
+                    except Exception:
+                        row = None
+                    if row and row["event_id"] not in seen:
+                        seen.add(row["event_id"])
+                        selected.append(row)
             candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
         else:
             candidates = [{**row, "root": root} for row in candidates[:limit]]

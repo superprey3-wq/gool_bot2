@@ -132,6 +132,31 @@ def _manual_thought(history: dict[str, Any], home: str, away: str, primary: dict
     return "💭 <b>Мысль V4:</b> " + "; ".join(notes) + "."
 
 
+def _idea_bet(history: dict[str, Any], home: str, away: str) -> str:
+    def avg(rows: list[dict[str, Any]], team: str) -> tuple[float, float]:
+        rows = list(rows or [])[:10]
+        if not rows:
+            return 0.0, 0.0
+        fs = FlashscoreProvider()
+        gf = ga = 0
+        for r in rows:
+            own_home = fs._same_team(str(r.get("home") or ""), team)
+            hs, aws = int(r.get("home_score") or 0), int(r.get("away_score") or 0)
+            a, b = (hs, aws) if own_home else (aws, hs)
+            gf += a; ga += b
+        return gf / len(rows), ga / len(rows)
+    hgf, hga = avg(history.get("home_recent") or [], home)
+    agf, aga = avg(history.get("away_recent") or [], away)
+    expected = (hgf + aga + agf + hga) / 2.0
+    if expected >= 2.8:
+        return "ТБ 2.5"
+    if expected <= 2.2:
+        return "ТМ 2.5"
+    if hgf >= 1.25 and agf >= 1.25:
+        return "Обе забьют — Да"
+    return "ТБ 1.5"
+
+
 def analyse_match_text(match: Any) -> str:
     fs = FlashscoreProvider()
     analysed, failures = _analyse_fixtures(fs, [match])
@@ -143,40 +168,29 @@ def analyse_match_text(match: Any) -> str:
     primary = row.get("primary_trend") or {}
     trends = row.get("trends") or []
     ts = int((match.meta or {}).get("scheduled_start_ts") or 0)
-    if ts:
-        when = datetime.fromtimestamp(ts, ZoneInfo("Europe/Moscow")).strftime("%H:%M МСК")
-    elif int(match.minute or 0):
-        when = f"LIVE {int(match.minute or 0)}' · {int(match.home_score or 0)}:{int(match.away_score or 0)}"
-    else:
-        when = "сегодня"
+    when = datetime.fromtimestamp(ts, ZoneInfo("Europe/Moscow")).strftime("%H:%M МСК") if ts else (f"LIVE {int(match.minute or 0)}' · {int(match.home_score or 0)}:{int(match.away_score or 0)}" if int(match.minute or 0) else "сегодня")
     h2h = list(history.get("h2h") or [])
     h2h_text = "нет данных"
     if h2h:
         hg = sum(int(x.get("home_score") or 0) + int(x.get("away_score") or 0) for x in h2h)
         h2h_text = f"{len(h2h)} матч. · средний тотал {hg/len(h2h):.2f}"
-    trend_lines = []
-    for t in trends[:4]:
-        trend_lines.append(f"• {t.get('name')}: {float(t.get('probability') or 0)*100:.0f}%")
+    trend_lines = [f"• {t.get('name')}: {float(t.get('probability') or 0)*100:.0f}%" for t in trends[:4]]
     if primary:
-        verdict = f"🎯 <b>Главный тренд: {primary.get('name')}</b> · {float(primary.get('probability') or 0)*100:.0f}%"
+        verdict = f"🎯 <b>Ставка V4: {primary.get('name')}</b> · {float(primary.get('probability') or 0)*100:.0f}%"
+        idea = "✅ Порог полноценного сигнала пройден."
     else:
-        verdict = "⏸ <b>NO BET:</b> нет достаточно однозначного главного тренда"
+        verdict = "⏸ <b>NO BET:</b> порог полноценного сигнала не пройден"
+        idea = f"💡 <b>Идея V4:</b> {_idea_bet(history, match.home, match.away)} · ориентир по форме, не официальный сигнал."
     return "\n".join([
         "🧠 <b>GOOL BOT 4 · V4 РАЗБОР МАТЧА</b>",
         f"⚽ <b>{match.home} — {match.away}</b>",
-        f"🏆 {match.league or 'FOOTBALL'} · {when}",
-        "",
+        f"🏆 {match.league or 'FOOTBALL'} · {when}", "",
         f"🏠 <b>{match.home}</b>: {_team_form(list(history.get('home_recent') or []), match.home)}",
         f"✈️ <b>{match.away}</b>: {_team_form(list(history.get('away_recent') or []), match.away)}",
         f"🤝 H2H: {h2h_text}",
-        f"📚 Выборка: {int(row.get('sample') or 0)} · качество {float(row.get('quality') or 0)*100:.0f}%",
-        "",
-        "<b>Тренды V4:</b>",
-        *(trend_lines or ["• сильных трендов не найдено"]),
-        "",
-        verdict,
-        _manual_thought(history, match.home, match.away, primary, trends),
-        "ℹ️ Ручной анализ показывает мнение V4 даже при NO BET; ставка появляется только при достаточном подтверждении.",
+        f"📚 Выборка: {int(row.get('sample') or 0)} · качество {float(row.get('quality') or 0)*100:.0f}%", "",
+        "<b>Тренды V4:</b>", *(trend_lines or ["• сильных трендов не найдено"]), "",
+        verdict, idea, _manual_thought(history, match.home, match.away, primary, trends),
     ])
 
 

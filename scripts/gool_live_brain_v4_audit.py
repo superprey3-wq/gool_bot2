@@ -1,11 +1,45 @@
 from __future__ import annotations
 
 import json
+import os
 from gool_bot2.live_goal_brain_v4 import evaluate_live_goals
 from gool_bot2.providers.fusion import FootballDataFusion
 from gool_bot2.v4_live_policy import LiveV4Input, decide_live_v4
 from gool_bot2.xbet_market_robust import RobustXBetMarketCollector
 from pathlib import Path
+
+
+def _journal_path() -> Path:
+    return Path(os.getenv('GOOL_POLICY_SHADOW_JOURNAL', 'artifacts/live_policy_shadow/journal.json'))
+
+
+def _load_journal() -> list[dict]:
+    try:
+        data = json.loads(_journal_path().read_text(encoding='utf-8'))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_journal(rows: list[dict]) -> None:
+    path = _journal_path(); path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def _settle_journal(rows: list[dict], records: list[dict]) -> None:
+    by_id = {str((r.get('match') or {}).get('flashscore_event_id') or ''): r for r in records}
+    for row in rows:
+        if row.get('result'):
+            continue
+        rec = by_id.get(str(row.get('event_id') or ''))
+        if not rec:
+            continue
+        m = rec.get('match') or {}; current_total = int(m.get('home_score') or 0) + int(m.get('away_score') or 0)
+        row['last_minute'] = int(m.get('minute') or 0); row['last_score'] = [int(m.get('home_score') or 0), int(m.get('away_score') or 0)]
+        if current_total > float(row.get('line') or 999):
+            row['result'] = 'WIN'; row['settled_score'] = row['last_score']
+        elif bool(m.get('is_finished')):
+            row['result'] = 'LOSS'; row['settled_score'] = row['last_score']
 
 
 def main() -> None:
@@ -14,7 +48,10 @@ def main() -> None:
     xbet_state = xbet.collect_once()
     xbet_matches = xbet_state.get('matches') or {}
     print(f"LIVE_POLICY_XBET mapped={len(xbet_matches)}", flush=True)
-    records = [r for r in fusion.live_records() if 8 <= int((r.get("match") or {}).get("minute") or 0) <= 82]
+    all_records = fusion.live_records()
+    journal = _load_journal()
+    _settle_journal(journal, all_records)
+    records = [r for r in all_records if 8 <= int((r.get("match") or {}).get("minute") or 0) <= 82]
     print(f"LIVE_BRAIN_V4 matches={len(records)}", flush=True)
     bets = 0
     candidates = []
@@ -73,6 +110,10 @@ def main() -> None:
                 price_status = "NO_PRICE" if odd is None else f"TB{target_line:g}@{odd:.2f}"
                 ev = None if odd is None else d.probability * odd - 1.0
                 print(f"LIVE_POLICY_PRICE {match.get('home')} - {match.get('away')} | {price_status} | p={d.probability:.3f} | EV={'n/a' if ev is None else f'{ev:+.3f}'}", flush=True)
+                event_id = str(match.get("flashscore_event_id") or "")
+                if odd is not None and not any(str(x.get("event_id") or "") == event_id and x.get("market") == d.market and not x.get("result") for x in journal):
+                    journal.append({"event_id": event_id, "home": match.get("home"), "away": match.get("away"), "market": d.market, "entry_minute": int(match.get("minute") or 0), "entry_score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)], "line": target_line, "odd": odd, "probability": d.probability, "policy_score": policy.score, "brain_decision": d.decision, "result": None})
+                    print(f"LIVE_POLICY_JOURNAL ADD {match.get('home')} - {match.get('away')} | TB{target_line:g}@{odd:.2f}", flush=True)
                 candidates.append({
                     "home": match.get("home"), "away": match.get("away"),
                     "minute": int(match.get("minute") or 0), "score": f"{match.get('home_score')}:{match.get('away_score')}",
@@ -86,6 +127,11 @@ def main() -> None:
                 f"p={d.probability:.3f} conf={d.confidence:.3f} score={d.score:.3f} source={d.data_source} policy={policy.allowed}/{policy.tier}/{policy.score:.1f}",
                 flush=True,
             )
+    _save_journal(journal)
+    wins = sum(1 for x in journal if x.get("result") == "WIN"); losses = sum(1 for x in journal if x.get("result") == "LOSS"); pending = sum(1 for x in journal if not x.get("result"))
+    print(f"LIVE_POLICY_JOURNAL_SUMMARY total={len(journal)} wins={wins} losses={losses} pending={pending}", flush=True)
+    for x in journal[-10:]:
+        print(f"LIVE_POLICY_JOURNAL_ROW {x.get('home')} - {x.get('away')} entry={x.get('entry_minute')} score={x.get('entry_score')} line={x.get('line')} odd={x.get('odd')} p={x.get('probability')} result={x.get('result') or 'PENDING'} last={x.get('last_score')}", flush=True)
     print(f"LIVE_BRAIN_V4_BETS {bets}", flush=True)
     print(f"LIVE_ROLE_SUMMARY policy_primary={len(candidates)} agree={agree} brain_veto={brain_veto} brain_only={brain_only}", flush=True)
     candidates.sort(key=lambda x:(x["policy_score"],x["p"],x["conf"]), reverse=True)

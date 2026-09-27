@@ -188,7 +188,7 @@ def choose_challenger_delivery(shortlist: list[dict[str, Any]], max_legs: int = 
     if best_single is None:
         return best_acca
     # A multi must retain substantial confidence to displace a very strong single.
-    if best_acca["combined_probability"] >= .48 and best_acca["expected_value"] >= best_single["expected_value"] * 1.15:
+    if best_acca["combined_probability"] >= best_single["probability"] * .70 and best_acca["expected_value"] >= best_single["expected_value"] * 1.15:
         return best_acca
     return {"type":"SINGLE","legs":[best_single],"combined_odds":best_single["odds"],
             "combined_probability":best_single["probability"],"expected_value":best_single["expected_value"]}

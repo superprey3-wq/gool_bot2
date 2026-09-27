@@ -4,7 +4,7 @@ from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.v4_shadow_report import _analyse_fixtures
 from gool_bot2.v4_prematch_engine import PrematchPick,rank_prematch_for_delivery,build_super_accumulator
-from gool_bot2.odds_journal import append_price_snapshot
+from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); tz=timezone(timedelta(hours=3)); day=datetime.now(tz).date()
 fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and float((m.meta or {}).get("scheduled_start_ts"))>now and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")),tz).date()==day]
 print("PIPELINE_START",len(fixtures),flush=True)
@@ -26,7 +26,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    rr=next((r for r in rows if str(r["match"].provider_match_id)==z[0].event_id),None)
    if rr:
     m=rr["match"]; x=z[1]
-    append_price_snapshot(event_id=z[0].event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=(m.meta or {}).get("scheduled_start_ts"),trend=z[0].market,odds=z[0].odds,bookmaker=x["bookmaker"],market_probability=z[0].market_probability,model_probability=z[0].model_probability)
+    append_price_snapshot(event_id=z[0].event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=(m.meta or {}).get("scheduled_start_ts"),trend=z[0].market,odds=z[0].odds,bookmaker=x["bookmaker"],market_probability=z[0].market_probability,model_probability=z[0].model_probability)\n    append_sqlite_snapshot(event_id=z[0].event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=(m.meta or {}).get("scheduled_start_ts"),trend=z[0].market,odds=z[0].odds,bookmaker=x["bookmaker"],market_probability=z[0].market_probability,model_probability=z[0].model_probability,data_quality=z[0].data_quality)
 print("EXACT_PRIMARY_PRICED",len(priced),flush=True)
 print("=== ORDINARS ===",flush=True)
 for i,(p,tier) in enumerate(rank_prematch_for_delivery(priced,limit=20,max_per_event=1),1):

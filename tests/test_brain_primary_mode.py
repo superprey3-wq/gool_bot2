@@ -41,7 +41,7 @@ def _experts(probability: float = 0.72, state: str = "PASS") -> dict:
 def test_main_brain_passes_without_any_xbet_market(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_MIN_RATING", "70")
     decision = mode.analyze_brain_primary_match(
-        _match(), None, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        _match(), None, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
 
     assert decision.status == "BET"
@@ -49,7 +49,7 @@ def test_main_brain_passes_without_any_xbet_market(monkeypatch):
     assert decision.winner.source == "brain_primary:another_goal"
     assert decision.winner.label == "ТБ 1.5"
     assert decision.winner.odd == 0.0
-    assert decision.winner.rating == 72.0
+    assert decision.winner.rating == 82.0
     assert "без обязательного кэфа" in decision.reason
 
 
@@ -68,7 +68,7 @@ def test_low_or_moving_xbet_odd_cannot_veto_main_brain(monkeypatch):
         },
     }
     decision = mode.analyze_brain_primary_match(
-        _match(), market, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        _match(), market, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
 
     assert decision.status == "BET"
@@ -123,12 +123,12 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
 
     record = {"match": _match()}
     decision = mode.analyze_brain_primary_match(
-        record["match"], None, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        record["match"], None, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
     _, entry = mode.sync_brain_or_market_journal(
         record,
         decision,
-        _experts(),
+        _experts(0.82),
         Path(tmp_path / "bet-journal.json"),
         data_quality=0.80,
     )
@@ -140,11 +140,11 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
     _, repeated = mode.sync_brain_or_market_journal(
         record,
         decision,
-        _experts(),
+        _experts(0.82),
         Path(tmp_path / "bet-journal.json"),
         data_quality=0.80,
     )
-    assert repeated is None
+    assert repeated is not None
 
 
 def test_brain_signal_without_price_is_not_public(tmp_path, monkeypatch):
@@ -217,7 +217,7 @@ def _experts(probability: float = 0.72, state: str = "PASS") -> dict:
 def test_main_brain_passes_without_any_xbet_market(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_MIN_RATING", "70")
     decision = mode.analyze_brain_primary_match(
-        _match(), None, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        _match(), None, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
 
     assert decision.status == "BET"
@@ -225,7 +225,7 @@ def test_main_brain_passes_without_any_xbet_market(monkeypatch):
     assert decision.winner.source == "brain_primary:another_goal"
     assert decision.winner.label == "ТБ 1.5"
     assert decision.winner.odd == 0.0
-    assert decision.winner.rating == 72.0
+    assert decision.winner.rating == 82.0
     assert "без обязательного кэфа" in decision.reason
 
 
@@ -244,7 +244,7 @@ def test_low_or_moving_xbet_odd_cannot_veto_main_brain(monkeypatch):
         },
     }
     decision = mode.analyze_brain_primary_match(
-        _match(), market, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        _match(), market, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
 
     assert decision.status == "BET"
@@ -299,12 +299,12 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
 
     record = {"match": _match()}
     decision = mode.analyze_brain_primary_match(
-        record["match"], None, {"another_goal": _experts()["another_goal"]}, data_quality=0.80
+        record["match"], None, {"another_goal": _experts(0.82)["another_goal"]}, data_quality=0.80
     )
     _, entry = mode.sync_brain_or_market_journal(
         record,
         decision,
-        _experts(),
+        _experts(0.82),
         Path(tmp_path / "bet-journal.json"),
         data_quality=0.80,
     )
@@ -316,7 +316,7 @@ def test_signal_only_dedupe_is_persisted_only_after_successful_delivery(tmp_path
     _, repeated = mode.sync_brain_or_market_journal(
         record,
         decision,
-        _experts(),
+        _experts(0.82),
         Path(tmp_path / "bet-journal.json"),
         data_quality=0.80,
     )

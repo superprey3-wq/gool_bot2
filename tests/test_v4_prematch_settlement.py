@@ -54,3 +54,23 @@ def test_parent_parlay_syncs_from_child_rows_and_settles():
     assert sync_and_settle_parlays(rows) > 0
     assert rows[-1]["result"] == "won"
     assert rows[-1]["result_notification_pending"] is True
+
+
+def test_parlay_waits_for_every_leg_even_after_a_loss():
+    row={"origin":"prematch_parlay","result":"pending","odd":3.0,"legs":[
+        {"event_id":"a","result":"lost","odd":1.8},
+        {"event_id":"b","result":"pending","odd":1.7},
+    ]}
+    assert settle_parlay(row) is False
+    assert row["result"] == "pending"
+
+
+def test_parlay_combined_and_effective_odds_are_products():
+    row={"origin":"prematch_parlay","result":"pending","odd":5.508,"legs":[
+        {"event_id":"a","result":"won","odd":1.8},
+        {"event_id":"b","result":"push","odd":1.7},
+        {"event_id":"c","result":"won","odd":1.7},
+    ]}
+    assert settle_parlay(row)
+    assert row["result"] == "won"
+    assert row["effective_odd"] == 3.06

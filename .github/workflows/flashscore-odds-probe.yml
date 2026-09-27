@@ -4,21 +4,26 @@ on:
     branches: [gool-v4-rebuild]
     paths:
       - scripts/flashscore_odds_probe.py
+      - scripts/gool_flashscore_today.py
+      - src/gool_bot2/flashscore_odds.py
       - .github/workflows/flashscore-odds-probe.yml
   workflow_dispatch:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       FS_ODDS_GEO: US
       FS_ODDS_GEO_SUB: USCA
       FS_ODDS_WORKERS: "20"
+      GOOL_PREMATCH_WORKERS: "20"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: pip install -e .
-      - name: Probe direct Flashscore odds
+      - name: Scan direct Flashscore odds
         run: python scripts/flashscore_odds_probe.py
+      - name: Build GOOL ordinaries and SUPER 10
+        run: python scripts/gool_flashscore_today.py

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .providers.common import pair_score
 from .providers.flashscore import FlashscoreProvider
+from .providers.fotmob import FotMobProvider
 from .providers.prematch_fusion import PrematchDataFusion
 from .prematch_goal_profile import build_prematch_goal_profile
 from .v4_prematch_engine import (
@@ -206,8 +207,14 @@ def main() -> None:
     parser.add_argument("--count-tomorrow", action="store_true")
     parser.add_argument("--count-today", action="store_true")
     args = parser.parse_args()
-    fs = FlashscoreProvider(); live = fs.live_matches(); fixtures = fs.scheduled_matches()
+    fs = FlashscoreProvider()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
+    if args.count_today:
+        live = []
+        fixtures = FotMobProvider().scheduled_matches_for_day(now_msk.date().isoformat())
+        print(f"FIXTURE_SOURCE fotmob raw={len(fixtures)}", flush=True)
+    else:
+        live = fs.live_matches(); fixtures = fs.scheduled_matches()
     target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow or args.count_tomorrow) else now_msk.date()
     remaining = [m for m in fixtures if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float((m.meta or {}).get("scheduled_start_ts")), tz=msk).date() == target_date and float((m.meta or {}).get("scheduled_start_ts")) > now_ts]
     if args.count_tomorrow:

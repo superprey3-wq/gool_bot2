@@ -12,6 +12,9 @@ def main() -> None:
     print(f"LIVE_BRAIN_V4 matches={len(records)}", flush=True)
     bets = 0
     candidates = []
+    brain_only = 0
+    brain_veto = 0
+    agree = 0
     for record in records[:20]:
         match = record.get("match") or {}
         decisions = evaluate_live_goals(record)
@@ -26,6 +29,7 @@ def main() -> None:
             if d.decision == "BET":
                 bets += 1
             if policy.allowed and d.decision != "BET":
+                brain_veto += 1
                 reason_map = {}
                 for reason in d.reasons:
                     if "=" in reason:
@@ -49,7 +53,11 @@ def main() -> None:
                     f"BLOCKERS={','.join(blockers)} DETAILS={';'.join(d.reasons)}",
                     flush=True,
                 )
-            if d.decision == "BET" and policy.allowed:
+            if d.decision == "BET" and not policy.allowed:
+                brain_only += 1
+                print(f"LIVE_ROLE BRAIN_ONLY {match.get('home')} - {match.get('away')} | {d.market} p={d.probability:.3f}", flush=True)
+            if policy.allowed:
+                if d.decision == "BET": agree += 1
                 candidates.append({
                     "home": match.get("home"), "away": match.get("away"),
                     "minute": int(match.get("minute") or 0), "score": f"{match.get('home_score')}:{match.get('away_score')}",
@@ -63,10 +71,11 @@ def main() -> None:
                 flush=True,
             )
     print(f"LIVE_BRAIN_V4_BETS {bets}", flush=True)
+    print(f"LIVE_ROLE_SUMMARY policy_primary={len(candidates)} agree={agree} brain_veto={brain_veto} brain_only={brain_only}", flush=True)
     candidates.sort(key=lambda x:(x["policy_score"],x["p"],x["conf"]), reverse=True)
-    print("=== LIVE ALL-SYSTEM CONSENSUS ===", flush=True)
+    print("=== LIVE POLICY PRIMARY / BRAIN SHADOW ===", flush=True)
     if not candidates:
-        print("LIVE_CONSENSUS NO_BET", flush=True)
+        print("LIVE_POLICY_PRIMARY NO_BET", flush=True)
     else:
         for i,row in enumerate(candidates[:8],1):
             print(f"L{i:02d}. {row['minute']}' {row['home']} - {row['away']} {row['score']} | {row['market']} | {row['tier']} | p={row['p']:.3f} conf={row['conf']:.3f} policy={row['policy_score']:.1f}", flush=True)
@@ -76,12 +85,12 @@ def main() -> None:
             legs=strong[:min(3,len(strong))]
             joint=1.0
             for r in legs: joint*=r["p"]
-            print(f"LIVE_SHADOW_ACCA legs={len(legs)} joint_model_p={joint:.3f}", flush=True)
+            print(f"LIVE_POLICY_PRIMARY_ACCA legs={len(legs)} joint_model_p={joint:.3f}", flush=True)
             for i,r in enumerate(legs,1):
                 print(f"LA{i}. {r['home']} - {r['away']} | {r['market']} | p={r['p']:.3f}", flush=True)
         else:
             top=candidates[0]
-            print(f"LIVE_SHADOW_SINGLE {top['home']} - {top['away']} | {top['market']} | p={top['p']:.3f}", flush=True)
+            print(f"LIVE_POLICY_PRIMARY_SINGLE {top['home']} - {top['away']} | {top['market']} | p={top['p']:.3f}", flush=True)
 
 
 if __name__ == "__main__":

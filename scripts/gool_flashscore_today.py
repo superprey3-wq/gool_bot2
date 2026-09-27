@@ -25,7 +25,7 @@ print("EXACT_PRIMARY_PRICED",len(priced),flush=True)
 print("=== ORDINARS ===",flush=True)
 for i,(p,tier) in enumerate(rank_prematch_for_delivery(priced,limit=20,max_per_event=1),1):
  x=meta[p.event_id]; print(f"S{i:02d}. {p.home} -- {p.away} | {p.selection} @ {p.odds:.2f} [{x['bookmaker']}] | {tier} | model={p.model_probability:.3f} market={p.market_probability:.3f} edge={p.edge:+.3f} EV={p.expected_value:+.3f} q={p.data_quality:.2f}",flush=True)
-print("=== SUPER 10 ===",flush=True); s=build_super_accumulator(priced,target_legs=10)
+print("=== SUPER 10 V4.1 CALIBRATED ===",flush=True); s=build_super_accumulator(priced,target_legs=10)
 if not s: print("NO QUALIFIED SUPER 10",flush=True)
 else:
  for i,p in enumerate(s["legs"],1):

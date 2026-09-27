@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/gool-multi-router
+      - fix/xbet-live-index-blackout
     paths:
       - 'src/gool_bot2/__init__.py'
       - 'src/gool_bot2/architecture_isolation.py'
@@ -31,6 +32,15 @@ on:
       - 'tests/test_multi_model_capture.py'
       - 'tests/test_xbet_market_robust.py'
       - 'tests/test_xbet_first_half_child.py'
+      - '.github/workflows/gool-multi-live-audit.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/gool_bot2/xbet_market_pressure.py'
+      - 'src/gool_bot2/xbet_market_robust.py'
+      - 'src/gool_bot2/xbet_market_worker.py'
+      - 'tests/test_xbet_market_robust.py'
       - '.github/workflows/gool-multi-live-audit.yml'
   workflow_dispatch:
 
@@ -61,7 +71,7 @@ jobs:
         env:
           XBET_MATCH_MIN_SCORE: '0.68'
           XBET_GAME_WORKERS: '8'
-          XBET_INDEX_CACHE_SECONDS: '75'
+          XBET_INDEX_CACHE_SECONDS: '300'
         run: python scripts/gool_multi_live_audit.py --snapshots 3 --interval 15 --out-dir artifacts/gool_multi_live_audit
 
       - name: Show report in job summary

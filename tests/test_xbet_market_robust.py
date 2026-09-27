@@ -128,6 +128,33 @@ def test_empty_index_cycle_reuses_recent_ids_but_not_old_market_data(monkeypatch
     assert collector._game("42") is not None
 
 
+def test_default_index_cache_survives_slow_livefeed_cycle(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(market, "ROOTS", ["https://a/LiveFeed"])
+    monkeypatch.setattr(market, "INDEX_QUERIES", ["q=1"])
+    monkeypatch.delenv("XBET_INDEX_CACHE_SECONDS", raising=False)
+    clock = {"now": 1000.0}
+    monkeypatch.setattr("gool_bot2.xbet_market_robust.time.monotonic", lambda: clock["now"])
+    phase = {"empty": False}
+
+    def fake_http(url: str, timeout: float = 8.0):
+        if phase["empty"]:
+            return {"Value": []}
+        return _payload(("42", "Alpha", "Beta"))
+
+    monkeypatch.setattr(market, "_http_json", fake_http)
+    collector = RobustXBetMarketCollector(tmp_path / "state.json", tmp_path / "history.jsonl")
+    _, first = collector._fetch_index()
+    phase["empty"] = True
+    clock["now"] += 210.0
+    root, second = collector._fetch_index()
+
+    assert {row["event_id"] for row in first} == {"42"}
+    assert {row["event_id"] for row in second} == {"42"}
+    assert root is not None
+    assert collector._index_cache_used is True
+    assert collector._index_cache_age_seconds == 210.0
+
+
 def test_expired_index_cache_is_not_reused(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(market, "ROOTS", ["https://a/LiveFeed"])
     monkeypatch.setattr(market, "INDEX_QUERIES", ["q=1"])
@@ -166,3 +193,46 @@ def test_game_tries_event_source_root_before_other_mirrors(monkeypatch, tmp_path
     assert calls
     assert calls[0].startswith("https://b/LiveFeed/GetGameZip")
     assert collector.active_root == roots[1]
+
+
+def test_betting_headers_cover_betb2b_feed_contract():
+    assert market.HEADERS["X-Requested-With"] == "XMLHttpRequest"
+    assert market.HEADERS["is-srv"] == "false"
+    assert market.HEADERS["x-app-n"] == "__BETTING_APP__"
+    assert market.HEADERS["x-svc-source"] == "__BETTING_APP__"
+    assert market.HEADERS["x-mobile-project-id"] == "0"
+
+
+def test_game_uses_full_live_market_parameters(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(market, "ROOTS", ["https://a/service-api/LiveFeed"])
+    calls = []
+
+    def fake_http(url: str, timeout: float = 8.0):
+        calls.append(url)
+        return {"Value": {"I": "42", "GE": []}}
+
+    monkeypatch.setattr(market, "_http_json", fake_http)
+    collector = RobustXBetMarketCollector(tmp_path / "state.json", tmp_path / "history.jsonl")
+    assert collector._game("42") is not None
+    assert calls
+    assert "grMode=4" in calls[0]
+    assert "marketType=1" in calls[0]
+    assert "isNewBuilder=true" in calls[0]
+
+
+def test_decode_supports_current_betb2b_total_goals_group():
+    game = {"E": [
+        {"G": 17, "T": 9, "P": 2.5, "C": 1.91},
+        {"G": 17, "T": 10, "P": 2.5, "C": 1.89},
+    ]}
+    markets = market.decode_markets(game)
+    assert markets["match_total"] == [{"line": 2.5, "over": 1.91, "under": 1.89}]
+
+
+def test_decode_keeps_legacy_total_group_fallback():
+    game = {"E": [
+        {"G": 4, "T": 9, "P": 1.5, "C": 1.72},
+        {"G": 4, "T": 10, "P": 1.5, "C": 2.08},
+    ]}
+    markets = market.decode_markets(game)
+    assert markets["match_total"] == [{"line": 1.5, "over": 1.72, "under": 2.08}]

@@ -32,6 +32,10 @@ HEADERS = {
     "Origin": "https://1xbet.com",
     "Referer": "https://1xbet.com/live/football/",
     "X-Requested-With": "XMLHttpRequest",
+    "is-srv": "false",
+    "x-app-n": "__BETTING_APP__",
+    "x-svc-source": "__BETTING_APP__",
+    "x-mobile-project-id": "0",
 }
 
 
@@ -123,12 +127,23 @@ def _match_1x2(nodes: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _pairs_groups(nodes: list[dict[str, Any]], over_t: int, under_t: int, groups: tuple[int, ...]) -> list[dict[str, Any]]:
+    """Try current BetB2B football market groups first, then legacy groups."""
+    for group in groups:
+        rows = _pairs(nodes, over_t, under_t, group)
+        if rows:
+            return rows
+    return []
+
+
 def decode_markets(game: dict[str, Any]) -> dict[str, Any]:
     nodes = _nodes(game)
     return {
-        "match_total": _pairs(nodes, 9, 10, 4),
-        "home_total": _pairs(nodes, 11, 12, 5),
-        "away_total": _pairs(nodes, 13, 14, 6),
+        # Current BetB2B football uses G=17 for Total Goals; older 1xBet
+        # payloads used G=4. Keep both so feed-version drift cannot zero odds.
+        "match_total": _pairs_groups(nodes, 9, 10, (17, 4)),
+        "home_total": _pairs_groups(nodes, 11, 12, (15, 5)),
+        "away_total": _pairs_groups(nodes, 13, 14, (16, 6)),
         "btts": _btts(nodes),
         "match_1x2": _match_1x2(nodes),
     }

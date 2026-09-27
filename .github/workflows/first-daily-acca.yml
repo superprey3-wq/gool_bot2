@@ -2,13 +2,15 @@ name: GOOL first daily accumulator
 on:
   workflow_dispatch:
   push:
-    branches: [gool-v4-rebuild]
+    branches: [gool-v4-rebuild, fix/xbet-live-index-blackout]
     paths:
       - ".github/workflows/first-daily-acca.yml"
       - "src/gool_bot2/v4_prematch_engine.py"
       - "src/gool_bot2/v4_shadow_report.py"
       - "src/gool_bot2/prematch_goal_profile.py"
       - "src/gool_bot2/providers/prematch_fusion.py"
+      - "src/gool_bot2/xbet_prematch_market.py"
+      - "src/gool_bot2/xbet_market_pressure.py"
 jobs:
   first-acca:
     runs-on: ubuntu-latest

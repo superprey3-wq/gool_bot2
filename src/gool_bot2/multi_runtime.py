@@ -9,6 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .live_goal_brain_v4 import evaluate_live_goals
+from .v4_live_policy import LiveV4Input, decide_live_v4
 from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
@@ -112,23 +113,43 @@ def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_pat
             f"confidence={decision.confidence:.3f} source={decision.data_source}",
             flush=True,
         )
-        if mode != "active":
-            continue
         row = experts.get(key)
         if not isinstance(row, dict):
             row = {}
             experts[key] = row
+        policy = decide_live_v4(LiveV4Input(
+            market=key,
+            minute=minute,
+            probability=float(decision.probability),
+            data_quality=float(decision.confidence),
+            pressure=min(1.0, float(decision.score)),
+            trend=min(1.0, float(decision.confidence)),
+            expected_remaining=max(0.0, float(decision.probability)),
+        ))
+        print(
+            f"GOOL_LIVE_POLICY match={mid} minute={minute} head={key} mode={mode} "
+            f"allowed={int(policy.allowed)} tier={policy.tier or '-'} score={policy.score:.2f} "
+            f"brain_shadow={decision.decision}",
+            flush=True,
+        )
+        if mode != "active":
+            continue
         row["probability"] = float(decision.probability)
         row["confidence"] = float(decision.confidence)
-        row["source"] = "live_goal_brain_v4"
-        row["v4_score"] = float(decision.score)
-        row["v4_reasons"] = list(decision.reasons)
-        # V4 controls the football gate only. Price/value/freshness/market
-        # opposition remain mandatory in the existing production router.
-        row["passed"] = decision.decision == "BET"
+        row["source"] = "live_v4_policy"
+        row["v4_score"] = float(policy.score)
+        row["v4_tier"] = policy.tier
+        row["v4_reason"] = policy.reason
+        row["brain_shadow_decision"] = decision.decision
+        row["brain_shadow_score"] = float(decision.score)
+        row["brain_shadow_reasons"] = list(decision.reasons)
+        # Policy is the football gate. The old Brain is shadow-only.
+        # Existing production price/value/freshness/market-opposition guards
+        # still run after this point and remain mandatory.
+        row["passed"] = bool(policy.allowed)
         blocks = [str(x) for x in (row.get("blocks") or []) if str(x) and not str(x).startswith("live_v4_")]
-        if decision.decision != "BET":
-            blocks.append("live_v4_no_bet")
+        if not policy.allowed:
+            blocks.append(f"live_v4_policy_{policy.reason}")
         row["blocks"] = blocks
 
 

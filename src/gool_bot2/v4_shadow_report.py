@@ -17,6 +17,7 @@ from .v4_prematch_engine import (
 )
 from .xbet_prematch_market import XBetPrematchCollector
 from .pinnacle_prematch_market import pinnacle_market_for_match
+from .football_model_challengers import poisson_profile_challenger, challenger_market_candidates, rank_challenger, build_challenger_double, choose_challenger_delivery, dixon_coles_profile_challenger, model_market_candidates, consensus_candidates
 
 
 def _pct(x: float) -> str:
@@ -72,6 +73,8 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     ])
     matched = 0
     all_candidates = []
+    challenger_candidates = []
+    dc_candidates = []
     report_fixtures = [m for m in fixtures if allowed_event_ids is None or str(m.provider_match_id) in allowed_event_ids]
     for i, match in enumerate(report_fixtures[:max(1, limit)], 1):
         row, score = _match_xbet(match, xbet_rows)
@@ -108,7 +111,18 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
                 profile=profile, market=row, data_quality=quality,
             )
             all_candidates.extend(candidates)
+            challenger_candidates.extend(challenger_market_candidates(event_id=match.provider_match_id, home=match.home, away=match.away, profile=profile, market=row, data_quality=quality))
+            dc = dixon_coles_profile_challenger(profile)
+            if dc is not None:
+                dc_candidates.extend(model_market_candidates(dc, event_id=match.provider_match_id, home=match.home, away=match.away, market=row, data_quality=quality))
+                lines.append(f"    CHALLENGER {dc.name}: 1X2={_pct(dc.home)}/{_pct(dc.draw)}/{_pct(dc.away)}")
             lines.append(f"    GOOL profile: sample={sample} quality={quality:.2f} candidates={len(candidates)}")
+            challenger = poisson_profile_challenger(profile)
+            if challenger is not None:
+                lines.append(
+                    f"    CHALLENGER {challenger.name}: xG={challenger.home_lambda:.2f}-{challenger.away_lambda:.2f} "
+                    f"1X2={_pct(challenger.home)}/{_pct(challenger.draw)}/{_pct(challenger.away)}"
+                )
         except Exception as exc:
             lines.append(f"    GOOL profile: unavailable ({type(exc).__name__}: {exc})")
         x = row.get("match_1x2") or {}
@@ -139,7 +153,52 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
             f"{tier} | model={_pct(pick.model_probability)} market={_pct(pick.market_probability)} "
             f"edge={100*pick.edge:+.1f}pp EV={100*pick.expected_value:+.1f}% quality={pick.data_quality:.2f}"
         )
-    lines.insert(2, f"matched_to_xbet={matched}/{min(len(report_fixtures), max(1, limit))}")
+    consensus = consensus_candidates([challenger_candidates, dc_candidates], min_models=2)
+    consensus_shortlist = rank_challenger(consensus, limit=8)
+    lines.extend(["", "=== MULTI-MODEL CONSENSUS SHORTLIST ==="])
+    if not consensus_shortlist:
+        lines.append("NO QUALIFIED CONSENSUS PICKS")
+    for i, pick in enumerate(consensus_shortlist, 1):
+        lines.append(f"M{i:02d}. {pick['home']} — {pick['away']} | {pick['selection']} @ {pick['odds']:.2f} | models={pick.get('model_count',0)} | model={_pct(pick['probability'])} edge={100*pick['edge']:+.1f}pp EV={100*pick['expected_value']:+.1f}%")
+    consensus_delivery = choose_challenger_delivery(consensus_shortlist)
+    lines.extend(["", "=== MULTI-MODEL CONSENSUS DELIVERY ==="])
+    if consensus_delivery is None:
+        lines.append("NO CONFIDENT CONSENSUS DELIVERY")
+    else:
+        lines.append(f"CONSENSUS_DELIVERY {consensus_delivery['type']}")
+        for i, leg in enumerate(consensus_delivery["legs"], 1):
+            lines.append(f"MD{i}. {leg['home']} — {leg['away']} | {leg['selection']} @ {leg['odds']:.2f} | p={leg['probability']:.3f}")
+        lines.append(f"CONSENSUS_SUMMARY odds={consensus_delivery['combined_odds']:.2f} probability={consensus_delivery['combined_probability']:.3f} EV={consensus_delivery['expected_value']:+.3f}")
+        challenger_shortlist = rank_challenger(challenger_candidates, limit=8)
+    lines.extend(["", "=== CHALLENGER SHADOW SHORTLIST ==="])
+    if not challenger_shortlist:
+        lines.append("NO QUALIFIED CHALLENGER PICKS")
+    gool_keys = {(str(p.event_id), p.selection) for p, _ in shortlist}
+    for i, pick in enumerate(challenger_shortlist, 1):
+        overlap = "SAME_AS_GOOL" if (str(pick["event_id"]), pick["selection"]) in gool_keys else "CHALLENGER_ONLY"
+        lines.append(
+            f"C{i:02d}. {pick['home']} — {pick['away']} | {pick['selection']} @ {pick['odds']:.2f} | {overlap} | "
+            f"model={_pct(pick['probability'])} market={_pct(pick['market_probability'])} "
+            f"edge={100*pick['edge']:+.1f}pp EV={100*pick['expected_value']:+.1f}% quality={pick['quality']:.2f}"
+        )
+    delivery = choose_challenger_delivery(challenger_shortlist)
+    lines.extend(["", "=== CHALLENGER BEST DELIVERY ==="])
+    if delivery is None:
+        lines.append("NO CONFIDENT CHALLENGER DELIVERY")
+    else:
+        lines.append(f"DELIVERY {delivery['type']}")
+        for i, leg in enumerate(delivery["legs"], 1):
+            lines.append(f"D{i}. {leg['home']} — {leg['away']} | {leg['selection']} @ {leg['odds']:.2f} | model={leg['probability']:.3f} edge={leg['edge']:+.3f}")
+        lines.append(f"DELIVERY_SUMMARY odds={delivery['combined_odds']:.2f} probability={delivery['combined_probability']:.3f} EV={delivery['expected_value']:+.3f}")
+        challenger_double = build_challenger_double(challenger_shortlist)
+    lines.extend(["", "=== CHALLENGER SHADOW ACCA ==="])
+    if challenger_double is None:
+        lines.append("NO QUALIFIED CHALLENGER ACCA")
+    else:
+        for i, leg in enumerate(challenger_double["legs"], 1):
+            lines.append(f"CA{i}. {leg['home']} — {leg['away']} | {leg['selection']} @ {leg['odds']:.2f} | model={leg['probability']:.3f} edge={leg['edge']:+.3f}")
+        lines.append(f"CHALLENGER_ACCA combined_odds={challenger_double['combined_odds']:.2f} combined_probability={challenger_double['combined_probability']:.3f} EV={challenger_double['expected_value']:+.3f}")
+        lines.insert(2, f"matched_to_xbet={matched}/{min(len(report_fixtures), max(1, limit))}")
     return "\n".join(lines)
 
 def _trend_signals(profile: dict, quality: float) -> list[dict]:

@@ -252,7 +252,9 @@ class XBetPrematchCollector:
             "GroupEvents": "true",
             "allEventsGroupSubGames": "true",
             "countevents": 250,
-            "grMode": 2,
+            "grMode": 4,
+            "marketType": 1,
+            "isNewBuilder": "true",
         }
         payload = _http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}")
         value = payload.get("Value") if isinstance(payload, dict) else None

@@ -3,7 +3,7 @@ name: GOOL LIVE Brain V4 audit
 on:
   workflow_dispatch:
   push:
-    branches: [gool-v4-rebuild]
+    branches: [gool-v4-rebuild, fix/xbet-live-index-blackout]
     paths:
       - 'src/gool_bot2/live_goal_brain_v4.py'
       - 'src/gool_bot2/multi_runtime.py'
@@ -24,5 +24,20 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e .
+      - name: Restore LIVE Policy shadow journal
+        uses: actions/cache/restore@v4
+        with:
+          path: artifacts/live_policy_shadow
+          key: live-policy-shadow-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            live-policy-shadow-${{ github.ref_name }}-
       - name: Run LIVE Brain V4 against real matches
+        env:
+          GOOL_POLICY_SHADOW_JOURNAL: artifacts/live_policy_shadow/journal.json
         run: python scripts/gool_live_brain_v4_audit.py
+      - name: Save LIVE Policy shadow journal
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: artifacts/live_policy_shadow
+          key: live-policy-shadow-${{ github.ref_name }}-${{ github.run_id }}

@@ -1,43 +1,36 @@
-import json, os, urllib.parse, urllib.request, urllib.error
+import json, os, urllib.parse, urllib.request
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from gool_bot2.providers.flashscore import FlashscoreProvider
 
-VARIANTS=(
- ("p5-oce","https://global.ds.lsapp.eu/odds/pq_graphql","oce","5"),
- ("p2-oce","https://global.ds.lsapp.eu/odds/pq_graphql","oce","2"),
- ("p2-oce-2host","https://2.ds.lsapp.eu/pq_graphql","oce","2"),
- ("p46-ope","https://46.ds.lsapp.eu/pq_graphql","ope","46"),
-)
-HEAD={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36","Referer":"https://www.flashscore.com/","Origin":"https://www.flashscore.com","Accept":"*/*","Accept-Language":"sv-SE,sv;q=0.9,en;q=0.8","x-fsign":"SW9D1eZo"}
+URL="https://global.ds.lsapp.eu/odds/pq_graphql"
+HEAD={"User-Agent":"Mozilla/5.0","Accept":"*/*","Referer":"https://www.flashscore.com/","Origin":"https://www.flashscore.com","x-fsign":"SW9D1eZo"}
 
-def get(event_id, geo):
-    for label,base,hsh,project in VARIANTS:
-        params={"_hash":hsh,"eventId":event_id,"projectId":project,"geoIpCode":geo,"geoIpSubdivisionCode":os.getenv("FS_ODDS_GEO_SUB","USCA")}
-        try:
-            req=urllib.request.Request(base+"?"+urllib.parse.urlencode(params),headers=HEAD)
-            with urllib.request.urlopen(req,timeout=12) as r:
-                raw=r.read().decode("utf-8","replace")
-            print("ODDS_HTTP",event_id,label,"status=200","body=",raw[:500],flush=True)
-            data=json.loads(raw)
-            found=(data.get("data") or {}).get("findOddsByEventId")
-            if found:
-                return label,found
-        except urllib.error.HTTPError as e:
-            raw=e.read().decode("utf-8","replace")
-            print("ODDS_HTTP",event_id,label,"status=",e.code,"body=",raw[:700],flush=True)
-        except Exception as e:
-            print("ODDS_ERR",event_id,label,type(e).__name__,str(e)[:160],flush=True)
-    return "",{}
+def fetch(m):
+    q=urllib.parse.urlencode({"_hash":"oce","eventId":m.provider_match_id,"projectId":"5","geoIpCode":"US","geoIpSubdivisionCode":"USCA"})
+    try:
+        with urllib.request.urlopen(urllib.request.Request(URL+"?"+q,headers=HEAD),timeout=12) as r:
+            d=json.load(r)
+        x=(d.get("data") or {}).get("findOddsByEventId") or {}
+        return m,200,x.get("odds") or []
+    except Exception as e:
+        return m,getattr(e,"code",0),[]
 
-fs=FlashscoreProvider()
-fixtures=fs.scheduled_matches_for_day(0)
-geo=os.getenv("FS_ODDS_GEO","US")
-print("FS_ODDS_PROBE_ALL fixtures=",len(fixtures),"geo=",geo,flush=True)
-for m in fixtures:
-    variant,data=get(m.provider_match_id,geo)
-    print("ODDS_EVENT",m.provider_match_id,m.home,"--",m.away,"variant=",variant,"type=",type(data).__name__,flush=True)
-    odds=data.get("odds") or []
-    scopes={}
-    for e in odds:
-        key=str(e.get("bettingScope"))+":"+str(e.get("bettingType"))
-        scopes[key]=scopes.get(key,0)+1
-    print("ODDS_COUNT",m.provider_match_id,"entries=",len(odds),"markets=",scopes,flush=True)
+fixtures=FlashscoreProvider().scheduled_matches_for_day(0)
+print("FS_ALL_START",len(fixtures),flush=True)
+http=Counter(); markets=Counter(); covered=0; entries=0; examples=[]
+with ThreadPoolExecutor(max_workers=int(os.getenv("FS_ODDS_WORKERS","20"))) as pool:
+    futures=[pool.submit(fetch,m) for m in fixtures]
+    for i,f in enumerate(as_completed(futures),1):
+        m,code,odds=f.result(); http[code]+=1
+        if odds:
+            covered+=1; entries+=len(odds)
+            for e in odds:
+                markets[str(e.get("bettingScope"))+":"+str(e.get("bettingType"))]+=1
+            if len(examples)<10:
+                examples.append([m.home,m.away,len(odds)])
+        if i%100==0 or i==len(fixtures):
+            print("FS_PROGRESS",i,len(fixtures),"covered",covered,flush=True)
+print("FS_ALL_SUMMARY",json.dumps({"fixtures":len(fixtures),"http":dict(http),"with_odds":covered,"without_odds":len(fixtures)-covered,"entries":entries}),flush=True)
+print("FS_MARKETS",json.dumps(markets.most_common()),flush=True)
+print("FS_EXAMPLES",json.dumps(examples,ensure_ascii=False),flush=True)

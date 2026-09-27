@@ -17,7 +17,7 @@ def test_live_v4_shadow_does_not_mutate_experts(monkeypatch, tmp_path: Path):
     assert experts["another_goal"]["passed"] is False
 
 
-def test_live_v4_active_promotes_football_gate(monkeypatch, tmp_path: Path):
+def test_live_v4_active_policy_promotes_football_gate(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("GOOL_LIVE_V4_MODE", "active")
     monkeypatch.setattr(runtime, "evaluate_live_goals", lambda record: [_decision("BET", .77, .81)])
     experts = {"another_goal": {"probability": .61, "passed": False, "source": "old", "blocks": ["old"]}}
@@ -26,12 +26,12 @@ def test_live_v4_active_promotes_football_gate(monkeypatch, tmp_path: Path):
     assert row["probability"] == .77
     assert row["confidence"] == .81
     assert row["passed"] is True
-    assert row["source"] == "live_goal_brain_v4"
+    assert row["source"] == "live_v4_policy"\n    assert row["brain_shadow_decision"] == "BET"
 
 
-def test_live_v4_active_blocks_weak_football_gate(monkeypatch, tmp_path: Path):
+def test_live_v4_active_policy_can_override_old_brain_veto(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("GOOL_LIVE_V4_MODE", "active")
-    monkeypatch.setattr(runtime, "evaluate_live_goals", lambda record: [_decision("NO_BET", .55, .75)])
+    monkeypatch.setattr(runtime, "evaluate_live_goals", lambda record: [_decision("NO_BET", .75, .80)])
     experts = {"another_goal": {"probability": .70, "passed": True, "source": "old"}}
     runtime._apply_live_v4({"match": {"flashscore_event_id": "x", "minute": 60}}, experts, tmp_path / "a.jsonl")
     row = experts["another_goal"]

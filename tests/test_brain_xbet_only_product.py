@@ -36,7 +36,7 @@ def test_browser_is_support_process_not_signal_system():
     assert set(commands) == {"live", "xbet", "worker", "browser"}
 
 
-def test_public_menu_has_only_report_in_game_analysis(tmp_path, monkeypatch):
+def test_public_menu_has_v4_report_in_game_analysis_and_match_search(tmp_path, monkeypatch):
     monkeypatch.setattr(multi_product, "reset_public_tracking_once", lambda: None)
     monkeypatch.setattr(multi_product, "install_runtime_patches", lambda: None)
     monkeypatch.setattr(multi_product, "install_production_guard_compat", lambda: None)
@@ -61,12 +61,12 @@ def test_public_menu_has_only_report_in_game_analysis(tmp_path, monkeypatch):
         for row in telegram.MENU_KEYBOARD["keyboard"]
         for button in row
     ]
-    assert texts == ["📊 Отчёт", "🟢 В игре", "🧠 Анализ"]
+    assert texts == ["📊 Отчёт", "🟢 В игре", "🧠 Анализ", "🔎 Найти матч"]
     assert all("деньги" not in text.casefold() for text in texts)
     assert "BETDAQ" not in telegram.START_TEXT
     assert "MONEY FLOW" not in telegram.START_TEXT
     assert "1xBet STEAM" in telegram.START_TEXT
-    assert "GOOL Brain" in telegram.START_TEXT
+    assert "LIVE Brain V4" in telegram.START_TEXT
 
 
 def test_routing_only_has_brain_decision_fallback_not_journal_patches():

@@ -93,3 +93,26 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
     draw.rounded_rectangle((285, 848, 795, 900), 16, fill=accent)
     sc._center(draw, "ПРОГРУЗ ПОДТВЕРЖДЁН", 860, sc._font(20, True), BG)
     return sc._save(image)
+
+
+def render_multisport_result_card(row: dict[str, Any], cfg: Any) -> bytes:
+    result = str(row.get("result") or "").lower()
+    won = result == "won"
+    accent = GREEN if won else (220, 76, 76)
+    width, height = 1080, 650
+    image = Image.new("RGBA", (width, height), BG + (255,))
+    draw = ImageDraw.Draw(image)
+    score = list(row.get("settled_score") or row.get("score") or [0, 0])
+    title = "✅ ПРОГРУЗ ЗАШЁЛ" if won else "❌ ПРОГРУЗ НЕ ЗАШЁЛ"
+    draw.rounded_rectangle((24, 20, 1056, 100), 22, fill=PANEL, outline=accent, width=3)
+    sc._center(draw, title, 43, sc._font(28, True), accent)
+    draw.text((48, 132), str(row.get("league") or getattr(cfg, "title", "STEAM")), font=sc._fit(draw, str(row.get("league") or "LIVE"), 984, 20, False), fill=MUTED)
+    draw.rounded_rectangle((44, 180, 1036, 390), 28, fill=PANEL2, outline=accent, width=3)
+    draw.text((75, 215), str(row.get("home") or "?"), font=sc._fit(draw, str(row.get("home") or "?"), 360, 28, True), fill=TEXT)
+    draw.text((75, 315), str(row.get("away") or "?"), font=sc._fit(draw, str(row.get("away") or "?"), 360, 28, True), fill=TEXT)
+    draw.text((500, 225), f"{int(score[0])} : {int(score[1])}", font=sc._font(62, True), fill=TEXT)
+    draw.rounded_rectangle((44, 425, 1036, 590), 24, fill=PANEL, outline=LINE, width=2)
+    draw.text((72, 452), f"ТБ {float(row.get('line') or 0):g}  @  {float(row.get('odd') or 0):.2f}", font=sc._font(36, True), fill=GOLD)
+    profit = float(row.get("profit_units") or 0.0)
+    draw.text((72, 520), f"P/L {profit:+.2f}u", font=sc._font(28, True), fill=accent)
+    return sc._save(image)

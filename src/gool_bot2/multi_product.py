@@ -26,7 +26,7 @@ from .stale_replay_guard import install_stale_replay_guard
 
 
 _CLEAN_MENU_KEYBOARD = {
-    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🧠 Анализ"}]],
+    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🧠 Анализ"}, {"text": "🔎 Найти матч"}]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -128,7 +128,8 @@ def install_multi_product() -> None:
             "🛡 Freshness / reentry guards: ✅\n\n"
             "📊 Отчёт — журнал сигналов\n"
             "🟢 В игре — активные отправленные сигналы\n"
-            "🧠 Анализ — текущие матчи и решения V4"
+            "🧠 Анализ — текущие матчи и решения V4\n"
+            "🔎 Найти матч — ручной V4-разбор по названию команды"
         )
     else:
         telegram.START_TEXT = (
@@ -136,7 +137,8 @@ def install_multi_product() -> None:
             "LIVE Brain V4 анализирует матчи без боевой отправки.\n\n"
             "📊 Отчёт — журнал\n"
             "🟢 В игре — активные сигналы\n"
-            "🧠 Анализ — текущие матчи и решения V4"
+            "🧠 Анализ — текущие матчи и решения V4\n"
+            "🔎 Найти матч — ручной V4-разбор по названию команды"
         )
 
     print(

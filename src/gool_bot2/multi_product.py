@@ -120,21 +120,23 @@ def install_multi_product() -> None:
 
     if is_multi_telegram_active():
         telegram.START_TEXT = (
-            "🟢 <b>GOOL работает</b>\n\n"
-            "Активные системы:\n"
-            "🧠 GOOL Brain — обычные LIVE-сигналы по футболу\n"
-            "🔥 1xBet STEAM — отдельные сигналы прогруза\n\n"
-            "📊 Отчёт — журнал Brain + STEAM\n"
-            "🟢 В игре — отправленные, ещё не рассчитанные сигналы\n"
-            "🧠 Анализ — текущий разбор матчей"
+            "🚀 <b>GOOL Bot 4 · V4 ACTIVE</b>\n\n"
+            "Новый LIVE Brain V4: ✅\n"
+            "⚽ Гол до перерыва: ✅\n"
+            "⚽ Ещё гол: ✅\n"
+            "📡 1xBet odds + VALUE: ✅\n"
+            "🛡 Freshness / reentry guards: ✅\n\n"
+            "📊 Отчёт — журнал сигналов\n"
+            "🟢 В игре — активные отправленные сигналы\n"
+            "🧠 Анализ — текущие матчи и решения V4"
         )
     else:
         telegram.START_TEXT = (
-            "🟢 <b>GOOL работает в shadow</b>\n\n"
-            "Активные системы: GOOL Brain + 1xBet STEAM.\n\n"
+            "🟡 <b>GOOL Bot 4 · V4 SHADOW</b>\n\n"
+            "LIVE Brain V4 анализирует матчи без боевой отправки.\n\n"
             "📊 Отчёт — журнал\n"
             "🟢 В игре — активные сигналы\n"
-            "🧠 Анализ — текущий разбор матчей"
+            "🧠 Анализ — текущие матчи и решения V4"
         )
 
     print(

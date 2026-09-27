@@ -20,6 +20,7 @@ def rec(minute=20, score=(0, 0), stats=None, halftime=False):
 
 def test_high_real_xg_pressure_can_bet():
     r = rec(stats={"xg": [1.4, 0.8], "shots": [10, 7], "shots_on_target": [5, 3], "big_chances": [3, 1], "touches_box": [20, 12], "corners": [4, 3]})
+    r["live_momentum"] = {"minutes_in_epoch": 5, "xg_total_last_5m": 0.25, "shots_total_last_5m": 4, "sot_total_last_5m": 2}
     ds = evaluate_live_goals(r)
     assert any(d.decision == "BET" for d in ds)
 

@@ -75,3 +75,18 @@ def test_update_falls_back_when_github_is_offline(tmp_path: Path, monkeypatch) -
     monkeypatch.setenv("GOOL_AUTO_UPDATE", "1")
 
     assert updater.update_from_github() is False
+
+
+def test_invalid_snapshot_keeps_working_code(tmp_path):
+    import pytest
+    updater = _load()
+    snapshot = _snapshot(tmp_path)
+    (snapshot/'src'/'gool_bot2'/'broken.py').write_text('invalid python !!!')
+    root = tmp_path/'server'
+    package = root/'src'/'gool_bot2'
+    package.mkdir(parents=True)
+    (package/'working.py').write_text('VALUE=1\n')
+    with pytest.raises(SyntaxError):
+        updater._install_snapshot(snapshot, root)
+    assert (package/'working.py').read_text() == 'VALUE=1\n'
+    assert not (package/'broken.py').exists()

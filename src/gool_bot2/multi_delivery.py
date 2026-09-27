@@ -176,7 +176,9 @@ def pending_result_notifications(
             if str(row.get("result") or "").lower() not in FINAL_RESULTS:
                 continue
             if wanted and str(row.get("match_id") or "") != wanted:
-                continue
+                is_parlay = str(row.get("origin") or "").lower() in {"prematch_parlay", "parlay"}
+                if not is_parlay or not any(str(leg.get("match_id") or "") == wanted for leg in row.get("legs") or []):
+                    continue
             if not was_publicly_sent(row):
                 continue
             if _claim_is_active(row, now):

@@ -176,8 +176,6 @@ def test_brain_signal_below_140_is_not_public(tmp_path, monkeypatch):
     assert card_restore.emit_brain_card_signal(record, decision, entry) == 0
     assert not (tmp_path / "brain-low-price.json").exists()
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import gool_bot2.brain_card_restore as card_restore

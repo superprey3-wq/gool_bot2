@@ -1,0 +1,22 @@
+name: Flashscore odds probe
+on:
+  push:
+    branches: [gool-v4-rebuild]
+    paths:
+      - scripts/flashscore_odds_probe.py
+      - .github/workflows/flashscore-odds-probe.yml
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FS_ODDS_GEO: SE
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Probe direct Flashscore odds
+        run: python scripts/flashscore_odds_probe.py

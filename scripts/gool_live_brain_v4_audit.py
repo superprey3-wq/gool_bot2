@@ -4,10 +4,16 @@ import json
 from gool_bot2.live_goal_brain_v4 import evaluate_live_goals
 from gool_bot2.providers.fusion import FootballDataFusion
 from gool_bot2.v4_live_policy import LiveV4Input, decide_live_v4
+from gool_bot2.xbet_market_robust import RobustXBetMarketCollector
+from pathlib import Path
 
 
 def main() -> None:
     fusion = FootballDataFusion()
+    xbet = RobustXBetMarketCollector(Path('/tmp/gool_policy_xbet.json'), Path('/tmp/gool_policy_xbet_history.jsonl'))
+    xbet_state = xbet.collect_once()
+    xbet_matches = xbet_state.get('matches') or {}
+    print(f"LIVE_POLICY_XBET mapped={len(xbet_matches)}", flush=True)
     records = [r for r in fusion.live_records() if 8 <= int((r.get("match") or {}).get("minute") or 0) <= 82]
     print(f"LIVE_BRAIN_V4 matches={len(records)}", flush=True)
     bets = 0
@@ -58,11 +64,21 @@ def main() -> None:
                 print(f"LIVE_ROLE BRAIN_ONLY {match.get('home')} - {match.get('away')} | {d.market} p={d.probability:.3f}", flush=True)
             if policy.allowed:
                 if d.decision == "BET": agree += 1
+                score_total = int(match.get("home_score") or 0) + int(match.get("away_score") or 0)
+                target_line = score_total + 0.5
+                market_row = xbet_matches.get(str(match.get("flashscore_event_id") or "")) or {}
+                total_rows = ((market_row.get("markets") or {}).get("match_total") or [])
+                total_row = next((r for r in total_rows if abs(float(r.get("line") or -999) - target_line) < 1e-9), None)
+                odd = None if not total_row or total_row.get("over") is None else float(total_row.get("over"))
+                price_status = "NO_PRICE" if odd is None else f"TB{target_line:g}@{odd:.2f}"
+                ev = None if odd is None else d.probability * odd - 1.0
+                print(f"LIVE_POLICY_PRICE {match.get('home')} - {match.get('away')} | {price_status} | p={d.probability:.3f} | EV={'n/a' if ev is None else f'{ev:+.3f}'}", flush=True)
                 candidates.append({
                     "home": match.get("home"), "away": match.get("away"),
                     "minute": int(match.get("minute") or 0), "score": f"{match.get('home_score')}:{match.get('away_score')}",
                     "market": d.market, "p": d.probability, "conf": d.confidence,
                     "brain_score": d.score, "policy_score": policy.score, "tier": policy.tier,
+                    "line": target_line, "odd": odd, "ev": ev,
                 })
             print(
                 f"{match.get('minute')}' {match.get('home')} - {match.get('away')} "

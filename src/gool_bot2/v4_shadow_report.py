@@ -11,7 +11,7 @@ from .providers.fixture_sources import all_fixture_sources
 from .providers.prematch_fusion import PrematchDataFusion
 from .prematch_goal_profile import build_prematch_goal_profile
 from .v4_prematch_engine import (
-    build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery,
+    build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery, build_accumulators,
 )
 from .xbet_prematch_market import XBetPrematchCollector
 from .pinnacle_prematch_market import pinnacle_market_for_match
@@ -207,10 +207,11 @@ def main() -> None:
     parser.add_argument("--nations-today", action="store_true")
     parser.add_argument("--count-tomorrow", action="store_true")
     parser.add_argument("--count-today", action="store_true")
+    parser.add_argument("--first-acca", action="store_true")
     args = parser.parse_args()
     fs = FlashscoreProvider()
     msk = timezone(timedelta(hours=3)); now_msk = datetime.now(msk); now_ts = datetime.now(timezone.utc).timestamp()
-    if args.count_today:
+    if args.count_today or args.first_acca:
         live = []
         source_counts, fixtures = all_fixture_sources(now_msk.date().isoformat())
         fs_daily = fs.parse_master_scheduled(fs._feed("f_1_0_3_en_1", timeout=12, max_hosts=1))
@@ -218,6 +219,8 @@ def main() -> None:
         from .providers.fixture_sources import dedupe
         fixtures = dedupe(fixtures + fs_daily)
         print("FIXTURE_SOURCES " + " ".join(f"{k}={v}" for k,v in source_counts.items()) + f" unique={len(fixtures)}", flush=True)
+        if args.count_today and not args.first_acca:
+            return
     else:
         live = fs.live_matches(); fixtures = fs.scheduled_matches()
     target_date = now_msk.date() + timedelta(days=1) if (args.one_tomorrow or args.nations_tomorrow or args.count_tomorrow) else now_msk.date()
@@ -264,6 +267,34 @@ def main() -> None:
         m=row["match"]
         print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']}", flush=True)
     print(report, flush=True)
+    if args.first_acca:
+        # Rebuild priced candidates for the selected football shortlist, then let the existing
+        # V4 accumulator policy choose a 2-leg ticket. Never pad with an unqualified leg.
+        priced = []
+        xbet_rows = [r for r in (state.get("matches") or {}).values() if isinstance(r, dict)]
+        fusion = PrematchDataFusion(fs)
+        for row0 in brain_candidates:
+            match = row0["match"]
+            market, _ = _match_xbet(match, xbet_rows)
+            if not market:
+                try: market, _ = pinnacle_market_for_match(match)
+                except Exception: market = None
+            if not market: continue
+            try:
+                history = fusion.context(match, limit=10)
+                profile = build_prematch_goal_profile({"match":{"home":match.home,"away":match.away},"prematch_context":history})
+                full = profile.get("full_match") or {}; sample=int(full.get("pair_sample") or 0); quality=min(1.0,sample/8.0)
+                priced.extend(build_prematch_candidates(event_id=match.provider_match_id,home=match.home,away=match.away,profile=profile,market=market,data_quality=quality))
+            except Exception: continue
+        accas = build_accumulators(priced, legs=2)
+        print("=== GOOL FIRST ACCA ===", flush=True)
+        if not accas:
+            print("NO QUALIFIED ACCUMULATOR", flush=True)
+        else:
+            a=accas[0]
+            for i,p in enumerate(a["legs"],1):
+                print(f"A{i}. {p.home} — {p.away} | {p.selection} @ {p.odds:.2f} | model={p.model_probability:.3f} edge={p.edge:+.3f} EV={p.expected_value:+.3f}", flush=True)
+            print(f"ACCA combined_odds={a['combined_odds']:.2f} combined_probability={a['combined_probability']:.3f} EV={a['expected_value']:+.3f}", flush=True)
 
 
 if __name__ == "__main__":

@@ -231,6 +231,7 @@ def main() -> None:
     prematch_cache = Path(os.environ.get("PREMATCH_CACHE_DIR", str(runtime / "live" / "prematch_cache")))
     xbet_state = Path(os.environ.get("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     xbet_history = Path(os.environ.get("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
+    multi_journal = Path(os.environ.get("GOOL_MULTI_JOURNAL_PATH", str(runtime / "live" / "gool_multi_journal.json")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["RAW_LIVE_DIR"] = str(raw_live)
@@ -244,6 +245,7 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
+    os.environ["GOOL_MULTI_JOURNAL_PATH"] = str(multi_journal)
     os.environ.setdefault("TELEGRAM_SUBSCRIBERS_FILE", str(runtime / "telegram_subscribers.json"))
     os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
 
@@ -283,6 +285,7 @@ def main() -> None:
     shadow_cards.mkdir(parents=True, exist_ok=True)
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
+    multi_journal.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
     ensure_deps()

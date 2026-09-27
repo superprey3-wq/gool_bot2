@@ -25,6 +25,30 @@ def main() -> None:
             ))
             if d.decision == "BET":
                 bets += 1
+            if policy.allowed and d.decision != "BET":
+                reason_map = {}
+                for reason in d.reasons:
+                    if "=" in reason:
+                        key, value = reason.split("=", 1)
+                        reason_map[key] = value
+                blockers = []
+                if reason_map.get("momentum_ready") != "1": blockers.append("momentum_not_ready")
+                try:
+                    if int(reason_map.get("recent_signals", "0")) < 2: blockers.append("recent_signals_lt_2")
+                except ValueError: blockers.append("recent_signals_invalid")
+                try:
+                    threshold = float(reason_map.get("threshold", "1"))
+                    if d.probability < threshold: blockers.append(f"probability_below_threshold({d.probability:.3f}<{threshold:.3f})")
+                except ValueError: blockers.append("threshold_invalid")
+                if d.confidence < .78: blockers.append(f"confidence_below_0.78({d.confidence:.3f})")
+                if not blockers: blockers.append("brain_gate_unclassified")
+                print(
+                    f"LIVE_CONFLICT {match.get('minute')}' {match.get('home')} - {match.get('away')} "
+                    f"{match.get('home_score')}:{match.get('away_score')} | {d.market} "
+                    f"POLICY={policy.tier}/{policy.score:.1f} BRAIN=NO_BET "
+                    f"BLOCKERS={','.join(blockers)} DETAILS={';'.join(d.reasons)}",
+                    flush=True,
+                )
             if d.decision == "BET" and policy.allowed:
                 candidates.append({
                     "home": match.get("home"), "away": match.get("away"),

@@ -209,7 +209,8 @@ def emit_brain_card_signal(
     if not price_available:
         print(
             f"GOOL_BRAIN_SIGNAL_NO_PRICE_DROP match={entry.get('match_id')} "
-            f"strategy={entry.get('strategy')} market={entry.get('market')}",
+            f"strategy={entry.get('strategy')} market={entry.get('market')} "
+            f"odd={original_odd} min_odd={min_public_odd}",
             flush=True,
         )
         # Public BEST BET requires a real current 1xBet price. Do not mark

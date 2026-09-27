@@ -123,3 +123,26 @@ def settle_parlay(row: dict[str, Any]) -> bool:
     row["result_notification_created_at"] = _now()
     apply_settlement_fields(row)
     return True
+
+
+def sync_and_settle_parlays(rows: list[dict[str, Any]]) -> int:
+    """Copy settled child-leg results into parent parlays, then settle parents."""
+    children = {
+        (str(r.get("event_id") or r.get("match_id") or ""), str(r.get("market") or "")): r
+        for r in rows if str(r.get("origin") or "").casefold() == "prematch"
+    }
+    changed = 0
+    for parent in rows:
+        if str(parent.get("origin") or "").casefold() != "prematch_parlay":
+            continue
+        for leg in list(parent.get("legs") or []):
+            child = children.get((str(leg.get("event_id") or ""), str(leg.get("market") or "")))
+            if not child:
+                continue
+            for key in ("result", "settled_at", "settled_score", "settled_minute"):
+                if child.get(key) is not None and leg.get(key) != child.get(key):
+                    leg[key] = child.get(key)
+                    changed += 1
+        if settle_parlay(parent):
+            changed += 1
+    return changed

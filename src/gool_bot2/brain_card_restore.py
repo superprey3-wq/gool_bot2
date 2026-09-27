@@ -200,9 +200,12 @@ def emit_brain_card_signal(
 
     fallback = brain._brain_text(record, entry)
     original_odd = getattr(winner, "odd", None)
-    price_available = False
     try:
-        price_available = float(original_odd or 0.0) > 1.0
+        min_public_odd = max(1.40, float(os.getenv("GOOL_LIVE_MIN_PUBLIC_ODD", "1.40") or 1.40))
+    except (TypeError, ValueError):
+        min_public_odd = 1.40
+    try:
+        price_available = float(original_odd or 0.0) >= min_public_odd
     except (TypeError, ValueError):
         price_available = False
 

@@ -32,6 +32,15 @@ on:
       - 'tests/test_xbet_market_robust.py'
       - 'tests/test_xbet_first_half_child.py'
       - '.github/workflows/gool-multi-live-audit.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/gool_bot2/xbet_market_pressure.py'
+      - 'src/gool_bot2/xbet_market_robust.py'
+      - 'src/gool_bot2/xbet_market_worker.py'
+      - 'tests/test_xbet_market_robust.py'
+      - '.github/workflows/gool-multi-live-audit.yml'
   workflow_dispatch:
 
 jobs:

@@ -26,7 +26,8 @@ def test_live_v4_active_policy_promotes_football_gate(monkeypatch, tmp_path: Pat
     assert row["probability"] == .77
     assert row["confidence"] == .81
     assert row["passed"] is True
-    assert row["source"] == "live_v4_policy"\n    assert row["brain_shadow_decision"] == "BET"
+    assert row["source"] == "live_v4_policy"
+    assert row["brain_shadow_decision"] == "BET"
 
 
 def test_live_v4_active_policy_can_override_old_brain_veto(monkeypatch, tmp_path: Path):
@@ -36,4 +37,5 @@ def test_live_v4_active_policy_can_override_old_brain_veto(monkeypatch, tmp_path
     runtime._apply_live_v4({"match": {"flashscore_event_id": "x", "minute": 60}}, experts, tmp_path / "a.jsonl")
     row = experts["another_goal"]
     assert row["passed"] is False
-    assert "live_v4_no_bet" in row["blocks"]
+    assert "live_v4_policy_rank_too_low" in row["blocks"]
+    assert row["brain_shadow_decision"] == "NO_BET"

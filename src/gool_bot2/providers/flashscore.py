@@ -10,7 +10,7 @@ from urllib.parse import quote
 from .common import ProviderMatch, UA, http_text, pair_score
 
 FSIGN = os.getenv("FLASHSCORE_FSIGN", "SW9D1eZo")
-FEED_HOSTS = ("global", "2", "46")
+FEED_BASES = ("https://local-global.flashscore.ninja/2/x/feed", "https://global.flashscore.ninja/2/x/feed", "https://2.flashscore.ninja/2/x/feed", "https://local-ruua.flashscore.ninja/46/x/feed")
 MASTER_PATHS = ("f_1_0_3_en_1", "f_1_0_0_en_1")
 SCHEDULE_DAY_OFFSETS = (-1, 0, 1, 2, 3, 4, 5, 6, 7)
 LIVE_COARSE_STATUS = "2"
@@ -71,9 +71,9 @@ class FlashscoreProvider:
 
     def _feed(self, path: str, *, timeout: int = 12, max_hosts: int | None = None) -> str:
         headers = {"User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com", "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache"}
-        hosts = FEED_HOSTS if max_hosts is None else FEED_HOSTS[:max(1, max_hosts)]
-        for host in hosts:
-            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=timeout)
+        bases = FEED_BASES if max_hosts is None else FEED_BASES[:max(1, max_hosts)]
+        for base in bases:
+            code, body = http_text(f"{base}/{path}", headers=headers, timeout=timeout)
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 
@@ -81,8 +81,8 @@ class FlashscoreProvider:
         landing = f"https://www.flashscore.com/match/{event_id}/#/h2h/overall"
         headers = {"User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com", "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache", "Pragma": "no-cache", "x-requested-with": "XMLHttpRequest", "x-referer": landing, "x-geoip": "1"}
         path = f"df_hh_1_{event_id}"
-        for host in FEED_HOSTS:
-            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=15)
+        for base in FEED_BASES:
+            code, body = http_text(f"{base}/{path}", headers=headers, timeout=15)
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 

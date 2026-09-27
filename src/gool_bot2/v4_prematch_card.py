@@ -31,6 +31,11 @@ def _meta(row: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
     return sc.flashscore_meta(record or {})
 
 
+def _market_label(value: str) -> str:
+    key = str(value or "").upper()
+    labels = {"FT_OVER_2.5":"ТБ 2.5","FT_UNDER_2.5":"ТМ 2.5","BTTS_YES":"Обе забьют — Да","1H_OVER_0.5":"1-й тайм · ТБ 0.5","1H_OVER_1.5":"1-й тайм · ТБ 1.5","2H_OVER_0.5":"2-й тайм · ТБ 0.5","2H_OVER_1.5":"2-й тайм · ТБ 1.5"}
+    return labels.get(key, str(value or "?").replace("_"," "))
+
 def render_v4_prematch_card(
     row: dict[str, Any],
     record: dict[str, Any] | None = None,
@@ -57,7 +62,7 @@ def render_v4_prematch_card(
     tier = str(row.get("tier") or "NORMAL").upper()
     accent = GOLD if tier == "STRONG" else ACCENT
     odd = float(row.get("odd") or 0.0)
-    market = str(row.get("market") or row.get("selection") or "?")
+    market = _market_label(str(row.get("market") or row.get("selection") or "?"))
     probability = float(row.get("probability") or row.get("model_probability") or 0.0)
     edge = float(row.get("edge") or row.get("value_edge") or 0.0)
 
@@ -71,8 +76,6 @@ def render_v4_prematch_card(
 
     _center(draw, f"🏆 {league}", 126, _fit(draw, f"🏆 {league}", 930, 19, True), TEXT)
 
-    sc._badge(img, draw, 180, 275, sc._logo(meta, "home"), home, accent)
-    sc._badge(img, draw, 900, 275, sc._logo(meta, "away"), away, accent)
 
     draw.rounded_rectangle((390, 200, 690, 360), 28, fill=(9, 19, 31), outline=accent, width=3)
     if live:
@@ -83,8 +86,7 @@ def render_v4_prematch_card(
         kickoff = str(row.get("scheduled_start") or row.get("kickoff") or "ДО МАТЧА")
         _center(draw, kickoff, 315, _fit(draw, kickoff, 260, 18, True), accent)
 
-    _center(draw, home, 382, _fit(draw, home, 430, 23, True), TEXT)
-    _center(draw, away, 416, _fit(draw, away, 430, 23, True), TEXT)
+    _center(draw, f"{home}  —  {away}", 390, _fit(draw, f"{home}  —  {away}", 900, 28, True), TEXT)
 
     draw.rounded_rectangle((45, 475, 1035, 650), 25, fill=PANEL2, outline=accent, width=3)
     draw.text((75, 500), "СТАВКА", font=sc._font(16, True), fill=MUTED)
@@ -155,7 +157,7 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         draw.text((65, y + 13), f"{icons.get(lr, '•')} {i}.", font=sc._font(18, True), fill=accent)
         teams = f"{leg.get('home','?')} — {leg.get('away','?')}"
         draw.text((125, y + 10), teams, font=_fit(draw, teams, 590, 19, True), fill=TEXT)
-        detail = f"{leg.get('league','FOOTBALL')} · {leg.get('scheduled_start','')} · {leg.get('market','?')}"
+        detail = f"{leg.get('league','FOOTBALL')} · {leg.get('scheduled_start','')} · {_market_label(str(leg.get('market','?')))}"
         draw.text((125, y + 43), detail, font=_fit(draw, detail, 700, 13, False), fill=MUTED)
         draw.text((875, y + 22), f"@ {float(leg.get('odd') or 0):.2f}", font=sc._font(18, True), fill=TEXT)
         y += 92

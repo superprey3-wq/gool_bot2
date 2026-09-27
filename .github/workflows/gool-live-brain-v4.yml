@@ -6,6 +6,8 @@ on:
     branches: [gool-v4-rebuild]
     paths:
       - 'src/gool_bot2/live_goal_brain_v4.py'
+      - 'src/gool_bot2/live_momentum.py'
+      - 'src/gool_bot2/live_collector.py'
       - 'src/gool_bot2/providers/fotmob_lineup_guard.py'
       - 'scripts/gool_live_brain_v4_audit.py'
       - '.github/workflows/gool-live-brain-v4.yml'

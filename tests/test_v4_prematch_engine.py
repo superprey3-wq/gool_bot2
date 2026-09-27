@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles, build_super_accumulator
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery
 
 
 def test_devig_two_way_removes_margin():
@@ -97,3 +97,14 @@ def test_super_accumulator_never_pads_weak_or_expensive_legs():
     ]
     bad = PrematchPick("bad", "X", "Y", "match_total", "over 1.5", 1.80, 0.86, 0.80, 0.9)
     assert build_super_accumulator([*good, bad]) is None
+
+
+def test_delivery_never_reuses_single_as_parlay_leg():
+    picks = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 2.5", 1.55, 0.78 - i*.005, 0.60, 0.9)
+        for i in range(8)
+    ]
+    delivery = choose_delivery(picks, max_singles=2, max_doubles=2)
+    single_ids = {p.event_id for p, _tier in delivery["singles"]}
+    parlay_ids = {p.event_id for acc in delivery["doubles"] for p in acc["legs"]}
+    assert single_ids.isdisjoint(parlay_ids)

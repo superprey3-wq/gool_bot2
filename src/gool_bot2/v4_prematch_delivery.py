@@ -210,7 +210,7 @@ def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jour
                 f"{_market_label(leg['market'])} @ {leg['odd']:.2f}", "",
             ]
         png = render_v4_parlay_card(parent)
-        delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip(), reply_markup=telegram.MENU_KEYBOARD)
+        delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip())
         if delivered:
             parent["telegram_sent"] = True
             parent["telegram_sent_at"] = _now()

@@ -213,6 +213,10 @@ def main() -> None:
     if args.count_today:
         live = []
         source_counts, fixtures = all_fixture_sources(now_msk.date().isoformat())
+        fs_daily = fs.parse_master_scheduled(fs._feed("f_1_0_3_en_1", timeout=12, max_hosts=1))
+        source_counts["flashscore"] = len(fs_daily)
+        from .providers.fixture_sources import dedupe
+        fixtures = dedupe(fixtures + fs_daily)
         print("FIXTURE_SOURCES " + " ".join(f"{k}={v}" for k,v in source_counts.items()) + f" unique={len(fixtures)}", flush=True)
     else:
         live = fs.live_matches(); fixtures = fs.scheduled_matches()

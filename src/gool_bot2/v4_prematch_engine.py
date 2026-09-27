@@ -16,6 +16,8 @@ class PrematchPick:
     model_probability: float
     market_probability: float
     data_quality: float = 1.0
+    league: str = ""
+    kickoff_ts: float = 0.0
 
     @property
     def edge(self) -> float:
@@ -355,6 +357,8 @@ def blend_with_market(
         model_probability=p,
         market_probability=pick.market_probability,
         data_quality=pick.data_quality,
+        league=pick.league,
+        kickoff_ts=pick.kickoff_ts,
     )
 
 

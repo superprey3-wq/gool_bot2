@@ -5,6 +5,10 @@ on:
     branches: [gool-v4-rebuild]
     paths:
       - ".github/workflows/first-daily-acca.yml"
+      - "src/gool_bot2/v4_prematch_engine.py"
+      - "src/gool_bot2/v4_shadow_report.py"
+      - "src/gool_bot2/prematch_goal_profile.py"
+      - "src/gool_bot2/providers/prematch_fusion.py"
 jobs:
   first-acca:
     runs-on: ubuntu-latest
@@ -20,4 +24,5 @@ jobs:
           XBET_PREMATCH_FETCH_EVENTS: "60"
           XBET_PREMATCH_WORKERS: "6"
           GOOL_PREMATCH_WORKERS: "20"
+          GOOL_PREMATCH_PRICE_CAP: "250"
         run: python -m gool_bot2.v4_shadow_report --first-acca --limit 30

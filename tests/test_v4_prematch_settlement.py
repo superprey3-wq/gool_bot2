@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_settlement import settle_parlay, settle_prematch_pick, settle_prematch_row
+from gool_bot2.v4_prematch_settlement import settle_parlay, settle_prematch_pick, settle_prematch_row, sync_and_settle_parlays
 
 
 def test_1x2_home_draw_away():
@@ -40,3 +40,17 @@ def test_parlay_push_leg_reduces_effective_odds():
     assert settle_parlay(row)
     assert row["result"]=="won"
     assert row["effective_odd"]==1.8
+
+
+def test_parent_parlay_syncs_from_child_rows_and_settles():
+    rows=[
+        {"origin":"prematch","event_id":"a","market":"FT_OVER_2.5","result":"won","odd":1.8},
+        {"origin":"prematch","event_id":"b","market":"FT_UNDER_2.5","result":"won","odd":1.7},
+        {"origin":"prematch_parlay","kind":"DOUBLES","result":"pending","odd":3.06,"legs":[
+            {"event_id":"a","market":"FT_OVER_2.5","result":"pending","odd":1.8},
+            {"event_id":"b","market":"FT_UNDER_2.5","result":"pending","odd":1.7},
+        ]},
+    ]
+    assert sync_and_settle_parlays(rows) > 0
+    assert rows[-1]["result"] == "won"
+    assert rows[-1]["result_notification_pending"] is True

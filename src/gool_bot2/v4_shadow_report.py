@@ -205,11 +205,21 @@ def _primary_trend(trends: list[dict]):
         return None
     info = {'1H_OVER_0.5':.90,'1H_OVER_1.5':1.06,'2H_OVER_0.5':.88,'2H_OVER_1.5':1.05,'FT_OVER_2.5':1.05,'FT_OVER_3.5':1.12,'FT_UNDER_2.5':1.08,'BTTS_YES':1.08,'BTTS_NO':1.08}
     def rank(t):
-        sample=min(1.0,float(t.get('sample') or 0)/10.0)
-        agreement=float(t.get('agreement') or 0.0)
-        return float(t.get('strength') or 0.0)*info.get(str(t.get('name')),1.0)*(0.90+0.10*sample)*(0.90+0.10*agreement)
-    best=max(trends,key=rank)
-    return {**best,'rank_score':rank(best)}
+        n=max(0.0,float(t.get('sample') or 0))
+        sample_conf=min(1.0,n/12.0)
+        agreement=max(0.0,min(1.0,float(t.get('agreement') or 0.0)))
+        p=max(0.0,min(1.0,float(t.get('probability') or 0.0)))
+        # Conservative shrinkage: small samples cannot keep extreme probabilities.
+        calibrated=.50+(p-.50)*(.55+.45*sample_conf)
+        return calibrated*float(t.get('strength') or 0.0)*info.get(str(t.get('name')),1.0)*(0.82+0.18*sample_conf)*(0.85+0.15*agreement)
+    ranked=sorted(trends,key=rank,reverse=True)
+    best=ranked[0]; best_score=rank(best)
+    runner_score=rank(ranked[1]) if len(ranked)>1 else 0.0
+    separation=best_score-runner_score
+    # Ambiguous profiles are observations, not betting candidates.
+    if len(ranked)>1 and separation < .015:
+        return None
+    return {**best,'rank_score':best_score,'runner_score':runner_score,'separation':separation}
 
 def _brain_score(profile: dict, quality: float) -> float:
     trends=_trend_signals(profile,quality)

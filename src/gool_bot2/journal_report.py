@@ -14,48 +14,45 @@ def _layer(row: dict[str, Any]) -> str:
     return "STEAM" if "STEAM" in source.upper() or str(row.get("source") or "").startswith("1xbet:autonomous_steam") else "GOOL"
 
 
-def production_report_text(_: Path | None = None, experiment_path: Path | None = None) -> str:
-    """Render the canonical public journal without running settlement again.
+def _today(rows: list[dict[str, Any]], tz: Any, day: Any) -> list[dict[str, Any]]:
+    from . import multi_menu
+    out = []
+    for row in rows:
+        dt = multi_menu._parse_dt(row.get("created_at"))
+        if dt is not None and dt.astimezone(tz).date() == day:
+            out.append(row)
+    return out
 
-    Telegram's command handler calls the single production reconcile function
-    before invoking this renderer. Keeping the report read-only prevents a second
-    hidden settlement/result-delivery pass from racing the LIVE worker. Rows that
-    were created before Telegram delivery but never actually sent are excluded.
-    """
+
+def production_report_text(_: Path | None = None, experiment_path: Path | None = None) -> str:
+    """GOOL Bot 4 public journal: only entries that were actually sent to Telegram."""
     del experiment_path
     from . import multi_menu
 
-    rows = [
-        row for row in load_signal_journal(multi_menu.journal_path())
-        if was_publicly_sent(row)
-    ]
+    all_rows = load_signal_journal(multi_menu.journal_path())
+    rows = [row for row in all_rows if was_publicly_sent(row)]
     tz = multi_menu._tz()
     today = datetime.now(tz).date()
-    today_rows = [
-        row for row in rows
-        if (dt := multi_menu._parse_dt(row.get("created_at"))) is not None and dt.astimezone(tz).date() == today
-    ]
+    today_rows = _today(rows, tz, today)
 
-    goal_before_ht = [row for row in rows if strategy_bucket(row.get("strategy")) == "goal_before_ht"]
-    another_goal = [row for row in rows if strategy_bucket(row.get("strategy")) == "another_goal"]
-    steam = [row for row in rows if _layer(row) == "STEAM"]
+    first_half = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "goal_before_ht"]
+    another_goal = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "another_goal"]
+    parlays = [row for row in today_rows if str(row.get("origin") or "") == "prematch_parlay"]
+    steam = [row for row in today_rows if _layer(row) == "STEAM"]
 
     parts = [
-        "📊 <b>GOOL MULTI · ЖУРНАЛ</b>",
-        "Только реально отправленные сигналы. WAIT в статистику не попадает.",
+        "📊 <b>GOOL BOT 4 · ОТЧЁТ СЕГОДНЯ</b>",
+        f"📅 {today.strftime('%d.%m.%Y')} · только реально отправленные ставки",
         "",
-        f"📅 <b>СЕГОДНЯ · {today.strftime('%d.%m.%Y')}</b>",
-        multi_menu._stats_line(today_rows),
+        f"🟡 <b>Гол в 1-м тайме</b>\n{multi_menu._stats_line(first_half)}",
         "",
-        "📚 <b>ВСЯ НОВАЯ ЭПОХА</b>",
-        multi_menu._stats_line(rows),
+        f"⚽ <b>Ещё гол</b>\n{multi_menu._stats_line(another_goal)}",
         "",
-        "<b>Две основные системы:</b>",
-        f"🟡 Гол в 1-м тайме: {multi_menu._stats_line(goal_before_ht)}",
-        f"⚽ Ещё гол: {multi_menu._stats_line(another_goal)}",
+        f"🔗 <b>Экспрессы</b>\n{multi_menu._stats_line(parlays)}",
         "",
-        "<b>Отдельная система прогруза:</b>",
-        f"🔥 1xBet STEAM: {multi_menu._stats_line(steam)}",
+        f"🔥 <b>Прогрузы 1xBet</b>\n{multi_menu._stats_line(steam)}",
+        "",
+        f"📦 Всего отправлено сегодня: <b>{len(today_rows)}</b>",
     ]
     return "\n".join(parts)
 

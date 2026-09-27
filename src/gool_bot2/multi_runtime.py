@@ -8,6 +8,7 @@ from . import signal_worker_all_cards as cards
 from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
+from .live_goal_brain_v4 import evaluate_live_goals
 from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
@@ -65,6 +66,70 @@ def _live_only_brain_inputs(
     # clearing it here also prevents a historical helper from leaking into the
     # unified Goal State diagnostics.
     return live_record, live_model, {}
+
+
+def _live_v4_mode() -> str:
+    raw = str(os.getenv("GOOL_LIVE_V4_MODE", "shadow")).strip().casefold()
+    return raw if raw in {"off", "shadow", "active"} else "shadow"
+
+
+def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_path: Path) -> None:
+    """Evaluate V4 on the exact production snapshot and optionally gate ordinary LIVE heads."""
+    mode = _live_v4_mode()
+    if mode == "off":
+        return
+    match = record.get("match") or {}
+    mid = str(match.get("flashscore_event_id") or "")
+    minute = int(match.get("minute") or 0)
+    try:
+        decisions = evaluate_live_goals(record)
+    except Exception as exc:
+        print(f"GOOL_LIVE_V4_ERROR match={mid} error={type(exc).__name__}:{exc}", flush=True)
+        return
+
+    mapping = {"GOAL_BEFORE_HT": "goal_before_ht", "ANOTHER_GOAL": "another_goal"}
+    snapshot = {
+        "type": "live_v4",
+        "match_id": mid,
+        "minute": minute,
+        "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
+        "mode": mode,
+        "decisions": [d.to_dict() for d in decisions],
+    }
+    try:
+        from .journal import append_analysis
+        append_analysis(analysis_path, snapshot)
+    except Exception as exc:
+        print(f"GOOL_LIVE_V4_AUDIT_ERROR match={mid} error={type(exc).__name__}:{exc}", flush=True)
+
+    for decision in decisions:
+        key = mapping.get(decision.market)
+        if not key:
+            continue
+        print(
+            f"GOOL_LIVE_V4 match={mid} minute={minute} head={key} mode={mode} "
+            f"decision={decision.decision} p={decision.probability:.3f} "
+            f"confidence={decision.confidence:.3f} source={decision.data_source}",
+            flush=True,
+        )
+        if mode != "active":
+            continue
+        row = experts.get(key)
+        if not isinstance(row, dict):
+            row = {}
+            experts[key] = row
+        row["probability"] = float(decision.probability)
+        row["confidence"] = float(decision.confidence)
+        row["source"] = "live_goal_brain_v4"
+        row["v4_score"] = float(decision.score)
+        row["v4_reasons"] = list(decision.reasons)
+        # V4 controls the football gate only. Price/value/freshness/market
+        # opposition remain mandatory in the existing production router.
+        row["passed"] = decision.decision == "BET"
+        blocks = [str(x) for x in (row.get("blocks") or []) if str(x) and not str(x).startswith("live_v4_")]
+        if decision.decision != "BET":
+            blocks.append("live_v4_no_bet")
+        row["blocks"] = blocks
 
 
 def _expert_probabilities(experts: dict[str, Any]) -> dict[str, float]:
@@ -373,6 +438,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     _ensure_any_goal_coverage_proxy(experts)
+    _apply_live_v4(brain_record, experts, analysis_path)
     live_probabilities = _expert_probabilities(experts)
 
     # Keep PREMATCH in the bot for collection, research and diagnostics. In

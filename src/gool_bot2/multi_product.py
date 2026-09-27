@@ -23,6 +23,10 @@ from .public_epoch_reset import reset_public_tracking_once
 from .result_delivery_guard import install_result_delivery_guard
 from .runtime_hardening import install_runtime_hardening
 from .stale_replay_guard import install_stale_replay_guard
+from .journal import load_signal_journal, save_signal_journal
+from .multi_delivery import pending_result_notifications, finalize_result_delivery
+from .v4_prematch_settlement import sync_and_settle_parlays
+from .v4_prematch_delivery import emit_parlay_result
 
 
 _CLEAN_MENU_KEYBOARD = {
@@ -111,7 +115,17 @@ def install_multi_product() -> None:
         corrected = reconcile_finalized_first_half(path)
         regular = reconcile_pending()
         orphaned = reconcile_orphaned_pending(path)
-        return int(corrected or 0) + int(regular or 0) + int(orphaned or 0)
+        rows = load_signal_journal(path)
+        parlay_changes = sync_and_settle_parlays(rows)
+        if parlay_changes:
+            save_signal_journal(path, rows)
+        for row in pending_result_notifications(path):
+            if str(row.get("origin") or "").casefold() != "prematch_parlay":
+                continue
+            sent = emit_parlay_result(row)
+            if sent:
+                finalize_result_delivery(path, row, sent)
+        return int(corrected or 0) + int(regular or 0) + int(orphaned or 0) + int(parlay_changes or 0)
 
     # Every menu command performs settlement exactly once before rendering.
     # Both Report and In Game are read-only views after this point.

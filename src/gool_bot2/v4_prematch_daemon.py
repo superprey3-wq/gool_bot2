@@ -11,7 +11,7 @@ SCRIPT = ROOT / "scripts" / "gool_flashscore_today.py"
 
 def main() -> None:
     interval = max(1800, int(os.getenv("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")))
-    os.environ["GOOL_PREMATCH_DELIVER"] = "1"
+    os.environ["GOOL_PREMATCH_DELIVER"] = "1"\n    # The persistent Telegram menu is owned by the main worker; prematch cards\n    # use inline controls only and must never replace it.
     while True:
         started = time.time()
         try:

@@ -25,5 +25,6 @@ jobs:
           XBET_PREMATCH_WORKERS: "8"
           XBET_PREMATCH_SEARCH_WORKERS: "12"
           GOOL_PREMATCH_WORKERS: "20"
-          GOOL_PREMATCH_PRICE_CAP: "250"
+          GOOL_PREMATCH_PRICE_CAP: "0"
+          GOOL_FIXTURE_SOURCE: "flashscore"
         run: python -m gool_bot2.v4_shadow_report --first-acca --limit 30

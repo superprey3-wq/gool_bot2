@@ -200,6 +200,17 @@ def _trend_signals(profile: dict, quality: float) -> list[dict]:
     return out
 
 
+def _primary_trend(trends: list[dict]):
+    if not trends:
+        return None
+    info = {'1H_OVER_0.5':.90,'1H_OVER_1.5':1.06,'2H_OVER_0.5':.88,'2H_OVER_1.5':1.05,'FT_OVER_2.5':1.05,'FT_OVER_3.5':1.12,'FT_UNDER_2.5':1.08,'BTTS_YES':1.08,'BTTS_NO':1.08}
+    def rank(t):
+        sample=min(1.0,float(t.get('sample') or 0)/10.0)
+        agreement=float(t.get('agreement') or 0.0)
+        return float(t.get('strength') or 0.0)*info.get(str(t.get('name')),1.0)*(0.90+0.10*sample)*(0.90+0.10*agreement)
+    best=max(trends,key=rank)
+    return {**best,'rank_score':rank(best)}
+
 def _brain_score(profile: dict, quality: float) -> float:
     trends=_trend_signals(profile,quality)
     return 0.0 if not trends else float(trends[0]["strength"])
@@ -223,7 +234,8 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
             trends = _trend_signals(profile, quality)
-            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "trends": trends, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
+            primary_trend = _primary_trend(trends)
+            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "trends": trends, "primary_trend": primary_trend, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
         except Exception as exc:
             return None, f"PROFILE_{type(exc).__name__}"
 
@@ -311,7 +323,7 @@ def main() -> None:
     # Rank football evidence first. Do not let an arbitrary absolute threshold
     # starve the price stage: strong tendencies qualify directly; otherwise the
     # best evidence-backed fixtures form a small exploration floor.
-    eligible = [row for row in analysed if row.get("trends")]
+    eligible = [row for row in analysed if row.get("primary_trend")]
     strong = [row for row in eligible if row["brain_score"] >= 0.42]
     # Stage 2 must price the full evidence-backed field, not an arbitrary top 12.
     # Football quality remains the first gate; bookmaker value decides only after it.
@@ -327,7 +339,8 @@ def main() -> None:
     for row in brain_candidates:
         m=row["match"]
         trend_text=",".join(f"{t['name']}:{t['probability']:.2f}" for t in row.get("trends",[])[:5])
-        print(f"BRAIN {m.home} — {m.away} score={row['brain_score']:.3f} quality={row['quality']:.2f} sample={row['sample']} TREND={trend_text}", flush=True)
+        primary=row.get("primary_trend") or {}
+        print(f"BRAIN {m.home} — {m.away} score={row[\'brain_score\']:.3f} quality={row[\'quality\']:.2f} sample={row[\'sample\']} PRIMARY_TREND={primary.get(\'name\')}:{float(primary.get(\'probability\') or 0):.2f} rank={float(primary.get(\'rank_score\') or 0):.3f} ALL_TRENDS={trend_text}", flush=True)
     print(report, flush=True)
     if args.first_acca:
         # Rebuild priced candidates for the selected football shortlist, then let the existing

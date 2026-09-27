@@ -192,3 +192,75 @@ def choose_challenger_delivery(shortlist: list[dict[str, Any]], max_legs: int = 
         return best_acca
     return {"type":"SINGLE","legs":[best_single],"combined_odds":best_single["odds"],
             "combined_probability":best_single["probability"],"expected_value":best_single["expected_value"]}
+
+
+def dixon_coles_profile_challenger(profile: dict[str, Any], rho: float = -0.08) -> ChallengerForecast | None:
+    """Low-score corrected Poisson challenger.
+
+    rho is a configurable shadow hyperparameter, not presented as fitted until
+    chronological outcome data is available for estimation.
+    """
+    base = poisson_profile_challenger(profile)
+    if base is None:
+        return None
+    hl, al = base.home_lambda, base.away_lambda
+    max_goals = 10
+    hp = [math.exp(-hl) * hl ** k / math.factorial(k) for k in range(max_goals + 1)]
+    ap = [math.exp(-al) * al ** k / math.factorial(k) for k in range(max_goals + 1)]
+    h = d = a = 0.0
+    for hg, ph in enumerate(hp):
+        for ag, pa in enumerate(ap):
+            tau = 1.0
+            if hg == 0 and ag == 0: tau = 1.0 - hl * al * rho
+            elif hg == 0 and ag == 1: tau = 1.0 + hl * rho
+            elif hg == 1 and ag == 0: tau = 1.0 + al * rho
+            elif hg == 1 and ag == 1: tau = 1.0 - rho
+            p = max(0.0, ph * pa * tau)
+            if hg > ag: h += p
+            elif hg == ag: d += p
+            else: a += p
+    mass = h+d+a
+    if mass <= 0: return None
+    return ChallengerForecast("dixon_coles_profile_v1", hl, al, h/mass, d/mass, a/mass)
+
+
+def model_market_candidates(forecast: ChallengerForecast, *, event_id: str, home: str, away: str,
+                            market: dict[str, Any], data_quality: float = 1.0) -> list[dict[str, Any]]:
+    out=[]
+    x=market.get("match_1x2") or {}
+    for selection,p in {"home":forecast.home,"draw":forecast.draw,"away":forecast.away}.items():
+        try: odds=float(x[selection])
+        except (KeyError,TypeError,ValueError): continue
+        if odds>1:
+            out.append({"event_id":event_id,"home":home,"away":away,"market":"match_1x2","selection":selection,
+                        "odds":odds,"probability":p,"market_probability":1/odds,"quality":data_quality,"model":forecast.name})
+    for row in market.get("match_totals") or []:
+        try: line,over,under=float(row["line"]),float(row["over"]),float(row["under"])
+        except (KeyError,TypeError,ValueError): continue
+        if min(over,under)<=1: continue
+        ro,ru=1/over,1/under; z=ro+ru
+        po=total_probability(forecast,line,True)
+        for selection,odds,p,fair in ((f"over {line:g}",over,po,ro/z),(f"under {line:g}",under,1-po,ru/z)):
+            out.append({"event_id":event_id,"home":home,"away":away,"market":"match_total","selection":selection,
+                        "odds":odds,"probability":p,"market_probability":fair,"quality":data_quality,"model":forecast.name})
+    return out
+
+
+def consensus_candidates(model_rows: list[list[dict[str, Any]]], min_models: int = 2) -> list[dict[str, Any]]:
+    """Aggregate only selections independently supported by >= min_models."""
+    grouped={}
+    for rows in model_rows:
+        seen=set()
+        for r in rows:
+            key=(str(r["event_id"]),r["market"],r["selection"])
+            if key in seen: continue
+            seen.add(key); grouped.setdefault(key,[]).append(r)
+    out=[]
+    for rows in grouped.values():
+        if len(rows)<min_models: continue
+        p=sum(float(r["probability"]) for r in rows)/len(rows)
+        base=rows[0]; market_p=float(base["market_probability"]); odds=float(base["odds"])
+        out.append({**base,"probability":p,"edge":p-market_p,"expected_value":p*odds-1,
+                    "model":"consensus","model_count":len(rows),
+                    "models":[r["model"] for r in rows]})
+    return out

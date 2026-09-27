@@ -10,8 +10,9 @@ from urllib.parse import quote
 from .common import ProviderMatch, UA, http_text, pair_score
 
 FSIGN = os.getenv("FLASHSCORE_FSIGN", "SW9D1eZo")
-FEED_HOSTS = ("global", "2", "46")
+FEED_BASES = ("https://local-global.flashscore.ninja/2/x/feed", "https://global.flashscore.ninja/2/x/feed", "https://2.flashscore.ninja/2/x/feed", "https://local-ruua.flashscore.ninja/46/x/feed")
 MASTER_PATHS = ("f_1_0_3_en_1", "f_1_0_0_en_1")
+SCHEDULE_DAY_OFFSETS = (-1, 0, 1, 2, 3, 4, 5, 6, 7)
 LIVE_COARSE_STATUS = "2"
 FINISHED_COARSE_STATUS = "3"
 FIRST_HALF_STATUS = "12"
@@ -68,10 +69,11 @@ def _to_number(value: Any) -> float:
 class FlashscoreProvider:
     name = "flashscore"
 
-    def _feed(self, path: str) -> str:
+    def _feed(self, path: str, *, timeout: int = 12, max_hosts: int | None = None) -> str:
         headers = {"User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com", "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache"}
-        for host in FEED_HOSTS:
-            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=12)
+        bases = FEED_BASES if max_hosts is None else FEED_BASES[:max(1, max_hosts)]
+        for base in bases:
+            code, body = http_text(f"{base}/{path}", headers=headers, timeout=timeout)
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 
@@ -79,8 +81,8 @@ class FlashscoreProvider:
         landing = f"https://www.flashscore.com/match/{event_id}/#/h2h/overall"
         headers = {"User-Agent": UA, "x-fsign": FSIGN, "Origin": "https://www.flashscore.com", "Referer": "https://www.flashscore.com/", "Accept": "*/*", "Cache-Control": "no-cache", "Pragma": "no-cache", "x-requested-with": "XMLHttpRequest", "x-referer": landing, "x-geoip": "1"}
         path = f"df_hh_1_{event_id}"
-        for host in FEED_HOSTS:
-            code, body = http_text(f"https://{host}.flashscore.ninja/2/x/feed/{path}", headers=headers, timeout=15)
+        for base in FEED_BASES:
+            code, body = http_text(f"{base}/{path}", headers=headers, timeout=15)
             if code == 200 and body.strip() and not body.lstrip().lower().startswith("<"): return body
         return ""
 
@@ -137,6 +139,44 @@ class FlashscoreProvider:
             meta = {"status_code": f.get("AC", ""), "coarse_status": f.get("AB", ""), "home_team_id": (f.get("JA") or "").strip(), "away_team_id": (f.get("JB") or "").strip(), "home_team_slug": (f.get("WU") or "").strip(), "away_team_slug": (f.get("WV") or "").strip(), "home_short": (f.get("WM") or "").strip(), "away_short": (f.get("WN") or "").strip(), "round": (f.get("ER") or "").strip(), "home_logo_file": (f.get("OA") or "").strip(), "away_logo_file": (f.get("OB") or "").strip()}
             matches.append(ProviderMatch(provider=self.name, provider_match_id=event_id, home=home, away=away, minute=minute, home_score=_as_int(f.get("AG"), _as_int(f.get("AT"))), away_score=_as_int(f.get("AH"), _as_int(f.get("AU"))), league=league, is_halftime=is_ht, meta=meta))
         return list({m.provider_match_id: m for m in matches}.values())
+
+    def parse_master_scheduled(self, body: str) -> list[ProviderMatch]:
+        """Parse upcoming football fixtures from the same Flashscore master feed used by LIVE."""
+        matches: list[ProviderMatch] = []; league = ""
+        for chunk in (body or "").split("~"):
+            if not chunk: continue
+            if chunk.startswith("ZA÷"): league = _fields(chunk).get("ZA", "").strip(); continue
+            if not chunk.startswith("AA÷"): continue
+            event_id, sep, rest = chunk[3:].partition("¬")
+            if not sep or len(event_id) != 8 or not event_id.isalnum(): continue
+            f = _fields(rest); coarse = str(f.get("AB") or "")
+            # Flashscore master uses coarse status 1 for scheduled/not-started events.
+            if coarse != "1": continue
+            home = (f.get("AE") or f.get("CX") or "").strip(); away = (f.get("AF") or "").strip()
+            if not home or not away: continue
+            start_ts = _as_int(f.get("AD") or f.get("AO"), 0)
+            meta = {"status_code": f.get("AC", ""), "coarse_status": coarse, "scheduled_start_ts": start_ts, "home_team_id": (f.get("JA") or "").strip(), "away_team_id": (f.get("JB") or "").strip(), "home_team_slug": (f.get("WU") or "").strip(), "away_team_slug": (f.get("WV") or "").strip(), "round": (f.get("ER") or "").strip()}
+            matches.append(ProviderMatch(provider=self.name, provider_match_id=event_id, home=home, away=away, league=league, meta=meta))
+        return list({m.provider_match_id: m for m in matches}.values())
+
+    def scheduled_matches_for_day(self, day: int = 0) -> list[ProviderMatch]:
+        body = self._feed(f"f_1_{day}_3_en_1", timeout=4, max_hosts=1)
+        if not body:
+            return []
+        matches = self.parse_master_scheduled(body)
+        return sorted(matches, key=lambda m: (int((m.meta or {}).get("scheduled_start_ts") or 0), m.league or "", m.home))
+
+    def scheduled_matches(self) -> list[ProviderMatch]:
+        merged: dict[str, ProviderMatch] = {}
+        # Flashscore daily football feed: f_1_{day}_3_en_1.  Day 0 is today,
+        # positive offsets are future dates. Unlike the LIVE/master feed this
+        # endpoint returns the complete calendar day (all competitions).
+        for day in SCHEDULE_DAY_OFFSETS:
+            body = self._feed(f"f_1_{day}_3_en_1")
+            if not body: continue
+            for match in self.parse_master_scheduled(body):
+                merged[match.provider_match_id] = match
+        return sorted(merged.values(), key=lambda m: (int((m.meta or {}).get("scheduled_start_ts") or 0), m.league or "", m.home))
 
     def live_matches(self) -> list[ProviderMatch]:
         merged: dict[str, ProviderMatch] = {}

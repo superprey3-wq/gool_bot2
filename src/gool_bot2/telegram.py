@@ -19,13 +19,13 @@ from .providers.flashscore import FlashscoreProvider
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
-    "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"
+    "🟢 <b>GOOL Bot 4 · V4 работает</b>\n\nАктивные стратегии:\n"
     "⚽ Ещё гол — обученная модель до 75'\n"
     "🔥 Ещё +2 гола — GOOL LIVE до 75'\n\n"
     "LIVE-сигналы приходят автоматически.\n"
     "Чтобы отключить сигналы: /stop"
 )
-STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 2.\nЧтобы включить их снова: /start"
+STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 4.\nЧтобы включить их снова: /start"
 
 def _token()->str:
  token=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
@@ -122,7 +122,7 @@ def broadcast_photo(png:bytes,caption:str="",reply_markup:dict[str,Any]|None=Non
  if sent==0 and caption.startswith(("✅ <b>ЗАШЁЛ","❌ <b>НЕ ЗАШЁЛ")):
   return broadcast(caption)
  return sent
-def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 2 запущен</b>\nАктивные стратегии: Ещё гол + Ещё +2 гола ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅",reply_markup=MENU_KEYBOARD)
+def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 4 · V4 ACTIVE запущен</b>\nLIVE Brain V4: ✅\nГол до перерыва: ✅\nЕщё гол: ✅\n1xBet odds + VALUE: ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅\n\n🧠 Кнопка «Анализ» — текущие матчи и решения V4.",reply_markup=MENU_KEYBOARD)
 def edit_message_reply_markup(chat_id:str|int,message_id:int,reply_markup:dict[str,Any])->bool:
  r=_api_call("editMessageReplyMarkup",{"chat_id":str(chat_id),"message_id":int(message_id),"reply_markup":reply_markup});return bool(r and r.get("ok"))
 def answer_callback_query(callback_query_id:str,text:str="")->bool:
@@ -207,6 +207,8 @@ def _force_reconcile_pending(journal_path:Path)->int:
   print(f"force_reconcile_pending closed={changed} checked={len(ids)} stale_hours={stale_hours:g}",flush=True)
  return changed
 
+_MATCH_SEARCH_WAITING:set[str]=set()
+
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
  result=_api_call("getUpdates",{"offset":offset,"timeout":timeout,"allowed_updates":["message","callback_query"]},timeout=max(5,timeout+5))
  if not result or not result.get("ok"):return offset,0
@@ -217,7 +219,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ"}:
+  if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -225,12 +227,48 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path);replies=in_game_sections(journal_path,_analysis_path(journal_path))
+   elif text=="🔎 найти матч":
+    _MATCH_SEARCH_WAITING.add(str(chat_id));replies=["🔎 <b>Поиск матча GOOL V4</b>\n\nНапиши название одной команды или обеих команд.\nНапример: <code>Арсенал</code> или <code>Арсенал — Манчестер Сити</code>.\n\nИщу только среди сегодняшних матчей."]
    else:
     replies=[analysis_text(_analysis_path(journal_path))]
    for reply in replies:
     if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
    continue
+  if chat_id is not None and str(chat_id) in _MATCH_SEARCH_WAITING and raw_text and not raw_text.startswith("/"):
+   from .manual_match_analysis import analyse_match_text,find_today_matches,match_choices
+   matches=find_today_matches(raw_text,limit=6)
+   if not matches:
+    send_message(chat_id,"❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.",reply_markup=MENU_KEYBOARD);changed+=1
+   elif len(matches)==1:
+    _MATCH_SEARCH_WAITING.discard(str(chat_id));send_message(chat_id,analyse_match_text(matches[0]),reply_markup=MENU_KEYBOARD);changed+=1
+   else:
+    send_message(chat_id,f"Нашёл совпадений: <b>{len(matches)}</b>. Выбери нужный матч:",reply_markup=match_choices(matches));changed+=1
+   continue
   cb=update.get("callback_query") or {};data=str(cb.get("data") or "")
+  if data.startswith("ma:"):
+   from .manual_match_analysis import analyse_match_text,find_today_by_id
+   event_id=data.split(":",1)[1];cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id")
+   match=find_today_by_id(event_id)
+   if cid is not None:
+    if match is None: send_message(cid,"❌ Матч уже не найден в сегодняшнем списке.",reply_markup=MENU_KEYBOARD)
+    else: send_message(cid,analyse_match_text(match),reply_markup=MENU_KEYBOARD)
+    _MATCH_SEARCH_WAITING.discard(str(cid));changed+=1
+   answer_callback_query(str(cb.get("id") or ""),"Запускаю V4-анализ")
+   continue
+  if data.startswith("v4ig:"):
+   entry_id=data.split(":",1)[1]
+   cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id");mid=cm.get("message_id")
+   try:
+    from .v4_prematch_delivery import mark_prematch_in_game,prematch_keyboard
+    marked=mark_prematch_in_game(journal_path,entry_id,chat_id=cid)
+   except Exception as exc:
+    print(f"V4_PREMATCH_CALLBACK_ERROR {type(exc).__name__}:{exc}",flush=True);marked=False
+   if marked:
+    changed+=1
+    if cid is not None and mid is not None:edit_message_reply_markup(cid,int(mid),prematch_keyboard(entry_id,entered=True))
+    answer_callback_query(str(cb.get("id") or ""),"Отмечено: в игре")
+   else:answer_callback_query(str(cb.get("id") or ""),"Ставка уже рассчитана или не найдена")
+   continue
   if not data.startswith("ig:"):continue
   parts=data.split(":",2)
   if len(parts)!=3:continue

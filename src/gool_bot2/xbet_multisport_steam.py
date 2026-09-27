@@ -513,6 +513,8 @@ class MultiSportSteamWorker:
 
         decoded = 0
         score_mismatch = 0
+        detected = 0
+        delivered = 0
         market_decode = 0
         alerts = 0
         latest: list[dict[str, Any]] = []
@@ -549,6 +551,8 @@ class MultiSportSteamWorker:
             "mapped": len(mapped),
             "decoded": decoded,
             "score_mismatch": score_mismatch,
+            "detected": detected,
+            "delivered": delivered,
             "market_decode_failed": market_decode,
             "alerts": alerts,
             "matches": latest,
@@ -565,7 +569,7 @@ class MultiSportSteamWorker:
             sports[key] = {"enabled": True, **stats}
             print(
                 f"XBET_{key.upper()}_STEAM flashscore={stats['flashscore_live']} xbet={stats['xbet_live']} "
-                f"mapped={stats['mapped']} decoded={stats['decoded']} score_mismatch={stats['score_mismatch']} "
+                f"mapped={stats['mapped']} decoded={stats['decoded']} score_mismatch={stats['score_mismatch']} detected={stats['detected']} delivered={stats['delivered']} "
                 f"alerts={stats['alerts']} cards={'on' if _truthy('XBET_MULTISPORT_CARDS_ENABLED', True) else 'off'}",
                 flush=True,
             )

@@ -140,6 +140,33 @@ class FotMobProvider:
         self._daily_cache[date_key] = (now, rows)
         return rows
 
+    def scheduled_matches_for_day(self, date_key: str) -> list[ProviderMatch]:
+        rows = self._rows(date_key.replace("-", ""))
+        out: list[ProviderMatch] = []
+        for row in rows:
+            home = (row.get("home") or {}).get("name") if isinstance(row.get("home"), dict) else row.get("homeName")
+            away = (row.get("away") or {}).get("name") if isinstance(row.get("away"), dict) else row.get("awayName")
+            match_id = row.get("id") or row.get("matchId")
+            if not home or not away or not match_id:
+                continue
+            raw_ts = row.get("timeTS") or row.get("timestamp")
+            if raw_ts is None:
+                status = row.get("status") or {}
+                raw_ts = status.get("utcTime") if isinstance(status, dict) else None
+            try:
+                if isinstance(raw_ts, str):
+                    from datetime import datetime
+                    start_ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00")).timestamp()
+                else:
+                    start_ts = float(raw_ts or 0)
+                    if start_ts > 100000000000:
+                        start_ts /= 1000.0
+            except (TypeError, ValueError):
+                start_ts = 0.0
+            league = row.get("leagueName") or row.get("tournamentName") or ""
+            out.append(ProviderMatch(provider=self.name, provider_match_id=str(match_id), home=str(home), away=str(away), league=str(league), meta={"scheduled_start_ts": start_ts, "fotmob_row": row}))
+        return out
+
     def _detail(self, match_id: str) -> dict:
         now = time.time()
         cached = self._detail_cache.get(str(match_id))

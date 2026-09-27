@@ -304,13 +304,13 @@ def _row_rank(row: dict[str, Any]) -> tuple[int, float]:
 def analysis_text(*_: Any, **__: Any) -> str:
     states = list(_latest_analysis().values())
     if not states:
-        return "🧠 <b>GOOL MULTI · КРАТКИЙ ОТЧЁТ</b>\n\nСейчас нет свежих матчей для анализа."
+        return "🧠 <b>GOOL BOT 4 · LIVE V4 · КРАТКИЙ ОТЧЁТ</b>\n\nСейчас нет свежих матчей для анализа."
 
     states.sort(key=_row_rank, reverse=True)
     bets = sum(1 for row in states if str((row.get("router") or {}).get("status") or "") == "BET")
     waits = len(states) - bets
     parts = [
-        "🧠 <b>GOOL MULTI · КРАТКИЙ ОТЧЁТ</b>",
+        "🧠 <b>GOOL BOT 4 · LIVE V4 · КРАТКИЙ ОТЧЁТ</b>",
         f"Матчей: <b>{len(states)}</b> · ставок: <b>{bets}</b> · ждём: <b>{waits}</b>",
         _xbet_coverage_line(states),
     ]

@@ -1,0 +1,13 @@
+[Unit]
+Description=GOOL V4 prematch scan and delivery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/gool_bot2
+Environment=RUNTIME_DATA_DIR=/opt/gool_bot2/data
+Environment=GOOL_HISTORY_DB=/opt/gool_bot2/data/gool_history.sqlite
+Environment=GOOL_MULTI_JOURNAL_PATH=/opt/gool_bot2/data/live/gool_multi_journal.json
+Environment=GOOL_PREMATCH_DELIVER=1
+ExecStart=/opt/gool_bot2/.venv/bin/python /opt/gool_bot2/scripts/gool_flashscore_today.py

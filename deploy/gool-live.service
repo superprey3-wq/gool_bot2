@@ -1,0 +1,19 @@
+[Unit]
+Description=GOOL production LIVE worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gool_bot2
+Environment=RUNTIME_DATA_DIR=/opt/gool_bot2/data
+Environment=GOOL_MULTI_JOURNAL_PATH=/opt/gool_bot2/data/live/gool_multi_journal.json
+Environment=GOOL_LIVE_ONLY=1
+Environment=GOOL_LIVE_V4_MODE=active
+EnvironmentFile=-/opt/gool_bot2/.env
+ExecStart=/opt/gool_bot2/.venv/bin/python -m gool_bot2.storage_market_signal_worker_var
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

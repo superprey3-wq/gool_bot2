@@ -14,6 +14,7 @@ from .providers.flashscore import FlashscoreProvider
 from .providers.fotmob import FotMobProvider
 from .providers.scores365 import Scores365Provider
 from .team_history import fotmob_team_history
+from .live_momentum import LiveMomentumTracker
 
 
 class LiveSnapshotCollector:
@@ -30,6 +31,7 @@ class LiveSnapshotCollector:
         self._prematch_context: dict[str, dict[str, Any]] = {}
         self._prematch_last_attempt: dict[str, float] = {}
         self._stop = False
+        self._momentum = LiveMomentumTracker()
 
     @staticmethod
     def _eligible_for_detail(minute: int, is_halftime: bool) -> bool:
@@ -273,7 +275,7 @@ class LiveSnapshotCollector:
             fs_stats=self.flashscore.fetch_stats(match.provider_match_id);goals=self.flashscore.fetch_goal_timeline(match.provider_match_id)
             record["providers"]["flashscore"]={"id":match.provider_match_id,"stats":fs_stats,"meta":{**match.meta,"goal_timeline":goals}}
             pref=football_prefilter(fs_stats,minute,threshold=self.prefilter_threshold);record["prefilter"]={"score":pref.score,"candidate":pref.candidate,"reasons":list(pref.reasons)}
-        self._attach_secondary_cache(record,str(match.provider_match_id));return record
+        self._attach_secondary_cache(record,str(match.provider_match_id));return self._momentum.attach(record)
 
     def _final_record(self, match_id: str, info: dict[str, Any], state: dict[str, Any], now: datetime) -> dict[str, Any]:
         goals=self.flashscore.fetch_goal_timeline(match_id);meta=dict(info.get("meta") or {});meta.update({"status_code":state.get("status_code",""),"coarse_status":state.get("coarse_status","3"),"goal_timeline":goals,"is_finished":True})

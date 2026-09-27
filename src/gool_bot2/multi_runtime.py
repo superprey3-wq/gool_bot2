@@ -8,11 +8,12 @@ from . import signal_worker_all_cards as cards
 from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
+from .live_goal_brain_v4 import evaluate_live_goals
 from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
 from .multi_autonomous_steam import apply_autonomous_steam
 from .multi_concept import enforce_entry_cutoff, routing_experts
-from .multi_delivery import finalize_multi_delivery, pending_result_notifications
+from .multi_delivery import finalize_multi_delivery, pending_result_notifications, finalize_result_delivery
 from .multi_entry_enrichment import enrich_multi_entry
 from .multi_exchange_confirmation import apply_matchbook_confirmation
 from .multi_journal import settle_multi_journal, sync_multi_journal
@@ -24,6 +25,10 @@ from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
 from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
+from .journal import load_signal_journal, save_signal_journal
+from .v4_prematch_lifecycle import sync_prematch_with_live_record
+from .v4_prematch_settlement import settle_prematch_row, settle_parlay
+from .v4_prematch_delivery import emit_prematch_result
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
 
@@ -61,6 +66,70 @@ def _live_only_brain_inputs(
     # clearing it here also prevents a historical helper from leaking into the
     # unified Goal State diagnostics.
     return live_record, live_model, {}
+
+
+def _live_v4_mode() -> str:
+    raw = str(os.getenv("GOOL_LIVE_V4_MODE", "shadow")).strip().casefold()
+    return raw if raw in {"off", "shadow", "active"} else "shadow"
+
+
+def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_path: Path) -> None:
+    """Evaluate V4 on the exact production snapshot and optionally gate ordinary LIVE heads."""
+    mode = _live_v4_mode()
+    if mode == "off":
+        return
+    match = record.get("match") or {}
+    mid = str(match.get("flashscore_event_id") or "")
+    minute = int(match.get("minute") or 0)
+    try:
+        decisions = evaluate_live_goals(record)
+    except Exception as exc:
+        print(f"GOOL_LIVE_V4_ERROR match={mid} error={type(exc).__name__}:{exc}", flush=True)
+        return
+
+    mapping = {"GOAL_BEFORE_HT": "goal_before_ht", "ANOTHER_GOAL": "another_goal"}
+    snapshot = {
+        "type": "live_v4",
+        "match_id": mid,
+        "minute": minute,
+        "score": [int(match.get("home_score") or 0), int(match.get("away_score") or 0)],
+        "mode": mode,
+        "decisions": [d.to_dict() for d in decisions],
+    }
+    try:
+        from .journal import append_analysis
+        append_analysis(analysis_path, snapshot)
+    except Exception as exc:
+        print(f"GOOL_LIVE_V4_AUDIT_ERROR match={mid} error={type(exc).__name__}:{exc}", flush=True)
+
+    for decision in decisions:
+        key = mapping.get(decision.market)
+        if not key:
+            continue
+        print(
+            f"GOOL_LIVE_V4 match={mid} minute={minute} head={key} mode={mode} "
+            f"decision={decision.decision} p={decision.probability:.3f} "
+            f"confidence={decision.confidence:.3f} source={decision.data_source}",
+            flush=True,
+        )
+        if mode != "active":
+            continue
+        row = experts.get(key)
+        if not isinstance(row, dict):
+            row = {}
+            experts[key] = row
+        row["probability"] = float(decision.probability)
+        row["confidence"] = float(decision.confidence)
+        row["source"] = "live_goal_brain_v4"
+        row["v4_score"] = float(decision.score)
+        row["v4_reasons"] = list(decision.reasons)
+        # V4 controls the football gate only. Price/value/freshness/market
+        # opposition remain mandatory in the existing production router.
+        row["passed"] = decision.decision == "BET"
+        blocks = [str(x) for x in (row.get("blocks") or []) if str(x) and not str(x).startswith("live_v4_")]
+        if decision.decision != "BET":
+            blocks.append("live_v4_no_bet")
+        row["blocks"] = blocks
 
 
 def _expert_probabilities(experts: dict[str, Any]) -> dict[str, float]:
@@ -297,8 +366,50 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     analysis_path, journal_path = _paths()
 
+    # V4 PREMATCH entries share the production journal. As soon as the same
+    # fixture appears in the live collector, promote/update that exact row so
+    # the menu can show real score/minute without creating a second bet.
+    try:
+        v4_rows = load_signal_journal(journal_path)
+        v4_changed = sync_prematch_with_live_record(v4_rows, record)
+        if bool(match.get("is_finished")):
+            for v4_row in v4_rows:
+                v4_changed += int(settle_prematch_row(v4_row, record))
+            # Parlay legs are journal rows too when emitted separately. Mirror
+            # their settled state into parent parlays and settle the parent once
+            # every leg is final.
+            settled_by_event = {
+                str(r.get("event_id") or ""): r for r in v4_rows
+                if str(r.get("origin") or "").lower() == "prematch"
+                and str(r.get("result") or "pending").lower() != "pending"
+            }
+            for parent in v4_rows:
+                if str(parent.get("origin") or "").lower() not in {"prematch_parlay", "parlay"}:
+                    continue
+                for leg in list(parent.get("legs") or []):
+                    child = settled_by_event.get(str(leg.get("event_id") or ""))
+                    if child:
+                        leg["result"] = child.get("result")
+                        leg["settled_score"] = child.get("settled_score")
+                        leg["settled_at"] = child.get("settled_at")
+                v4_changed += int(settle_parlay(parent))
+        if v4_changed:
+            save_signal_journal(journal_path, v4_rows)
+    except Exception as exc:
+        print(f"V4_PREMATCH_LIVE_SYNC_ERROR {type(exc).__name__}:{exc}", flush=True)
+
     settled = settle_multi_journal(record, journal_path)
-    result_rows = pending_result_notifications(journal_path, match_id=mid)
+    # V4 PREMATCH uses the same atomic result-notification claim mechanism as
+    # LIVE. Send its legacy-style result card, then finalize the same claim.
+    v4_result_rows = pending_result_notifications(journal_path, match_id=mid)
+    for v4_row in [r for r in v4_result_rows if str(r.get("origin") or "").lower() == "prematch"]:
+        try:
+            sent_v4 = emit_prematch_result(v4_row, record)
+            finalize_result_delivery(journal_path, v4_row, sent_v4)
+        except Exception as exc:
+            print(f"V4_PREMATCH_RESULT_DELIVERY_ERROR {type(exc).__name__}:{exc}", flush=True)
+    result_rows = [r for r in pending_result_notifications(journal_path, match_id=mid)
+                   if str(r.get("origin") or "").lower() != "prematch"]
     if result_rows:
         emit_multi_results(record, result_rows, journal_path=journal_path)
     for row in settled:
@@ -327,6 +438,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         data_quality=quality,
     )
     _ensure_any_goal_coverage_proxy(experts)
+    _apply_live_v4(brain_record, experts, analysis_path)
     live_probabilities = _expert_probabilities(experts)
 
     # Keep PREMATCH in the bot for collection, research and diagnostics. In

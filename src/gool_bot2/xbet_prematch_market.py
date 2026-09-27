@@ -23,8 +23,9 @@ ROOTS = (
     "https://1xbet.fi/LineFeed",
 )
 INDEX_QUERIES = (
-    "sports=1&count=200&lng=en&mode=4&country=1&getEmpty=true",
-    "sports=1&count=200&lng=en&tf=2200000&tz=0&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=19&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=1&getEmpty=true",
+    "sports=1&count=500&lng=en&cfview=2&mode=4&country=19&tf=2200000&tz=0&getEmpty=true",
 )
 
 
@@ -100,10 +101,10 @@ def _main_total(markets: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _usable_snapshot(markets: dict[str, Any]) -> bool:
+    """A candidate is usable when at least one supported market can be priced."""
     one_x_two = markets.get("match_1x2") or {}
-    if not all(one_x_two.get(name) for name in ("home", "draw", "away")):
-        return False
-    return bool(_main_total(markets))
+    has_1x2 = all(one_x_two.get(name) for name in ("home", "draw", "away"))
+    return bool(has_1x2 or _main_total(markets))
 
 
 def _safe_team_name(value: Any) -> str:
@@ -188,6 +189,60 @@ class XBetPrematchCollector:
                         return root, rows
         return None, []
 
+    @staticmethod
+    def _search_rows(payload: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        def walk(obj: Any) -> None:
+            if isinstance(obj, dict):
+                if obj.get("I") and obj.get("O1") and obj.get("O2"):
+                    rows.append(obj)
+                for value in obj.values():
+                    walk(value)
+            elif isinstance(obj, list):
+                for value in obj:
+                    walk(value)
+        walk(payload)
+        unique: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            unique[str(row.get("I"))] = row
+        return list(unique.values())
+
+    def _search_target(self, target: Any) -> dict[str, Any] | None:
+        home = str(getattr(target, "home", "") or "").strip()
+        away = str(getattr(target, "away", "") or "").strip()
+        if not home or not away:
+            return None
+        roots = [self.active_root, *[root for root in ROOTS if root != self.active_root]]
+        best: dict[str, Any] | None = None
+        best_score = 0.0
+        target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
+        # Address 1xBet from the Flashscore fixture instead of downloading the
+        # whole bookmaker catalogue. One query is normally enough; away is a fallback.
+        for term in (home, away):
+            params = urllib.parse.urlencode({"text": term, "limit": 50, "lng": "en"})
+            for root in roots:
+                payload = _http_json(f"{root}/Web_SearchZip?{params}")
+                for event in self._search_rows(payload):
+                    eh = _safe_team_name(event.get("O1")); ea = _safe_team_name(event.get("O2"))
+                    if not eh or not ea:
+                        continue
+                    names = pair_score(home, away, eh, ea)
+                    xb_ts = _event_start(event) or 0.0
+                    if target_ts and xb_ts:
+                        delta = abs(target_ts - xb_ts)
+                        if delta > 3 * 3600:
+                            continue
+                        score = 0.85 * names + 0.15 * max(0.0, 1.0 - delta / (3 * 3600))
+                    else:
+                        score = names
+                    if score > best_score:
+                        best_score = score
+                        best = {"event": event, "event_id": str(event.get("I")), "home": eh, "away": ea, "root": root, "match_score": score}
+                if best_score >= 0.82:
+                    self.active_root = root
+                    return best
+        return best if best_score >= 0.68 else None
+
     def _game(self, root: str, event_id: str) -> dict[str, Any] | None:
         params = {
             "id": event_id,
@@ -203,13 +258,13 @@ class XBetPrematchCollector:
         value = payload.get("Value") if isinstance(payload, dict) else None
         return value if isinstance(value, dict) else None
 
-    def collect_once(self) -> dict[str, Any]:
+    def collect_once(self, targets: list[Any] | None = None) -> dict[str, Any]:
         started = time.time()
         root, index = self._index()
         previous = _load(self.state_path)
         stored = dict(previous.get("matches") or {}) if isinstance(previous.get("matches"), dict) else {}
-        limit = max(10, min(100, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "40"))))
-        workers = max(2, min(8, int(os.getenv("XBET_PREMATCH_WORKERS", "4"))))
+        limit = max(40, min(120, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "80"))))
+        workers = max(2, min(16, int(os.getenv("XBET_PREMATCH_WORKERS", "8"))))
         now = time.time()
         candidates: list[dict[str, Any]] = []
         for event in index:
@@ -219,14 +274,63 @@ class XBetPrematchCollector:
             if not event_id or not home or not away:
                 continue
             candidates.append({"event": event, "event_id": event_id, "home": home, "away": away})
-            if len(candidates) >= limit:
-                break
+
+        if targets:
+            # Fixture discovery is already complete before this stage. Resolve bookmaker
+            # addresses concurrently so pricing cannot serialize the full daily field.
+            selected: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            search_workers = max(4, min(24, int(os.getenv("XBET_PREMATCH_SEARCH_WORKERS", "12"))))
+
+            def resolve_target(target: Any) -> dict[str, Any] | None:
+                row = self._search_target(target)
+                if row:
+                    return row
+                target_ts = float((getattr(target, "meta", {}) or {}).get("scheduled_start_ts") or 0)
+                best = None; best_score = 0.0
+                for candidate in candidates:
+                    names = pair_score(getattr(target, "home", ""), getattr(target, "away", ""), candidate["home"], candidate["away"])
+                    xb_ts = _event_start(candidate["event"]) or 0.0
+                    if target_ts and xb_ts and abs(target_ts - xb_ts) > 3 * 3600:
+                        continue
+                    if names > best_score:
+                        best = candidate; best_score = names
+                if best and best_score >= 0.68:
+                    return {**best, "root": root}
+                return None
+
+            search_total = len(targets)
+            search_done = 0
+            print(f"XBET_SEARCH_PROGRESS start total={search_total} workers={search_workers}", flush=True)
+            with ThreadPoolExecutor(max_workers=search_workers, thread_name_prefix="xbet-search") as pool:
+                futures = [pool.submit(resolve_target, target) for target in targets]
+                for future in as_completed(futures):
+                    try:
+                        row = future.result()
+                    except Exception:
+                        row = None
+                    if row and row["event_id"] not in seen:
+                        seen.add(row["event_id"])
+                        selected.append(row)
+                    search_done += 1
+                    if search_done % 25 == 0 or search_done == search_total:
+                        print(
+                            f"XBET_SEARCH_PROGRESS checked={search_done}/{search_total} matched={len(selected)}",
+                            flush=True,
+                        )
+            candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
+        else:
+            candidates = [{**row, "root": root} for row in candidates[:limit]]
 
         refreshed = 0
-        if root and candidates:
+        if candidates:
+            price_total = len(candidates)
+            price_done = 0
+            price_failures = 0
+            print(f"XBET_PRICE_PROGRESS start total={price_total} workers={workers}", flush=True)
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {
-                    pool.submit(self._game, root, row["event_id"]): row
+                    pool.submit(self._game, row.get("root") or root, row["event_id"]): row
                     for row in candidates
                 }
                 for future in as_completed(futures):
@@ -236,9 +340,19 @@ class XBetPrematchCollector:
                     except Exception:
                         game = None
                     if not game:
-                        continue
-                    markets = decode_markets(game)
-                    if not _usable_snapshot(markets):
+                        price_failures += 1
+                    else:
+                        markets = decode_markets(game)
+                        if not _usable_snapshot(markets):
+                            price_failures += 1
+                            game = None
+                    price_done += 1
+                    if price_done % 25 == 0 or price_done == price_total:
+                        print(
+                            f"XBET_PRICE_PROGRESS checked={price_done}/{price_total} usable={refreshed} failures={price_failures}",
+                            flush=True,
+                        )
+                    if not game:
                         continue
                     event = row["event"]
                     event_id = row["event_id"]
@@ -249,7 +363,7 @@ class XBetPrematchCollector:
                         "away": row["away"],
                         "scheduled_start_ts": _event_start(event),
                         "source": "1xbet:LineFeed",
-                        "root": root,
+                        "root": row.get("root") or root,
                         "first_captured_at": old.get("first_captured_at") or _iso_now(),
                         "captured_at": _iso_now(),
                         "match_1x2": dict(markets.get("match_1x2") or {}),

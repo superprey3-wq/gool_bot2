@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - gool-v4-rebuild
     paths:
       - 'src/gool_bot2/providers/flashscore_stats_guard.py'
       - 'src/gool_bot2/providers/__init__.py'

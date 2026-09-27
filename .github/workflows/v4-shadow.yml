@@ -1,0 +1,23 @@
+name: V4 real-data shadow
+
+on:
+  push:
+    branches: [gool-v4-rebuild]
+  workflow_dispatch:
+
+jobs:
+  prematch-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Collect real 1xBet prematch market and print shadow list
+        env:
+          XBET_PREMATCH_FETCH_EVENTS: "60"
+          XBET_PREMATCH_WORKERS: "6"
+        run: python -m gool_bot2.v4_shadow_report --count-today

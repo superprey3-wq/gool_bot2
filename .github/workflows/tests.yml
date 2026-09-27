@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [main, archive-foundation, experiment/ht-one-goal-over25]
+    branches: [main, archive-foundation, experiment/ht-one-goal-over25, gool-v4-rebuild]
   pull_request:
 
 jobs:
@@ -17,6 +17,31 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
       - run: pytest -q
+      - name: V4 deployment smoke check
+        run: |
+          python -m py_compile \
+            src/gool_bot2/v4_prematch_engine.py \
+            src/gool_bot2/v4_live_policy.py \
+            src/gool_bot2/v4_prematch_lifecycle.py \
+            src/gool_bot2/v4_prematch_delivery.py \
+            src/gool_bot2/v4_prematch_card.py \
+            src/gool_bot2/v4_prematch_settlement.py \
+            src/gool_bot2/multi_runtime.py \
+            src/gool_bot2/multi_menu.py \
+            src/gool_bot2/telegram.py
+          python - <<'PY'
+          from gool_bot2.v4_prematch_engine import build_prematch_candidates
+          from gool_bot2.v4_live_policy import decide_live_v4
+          from gool_bot2.v4_prematch_lifecycle import sync_prematch_with_live_record
+          from gool_bot2.v4_prematch_delivery import prematch_keyboard
+          from gool_bot2.v4_prematch_card import render_v4_prematch_card
+          from gool_bot2.v4_prematch_settlement import settle_prematch_pick
+          from gool_bot2.multi_runtime import observe_multi_shadow
+          from gool_bot2.multi_menu import in_game_sections
+          assert prematch_keyboard("smoke")["inline_keyboard"][0][0]["callback_data"] == "v4ig:smoke"
+          assert settle_prematch_pick({"market": "ТБ 2.5"}, 2, 1) == "won"
+          print("V4_DEPLOY_SMOKE_OK")
+          PY
       - name: Build Monkey deployment bundle
         run: |
           rm -rf deploy_bundle GOOL_BOT2_MONKEY_CODE.zip

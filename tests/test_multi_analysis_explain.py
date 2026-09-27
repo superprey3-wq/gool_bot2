@@ -153,7 +153,7 @@ def test_analysis_view_explains_price_value_and_gool_wait(monkeypatch):
 
     text = multi_analysis_view.analysis_text()
 
-    assert "GOOL MULTI · КРАТКИЙ ОТЧЁТ" in text
+    assert "GOOL BOT 4 · LIVE V4 · КРАТКИЙ ОТЧЁТ" in text
     assert "Vinotinto — San Antonio" in text
     assert "🎯 Ещё 1 гол: ТБ 0.5 @ 1.27" in text
     assert "🧠 Ещё гол: 87% · GOOL пока не подтверждает" in text

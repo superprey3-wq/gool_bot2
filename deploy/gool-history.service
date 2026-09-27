@@ -1,0 +1,11 @@
+[Unit]
+Description=GOOL odds history and settlement tick
+After=network-online.target
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/gool_bot2
+Environment=GOOL_HISTORY_DB=/opt/gool_bot2/data/gool_history.sqlite
+Environment=RUNTIME_DATA_DIR=/opt/gool_bot2/data
+Environment=GOOL_MULTI_JOURNAL_PATH=/opt/gool_bot2/data/live/gool_multi_journal.json
+EnvironmentFile=-/opt/gool_bot2/.env
+ExecStart=/bin/bash /opt/gool_bot2/scripts/server_tick.sh

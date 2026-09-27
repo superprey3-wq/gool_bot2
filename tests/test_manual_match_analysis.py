@@ -46,4 +46,4 @@ def test_analyse_match_text_builds_v4_thought_without_name_error(monkeypatch):
     }], {}))
     text = mma.analyse_match_text(M("a", "Norway", "Portugal"))
     assert "МЫСЛЬ БОТА" in text
-    assert "NO BET" in text
+    assert "СТАВКА БОТА" in text

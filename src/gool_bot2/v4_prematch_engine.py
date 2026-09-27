@@ -151,6 +151,45 @@ def build_super_accumulator(
         "expected_value": combined_probability * combined_odds - 1.0,
     }
 
+
+def choose_delivery(
+    picks: Iterable[PrematchPick],
+    *,
+    max_singles: int = 6,
+    max_doubles: int = 2,
+) -> dict:
+    """Choose the safest useful delivery format; never force an accumulator."""
+    rows=list(picks)
+    singles=rank_prematch_for_delivery(rows, limit=max_singles)
+    # SUPER is exceptional: all 10 calibrated legs must clear stricter gates.
+    super_ticket=build_super_accumulator(
+        rows, target_legs=10, min_leg_probability=.74,
+        min_quality=.80, min_edge=.035, min_ev=.02, max_same_market=6,
+    )
+    if super_ticket:
+        return {"mode":"SUPER","super":super_ticket,"doubles":[],"singles":singles[:3]}
+
+    doubles=build_accumulators(
+        rows, legs=2, min_combined_probability=.50,
+        min_combined_odds=1.70, max_combined_odds=3.20,
+    )
+    # Require both legs to be strong individually and avoid reusing events.
+    strong=[]
+    used=set()
+    for acc in doubles:
+        legs=acc["legs"]
+        if any(p.model_probability < .69 or p.data_quality < .75 or p.edge < .045 for p in legs):
+            continue
+        if any(p.event_id in used for p in legs):
+            continue
+        strong.append(acc); used.update(p.event_id for p in legs)
+        if len(strong)>=max_doubles:break
+    if strong:
+        return {"mode":"DOUBLES","super":None,"doubles":strong,"singles":singles[:4]}
+    if singles:
+        return {"mode":"SINGLES","super":None,"doubles":[],"singles":singles}
+    return {"mode":"NO_BET","super":None,"doubles":[],"singles":[]}
+
 def picks_from_goal_profile(
     *,
     event_id: str,

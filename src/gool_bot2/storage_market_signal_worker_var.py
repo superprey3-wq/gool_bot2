@@ -40,6 +40,7 @@ _DIRECT_TELEGRAM_OFFSET = 0
 _TELEGRAM_RESPONDER_THREAD: threading.Thread | None = None
 _TELEGRAM_RESPONDER_STOP = threading.Event()
 _TELEGRAM_OFFSET_LOCK = threading.Lock()
+_DIRECT_MATCH_SEARCH_WAITING: set[str] = set()
 
 
 def _telegram_journal_path() -> Path:
@@ -126,7 +127,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "📊 отчёт", "📊 отчет", "🟢 в игре", "🧠 анализ"}:
+    if chat_id is not None and text in {"/start", "📊 отчёт", "📊 отчет", "🟢 в игре", "🧠 анализ", "🔎 найти матч"}:
         try:
             if text == "/start":
                 telegram_mod.subscribe(chat_id)
@@ -137,6 +138,14 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text == "🟢 в игре":
                 telegram_mod._force_reconcile_pending(journal_path)
                 replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))
+            elif text == "🔎 найти матч":
+                _DIRECT_MATCH_SEARCH_WAITING.add(str(chat_id))
+                replies = [
+                    "🔎 <b>Поиск матча GOOL V4</b>\n\n"
+                    "Напиши название одной команды или обеих команд.\n"
+                    "Например: <code>Арсенал</code> или <code>Арсенал — Манчестер Сити</code>.\n\n"
+                    "Ищу только среди сегодняшних матчей."
+                ]
             else:
                 replies = [telegram_mod.analysis_text(telegram_mod._analysis_path(journal_path))]
         except Exception as exc:
@@ -148,8 +157,42 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 changed += 1
         return changed
 
+    if chat_id is not None and str(chat_id) in _DIRECT_MATCH_SEARCH_WAITING and raw_text and not raw_text.startswith("/"):
+        try:
+            from .manual_match_analysis import analyse_match_text, find_today_matches, match_choices
+            matches = find_today_matches(raw_text, limit=6)
+            if not matches:
+                _direct_send_message(token, chat_id, "❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.", reply_markup=telegram_mod.MENU_KEYBOARD)
+            elif len(matches) == 1:
+                _DIRECT_MATCH_SEARCH_WAITING.discard(str(chat_id))
+                _direct_send_message(token, chat_id, analyse_match_text(matches[0]), reply_markup=telegram_mod.MENU_KEYBOARD)
+            else:
+                _direct_send_message(token, chat_id, f"Нашёл совпадений: <b>{len(matches)}</b>. Выбери нужный матч:", reply_markup=match_choices(matches))
+            changed += 1
+        except Exception as exc:
+            print(f"GOOL_MANUAL_MATCH_SEARCH_ERROR error={type(exc).__name__}:{exc}", flush=True)
+            if _direct_send_message(token, chat_id, "⚠️ Не удалось выполнить поиск матча. Бот продолжает работать.", reply_markup=telegram_mod.MENU_KEYBOARD):
+                changed += 1
+        return changed
+
     callback = update.get("callback_query") or {}
     data = str(callback.get("data") or "")
+    if data.startswith("ma:"):
+        from .manual_match_analysis import analyse_match_text, find_today_by_id
+        event_id = data.split(":", 1)[1]
+        callback_message = callback.get("message") or {}
+        callback_chat_id = (callback_message.get("chat") or {}).get("id")
+        callback_id = str(callback.get("id") or "")
+        match = find_today_by_id(event_id)
+        if callback_chat_id is not None:
+            if match is None:
+                _direct_send_message(token, callback_chat_id, "❌ Матч уже не найден в сегодняшнем списке.", reply_markup=telegram_mod.MENU_KEYBOARD)
+            else:
+                _direct_send_message(token, callback_chat_id, analyse_match_text(match), reply_markup=telegram_mod.MENU_KEYBOARD)
+            _DIRECT_MATCH_SEARCH_WAITING.discard(str(callback_chat_id))
+            changed += 1
+        _direct_answer_callback(token, callback_id, "Запускаю V4-анализ")
+        return changed
     if not data.startswith("ig:"):
         return changed
     parts = data.split(":", 2)

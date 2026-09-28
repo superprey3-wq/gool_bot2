@@ -1,0 +1,41 @@
+name: V4 prematch card preview
+
+on:
+  push:
+    branches: [fix/v4-prematch-team-badges]
+    paths:
+      - 'src/gool_bot2/v4_prematch_card.py'
+      - 'tests/test_v4_prematch_card.py'
+      - '.github/workflows/v4-prematch-card-preview.yml'
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e '.[dev]'
+      - name: Test card renderer
+        run: pytest -q tests/test_v4_prematch_card.py
+      - name: Render preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from gool_bot2.v4_prematch_card import render_v4_prematch_card
+          row = {
+              "home":"CSR Espanol","away":"Def. de Cambaceres","league":"ARGENTINA · PRIMERA C",
+              "market":"FT_UNDER_2.5","odd":1.50,"probability":0.695,"edge":0.067,
+              "tier":"STRONG","scheduled_start":"28.09 21:00 МСК",
+              "flashscore_meta":{}
+          }
+          p = Path(render_v4_prematch_card(row))
+          Path("artifacts").mkdir(exist_ok=True)
+          p.replace("artifacts/v4-prematch-preview.png")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v4-prematch-card-preview
+          path: artifacts/v4-prematch-preview.png

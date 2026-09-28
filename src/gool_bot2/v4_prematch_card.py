@@ -74,8 +74,14 @@ def render_v4_prematch_card(
     draw.rounded_rectangle((790, 32, 1028, 87), 15, outline=accent, width=2)
     _center_in_box(draw, state, (790, 32, 1028, 87), sc._font(16, True), accent)
 
-    _center(draw, f"🏆 {league}", 126, _fit(draw, f"🏆 {league}", 930, 19, True), TEXT)
+    # Do not use emoji here: the bundled card font may render it as a tofu square.
+    league_text = f"FOOTBALL · {league}"
+    _center(draw, league_text, 126, _fit(draw, league_text, 930, 19, True), TEXT)
 
+    # V4 used to compute Flashscore metadata but never render the team assets.
+    # Reuse the proven LIVE-card badge/logo helpers so PREMATCH has real crests.
+    sc._badge(img, draw, 185, 280, sc._logo(meta, "home"), home, accent)
+    sc._badge(img, draw, 895, 280, sc._logo(meta, "away"), away, accent)
 
     draw.rounded_rectangle((390, 200, 690, 360), 28, fill=(9, 19, 31), outline=accent, width=3)
     if live:

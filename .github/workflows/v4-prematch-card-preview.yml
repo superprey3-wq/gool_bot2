@@ -24,18 +24,21 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          from gool_bot2.v4_prematch_card import render_v4_prematch_card
+          from gool_bot2.v4_prematch_card import render_v4_prematch_card, render_v4_prematch_result_card
           row = {
               "home":"CSR Espanol","away":"Def. de Cambaceres","league":"ARGENTINA · PRIMERA C",
               "market":"FT_UNDER_2.5","odd":1.50,"probability":0.695,"edge":0.067,
               "tier":"STRONG","scheduled_start":"28.09 21:00 МСК",
               "flashscore_meta":{}
           }
-          p = Path(render_v4_prematch_card(row))
-          Path("artifacts").mkdir(exist_ok=True)
-          p.replace("artifacts/v4-prematch-preview.png")
+          out = Path("artifacts")
+          out.mkdir(exist_ok=True)
+          (out / "v4-prematch-preview.png").write_bytes(render_v4_prematch_card(row))
+          settled = {**row, "settled_score":[1, 0]}
+          (out / "v4-prematch-won.png").write_bytes(render_v4_prematch_result_card({**settled, "result":"won"}))
+          (out / "v4-prematch-lost.png").write_bytes(render_v4_prematch_result_card({**settled, "result":"lost"}))
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: v4-prematch-card-preview
-          path: artifacts/v4-prematch-preview.png
+          path: artifacts/*.png

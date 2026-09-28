@@ -1,0 +1,44 @@
+name: V4 prematch card preview
+
+on:
+  push:
+    branches: [fix/v4-prematch-team-badges]
+    paths:
+      - 'src/gool_bot2/v4_prematch_card.py'
+      - 'tests/test_v4_prematch_card.py'
+      - '.github/workflows/v4-prematch-card-preview.yml'
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e '.[dev]'
+      - name: Test card renderer
+        run: pytest -q tests/test_v4_prematch_card.py
+      - name: Render preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from gool_bot2.v4_prematch_card import render_v4_prematch_card, render_v4_prematch_result_card
+          row = {
+              "home":"CSR Espanol","away":"Def. de Cambaceres","league":"ARGENTINA · PRIMERA C",
+              "market":"FT_UNDER_2.5","odd":1.50,"probability":0.695,"edge":0.067,
+              "tier":"STRONG","scheduled_start":"28.09 21:00 МСК",
+              "flashscore_meta":{}
+          }
+          out = Path("artifacts")
+          out.mkdir(exist_ok=True)
+          (out / "v4-prematch-preview.png").write_bytes(render_v4_prematch_card(row))
+          settled = {**row, "settled_score":[1, 0]}
+          (out / "v4-prematch-won.png").write_bytes(render_v4_prematch_result_card({**settled, "result":"won"}))
+          (out / "v4-prematch-lost.png").write_bytes(render_v4_prematch_result_card({**settled, "result":"lost"}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v4-prematch-card-preview
+          path: artifacts/*.png

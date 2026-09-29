@@ -161,10 +161,18 @@ def settle_parlay(row: dict[str, Any]) -> bool:
     apply_settlement_fields(row)
     return True
 
+def _pick_identity(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(row.get("event_id") or row.get("match_id") or ""),
+        str(row.get("market") or ""),
+        str(row.get("selection") or ""),
+    )
+
+
 def sync_and_settle_parlays(rows: list[dict[str, Any]]) -> int:
     """Copy settled child-leg results into parent parlays, then settle parents."""
     children = {
-        (str(r.get("event_id") or r.get("match_id") or ""), str(r.get("market") or "")): r
+        _pick_identity(r): r
         for r in rows if str(r.get("origin") or "").casefold() == "prematch"
     }
     changed = 0
@@ -172,7 +180,7 @@ def sync_and_settle_parlays(rows: list[dict[str, Any]]) -> int:
         if str(parent.get("origin") or "").casefold() != "prematch_parlay":
             continue
         for leg in list(parent.get("legs") or []):
-            child = children.get((str(leg.get("event_id") or ""), str(leg.get("market") or "")))
+            child = children.get(_pick_identity(leg))
             if not child:
                 continue
             for key in ("result", "settled_at", "settled_score", "settled_minute"):
@@ -207,29 +215,36 @@ def sync_prematch_journal(journal_path, record: dict[str, Any]) -> None:
 
 
 def reconcile_pending_prematch(journal_path) -> int:
-    """Settle pending PREMATCH rows from Flashscore even after fixtures leave LIVE."""
+    """Settle all pending PREMATCH singles and parlay-only legs from Flashscore."""
     from .journal import load_signal_journal, save_signal_journal
     from .production_journal_serialization import _locked
     from .providers.flashscore import FlashscoreProvider
+
     with _locked(journal_path):
         rows = load_signal_journal(journal_path)
+        pending_rows: list[dict[str, Any]] = []
+        for row in rows:
+            origin = str(row.get("origin") or "").casefold()
+            if origin == "prematch" and str(row.get("result") or "pending").casefold() == "pending":
+                pending_rows.append(row)
+            elif origin in {"prematch_parlay", "parlay"} and str(row.get("result") or "pending").casefold() == "pending":
+                pending_rows.extend(
+                    leg for leg in (row.get("legs") or [])
+                    if str(leg.get("result") or "pending").casefold() == "pending"
+                )
+
         pending_ids = {
             str(r.get("match_id") or r.get("event_id") or "")
-            for r in rows
-            if str(r.get("origin") or "").casefold() == "prematch"
-            and str(r.get("result") or "pending").casefold() == "pending"
+            for r in pending_rows
+            if str(r.get("match_id") or r.get("event_id") or "")
         }
-        pending_ids.discard("")
         if not pending_ids:
             return 0
+
         provider = FlashscoreProvider()
         states = provider.event_states(pending_ids)
         changed = 0
-        for row in rows:
-            if str(row.get("origin") or "").casefold() != "prematch":
-                continue
-            if str(row.get("result") or "pending").casefold() != "pending":
-                continue
+        for row in pending_rows:
             mid = str(row.get("match_id") or row.get("event_id") or "")
             state = states.get(mid) or {}
             if not bool(state.get("is_finished")):
@@ -241,7 +256,15 @@ def reconcile_pending_prematch(journal_path) -> int:
                 "away_score": state.get("away_score"),
             }}
             changed += int(settle_prematch_row(row, record))
+
+        # Copy exact single results into matching legs when both products exist,
+        # then settle every parent whose displayed legs are final.
         changed += sync_and_settle_parlays(rows)
+        for parent in rows:
+            if str(parent.get("origin") or "").casefold() in {"prematch_parlay", "parlay"}:
+                changed += int(settle_parlay(parent))
+
         if changed:
             save_signal_journal(journal_path, rows)
+            print(f"GOOL_PREMATCH_RECONCILE settled_or_synced={changed} events={len(pending_ids)}", flush=True)
         return changed

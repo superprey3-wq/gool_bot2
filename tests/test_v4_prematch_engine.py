@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery
 
 
 def test_devig_two_way_removes_margin():
@@ -126,3 +126,28 @@ def test_parlay_pool_rejects_expensive_non_single_legs():
     legs = [p for acc in delivery["doubles"] for p in acc["legs"]]
     assert legs
     assert all(p.odds <= 1.70 for p in legs)
+
+
+def test_btts_profile_builds_yes_and_no_from_team_goal_rates():
+    profile = {
+        "first_half": {"available": True, "home_expected_goals": 0.7, "away_expected_goals": 0.5},
+        "second_half": {"available": True, "home_expected_goals": 0.9, "away_expected_goals": 0.6},
+    }
+    market = {"btts": {"yes": 1.85, "no": 1.95}}
+    picks = picks_from_btts_profile(event_id="b1", home="A", away="B", profile=profile, market=market, data_quality=.9)
+    assert [p.selection for p in picks] == ["yes", "no"]
+    assert abs(sum(p.model_probability for p in picks) - 1.0) < 1e-9
+    assert abs(sum(p.market_probability for p in picks) - 1.0) < 1e-9
+
+
+def test_goal_profile_compares_multiple_half_goal_total_lines():
+    profile = {"full_match": {"available": True, "expected_total": 2.8}}
+    market = {"match_totals": [
+        {"line": 1.5, "over": 1.25, "under": 3.8},
+        {"line": 2.5, "over": 1.85, "under": 1.95},
+        {"line": 3.0, "over": 2.2, "under": 1.65},
+        {"line": 3.5, "over": 2.6, "under": 1.45},
+    ]}
+    picks = picks_from_goal_profile(event_id="t1", home="A", away="B", profile=profile, market=market)
+    assert {p.selection for p in picks} == {"over 1.5", "under 1.5", "over 2.5", "under 2.5", "over 3.5", "under 3.5"}
+    assert all("3" not in p.selection or "3.5" in p.selection for p in picks)

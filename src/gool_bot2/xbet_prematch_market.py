@@ -369,6 +369,7 @@ class XBetPrematchCollector:
                         "first_captured_at": old.get("first_captured_at") or _iso_now(),
                         "captured_at": _iso_now(),
                         "match_1x2": dict(markets.get("match_1x2") or {}),
+                        "btts": dict(markets.get("btts") or {}),
                         "main_total": _main_total(markets),
                         "match_totals": [dict(x) for x in (markets.get("match_total") or []) if isinstance(x, dict)],
                     }

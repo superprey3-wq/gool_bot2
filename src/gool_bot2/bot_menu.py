@@ -191,10 +191,12 @@ def prematch_singles_sections(path: Path) -> list[str]:
         return ["🎟 <b>ОРДИНАРЫ · СЕГОДНЯ</b>\n\nСегодня PREMATCH-ординаров ещё не отправляли."]
     parts = [f"🎟 <b>ОРДИНАРЫ · СЕГОДНЯ</b> · <b>{len(rows)}</b>"]
     for i, row in enumerate(rows, 1):
+        time_label = _prematch_time_label(row)
         parts.append(
-            f"<b>{i}.</b> {_result_icon(row)} {_h(row.get('home'))} — {_h(row.get('away'))}"
-            f"{' · ' + _h(_prematch_time_label(row)) if _prematch_time_label(row) else ''}\n"
-            f"↳ {_h(_prematch_market_label(row.get('market') or row.get('selection')))} @ <b>{float(row.get('odd') or 0):.2f}</b>"
+            f"<b>{i}. {_result_icon(row)} {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
+            f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
+            f"⚽ {_h(_prematch_market_label(row.get('market') or row.get('selection')))}\n"
+            f"💰 Кэф: <b>{float(row.get('odd') or 0):.2f}</b>"
         )
     return _chunk_menu(parts, "🎟 <b>ОРДИНАРЫ · продолжение</b>")
 
@@ -207,12 +209,14 @@ def prematch_parlays_sections(path: Path) -> list[str]:
     for i, row in enumerate(rows, 1):
         legs = []
         for leg in row.get("legs") or []:
+            time_label = _prematch_time_label(leg)
             legs.append(
-                f"{_result_icon(leg)} {_h(leg.get('home'))} — {_h(leg.get('away'))}"
-                f"{' · ' + _h(_prematch_time_label(leg)) if _prematch_time_label(leg) else ''}"
-                f" · {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))} @ {float(leg.get('odd') or 0):.2f}"
+                f"{_result_icon(leg)} <b>{_h(leg.get('home'))} — {_h(leg.get('away'))}</b>\n"
+                f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
+                f"⚽ {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))}\n"
+                f"💰 Кэф: <b>{float(leg.get('odd') or 0):.2f}</b>"
             )
-        parts.append(f"<b>{i}.</b> {_result_icon(row)} Экспресс @ <b>{float(row.get('odd') or 0):.2f}</b>\n" + "\n".join("↳ " + x for x in legs))
+        parts.append(f"<b>{i}.</b> {_result_icon(row)} Экспресс @ <b>{float(row.get('odd') or 0):.2f}</b>\n" + "\n\n".join(legs))
     return _chunk_menu(parts, "🔗 <b>ЭКСПРЕССЫ · продолжение</b>")
 
 

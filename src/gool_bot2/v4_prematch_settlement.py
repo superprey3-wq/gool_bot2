@@ -86,6 +86,10 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, 
 
 def settle_prematch_row(row: dict[str, Any], record: dict[str, Any]) -> bool:
     match = record.get("match") or {}
+    kickoff_ts = float(row.get("kickoff_ts") or 0.0)
+    # Provider IDs/states can be stale. A scheduled PREMATCH can never settle before kickoff.
+    if kickoff_ts and datetime.now(timezone.utc).timestamp() < kickoff_ts - 120:
+        return False
     first_half = str(row.get("market_family") or "") == "first_half_total" or str(row.get("market") or "").upper().startswith("1H_")
     if not bool(match.get("is_finished")) and not (first_half and bool(match.get("is_halftime"))):
         return False

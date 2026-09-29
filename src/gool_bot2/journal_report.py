@@ -41,6 +41,9 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
     parlays = [row for row in today_rows if str(row.get("origin") or "") == "prematch_parlay"]
     steam = [row for row in today_rows if _layer(row) == "STEAM"]
 
+    total_profit, total_missing = multi_menu._profit_info(today_rows)
+    total_pl = f"{total_profit:+.2f}u" + ("*" if total_missing else "")
+    settled = [row for row in today_rows if str(row.get("result") or "").lower() in {"won", "lost"}]
     parts = [
         "📊 <b>GOOL BOT 4 · ОТЧЁТ СЕГОДНЯ</b>",
         f"📅 {today.strftime('%d.%m.%Y')} · только реально отправленные ставки",
@@ -55,8 +58,13 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
         "",
         f"🔥 <b>Прогрузы 1xBet</b>\n{multi_menu._stats_line(steam)}",
         "",
-        f"📦 Всего отправлено сегодня: <b>{len(today_rows)}</b>",
+        "━━━━━━━━━━━━━━",
+        f"📦 <b>ИТОГО ДНЯ</b> · отправлено <b>{len(today_rows)}</b> · рассчитано <b>{len(settled)}</b>",
+        f"{multi_menu._stats_line(today_rows)}",
+        f"💰 Итоговый P/L: <b>{total_pl}</b>",
     ]
+    if total_missing:
+        parts += ["<i>* P/L/ROI неполные: у части старых выигрышных записей не сохранён взятый коэффициент.</i>"]
     return "\n".join(parts)
 
 

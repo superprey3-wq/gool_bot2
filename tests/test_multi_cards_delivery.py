@@ -163,7 +163,16 @@ def test_active_mode_hides_telegram_token_only_while_legacy_worker_runs(monkeypa
 
 def test_multi_result_delivery_never_renders_prematch(monkeypatch):
     monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
-    monkeypatch.setattr(multi_telegram.multi_card if hasattr(multi_telegram, "multi_card") else multi_card, "render_multi_result_card", lambda *a, **k: (_ for _ in ()).throw(AssertionError("PREMATCH must not use MULTI renderer")))
+    monkeypatch.setattr(multi_telegram, "render_multi_result_card", lambda *a, **k: (_ for _ in ()).throw(AssertionError("PREMATCH must not use MULTI renderer")))
     monkeypatch.setattr(multi_telegram.telegram, "broadcast_photo", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not send MULTI photo")))
     row = {**_entry(), "origin":"prematch", "result":"lost", "telegram_sent":True, "settled_score":[2,0]}
     assert multi_telegram.emit_multi_results(_record(90,2,0), [row]) == 0
+
+
+def test_live_card_product_labels_are_explicit():
+    assert multi_card._live_signal_name(strategy="goal_before_ht", family="first_half_total", minute=28) == "ГОЛ В 1-М ТАЙМЕ"
+    assert multi_card._live_signal_name(strategy="another_goal", family="match_total", minute=67) == "ЕЩЁ ГОЛ"
+
+
+def test_live_market_label_never_exposes_raw_prematch_code():
+    assert multi_card._pretty_market("FT_OVER_2.5") == "ТБ 2.5"

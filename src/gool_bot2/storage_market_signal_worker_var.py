@@ -163,7 +163,10 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             replies = ["⚠️ <b>GOOL MULTI</b>\n\nНе удалось подготовить ответ. Бот продолжает работать."]
 
         for reply in replies:
-            if _direct_send_message(token, chat_id, reply, reply_markup=telegram_mod.MENU_KEYBOARD):
+            # Read the canonical keyboard at send time. Product installers may
+            # mutate telegram_mod globals during import/runtime; bot_menu is the
+            # single source of truth for the production reply keyboard.
+            if _direct_send_message(token, chat_id, reply, reply_markup=_bot_menu.MENU_KEYBOARD):
                 changed += 1
         return changed
 
@@ -172,7 +175,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             from .manual_match_analysis import analyse_match_text, find_today_matches, match_choices
             matches = find_today_matches(raw_text, limit=6)
             if not matches:
-                _direct_send_message(token, chat_id, "❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.", reply_markup=telegram_mod.MENU_KEYBOARD)
+                _direct_send_message(token, chat_id, "❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.", reply_markup=_bot_menu.MENU_KEYBOARD)
             elif len(matches) == 1:
                 _DIRECT_MATCH_SEARCH_WAITING.discard(str(chat_id))
                 _direct_send_message(token, chat_id, analyse_match_text(matches[0]), reply_markup=telegram_mod.MENU_KEYBOARD)

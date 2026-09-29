@@ -211,21 +211,8 @@ _MATCH_SEARCH_WAITING:set[str]=set()
 
 
 def _drain_prematch_result_notifications(journal_path: Path) -> int:
-    from .multi_delivery import pending_result_notifications, finalize_result_delivery
-    from .v4_prematch_delivery import emit_prematch_result, emit_parlay_result
-    sent_total = 0
-    for row in pending_result_notifications(journal_path):
-        origin = str(row.get("origin") or "").casefold()
-        if origin not in {"prematch", "prematch_parlay", "parlay"}:
-            continue
-        try:
-            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
-            if finalize_result_delivery(journal_path, row, sent):
-                sent_total += int(sent or 0)
-        except Exception as exc:
-            print(f"V4_PREMATCH_RESULT_DRAIN_ERROR {type(exc).__name__}:{exc}", flush=True)
-    return sent_total
-
+    from .v4_prematch_delivery import drain_prematch_result_notifications
+    return drain_prematch_result_notifications(journal_path)
 
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
  try:

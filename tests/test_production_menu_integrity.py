@@ -116,3 +116,39 @@ def test_startup_repair_prefers_latest_settlement_not_old_delivered_result(tmp_p
     assert row["result_notification_pending"] is False
     assert row["result_notification_suppressed"] is True
     assert row["result_notification_suppression_reason"] == "startup_repair_conflicting_delivered_result"
+
+
+def test_public_report_reconstructs_profit_from_odds(tmp_path, monkeypatch):
+    canonical = tmp_path / "gool_multi_journal.json"
+    now = datetime.now(timezone.utc).isoformat()
+    win = _row("w", result="won", sent=True, home="Win")
+    win.update({"created_at": now, "odd": 1.65, "profit_units": None})
+    loss = _row("l", result="lost", sent=True, home="Loss")
+    loss.update({"created_at": now, "odd": 1.80, "profit_units": None})
+    save_signal_journal(canonical, [win, loss])
+
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(canonical))
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+
+    text = report.production_report_text(tmp_path / "legacy.json")
+
+    assert "P/L <b>-0.35u</b>" in text
+    assert "ROI <b>-17.5%</b>" in text
+    assert "ср.кэф <b>1.73</b>" in text
+    assert "ИТОГО ДНЯ" in text
+
+
+def test_public_report_marks_missing_winner_price_instead_of_fake_zero(tmp_path, monkeypatch):
+    canonical = tmp_path / "gool_multi_journal.json"
+    now = datetime.now(timezone.utc).isoformat()
+    win = _row("w", result="won", sent=True, home="Old Win")
+    win.update({"created_at": now, "odd": None, "profit_units": None})
+    save_signal_journal(canonical, [win])
+
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(canonical))
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+
+    text = report.production_report_text(tmp_path / "legacy.json")
+
+    assert "P/L <b>+0.00u*</b>" in text
+    assert "P/L/ROI неполные" in text

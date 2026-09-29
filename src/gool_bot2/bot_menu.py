@@ -187,9 +187,38 @@ def _prematch_league_label(value: object) -> str:
     text = str(value or "").strip()
     if not text:
         return "Турнир не указан"
-    replacements = {"International Friendlies":"Международные товарищеские матчи","International Friendly":"Международные товарищеские матчи","Friendly International":"Международные товарищеские матчи","World Cup":"Чемпионат мира","Champions League":"Лига чемпионов","Europa League":"Лига Европы","Conference League":"Лига конференций","Premier League":"Премьер-лига"}
-    for src, dst in replacements.items():
-        text = text.replace(src, dst)
+    replacements = {
+        "NORTH & CENTRAL AMERICA": "Северная и Центральная Америка",
+        "UNITED ARAB EMIRATES": "ОАЭ", "CZECH REPUBLIC": "Чехия",
+        "WORLD": "Мир", "QATAR": "Катар", "ENGLAND": "Англия",
+        "EUROPE": "Европа", "COLOMBIA": "Колумбия", "URUGUAY": "Уругвай",
+        "BRAZIL": "Бразилия", "SWEDEN": "Швеция", "ARGENTINA": "Аргентина",
+        "AFRICA": "Африка", "ASIA": "Азия", "INDIA": "Индия", "SLOVENIA": "Словения",
+        "International Friendlies": "Международные товарищеские матчи",
+        "International Friendly": "Международные товарищеские матчи",
+        "Southern League Premier South": "Южная лига — Премьер, Юг",
+        "Southern League Premier Central": "Южная лига — Премьер, Центр",
+        "Elite League U20": "Элитная лига U20",
+        "Euro U21 - Qualification": "Евро U21 — квалификация",
+        "Presidents Cup": "Кубок президента",
+        "Primera B - Clausura": "Примера B — Клаусура",
+        "Segunda Division": "Второй дивизион",
+        "Paulista U20 - Play Offs": "Паулиста U20 — плей-офф",
+        "Svenska Cupen Women - Qualification": "Кубок Швеции, женщины — квалификация",
+        "CONCACAF Nations League - League A": "Лига наций КОНКАКАФ — Лига A",
+        "CONCACAF Nations League - League B": "Лига наций КОНКАКАФ — Лига B",
+        "Reserve League - Clausura": "Лига резервов — Клаусура",
+        "NPL Premier Division": "НПЛ — Премьер-дивизион",
+        "UEFA Nations League - League A": "Лига наций УЕФА — Лига A",
+        "Africa Cup of Nations - Qualification": "Кубок африканских наций — квалификация",
+        "Asian Games Women - Play Offs": "Азиатские игры, женщины — плей-офф",
+        "Isthmian League Premier Division": "Истмийская лига — Премьер-дивизион",
+        "3. SNL - East": "3-я лига Словении — Восток",
+        "QSL Cup": "Кубок QSL", "IFA Shield": "Кубок IFA",
+        "Jihomoravsky KP": "Южноморавский краевой чемпионат",
+    }
+    for src in sorted(replacements, key=len, reverse=True):
+        text = text.replace(src, replacements[src])
     return text
 
 
@@ -212,8 +241,8 @@ def prematch_singles_sections(path: Path) -> list[str]:
     for i, row in enumerate(rows, 1):
         time_label = _prematch_time_label(row)
         parts.append(
-            f"<b>{i}. {_result_icon(row)} {_h(_prematch_ru_name(row.get('home')))} — {_h(_prematch_ru_name(row.get('away')))}</b>\\n"
-            f"🏆 {_h(_prematch_league_label(row.get('league')))}\\n"
+            f"<b>{i}. {_result_icon(row)} {_h(_prematch_ru_name(row.get('home')))} — {_h(_prematch_ru_name(row.get('away')))}</b>\n"
+            f"🏆 {_h(_prematch_league_label(row.get('league')))}\n"
             f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
             f"⚽ {_h(_prematch_market_label(row.get('market') or row.get('selection')))}\n"
             f"💰 Кэф: <b>{float(row.get('odd') or 0):.2f}</b>"
@@ -231,8 +260,8 @@ def prematch_parlays_sections(path: Path) -> list[str]:
         for leg in row.get("legs") or []:
             time_label = _prematch_time_label(leg)
             legs.append(
-                f"{_result_icon(leg)} <b>{_h(_prematch_ru_name(leg.get('home')))} — {_h(_prematch_ru_name(leg.get('away')))}</b>\\n"
-                f"🏆 {_h(_prematch_league_label(leg.get('league')))}\\n"
+                f"{_result_icon(leg)} <b>{_h(_prematch_ru_name(leg.get('home')))} — {_h(_prematch_ru_name(leg.get('away')))}</b>\n"
+                f"🏆 {_h(_prematch_league_label(leg.get('league')))}\n"
                 f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
                 f"⚽ {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))}\n"
                 f"💰 Кэф: <b>{float(leg.get('odd') or 0):.2f}</b>"

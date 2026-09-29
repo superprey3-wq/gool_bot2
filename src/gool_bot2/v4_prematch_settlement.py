@@ -200,3 +200,44 @@ def sync_prematch_journal(journal_path, record: dict[str, Any]) -> None:
             changed += int(settle_parlay(row))
         if changed:
             save_signal_journal(journal_path, rows)
+
+
+def reconcile_pending_prematch(journal_path) -> int:
+    """Settle pending PREMATCH rows from Flashscore even after fixtures leave LIVE."""
+    from .journal import load_signal_journal, save_signal_journal
+    from .production_journal_serialization import _locked
+    from .providers.flashscore import FlashscoreProvider
+    with _locked(journal_path):
+        rows = load_signal_journal(journal_path)
+        pending_ids = {
+            str(r.get("match_id") or r.get("event_id") or "")
+            for r in rows
+            if str(r.get("origin") or "").casefold() == "prematch"
+            and str(r.get("result") or "pending").casefold() == "pending"
+        }
+        pending_ids.discard("")
+        if not pending_ids:
+            return 0
+        provider = FlashscoreProvider()
+        states = provider.event_states(pending_ids)
+        changed = 0
+        for row in rows:
+            if str(row.get("origin") or "").casefold() != "prematch":
+                continue
+            if str(row.get("result") or "pending").casefold() != "pending":
+                continue
+            mid = str(row.get("match_id") or row.get("event_id") or "")
+            state = states.get(mid) or {}
+            if not bool(state.get("is_finished")):
+                continue
+            record = {"match": {
+                "flashscore_event_id": mid,
+                "is_finished": True,
+                "home_score": state.get("home_score"),
+                "away_score": state.get("away_score"),
+            }}
+            changed += int(settle_prematch_row(row, record))
+        changed += sync_and_settle_parlays(rows)
+        if changed:
+            save_signal_journal(journal_path, rows)
+        return changed

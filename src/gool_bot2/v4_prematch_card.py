@@ -152,13 +152,14 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
 
     img = Image.new("RGBA", (W, 900), BG + (255,))
     draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((18, 18, 1062, 882), 30, outline=accent, width=5)
     draw.rounded_rectangle((28, 22, 1052, 94), 22, fill=PANEL, outline=accent, width=2)
     draw.text((54, 40), "GOOL", font=sc._font(29, True), fill=TEXT)
-    draw.text((154, 40), "V4", font=sc._font(29, True), fill=accent)
+    draw.text((154, 40), "V4 · PREMATCH RESULT", font=sc._font(25, True), fill=accent)
     draw.rounded_rectangle((790, 36, 1020, 80), 14, fill=(9, 19, 31), outline=accent, width=2)
     _center_in_box(draw, result_label, (790, 36, 1020, 80), sc._font(15, True), accent)
 
-    _center(draw, league.upper(), 122, _fit(draw, league.upper(), 900, 16, True), MUTED)
+    _center(draw, f"🏆 {league}", 122, _fit(draw, f"🏆 {league}", 900, 17, True), MUTED)
     sc._badge(img, draw, 205, 270, sc._logo(meta, "home"), home, accent)
     sc._badge(img, draw, 875, 270, sc._logo(meta, "away"), away, accent)
 
@@ -177,8 +178,12 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
 
     draw.rounded_rectangle((190, 675, 890, 770), 24, fill=(9, 19, 31), outline=accent, width=3)
     _center_in_box(draw, result_label, (190, 675, 890, 770), sc._font(34, True), accent)
-    _center(draw, "PREMATCH · РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 820, sc._font(14, True), MUTED)
-    _center(draw, "GOOL V4", 855, sc._font(11, True), accent)
+    probability = float(row.get("probability") or row.get("model_probability") or 0.0)
+    edge = float(row.get("edge") or row.get("value_edge") or 0.0)
+    draw.text((95, 802), f"МОДЕЛЬ {probability*100:.1f}%", font=sc._font(14, True), fill=TEXT)
+    draw.text((780, 802), f"ПЕРЕВЕС {edge*100:+.1f} п.п.", font=sc._font(14, True), fill=accent)
+    _center(draw, "PREMATCH · РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 840, sc._font(13, True), MUTED)
+    _center(draw, "GOOL V4", 865, sc._font(10, True), accent)
     return sc._save(img)
 
 def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:

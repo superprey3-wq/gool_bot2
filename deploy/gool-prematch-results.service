@@ -1,0 +1,18 @@
+[Unit]
+Description=GOOL V4 continuous prematch result settlement and cards
+After=network-online.target gool-live.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gool_bot2
+Environment=RUNTIME_DATA_DIR=/opt/gool_bot2/data
+Environment=GOOL_MULTI_JOURNAL_PATH=/opt/gool_bot2/data/live/gool_multi_journal.json
+Environment=GOOL_PREMATCH_RESULT_INTERVAL_SECONDS=60
+EnvironmentFile=-/opt/gool_bot2/.env
+ExecStart=/opt/gool_bot2/.venv/bin/python -m gool_bot2.v4_prematch_result_daemon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

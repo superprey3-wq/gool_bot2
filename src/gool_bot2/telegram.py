@@ -209,10 +209,29 @@ def _force_reconcile_pending(journal_path:Path)->int:
 
 _MATCH_SEARCH_WAITING:set[str]=set()
 
+
+def _drain_prematch_result_notifications(journal_path: Path) -> int:
+    from .multi_delivery import pending_result_notifications, finalize_result_delivery
+    from .v4_prematch_delivery import emit_prematch_result, emit_parlay_result
+    sent_total = 0
+    for row in pending_result_notifications(journal_path):
+        origin = str(row.get("origin") or "").casefold()
+        if origin not in {"prematch", "prematch_parlay", "parlay"}:
+            continue
+        try:
+            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
+            if finalize_result_delivery(journal_path, row, sent):
+                sent_total += int(sent or 0)
+        except Exception as exc:
+            print(f"V4_PREMATCH_RESULT_DRAIN_ERROR {type(exc).__name__}:{exc}", flush=True)
+    return sent_total
+
+
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
  try:
   from .v4_prematch_settlement import reconcile_pending_prematch
   reconcile_pending_prematch(journal_path)
+  _drain_prematch_result_notifications(journal_path)
  except Exception as exc:
   print(f"V4_PREMATCH_RECONCILE_ERROR {type(exc).__name__}:{exc}",flush=True)
  result=_api_call("getUpdates",{"offset":offset,"timeout":timeout,"allowed_updates":["message","callback_query"]},timeout=max(5,timeout+5))

@@ -25,7 +25,8 @@ def start_ts(e):
     except:return 0.0
 
 def list_events():
-    q=urlencode({"offset":0,"per-page":200,"sport-ids":15})
+    now=int(time.time())
+    q=urlencode({"offset":0,"per-page":100,"sport-ids":15,"after":now-3600,"before":now+900})
     r=get_json("https://api.matchbook.com/edge/rest/events?"+q)
     return ((r.get("data") or {}).get("events") or []),r
 
@@ -66,6 +67,7 @@ def total_score(m):
 def pick():
     es,_=list_events();now=time.time();candidates=[];diagnostics=[]
     recent=[]
+    diagnostics_raw=[{"event":e.get("name"),"start":e.get("start"),"status":e.get("status"),"volume":e.get("volume")} for e in es[:40]]
     for e in es:
         age=(now-start_ts(e))/60 if start_ts(e) else 9999
         if -5 <= age <= 55 and str(e.get("status") or "").lower() in {"open","in-running","live","suspended"}:
@@ -83,7 +85,7 @@ def pick():
         if best:
             candidates.append((best[0],float(e.get("volume") or 0),-abs(age-25),age,e,best[1]))
     candidates.sort(reverse=True,key=lambda x:(x[0],x[1],x[2]))
-    return candidates,diagnostics
+    return candidates,diagnostics,diagnostics_raw
 
 def ladder(r):
     back=[];lay=[]
@@ -135,9 +137,9 @@ def summarize(ss):
     return out
 
 def main():
-    c,diag=pick()
+    c,diag,raw=pick()
     if not c:
-        result={"error":"no recent event with priced total via /markets include-prices","diagnostics":diag[:30]}
+        result={"error":"no recent event with priced total via /markets include-prices","diagnostics":diag[:30],"raw_events":raw}
     else:
         _,_,_,age,e,m=c[0]
         ss=[]
@@ -148,7 +150,7 @@ def main():
             "selected":{"event":e.get("name"),"event_id":e.get("id"),"start":e.get("start"),
                         "age_min_at_start":round(age,1),"status":e.get("status"),"event_volume":e.get("volume"),
                         "market":m.get("name"),"market_id":m.get("id"),"market_volume":m.get("volume")},
-            "candidate_count":len(c),"diagnostics":diag[:20],"snapshots":ss,"summary":summarize(ss)
+            "candidate_count":len(c),"diagnostics":diag[:20],"raw_events":raw,"snapshots":ss,"summary":summarize(ss)
         }
     print("=== MATCHBOOK LIVE DETAIL-ENDPOINT TEST ===")
     print(json.dumps(result,ensure_ascii=False,indent=2))

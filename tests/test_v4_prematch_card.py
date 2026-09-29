@@ -114,3 +114,31 @@ def test_parlay_result_card_renders_leg_statuses(tmp_path, monkeypatch):
     path = Path(render_v4_parlay_card(row, result=True))
     with Image.open(path) as img:
         assert img.width == 1080
+
+
+def test_result_card_merges_cached_flashscore_meta(monkeypatch):
+    from gool_bot2 import v4_prematch_card as card
+    monkeypatch.setattr(card.sc, "_read_assets", lambda: {
+        "evt1": {"flashscore_meta": {"home_logo_file": "home.png", "away_logo_file": "away.png"}}
+    })
+    meta = card._meta(
+        {"event_id": "evt1", "flashscore_meta": {"home_team_id": "h", "away_team_id": "a"}},
+        {},
+    )
+    assert meta["home_logo_file"] == "home.png"
+    assert meta["away_logo_file"] == "away.png"
+    assert meta["home_team_id"] == "h"
+
+
+def test_result_card_keeps_prematch_tournament_and_renders(monkeypatch):
+    from gool_bot2 import v4_prematch_card as card
+    monkeypatch.setattr(card.sc, "_logo", lambda meta, side: None)
+    row = {
+        "event_id":"evt2","home":"Al Khor","away":"Umm-Salal",
+        "league":"QATAR: QSL Cup","scheduled_start":"29.09 18:00 МСК",
+        "market":"FT_OVER_2.5","selection":"FT_OVER_2.5","odd":1.65,
+        "probability":.653,"edge":.083,"result":"lost","settled_score":[0,2],
+    }
+    png = card.render_v4_prematch_result_card(row)
+    assert isinstance(png, (bytes, bytearray))
+    assert len(png) > 1000

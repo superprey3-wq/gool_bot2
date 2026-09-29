@@ -58,6 +58,10 @@ def attach_live_state_to_prematch(
         if not match_id:
             continue
         minute = int(match.get("minute") or 0)
+        kickoff_ts = float(row.get("kickoff_ts") or 0.0)
+        # Never attach a stale/reused provider event as live before this fixture's kickoff.
+        if kickoff_ts and datetime.now(timezone.utc).timestamp() < kickoff_ts - 120:
+            continue
         started = minute > 0 or bool(match.get("is_halftime")) or bool(match.get("is_finished"))
         if not started:
             continue

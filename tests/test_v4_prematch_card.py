@@ -24,7 +24,7 @@ def test_prematch_card_renders(tmp_path, monkeypatch):
     monkeypatch.setattr("gool_bot2.signal_cards._save", lambda img: _save(img, tmp_path / "pre.png"))
     path = Path(render_v4_prematch_card(_row()))
     with Image.open(path) as img:
-        assert img.size == (1080, 980)
+        assert img.size == (1080, 1120)
 
 
 def test_same_card_can_render_live_state(tmp_path, monkeypatch):
@@ -33,7 +33,7 @@ def test_same_card_can_render_live_state(tmp_path, monkeypatch):
     monkeypatch.setattr("gool_bot2.signal_cards._save", lambda img: _save(img, tmp_path / "live.png"))
     path = Path(render_v4_prematch_card(row, in_game=True))
     with Image.open(path) as img:
-        assert img.size == (1080, 980)
+        assert img.size == (1080, 1120)
 
 
 def _save(img, path):

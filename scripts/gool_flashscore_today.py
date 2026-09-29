@@ -4,10 +4,12 @@ from datetime import datetime,timezone
 from zoneinfo import ZoneInfo
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
-from gool_bot2.v4_shadow_report import _analyse_fixtures
+from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
 from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
+from gool_bot2.providers.prematch_fusion import PrematchDataFusion
+from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from pathlib import Path
 import os
 
@@ -23,6 +25,41 @@ fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("sche
 print("PIPELINE_START",len(fixtures),flush=True)
 rows,fail=_analyse_fixtures(fs,fixtures); rows=[r for r in rows if r.get("primary_trend")]
 print("BRAIN_ELIGIBLE",len(rows),"FAIL",len(fail),flush=True)
+
+# Second-stage football confirmation. Do not fan out secondary providers across the
+# whole slate: only candidates that already passed the cheap Flashscore brain are enriched.
+fusion_limit=max(0,min(80,int(os.getenv("GOOL_PREMATCH_FUSION_LIMIT","40"))))
+fusion_workers=max(2,min(12,int(os.getenv("GOOL_PREMATCH_FUSION_WORKERS","6"))))
+fusion_rows=rows[:fusion_limit]
+if fusion_rows:
+ def enrich(r):
+  try:
+   local_fs=FlashscoreProvider(); fusion=PrematchDataFusion(local_fs); m=r["match"]
+   history=fusion.context(m,limit=10)
+   profile=build_prematch_goal_profile({"match":{"home":m.home,"away":m.away},"prematch_context":history})
+   samples=[int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half","second_half","full_match")]
+   sample=max(samples or [0])
+   coverage=sum(1 for v in (history.get("source_coverage") or {}).values() if int(v or 0)>0)
+   sample_quality=min(1.0,sample/8.0)
+   source_quality=min(1.0,coverage/3.0)
+   quality=max(float(r.get("quality") or 0.0), min(1.0,0.78*sample_quality+0.22*source_quality))
+   trends=_trend_signals(profile,quality); primary=_primary_trend(trends)
+   return {**r,"profile":profile,"sample":sample,"quality":quality,"brain_score":_brain_score(profile,quality),
+           "trends":trends,"primary_trend":primary,"sources":history.get("sources") or [],
+           "source_coverage":history.get("source_coverage") or {}},None
+  except Exception as exc:
+   return r,f"FUSION_{type(exc).__name__}"
+ enriched=[]; fusion_fail=0
+ with ThreadPoolExecutor(max_workers=fusion_workers) as pool:
+  for fut in as_completed([pool.submit(enrich,r) for r in fusion_rows]):
+   row,err=fut.result(); enriched.append(row); fusion_fail+=int(bool(err))
+ by_id={str(r["match"].provider_match_id):r for r in enriched}
+ rows=[by_id.get(str(r["match"].provider_match_id),r) for r in rows]
+ rows=[r for r in rows if r.get("primary_trend")]
+ rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
+ print("PREMATCH_FUSION",{"checked":len(fusion_rows),"kept":len(rows),"fail":fusion_fail},flush=True)
+
+print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in rows)),flush=True)
 
 def one(r):

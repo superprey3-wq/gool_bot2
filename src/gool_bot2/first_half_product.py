@@ -13,6 +13,10 @@ bot_menu.HEAD_LABELS["goal_before_ht"] = "🟡 Гол до перерыва"
 bot_menu.MAIN_HEADS = ("another_goal", "goal_before_ht", "two_more_goals")
 bot_menu.ALL_HEADS = bot_menu.MAIN_HEADS + bot_menu.EXPERIMENT_HEADS
 bot_menu.ACTIVE_HEADS = bot_menu.ALL_HEADS
+# first_half_product is imported by the production worker and historically
+# replaced the Telegram module state. Keep the production reply keyboard tied
+# to the canonical menu instead of leaving an older four-button layout behind.
+telegram.MENU_KEYBOARD = bot_menu.MENU_KEYBOARD
 
 telegram.START_TEXT = (
     "🟢 <b>GOOL Bot 2 работает</b>\n\nАктивные стратегии:\n"

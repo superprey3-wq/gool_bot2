@@ -166,11 +166,13 @@ def choose_delivery(
     singles = rank_prematch_for_delivery(rows, limit=single_limit)
     single_event_ids = {str(item[0].event_id) for item in singles}
 
-    # Parlays are an independent product. A qualified leg may also be published
-    # as a single; the accumulator has its own parent journal row and settlement.
-    # Excluding every single here starved the parlay pool when normal delivery
-    # published all qualified singles.
-    parlay_pool = rows
+    # Strict product separation: once an event is published as a single, that
+    # fixture may not appear in any parlay under another market either.
+    # Parlays therefore use only other events, favouring the lower-price pool.
+    parlay_pool = [
+        p for p in rows
+        if str(p.event_id) not in single_event_ids and 1.15 <= float(p.odds) <= 1.70
+    ]
 
     super_ticket = build_super_accumulator(
         parlay_pool, target_legs=10, min_leg_probability=.74,

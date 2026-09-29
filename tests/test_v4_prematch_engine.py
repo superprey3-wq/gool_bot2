@@ -99,12 +99,30 @@ def test_super_accumulator_never_pads_weak_or_expensive_legs():
     assert build_super_accumulator([*good, bad]) is None
 
 
-def test_delivery_can_build_parlay_from_qualified_single_pool():
-    picks = [
-        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 2.5", 1.55, 0.80 - i*.005, 0.60, 0.9)
-        for i in range(4)
+def test_delivery_never_reuses_single_event_in_parlay():
+    singles = [
+        PrematchPick("s1", "S1H", "S1A", "match_total", "over 2.5", 1.80, .82, .60, .9),
+        PrematchPick("s2", "S2H", "S2A", "match_total", "under 2.5", 1.75, .81, .60, .9),
     ]
-    delivery = choose_delivery(picks, max_singles=4, max_doubles=1)
-    assert delivery["singles"]
+    low_price = [
+        PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.55, .82, .68, .9),
+        PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.58, .81, .67, .9),
+    ]
+    delivery = choose_delivery([*singles, *low_price], max_singles=2, max_doubles=1)
+    single_ids = {p.event_id for p, _tier in delivery["singles"]}
+    parlay_ids = {p.event_id for acc in delivery["doubles"] for p in acc["legs"]}
     assert delivery["doubles"]
-    assert len(delivery["doubles"][0]["legs"]) == 2
+    assert single_ids.isdisjoint(parlay_ids)
+
+
+def test_parlay_pool_rejects_expensive_non_single_legs():
+    picks = [
+        PrematchPick("s1", "A", "B", "match_total", "over 2.5", 1.80, .84, .60, .9),
+        PrematchPick("p1", "C", "D", "goal_1h", "goal 1h", 1.55, .83, .68, .9),
+        PrematchPick("p2", "E", "F", "goal_1h", "goal 1h", 1.58, .82, .67, .9),
+        PrematchPick("x", "G", "H", "match_total", "over 3.5", 2.10, .80, .55, .9),
+    ]
+    delivery = choose_delivery(picks, max_singles=1, max_doubles=1)
+    legs = [p for acc in delivery["doubles"] for p in acc["legs"]]
+    assert legs
+    assert all(p.odds <= 1.70 for p in legs)

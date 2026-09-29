@@ -103,7 +103,11 @@ def retry_pending_prematch_deliveries(journal_path: Path, *, limit: int = 20) ->
             and not bool(row.get("telegram_sent"))
         ][:max(1, int(limit))]
         for row in pending:
-            delivered += int(bool(_emit_prematch_signal(row, journal_path)))
+            try:
+                delivered += int(bool(_emit_prematch_signal(row, journal_path)))
+            except Exception as exc:
+                # One bad render/network send must not prevent later pending cards from retrying.
+                print(f"PREMATCH_RETRY_ERROR entry_id={row.get('entry_id')} error={type(exc).__name__}:{exc}", flush=True)
     return delivered
 
 def parlay_leg_states(row: dict[str, Any], live_rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:

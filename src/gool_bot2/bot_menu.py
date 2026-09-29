@@ -143,16 +143,31 @@ def report_text(path: Path, experiment_path: Path | None = None):
 
 
 def _today_prematch_rows(path: Path, origin: str) -> list[dict]:
+    """Return only today's still-upcoming PREMATCH entries for the PREMATCH menu.
+
+    Settled/started matches belong in report/history, never in the upcoming list.
+    """
     tz = _tz()
+    now = datetime.now(timezone.utc).timestamp()
     today = datetime.now(tz).date()
     rows = []
     for row in _load_rows(path):
         if str(row.get("origin") or "").casefold() != origin:
             continue
+        if str(row.get("result") or "pending").casefold() != "pending":
+            continue
+        if str(row.get("lifecycle") or "").casefold() in {"in_game", "finished_waiting_settlement", "settled"}:
+            continue
+        try:
+            kickoff_ts = float(row.get("kickoff_ts") or 0.0)
+        except (TypeError, ValueError):
+            kickoff_ts = 0.0
+        if kickoff_ts and kickoff_ts <= now:
+            continue
         dt = _parse_dt(row.get("created_at") or row.get("captured_at"))
         if dt and dt.astimezone(tz).date() == today:
             rows.append(row)
-    rows.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    rows.sort(key=lambda r: float(r.get("kickoff_ts") or 0.0))
     return rows
 
 

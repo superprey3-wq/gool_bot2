@@ -247,6 +247,10 @@ def picks_from_goal_profile(
             continue
         if over_odd <= 1 or under_odd <= 1:
             continue
+        # Binary Poisson pricing below is exact for half-goal lines only.
+        # Whole/quarter Asian totals need explicit push/half-win settlement EV.
+        if abs((line * 2) - round(line * 2)) > 1e-9 or int(round(line * 2)) % 2 == 0:
+            continue
         threshold = int(math.floor(line)) + 1
         cdf = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(threshold))
         model_over = max(0.0, min(1.0, 1.0 - cdf))

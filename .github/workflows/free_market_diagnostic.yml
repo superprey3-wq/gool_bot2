@@ -21,7 +21,7 @@ jobs:
       - name: Install test dependencies
         run: pip install -e '.[dev]'
       - name: Run prematch delivery regressions
-        run: pytest -q tests/test_prematch_result_delivery_regression.py tests/test_v4_prematch_settlement.py
+        run: pytest -q tests/test_prematch_result_delivery_regression.py tests/test_v4_prematch_settlement.py tests/test_threat_sequence_live.py tests/test_v4_prematch_engine.py
       - name: Probe live/prematch free sources
         run: python scripts/free_market_diagnostic.py
       - name: Upload diagnostic result

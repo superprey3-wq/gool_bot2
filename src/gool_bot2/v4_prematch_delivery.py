@@ -170,6 +170,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
         "data_quality": float(pick.data_quality),
         "tier": str(tier or "NORMAL"),
         "origin": "prematch",
+        "card_family": "prematch_single",
         "head": "prematch",
         "result": "pending",
         "lifecycle": "scheduled",
@@ -242,7 +243,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                 continue
         else:
             parent = {
-                "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
+                "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
                 "kind": kind, "result": "pending", "lifecycle": "scheduled",
                 "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
                 "effective_odd": float(acc.get("combined_odds") or 0.0),

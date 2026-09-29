@@ -93,7 +93,7 @@ def point(match):
             "xg_total":xg,"sot_total":total("sot") or 0.0,"shots_total":total("shots") or 0.0,
             "danger_total":0.0,"corners_total":total("corners") or 0.0,"over_prob":None,"raw_stats":st}
 
-def choose(ms,n=2):
+def choose(ms,n=3):
     # prioritize 1H matches with at least some attack stats
     rows=[]
     for m in ms:
@@ -106,20 +106,41 @@ def choose(ms,n=2):
     return [x[3] for x in rows[:n]]
 
 def main():
-    ms=live_matches(); selected=choose(ms,2)
+    ms=live_matches(); selected=choose(ms,3)
     histories={m["id"]:[] for m in selected}
-    for i in range(3):
+    for i in range(6):
         current={m["id"]:m for m in live_matches()}
         for base in selected:
             m=current.get(base["id"],base)
             histories[base["id"]].append(point(m))
-        if i<2:time.sleep(8)
+        if i<5:time.sleep(60)
     results=[]
+    latest={m["id"]:m for m in live_matches()}
     for m in selected:
         hist=histories[m["id"]]
-        results.append({"match":m,"history":hist,"threat":THREAT.evaluate_threat_sequence(hist)})
+        states=[]
+        for end in range(3,len(hist)+1):
+            states.append({"point":end,"threat":THREAT.evaluate_threat_sequence(hist[:end])})
+        final_match=latest.get(m["id"],m)
+        goal_happened=(sum(final_match.get("score") or [0,0]) > sum(m.get("score") or [0,0]))
+        max_state="QUIET"
+        order={"NO_DATA":0,"RESET":0,"QUIET":1,"WARM":2,"BUILDING":3,"SURGE":4}
+        max_score=-1
+        for s in states:
+            st=(s.get("threat") or {}).get("state","QUIET")
+            if order.get(st,0)>max_score:
+                max_score=order.get(st,0); max_state=st
+        results.append({
+            "match_start":m,
+            "match_end":final_match,
+            "history":hist,
+            "states":states,
+            "max_state":max_state,
+            "goal_happened_during_window":goal_happened,
+            "score_delta":sum(final_match.get("score") or [0,0])-sum(m.get("score") or [0,0])
+        })
     payload={"captured_at":datetime.now(timezone.utc).isoformat(),"flashscore_live_count":len(ms),
-             "selected_count":len(selected),"results":results}
+             "selected_count":len(selected),"window_seconds":300,"results":results}
     print("=== FLASHSCORE LIVE THREAT-SEQUENCE TEST ===")
     print(json.dumps(payload,ensure_ascii=False,indent=2))
     open("diagnostic_result.json","w",encoding="utf-8").write(json.dumps(payload,ensure_ascii=False,indent=2))

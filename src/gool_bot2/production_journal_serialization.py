@@ -80,12 +80,54 @@ def _pending_results(
     match_id: str | None = None,
     origins: set[str] | None = None,
 ):
-    with _locked(Path(journal_path)):
-        return _ORIGINALS["pending_results"](
-            journal_path,
-            match_id=match_id,
-            origins=origins,
-        )
+    path = Path(journal_path)
+    with _locked(path):
+        original = _ORIGINALS["pending_results"]
+        try:
+            return original(
+                path,
+                match_id=match_id,
+                origins=origins,
+            )
+        except TypeError as exc:
+            # Rolling deploy compatibility: an older stale-replay wrapper may
+            # still expose the pre-origins signature. Do not let that break the
+            # PREMATCH result watchdog.
+            if "unexpected keyword argument 'origins'" not in str(exc):
+                raise
+            claimed = list(original(path, match_id=match_id) or [])
+            if origins is None:
+                return claimed
+
+            wanted = {str(value).casefold() for value in origins}
+            accepted = [
+                row for row in claimed
+                if str(row.get("origin") or "").casefold() in wanted
+            ]
+            rejected = [
+                row for row in claimed
+                if str(row.get("origin") or "").casefold() not in wanted
+            ]
+            if rejected:
+                from . import multi_delivery as delivery
+                from .journal import load_signal_journal, save_signal_journal
+
+                rejected_claims = {
+                    str(row.get("result_notification_claim_id") or "")
+                    for row in rejected
+                    if str(row.get("result_notification_claim_id") or "")
+                }
+                if rejected_claims:
+                    with delivery._journal_delivery_lock(path):
+                        rows = load_signal_journal(path)
+                        dirty = False
+                        for row in rows:
+                            if str(row.get("result_notification_claim_id") or "") in rejected_claims:
+                                delivery._clear_claim(row)
+                                dirty = True
+                        if dirty:
+                            save_signal_journal(path, rows)
+            return accepted
 
 
 def _finalize_result(journal_path: Path, row: dict[str, Any], sent: int) -> bool:

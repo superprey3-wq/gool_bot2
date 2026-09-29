@@ -212,7 +212,8 @@ def prematch_singles_sections(path: Path) -> list[str]:
     for i, row in enumerate(rows, 1):
         time_label = _prematch_time_label(row)
         parts.append(
-            f"<b>{i}. {_result_icon(row)} {_h(_prematch_ru_name(row.get('home')))} — {_h(_prematch_ru_name(row.get('away')))}</b>\n"\n            f"🏆 {_h(_prematch_league_label(row.get('league')))}\n"
+            f"<b>{i}. {_result_icon(row)} {_h(_prematch_ru_name(row.get('home')))} — {_h(_prematch_ru_name(row.get('away')))}</b>\\n"
+            f"🏆 {_h(_prematch_league_label(row.get('league')))}\\n"
             f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
             f"⚽ {_h(_prematch_market_label(row.get('market') or row.get('selection')))}\n"
             f"💰 Кэф: <b>{float(row.get('odd') or 0):.2f}</b>"
@@ -230,7 +231,8 @@ def prematch_parlays_sections(path: Path) -> list[str]:
         for leg in row.get("legs") or []:
             time_label = _prematch_time_label(leg)
             legs.append(
-                f"{_result_icon(leg)} <b>{_h(_prematch_ru_name(leg.get('home')))} — {_h(_prematch_ru_name(leg.get('away')))}</b>\n"\n                f"🏆 {_h(_prematch_league_label(leg.get('league')))}\n"
+                f"{_result_icon(leg)} <b>{_h(_prematch_ru_name(leg.get('home')))} — {_h(_prematch_ru_name(leg.get('away')))}</b>\\n"
+                f"🏆 {_h(_prematch_league_label(leg.get('league')))}\\n"
                 f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
                 f"⚽ {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))}\n"
                 f"💰 Кэф: <b>{float(leg.get('odd') or 0):.2f}</b>"

@@ -50,7 +50,7 @@ def evaluate_live_threat(record: dict[str, Any]) -> dict[str, Any]:
         state, modifier = "SURGE", 6.0
     elif score >= 0.52:
         state, modifier = "BUILDING", 3.5
-    elif score >= 0.30:
+    elif score >= 0.28:
         state, modifier = "WARM", 1.5
     else:
         state, modifier = "QUIET", -3.0

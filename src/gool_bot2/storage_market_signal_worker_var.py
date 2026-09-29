@@ -127,7 +127,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "📊 отчёт", "📊 отчет", "🟢 в игре", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🧠 анализ", "🔎 найти матч"}:
         try:
             if text == "/start":
                 telegram_mod.subscribe(chat_id)
@@ -138,6 +138,10 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text == "🟢 в игре":
                 telegram_mod._force_reconcile_pending(journal_path)
                 replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))
+            elif text == "🎟 ординары":
+                replies = telegram_mod.prematch_singles_sections(journal_path)
+            elif text == "🔗 экспрессы":
+                replies = telegram_mod.prematch_parlays_sections(journal_path)
             elif text == "🔎 найти матч":
                 _DIRECT_MATCH_SEARCH_WAITING.add(str(chat_id))
                 replies = [

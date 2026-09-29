@@ -120,6 +120,18 @@ def _direct_edit_reply_markup(
     return bool(result and result.get("ok"))
 
 
+def _drain_prematch_results_safely(journal_path: Path) -> int:
+    try:
+        from .v4_prematch_delivery import reconcile_and_deliver_prematch_results
+        result = reconcile_and_deliver_prematch_results(
+            Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)
+        )
+        return int((result or {}).get("delivered") or 0)
+    except Exception as exc:
+        print(f"GOOL_PREMATCH_RESULT_DRAIN_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return 0
+
+
 def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[str, Any]) -> int:
     changed = 0
     message = update.get("message") or {}
@@ -163,6 +175,8 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
         except Exception as exc:
             print(f"GOOL_TELEGRAM_MENU_ERROR command={text!r} error={type(exc).__name__}:{exc}", flush=True)
             replies = ["⚠️ <b>GOOL MULTI</b>\n\nНе удалось подготовить ответ. Бот продолжает работать."]
+
+        changed += _drain_prematch_results_safely(journal_path)
 
         for reply in replies:
             # Read the canonical keyboard at send time. Product installers may

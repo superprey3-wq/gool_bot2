@@ -159,3 +159,11 @@ def test_active_mode_hides_telegram_token_only_while_legacy_worker_runs(monkeypa
         assert multi_telegram.os.environ.get("TELEGRAM_BOT_TOKEN") == ""
 
     assert multi_telegram.os.environ.get("TELEGRAM_BOT_TOKEN") == "123:secret"
+
+
+def test_multi_result_delivery_never_renders_prematch(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
+    monkeypatch.setattr(multi_telegram.multi_card if hasattr(multi_telegram, "multi_card") else multi_card, "render_multi_result_card", lambda *a, **k: (_ for _ in ()).throw(AssertionError("PREMATCH must not use MULTI renderer")))
+    monkeypatch.setattr(multi_telegram.telegram, "broadcast_photo", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not send MULTI photo")))
+    row = {**_entry(), "origin":"prematch", "result":"lost", "telegram_sent":True, "settled_score":[2,0]}
+    assert multi_telegram.emit_multi_results(_record(90,2,0), [row]) == 0

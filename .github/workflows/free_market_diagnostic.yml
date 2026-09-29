@@ -1,0 +1,29 @@
+name: Free market mechanics diagnostic
+
+on:
+  push:
+    branches:
+      - test/free-market-mechanics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe live/prematch free sources
+        run: python scripts/free_market_diagnostic.py
+      - name: Upload diagnostic result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-market-diagnostic
+          path: diagnostic_result.json
+          if-no-files-found: warn

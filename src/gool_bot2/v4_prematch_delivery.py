@@ -90,6 +90,22 @@ def _emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
     return sent
 
 
+
+def retry_pending_prematch_deliveries(journal_path: Path, *, limit: int = 20) -> int:
+    """Retry journaled PREMATCH singles whose Telegram photo was not confirmed."""
+    delivered = 0
+    with _locked(journal_path):
+        rows = load_signal_journal(journal_path)
+        pending = [
+            dict(row) for row in rows
+            if str(row.get("origin") or "") == "prematch"
+            and str(row.get("result") or "pending").lower() == "pending"
+            and not bool(row.get("telegram_sent"))
+        ][:max(1, int(limit))]
+        for row in pending:
+            delivered += int(bool(_emit_prematch_signal(row, journal_path)))
+    return delivered
+
 def parlay_leg_states(row: dict[str, Any], live_rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     live_rows = list(live_rows)
     states: list[dict[str, Any]] = []

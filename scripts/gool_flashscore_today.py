@@ -7,7 +7,7 @@ from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.v4_shadow_report import _analyse_fixtures
 from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
-from gool_bot2.v4_prematch_delivery import emit_delivery_selection
+from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
 from pathlib import Path
 import os
 
@@ -47,6 +47,9 @@ print("PRICED_TREND_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 d=choose_delivery(priced)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}:
+ retried=retry_pending_prematch_deliveries(journal)
+ if retried:
+  print("PREMATCH_RETRY",{"cards":retried},"journal",journal,flush=True)
  delivered=emit_delivery_selection(d,meta,journal)
  print("PREMATCH_DELIVERY",delivered,"journal",journal,flush=True)
 print("=== GOOL DELIVERY",d["mode"],"===",flush=True)

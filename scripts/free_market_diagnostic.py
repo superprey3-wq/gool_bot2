@@ -108,12 +108,12 @@ def choose(ms,n=3):
 def main():
     ms=live_matches(); selected=choose(ms,3)
     histories={m["id"]:[] for m in selected}
-    for i in range(6):
+    for i in range(4):
         current={m["id"]:m for m in live_matches()}
         for base in selected:
             m=current.get(base["id"],base)
             histories[base["id"]].append(point(m))
-        if i<5:time.sleep(60)
+        if i<3:time.sleep(20)
     results=[]
     latest={m["id"]:m for m in live_matches()}
     for m in selected:
@@ -140,7 +140,7 @@ def main():
             "score_delta":sum(final_match.get("score") or [0,0])-sum(m.get("score") or [0,0])
         })
     payload={"captured_at":datetime.now(timezone.utc).isoformat(),"flashscore_live_count":len(ms),
-             "selected_count":len(selected),"window_seconds":300,"results":results}
+             "selected_count":len(selected),"window_seconds":60,"results":results}
     print("=== FLASHSCORE LIVE THREAT-SEQUENCE TEST ===")
     print(json.dumps(payload,ensure_ascii=False,indent=2))
     open("diagnostic_result.json","w",encoding="utf-8").write(json.dumps(payload,ensure_ascii=False,indent=2))

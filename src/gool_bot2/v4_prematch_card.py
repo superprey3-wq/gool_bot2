@@ -27,10 +27,22 @@ def _center(draw, text: str, y: int, font, fill):
 
 
 def _meta(row: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
+    # Merge every available source instead of returning the first non-empty dict.
+    # Older PREMATCH journal rows may contain team ids/slugs but no crest files.
+    merged: dict[str, Any] = {}
+    event_id = str(row.get("event_id") or row.get("match_id") or "")
+    try:
+        cached = (sc._read_assets().get(event_id) or {}).get("flashscore_meta") or {}
+        if isinstance(cached, dict):
+            merged.update(cached)
+    except Exception:
+        pass
+    live = sc.flashscore_meta(record or {})
+    if isinstance(live, dict):
+        merged.update({k: v for k, v in live.items() if v not in (None, "")})
     direct = dict(row.get("flashscore_meta") or {})
-    if direct:
-        return direct
-    return sc.flashscore_meta(record or {})
+    merged.update({k: v for k, v in direct.items() if v not in (None, "")})
+    return merged
 
 
 def _market_label(value: str) -> str:
@@ -159,25 +171,28 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     draw.rounded_rectangle((790, 36, 1020, 80), 14, fill=(9, 19, 31), outline=accent, width=2)
     _center_in_box(draw, result_label, (790, 36, 1020, 80), sc._font(15, True), accent)
 
-    _center(draw, f"🏆 {league}", 118, _fit(draw, f"🏆 {league}", 900, 17, True), MUTED)
+    # Tournament is primary PREMATCH context, not muted technical metadata.
+    draw.rounded_rectangle((120, 112, 960, 174), 18, fill=PANEL2, outline=accent, width=2)
+    tournament = f"🏆 {league}"
+    _center_in_box(draw, tournament, (120, 112, 960, 174), _fit(draw, tournament, 790, 24, True), TEXT)
     kickoff = str(row.get("scheduled_start") or "")
     if kickoff:
-        _center(draw, f"СТАРТ · {kickoff}", 151, _fit(draw, f"СТАРТ · {kickoff}", 700, 14, True), MUTED)
-    sc._badge(img, draw, 205, 270, sc._logo(meta, "home"), home, accent)
-    sc._badge(img, draw, 875, 270, sc._logo(meta, "away"), away, accent)
+        _center(draw, f"PREMATCH · СТАРТ {kickoff}", 184, _fit(draw, f"PREMATCH · СТАРТ {kickoff}", 760, 15, True), accent)
+    sc._badge(img, draw, 205, 300, sc._logo(meta, "home"), home, accent)
+    sc._badge(img, draw, 875, 300, sc._logo(meta, "away"), away, accent)
 
-    draw.rounded_rectangle((405, 198, 675, 345), 28, fill=(8, 17, 28), outline=accent, width=3)
-    _center(draw, f"{int(settled[0])} : {int(settled[1])}", 226, sc._font(60, True), TEXT)
-    _center(draw, "ФИНАЛ", 304, sc._font(17, True), accent)
-    _center_in_box(draw, home, (65, 355, 470, 405), _fit(draw, home, 380, 21, True), TEXT)
-    _center_in_box(draw, away, (610, 355, 1015, 405), _fit(draw, away, 380, 21, True), TEXT)
+    draw.rounded_rectangle((405, 228, 675, 375), 28, fill=(8, 17, 28), outline=accent, width=3)
+    _center(draw, f"{int(settled[0])} : {int(settled[1])}", 256, sc._font(60, True), TEXT)
+    _center(draw, "ФИНАЛ", 334, sc._font(17, True), accent)
+    _center_in_box(draw, home, (65, 385, 470, 435), _fit(draw, home, 380, 21, True), TEXT)
+    _center_in_box(draw, away, (610, 385, 1015, 435), _fit(draw, away, 380, 21, True), TEXT)
 
-    draw.rounded_rectangle((48, 448, 1032, 620), 26, fill=PANEL2, outline=accent, width=2)
-    draw.text((78, 474), "СТАВКА", font=sc._font(13, True), fill=MUTED)
-    draw.text((78, 514), market, font=_fit(draw, market, 610, 36, True), fill=TEXT)
-    draw.line((735, 478, 735, 590), fill=(49, 66, 82), width=2)
-    draw.text((780, 474), "ВЗЯТЫЙ КЭФ", font=sc._font(13, True), fill=MUTED)
-    draw.text((780, 514), f"{odd:.2f}" if odd > 1 else "—", font=sc._font(46, True), fill=accent)
+    draw.rounded_rectangle((48, 468, 1032, 640), 26, fill=PANEL2, outline=accent, width=2)
+    draw.text((78, 494), "СТАВКА", font=sc._font(13, True), fill=MUTED)
+    draw.text((78, 534), market, font=_fit(draw, market, 610, 36, True), fill=TEXT)
+    draw.line((735, 498, 735, 610), fill=(49, 66, 82), width=2)
+    draw.text((780, 494), "ВЗЯТЫЙ КЭФ", font=sc._font(13, True), fill=MUTED)
+    draw.text((780, 534), f"{odd:.2f}" if odd > 1 else "—", font=sc._font(46, True), fill=accent)
 
     draw.rounded_rectangle((190, 675, 890, 770), 24, fill=(9, 19, 31), outline=accent, width=3)
     _center_in_box(draw, result_label, (190, 675, 890, 770), sc._font(34, True), accent)

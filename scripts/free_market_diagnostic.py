@@ -1,5 +1,6 @@
 from __future__ import annotations
-import json,time,re
+import json,time,re,importlib.util
+from pathlib import Path
 from urllib.request import Request,urlopen
 from urllib.parse import urlencode
 from datetime import datetime,timezone
@@ -7,6 +8,15 @@ from datetime import datetime,timezone
 UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 ROOT="https://1xbet.fi/service-api/LiveFeed"
 INDEX_Q="sports=1&count=1000&lng=en&mode=4&country=1&getEmpty=true"
+ROOTDIR=Path(__file__).resolve().parents[1]
+def _load(name, path):
+    spec=importlib.util.spec_from_file_location(name, path)
+    mod=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+THREAT=_load("threat_sequence_expert", ROOTDIR/"src/gool_bot2/threat_sequence_expert.py")
+AUDIT=_load("signal_quality_auditor", ROOTDIR/"src/gool_bot2/signal_quality_auditor.py")
+
 HEADERS={
  "User-Agent":UA,"Accept":"application/json,*/*","Origin":"https://1xbet.com",
  "Referer":"https://1xbet.com/live/football/","X-Requested-With":"XMLHttpRequest",
@@ -143,6 +153,40 @@ def summarize(ss):
             "fair_over_delta_pp":round((b["fair_over"]-a["fair_over"])*100,3),
             "score_start":a["score"],"score_end":b["score"]}
 
+def threat_history(ss, score_at_pick):
+    out=[]
+    for s in ss:
+        info=s.get("info") or {}
+        stats=info.get("stats") or {}
+        def pair(name):
+            vals=stats.get(name) or [0,0]
+            try: a=float(vals[0] or 0)
+            except: a=0.0
+            try: b=float(vals[1] or 0)
+            except: b=0.0
+            return a+b
+        sel=s.get("selected") or {}
+        out.append({
+            "score": list(score_at_pick),
+            "xg_total": pair("xG"),
+            "sot_total": pair("Shots on target"),
+            "shots_total": pair("Shots on target")+pair("Shots off target"),
+            "danger_total": pair("Dangerous attacks"),
+            "corners_total": pair("Corner"),
+            "over_prob": sel.get("fair_over"),
+        })
+    return out
+
+def auditor_selftest():
+    rows=[]
+    for i in range(24):
+        rows.append({"result":"won" if i%10<7 else "lost","probability":0.70,"odd":1.55,"closing_odd":1.48,
+                     "league":"A" if i%2==0 else "B","created_at":f"2026-08-{(i%24)+1:02d}T12:00:00+00:00"})
+    for i in range(10):
+        rows.append({"result":"won" if i<4 else "lost","probability":0.74,"odd":1.45,"closing_odd":1.55,
+                     "league":"A" if i%2==0 else "B","created_at":f"2026-09-{i+1:02d}T12:00:00+00:00"})
+    return AUDIT.summarize_quality(rows)
+
 def main():
     ch=choose_event()
     if not ch:
@@ -153,8 +197,11 @@ def main():
         for i in range(7):
             ss.append(snapshot(eid))
             if i<6:time.sleep(12)
+        hist=threat_history(ss,[s1,s2])
         result={"event":{"id":eid,"home":h,"away":a,"score_at_pick":[s1,s2]},
-                "snapshots":ss,"summary":summarize(ss)}
+                "snapshots":ss,"summary":summarize(ss),
+                "threat_sequence":THREAT.evaluate_threat_sequence(hist),
+                "auditor_selftest":auditor_selftest()}
     print("=== 1XBET NATIONAL FIRST-HALF ODDS SEQUENCE ===")
     print(json.dumps(result,ensure_ascii=False,indent=2))
     open("diagnostic_result.json","w",encoding="utf-8").write(json.dumps(result,ensure_ascii=False,indent=2))

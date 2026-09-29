@@ -12,10 +12,10 @@ THREAT=load_module("threat_sequence_expert",ROOTDIR/"src/gool_bot2/threat_sequen
 
 UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 FSIGN="SW9D1eZo"
-BASES=("https://local-global.flashscore.ninja/2/x/feed","https://global.flashscore.ninja/2/x/feed","https://2.flashscore.ninja/2/x/feed")
+BASES=("https://local-global.flashscore.ninja/2/x/feed",)
 STAT_MAP={"432":"xg","34":"shots","13":"sot","16":"corners","459":"big","471":"touches_box"}
 
-def text(url,headers,timeout=10):
+def text(url,headers,timeout=4):
     try:
         with urlopen(Request(url,headers=headers),timeout=timeout) as r:
             return r.read().decode("utf-8","replace")
@@ -93,7 +93,7 @@ def point(match):
             "xg_total":xg,"sot_total":total("sot") or 0.0,"shots_total":total("shots") or 0.0,
             "danger_total":0.0,"corners_total":total("corners") or 0.0,"over_prob":None,"raw_stats":st}
 
-def choose(ms,n=4):
+def choose(ms,n=2):
     # prioritize 1H matches with at least some attack stats
     rows=[]
     for m in ms:
@@ -106,14 +106,14 @@ def choose(ms,n=4):
     return [x[3] for x in rows[:n]]
 
 def main():
-    ms=live_matches(); selected=choose(ms,4)
+    ms=live_matches(); selected=choose(ms,2)
     histories={m["id"]:[] for m in selected}
-    for i in range(4):
+    for i in range(3):
         current={m["id"]:m for m in live_matches()}
         for base in selected:
             m=current.get(base["id"],base)
             histories[base["id"]].append(point(m))
-        if i<3:time.sleep(15)
+        if i<2:time.sleep(8)
     results=[]
     for m in selected:
         hist=histories[m["id"]]

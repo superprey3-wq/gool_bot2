@@ -77,3 +77,42 @@ def test_prematch_row_keeps_flashscore_team_metadata():
     meta = {"home_team_id":"h1","away_team_id":"a1","home_team_slug":"home","away_team_slug":"away"}
     row = prematch_row_from_pick(pick, flashscore_meta=meta)
     assert row["flashscore_meta"] == meta
+
+
+def test_result_claims_are_scoped_by_origin(tmp_path):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    from gool_bot2.multi_delivery import pending_result_notifications
+    path = tmp_path / "journal.json"
+    rows = [
+        {"entry_id":"p1","origin":"prematch","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T10:00:00+00:00"},
+        {"entry_key":"l1","origin":"live","mode":"active","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T10:00:00+00:00"},
+    ]
+    save_signal_journal(path, rows)
+    claimed = pending_result_notifications(path, origins={"prematch","prematch_parlay","parlay"})
+    assert [row["entry_id"] for row in claimed] == ["p1"]
+    stored = load_signal_journal(path)
+    assert stored[0].get("result_notification_claim_id")
+    assert not stored[1].get("result_notification_claim_id")
+
+
+def test_prematch_result_drain_sends_and_finalizes(tmp_path, monkeypatch):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    import gool_bot2.v4_prematch_delivery as delivery
+    path = tmp_path / "journal.json"
+    row = {"entry_id":"p2","origin":"prematch","result":"won","telegram_sent":True,
+           "result_notification_pending":True,"result_notification_created_at":"2026-09-29T10:00:00+00:00"}
+    save_signal_journal(path, [row])
+    monkeypatch.setattr(delivery, "emit_prematch_result", lambda row, record=None: 1)
+    assert delivery.drain_prematch_result_notifications(path) == 1
+    stored = load_signal_journal(path)[0]
+    assert stored["result_notification_pending"] is False
+    assert stored["result_telegram_sent"] is True
+
+
+def test_prematch_monitor_settles_before_delivery(tmp_path, monkeypatch):
+    import gool_bot2.v4_prematch_daemon as daemon
+    calls = []
+    monkeypatch.setattr(daemon, "reconcile_pending_prematch", lambda path: calls.append("settle") or 1)
+    monkeypatch.setattr(daemon, "drain_prematch_result_notifications", lambda path: calls.append("send") or 1)
+    daemon._monitor_results(tmp_path / "journal.json")
+    assert calls == ["settle", "send"]

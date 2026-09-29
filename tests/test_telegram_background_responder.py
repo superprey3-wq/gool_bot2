@@ -90,3 +90,22 @@ def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
     assert "Upcoming" in text
     assert "Old Lost" not in text
     assert "Already Started" not in text
+
+
+def test_background_responder_sweeps_prematch_results_without_updates(tmp_path: Path, monkeypatch):
+    calls = []
+    journal = tmp_path / "gool_multi_journal.json"
+    monkeypatch.setattr(worker, "multi_journal_path", lambda: journal)
+    monkeypatch.setattr(
+        "gool_bot2.v4_prematch_settlement.reconcile_pending_prematch",
+        lambda path: calls.append(("reconcile", path)) or 1,
+    )
+    monkeypatch.setattr(
+        worker.telegram_mod,
+        "_drain_prematch_result_notifications",
+        lambda path: calls.append(("drain", path)) or 2,
+    )
+    worker._LAST_PREMATCH_RESULT_SWEEP = 0.0
+
+    assert worker._prematch_result_sweep(force=True) == 2
+    assert calls == [("reconcile", journal), ("drain", journal)]

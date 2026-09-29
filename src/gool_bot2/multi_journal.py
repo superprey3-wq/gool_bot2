@@ -78,6 +78,8 @@ def entry_from_decision(
     return {
         "created_at": _now(),
         "mode": mode,
+        "origin": "live",
+        "card_family": "live",
         "head": "multi",
         "match_id": match_id,
         "home": match.get("home"),

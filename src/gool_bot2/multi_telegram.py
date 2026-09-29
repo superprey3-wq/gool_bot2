@@ -121,6 +121,16 @@ def emit_multi_results(
         return 0
     total = 0
     for row in rows:
+        origin = str(row.get("origin") or "").strip().casefold()
+        if origin in {"prematch", "prematch_parlay", "parlay"}:
+            # PREMATCH has its own renderer/delivery path. Never render it as a
+            # LIVE/MULTI result, even if a shared journal caller passes it here.
+            print(
+                f"GOOL_MULTI_RESULT_SUPPRESSED match={row.get('match_id')} "
+                f"origin={origin} reason=prematch_has_dedicated_renderer",
+                flush=True,
+            )
+            continue
         if not was_publicly_sent(row):
             print(
                 f"GOOL_MULTI_RESULT_SUPPRESSED match={row.get('match_id')} "

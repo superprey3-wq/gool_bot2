@@ -152,13 +152,17 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
 
     img = Image.new("RGBA", (W, 900), BG + (255,))
     draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((18, 18, 1062, 882), 30, outline=accent, width=5)
     draw.rounded_rectangle((28, 22, 1052, 94), 22, fill=PANEL, outline=accent, width=2)
     draw.text((54, 40), "GOOL", font=sc._font(29, True), fill=TEXT)
-    draw.text((154, 40), "V4", font=sc._font(29, True), fill=accent)
+    draw.text((154, 40), "V4 · PREMATCH RESULT", font=sc._font(25, True), fill=accent)
     draw.rounded_rectangle((790, 36, 1020, 80), 14, fill=(9, 19, 31), outline=accent, width=2)
     _center_in_box(draw, result_label, (790, 36, 1020, 80), sc._font(15, True), accent)
 
-    _center(draw, league.upper(), 122, _fit(draw, league.upper(), 900, 16, True), MUTED)
+    _center(draw, f"🏆 {league}", 118, _fit(draw, f"🏆 {league}", 900, 17, True), MUTED)
+    kickoff = str(row.get("scheduled_start") or "")
+    if kickoff:
+        _center(draw, f"СТАРТ · {kickoff}", 151, _fit(draw, f"СТАРТ · {kickoff}", 700, 14, True), MUTED)
     sc._badge(img, draw, 205, 270, sc._logo(meta, "home"), home, accent)
     sc._badge(img, draw, 875, 270, sc._logo(meta, "away"), away, accent)
 
@@ -177,46 +181,96 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
 
     draw.rounded_rectangle((190, 675, 890, 770), 24, fill=(9, 19, 31), outline=accent, width=3)
     _center_in_box(draw, result_label, (190, 675, 890, 770), sc._font(34, True), accent)
-    _center(draw, "PREMATCH · РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 820, sc._font(14, True), MUTED)
-    _center(draw, "GOOL V4", 855, sc._font(11, True), accent)
+    probability = float(row.get("probability") or row.get("model_probability") or 0.0)
+    edge = float(row.get("edge") or row.get("value_edge") or 0.0)
+    draw.text((95, 802), f"МОДЕЛЬ {probability*100:.1f}%", font=sc._font(14, True), fill=TEXT)
+    draw.text((780, 802), f"ПЕРЕВЕС {edge*100:+.1f} п.п.", font=sc._font(14, True), fill=accent)
+    _center(draw, "PREMATCH · РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 840, sc._font(13, True), MUTED)
+    _center(draw, "GOOL V4", 865, sc._font(10, True), accent)
     return sc._save(img)
 
+def _mini_team_badge(img: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int, meta: dict[str, Any], side: str, name: str, accent) -> None:
+    r = 34
+    draw.ellipse((x-r-4, y-r-4, x+r+4, y+r+4), outline=accent, width=2)
+    draw.ellipse((x-r, y-r, x+r, y+r), fill=PANEL2, outline=(42, 59, 75), width=1)
+    logo = sc._logo(meta, side)
+    if logo:
+        bb = logo.getbbox()
+        logo = logo.crop(bb) if bb else logo
+        scale = min(54 / max(1, logo.width), 54 / max(1, logo.height))
+        logo = logo.resize((max(1, int(logo.width * scale)), max(1, int(logo.height * scale))), Image.Resampling.LANCZOS)
+        img.alpha_composite(logo, (x-logo.width//2, y-logo.height//2))
+        return
+    initials = "".join(part[:1] for part in str(name).split()[:2]).upper() or "?"
+    font = sc._font(15, True)
+    bb = draw.textbbox((0, 0), initials, font=font)
+    draw.text((x-(bb[2]-bb[0])/2, y-10), initials, font=font, fill=TEXT)
+
+
 def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
-    """Combined entry/result PNG for DOUBLE and SUPER parent bets."""
+    """PREMATCH parlay card with team crests, tournament, Moscow kickoff and leg status."""
     kind = str(row.get("kind") or "DOUBLES").upper()
     legs = list(row.get("legs") or [])
     final = str(row.get("result") or "pending").lower()
     if result:
-        title = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "VOID"}.get(final, "РЕЗУЛЬТАТ")
-        accent = ACCENT if final == "won" else GOLD
+        title = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "ВОЗВРАТ"}.get(final, "РЕЗУЛЬТАТ")
+        accent = ACCENT if final == "won" else RED if final == "lost" else NEUTRAL
     else:
         title = "SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС"
         accent = GOLD if kind == "SUPER" else ACCENT
-    height = max(760, 330 + len(legs) * 92)
+
+    row_h = 152
+    height = max(780, 260 + len(legs) * row_h + 120)
     img = Image.new("RGBA", (W, height), BG + (255,))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle((24, 20, 1056, 105), 22, fill=PANEL, outline=accent, width=3)
-    draw.text((50, 40), "GOOL V4", font=sc._font(30, True), fill=accent)
-    _center_in_box(draw, title, (700, 32, 1028, 92), sc._font(22, True), accent)
+    draw.rounded_rectangle((18, 18, 1062, height - 18), 30, outline=accent, width=5)
+    draw.rounded_rectangle((28, 22, 1052, 100), 22, fill=PANEL, outline=accent, width=2)
+    draw.text((52, 42), "GOOL V4", font=sc._font(29, True), fill=TEXT)
+    draw.text((190, 43), "PREMATCH · ЭКСПРЕСС", font=sc._font(23, True), fill=accent)
+    _center_in_box(draw, title, (760, 34, 1025, 88), sc._font(18, True), accent)
+
     odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
-    _center(draw, f"{'ИТОГ · ' if result else ''}{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'}", 135, sc._font(31, True), TEXT)
-    _center(draw, f"Общий коэффициент {odd:.2f}", 180, sc._font(25, True), accent)
-    y = 245
-    icons = {"won": "✓", "lost": "×", "push": "↩", "void": "↩", "pending": "•"}
+    headline = "ИТОГ ЭКСПРЕССА" if result else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС")
+    _center(draw, headline, 125, sc._font(31, True), TEXT)
+    _center(draw, f"Общий коэффициент · {odd:.2f}", 168, sc._font(22, True), accent)
+
+    y = 220
+    status_labels = {"won":"✓ ЗАШЛА","lost":"✕ НЕ ЗАШЛА","push":"↩ ВОЗВРАТ","void":"↩ ВОЗВРАТ","pending":"ЖДЁМ"}
     for i, leg in enumerate(legs, 1):
         lr = str(leg.get("result") or "pending").lower()
-        draw.rounded_rectangle((45, y, 1035, y + 76), 16, fill=PANEL2)
-        draw.text((65, y + 13), f"{icons.get(lr, '•')} {i}.", font=sc._font(18, True), fill=accent)
-        teams = f"{leg.get('home','?')} — {leg.get('away','?')}"
-        draw.text((125, y + 10), teams, font=_fit(draw, teams, 590, 19, True), fill=TEXT)
-        result_label = {"won":"ЗАШЛА","lost":"НЕ ЗАШЛА","push":"ВОЗВРАТ","void":"VOID","pending":"ЖДЁМ"}.get(lr, "ЖДЁМ")
-        detail = f"{leg.get('league','FOOTBALL')} · {leg.get('scheduled_start','')} · {_market_label(str(leg.get('market','?')))}"
+        leg_accent = ACCENT if lr == "won" else RED if lr == "lost" else accent
+        meta = dict(leg.get("flashscore_meta") or {})
+        home = str(leg.get("home") or "?")
+        away = str(leg.get("away") or "?")
+        league = str(leg.get("league") or "FOOTBALL")
+        kickoff = str(leg.get("scheduled_start") or "Время не указано")
+        market = _market_label(str(leg.get("selection") or leg.get("market") or "?"))
+        leg_odd = float(leg.get("odd") or 0.0)
+
+        draw.rounded_rectangle((45, y, 1035, y + 132), 22, fill=PANEL2, outline=leg_accent if result else (42,59,75), width=2)
+        draw.text((64, y + 14), f"{i}.", font=sc._font(18, True), fill=leg_accent)
+        _mini_team_badge(img, draw, 112, y + 66, meta, "home", home, leg_accent)
+        _mini_team_badge(img, draw, 190, y + 66, meta, "away", away, leg_accent)
+
+        teams = f"{home} — {away}"
+        draw.text((245, y + 13), teams, font=_fit(draw, teams, 520, 20, True), fill=TEXT)
+        tournament = f"ТУРНИР · {league}"
+        draw.text((245, y + 45), tournament, font=_fit(draw, tournament, 585, 14, True), fill=MUTED)
+        timing = f"СТАРТ · {kickoff}"
+        draw.text((245, y + 72), timing, font=_fit(draw, timing, 400, 14, True), fill=MUTED)
+        bet = f"{market}  @ {leg_odd:.2f}"
+        draw.text((245, y + 99), bet, font=_fit(draw, bet, 520, 18, True), fill=leg_accent if result else accent)
         if result:
-            detail += f" · {result_label}"
-        draw.text((125, y + 43), detail, font=_fit(draw, detail, 700, 13, False), fill=MUTED)
-        draw.text((875, y + 22), f"@ {float(leg.get('odd') or 0):.2f}", font=sc._font(18, True), fill=TEXT)
-        y += 92
-    footer = "РЕЗУЛЬТАТ ЗАФИКСИРОВАН" if result else "ЕДИНАЯ СТАВКА · ВСЕ НОГИ В ЖУРНАЛЕ"
-    draw.rounded_rectangle((245, height - 78, 835, height - 25), 16, fill=accent)
-    _center_in_box(draw, footer, (245, height - 78, 835, height - 25), sc._font(15, True), BG)
+            label = status_labels.get(lr, "ЖДЁМ")
+            draw.text((805, y + 19), label, font=_fit(draw, label, 200, 16, True), fill=leg_accent)
+            score = leg.get("settled_score") or leg.get("current_score")
+            if isinstance(score, (list, tuple)) and len(score) >= 2:
+                score_text = f"{int(score[0] or 0)}:{int(score[1] or 0)}"
+                draw.text((865, y + 58), score_text, font=sc._font(25, True), fill=TEXT)
+        y += row_h
+
+    footer_top = height - 92
+    draw.rounded_rectangle((235, footer_top, 845, height - 35), 18, fill=accent)
+    footer = "РЕЗУЛЬТАТ ЭКСПРЕССА ПОДТВЕРЖДЁН" if result else "PREMATCH · ВСЕ НОГИ ЗАФИКСИРОВАНЫ"
+    _center_in_box(draw, footer, (235, footer_top, 845, height - 35), _fit(draw, footer, 560, 15, True), BG)
     return sc._save(img)

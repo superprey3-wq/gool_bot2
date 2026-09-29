@@ -27,6 +27,7 @@ def append_prematch_entry(path: Path, row: dict[str, Any]) -> dict[str, Any]:
     entry = dict(row)
     entry.setdefault("created_at", _now())
     entry.setdefault("origin", "prematch")
+    entry.setdefault("card_family", "prematch_single")
     entry.setdefault("head", "prematch")
     entry.setdefault("result", "pending")
     entry.setdefault("telegram_sent", False)
@@ -75,7 +76,7 @@ def _emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
     caption = (
         f"⚽ <b>GOOL V4 · PREMATCH</b>\n"
         f"{escape(str(entry.get('home','?')))} — {escape(str(entry.get('away','?')))}\n"
-        f"<b>{escape(str(entry.get('market','?')))} @ {float(entry.get('odd') or 0):.2f}</b>"
+        f"<b>{escape(_market_label(str(entry.get('selection') or entry.get('market') or '?')))} @ {float(entry.get('odd') or 0):.2f}</b>"
     )
     sent = telegram.broadcast_photo(png, caption=caption, reply_markup=markup)
     if sent:
@@ -127,13 +128,16 @@ def parlay_leg_states(row: dict[str, Any], live_rows: Iterable[dict[str, Any]]) 
 
 
 def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = None) -> int:
+    if str(row.get("origin") or "").casefold() != "prematch":
+        raise ValueError("PREMATCH result renderer received non-prematch row")
+    print(f"GOOL_CARD_ROUTE family=prematch_single stage=result match={row.get('match_id')}", flush=True)
     png = render_v4_prematch_result_card(row, record=record)
     result = str(row.get("result") or "void").lower()
     icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")
     caption = (
         f"{icon} <b>GOOL V4 · PREMATCH RESULT</b>\n"
         f"{escape(str(row.get('home','?')))} — {escape(str(row.get('away','?')))}\n"
-        f"<b>{escape(str(row.get('market','?')))} @ {float(row.get('odd') or 0):.2f}</b>"
+        f"<b>{escape(_market_label(str(row.get('selection') or row.get('market') or '?')))} @ {float(row.get('odd') or 0):.2f}</b>"
     )
     return telegram.broadcast_photo(png, caption=caption)
 
@@ -170,6 +174,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
         "data_quality": float(pick.data_quality),
         "tier": str(tier or "NORMAL"),
         "origin": "prematch",
+        "card_family": "prematch_single",
         "head": "prematch",
         "result": "pending",
         "lifecycle": "scheduled",
@@ -177,14 +182,24 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
 
 
 def _market_label(value: str) -> str:
-    key = str(value or "").upper()
+    import re
+    raw = str(value or "").strip()
+    key = raw.upper()
     labels = {
         "FT_OVER_2.5": "ТБ 2.5", "FT_UNDER_2.5": "ТМ 2.5",
-        "BTTS_YES": "Обе забьют — Да",
+        "BTTS_YES": "Обе забьют — Да", "BTTS_NO": "Обе забьют — Нет",
         "1H_OVER_0.5": "1-й тайм: ТБ 0.5", "1H_OVER_1.5": "1-й тайм: ТБ 1.5",
         "2H_OVER_0.5": "2-й тайм: ТБ 0.5", "2H_OVER_1.5": "2-й тайм: ТБ 1.5",
     }
-    return labels.get(key, str(value or "?").replace("_", " "))
+    if key in labels:
+        return labels[key]
+    low = raw.casefold().replace("_", " ")
+    match = re.search(r"\\b(over|under)\\s+(\\d+(?:[.,]\\d+)?)", low)
+    if match:
+        return f"{'ТБ' if match.group(1) == 'over' else 'ТМ'} {match.group(2).replace(',', '.')}"
+    if "btts" in low:
+        return "Обе забьют — Нет" if "no" in low else "Обе забьют — Да"
+    return raw.replace("_", " ") or "?"
 
 
 def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
@@ -242,7 +257,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                 continue
         else:
             parent = {
-                "entry_id": pid, "origin": "prematch_parlay", "head": "prematch",
+                "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
                 "kind": kind, "result": "pending", "lifecycle": "scheduled",
                 "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
                 "effective_odd": float(acc.get("combined_odds") or 0.0),
@@ -260,7 +275,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             caption_lines += [
                 f"<b>{n}. {escape(str(leg['home']))} — {escape(str(leg['away']))}</b>",
                 f"{escape(str(leg['league']))} · {escape(str(leg['scheduled_start']))}",
-                f"{_market_label(leg['market'])} @ {leg['odd']:.2f}", "",
+                f"{_market_label(str(leg.get('selection') or leg.get('market') or '?'))} @ {leg['odd']:.2f}", "",
             ]
         png = render_v4_parlay_card(parent)
         delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip())
@@ -275,6 +290,9 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
 
 
 def emit_parlay_result(row: dict[str, Any]) -> int:
+    if str(row.get("origin") or "").casefold() not in {"prematch_parlay", "parlay"}:
+        raise ValueError("PREMATCH parlay renderer received non-parlay row")
+    print(f"GOOL_CARD_ROUTE family=prematch_parlay stage=result entry={row.get('entry_id')}", flush=True)
     png = render_v4_parlay_card(row, result=True)
     result = str(row.get("result") or "void").lower()
     icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")

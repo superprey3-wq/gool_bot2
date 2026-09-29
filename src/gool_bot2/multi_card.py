@@ -24,6 +24,30 @@ W = sc.W
 PUBLIC_STEAM_MIN_PP = 3.0
 
 
+def _pretty_market(value: Any) -> str:
+    raw = str(value or "").strip()
+    key = raw.upper()
+    fixed = {
+        "FT_OVER_2.5": "ТБ 2.5",
+        "FT_UNDER_2.5": "ТМ 2.5",
+        "BTTS_YES": "Обе забьют — Да",
+        "BTTS_NO": "Обе забьют — Нет",
+        "1H_OVER_0.5": "1-й тайм · ТБ 0.5",
+        "1H_OVER_1.5": "1-й тайм · ТБ 1.5",
+    }
+    if key in fixed:
+        return fixed[key]
+    return raw.replace("_", " ") or "—"
+
+
+def _live_signal_name(*, strategy: str = "", family: str = "", minute: int = 0) -> str:
+    strategy = str(strategy or "").casefold()
+    family = str(family or "").casefold()
+    if strategy == "goal_before_ht" or family == "first_half_total" or (strategy == "another_goal" and minute <= 45):
+        return "ГОЛ В 1-М ТАЙМЕ"
+    return "ЕЩЁ ГОЛ"
+
+
 def _fmt_odd(value: Any) -> str:
     try:
         return f"{float(value):.2f}"
@@ -281,6 +305,11 @@ def render_multi_card(
     height = 1120
     image = Image.new("RGBA", (W, height), BG + (255,))
     draw = ImageDraw.Draw(image)
+    live_name = _live_signal_name(
+        strategy=str(getattr(winner, "strategy", "") or ""),
+        family=str(getattr(winner, "family", "") or ""),
+        minute=minute,
+    )
     _draw_match_header(
         image,
         draw,
@@ -292,10 +321,11 @@ def render_multi_card(
         aws=aws,
         meta=meta,
         cards=cards,
+        title=f"GOOL LIVE • {live_name}",
     )
 
     draw.rounded_rectangle((45, 382, 1035, 610), 26, fill=PANEL2, outline=ACCENT, width=3)
-    draw.text((75, 405), "BEST BET", font=sc._font(18, True), fill=ACCENT)
+    draw.text((75, 405), live_name, font=sc._font(18, True), fill=ACCENT)
     draw.text((75, 445), winner.label, font=_fit_line(draw, winner.label, 610, 40, True), fill=TEXT)
     draw.text((760, 405), "КОЭФФИЦИЕНТ 1xBet", font=sc._font(13, True), fill=MUTED)
     draw.text((760, 438), _fmt_odd(winner.odd), font=sc._font(48, True), fill=GREEN)
@@ -314,7 +344,7 @@ def render_multi_card(
 
     _draw_reason(draw, reason, _formula_text(entry), top=920, accent=market_accent)
 
-    footer = "BEST BET • LIVE • " + source_label(entry.get("signal_source") or winner.source)
+    footer = f"{live_name} • LIVE • " + source_label(entry.get("signal_source") or winner.source)
     draw.rounded_rectangle((300, 1060, 780, 1105), 15, fill=market_accent)
     sc._center(draw, footer, 1072, _fit_line(draw, footer, 440, 14, True), BG)
     return sc._save(image)
@@ -346,7 +376,12 @@ def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None 
     settled_score = list(row.get("settled_score") or [match.get("home_score", 0), match.get("away_score", 0)])
     entry_minute = int(row.get("minute") or 0)
     settled_minute = int(row.get("settled_minute") or match.get("minute") or 90)
-    market = str(row.get("market") or "BEST BET")
+    market = _pretty_market(row.get("market") or "BEST BET")
+    live_name = _live_signal_name(
+        strategy=str(row.get("strategy") or ""),
+        family=str(row.get("market_family") or ""),
+        minute=entry_minute,
+    )
     odd = row.get("odd")
     confidence = _score100(row.get("confidence_score"), fallback=_score100(row.get("rating")))
     event_score = _score100(row.get("event_score"), fallback=_score100(row.get("probability")))
@@ -368,7 +403,7 @@ def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None 
         meta=meta,
         cards=cards,
         accent=accent,
-        title="GOOL MULTI • RESULT",
+        title=f"GOOL LIVE • {live_name} • RESULT",
     )
 
     draw.rounded_rectangle((45, 382, 1035, 610), 26, fill=PANEL2, outline=accent, width=3)
@@ -389,7 +424,7 @@ def render_multi_result_card(row: dict[str, Any], record: dict[str, Any] | None 
     for i, line in enumerate(_wrap(draw, reason, 920, font)):
         draw.text((70, 916 + i * 22), line, font=font, fill=TEXT)
 
-    footer = f"GOOL MULTI • VERIFIED • {source_label(row.get('signal_source'))}"
+    footer = f"GOOL LIVE • {live_name} • VERIFIED"
     draw.rounded_rectangle((300, 975, 780, 1025), 16, fill=accent)
     sc._center(draw, footer, 988, _fit_line(draw, footer, 440, 14, True), BG)
     return sc._save(image)

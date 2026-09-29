@@ -21,6 +21,7 @@ from .multi_journal import settle_multi_journal, sync_multi_journal
 from .multi_lineup_context import apply_lineup_context
 from .multi_match_intelligence import apply_match_intelligence, enforce_match_suitability
 from .multi_reentry_guard import enforce_reentry_cooldown
+from .post_goal_freshness import post_goal_freshness
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
@@ -539,6 +540,22 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     decision = enforce_entry_cutoff(decision)
 
     decision = enforce_reentry_cooldown(decision, record, journal_path)
+
+    # A new score epoch must collect genuinely new evidence. Do not reuse a
+    # pre-goal pressure window simply because the match clock advanced.
+    if decision.status == "BET" and decision.winner is not None:
+        fresh, fresh_block = post_goal_freshness(record)
+        if not fresh:
+            winner = decision.winner
+            if fresh_block not in winner.blocks:
+                winner.blocks.append(fresh_block)
+            winner.eligible = False
+            if not any(row.key == winner.key for row in decision.rejected):
+                decision.rejected.append(winner)
+            decision.status = "WAIT"
+            decision.winner = None
+            decision.alternatives = []
+            decision.reason = f"WAIT: после гола нужны новые LIVE-данные ({fresh_block})."
 
     append_shadow_snapshot(
         analysis_path,

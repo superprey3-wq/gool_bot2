@@ -72,3 +72,21 @@ def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatc
     )
     assert (a, b) == (1, 1)
     assert sent == ["SINGLES", "PARLAYS"]
+
+
+def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
+    import json, time
+    from datetime import datetime, timezone
+    from gool_bot2.bot_menu import prematch_singles_sections
+    now = time.time()
+    created = datetime.now(timezone.utc).isoformat()
+    rows = [
+        {"origin":"prematch","result":"lost","home":"Old Lost","away":"X","created_at":created,"kickoff_ts":now+3600,"odd":1.8},
+        {"origin":"prematch","result":"pending","home":"Already Started","away":"Y","created_at":created,"kickoff_ts":now-60,"odd":1.7},
+        {"origin":"prematch","result":"pending","home":"Upcoming","away":"Z","created_at":created,"kickoff_ts":now+3600,"odd":1.6},
+    ]
+    p = tmp_path / "journal.json"; p.write_text(json.dumps(rows), encoding="utf-8")
+    text = "\\n".join(prematch_singles_sections(p))
+    assert "Upcoming" in text
+    assert "Old Lost" not in text
+    assert "Already Started" not in text

@@ -160,6 +160,31 @@ def _result_icon(row: dict) -> str:
     return {"won":"✅", "lost":"❌", "push":"↩️", "void":"↩️"}.get(str(row.get("result") or "pending").casefold(), "⏳")
 
 
+def _prematch_market_label(value: object) -> str:
+    key = str(value or "").upper()
+    labels = {
+        "FT_OVER_2.5": "Тотал больше 2.5",
+        "FT_UNDER_2.5": "Тотал меньше 2.5",
+        "BTTS_YES": "Обе забьют — Да",
+        "1H_OVER_0.5": "1-й тайм: тотал больше 0.5",
+        "1H_OVER_1.5": "1-й тайм: тотал больше 1.5",
+        "2H_OVER_0.5": "2-й тайм: тотал больше 0.5",
+        "2H_OVER_1.5": "2-й тайм: тотал больше 1.5",
+    }
+    return labels.get(key, str(value or "?").replace("_", " "))
+
+
+def _prematch_time_label(row: dict) -> str:
+    value = str(row.get("scheduled_start") or "").strip()
+    if not value:
+        return ""
+    # Stored PREMATCH value is already Europe/Moscow, e.g. "29.09 13:00 МСК".
+    parts = value.split()
+    if len(parts) >= 2:
+        return f"{parts[1]} МСК"
+    return value
+
+
 def prematch_singles_sections(path: Path) -> list[str]:
     rows = _today_prematch_rows(path, "prematch")
     if not rows:
@@ -167,8 +192,9 @@ def prematch_singles_sections(path: Path) -> list[str]:
     parts = [f"🎟 <b>ОРДИНАРЫ · СЕГОДНЯ</b> · <b>{len(rows)}</b>"]
     for i, row in enumerate(rows, 1):
         parts.append(
-            f"<b>{i}.</b> {_result_icon(row)} {_h(row.get('home'))} — {_h(row.get('away'))}\n"
-            f"↳ {_h(row.get('market') or row.get('selection'))} @ <b>{float(row.get('odd') or 0):.2f}</b>"
+            f"<b>{i}.</b> {_result_icon(row)} {_h(row.get('home'))} — {_h(row.get('away'))}"
+            f"{' · ' + _h(_prematch_time_label(row)) if _prematch_time_label(row) else ''}\n"
+            f"↳ {_h(_prematch_market_label(row.get('market') or row.get('selection')))} @ <b>{float(row.get('odd') or 0):.2f}</b>"
         )
     return _chunk_menu(parts, "🎟 <b>ОРДИНАРЫ · продолжение</b>")
 
@@ -181,7 +207,11 @@ def prematch_parlays_sections(path: Path) -> list[str]:
     for i, row in enumerate(rows, 1):
         legs = []
         for leg in row.get("legs") or []:
-            legs.append(f"{_result_icon(leg)} {_h(leg.get('home'))} — {_h(leg.get('away'))} · {_h(leg.get('market') or leg.get('selection'))} @ {float(leg.get('odd') or 0):.2f}")
+            legs.append(
+                f"{_result_icon(leg)} {_h(leg.get('home'))} — {_h(leg.get('away'))}"
+                f"{' · ' + _h(_prematch_time_label(leg)) if _prematch_time_label(leg) else ''}"
+                f" · {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))} @ {float(leg.get('odd') or 0):.2f}"
+            )
         parts.append(f"<b>{i}.</b> {_result_icon(row)} Экспресс @ <b>{float(row.get('odd') or 0):.2f}</b>\n" + "\n".join("↳ " + x for x in legs))
     return _chunk_menu(parts, "🔗 <b>ЭКСПРЕССЫ · продолжение</b>")
 

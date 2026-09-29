@@ -41,7 +41,7 @@ def _market_label(value: str) -> str:
         return labels[key]
     low = raw.casefold().replace("_", " ")
     import re
-    m = re.search(r"\\b(over|under)\\s+(\\d+(?:[.,]\\d+)?)", low)
+    m = re.search(r"\b(over|under)\s+(\d+(?:[.,]\d+)?)", low)
     if m:
         return f"{'ТБ' if m.group(1) == 'over' else 'ТМ'} {m.group(2).replace(',', '.')}"
     if "btts" in low or "обе забьют" in low:

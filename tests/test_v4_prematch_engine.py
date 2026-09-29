@@ -99,12 +99,12 @@ def test_super_accumulator_never_pads_weak_or_expensive_legs():
     assert build_super_accumulator([*good, bad]) is None
 
 
-def test_delivery_never_reuses_single_as_parlay_leg():
+def test_delivery_can_build_parlay_from_qualified_single_pool():
     picks = [
-        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 2.5", 1.55, 0.78 - i*.005, 0.60, 0.9)
-        for i in range(8)
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 2.5", 1.55, 0.80 - i*.005, 0.60, 0.9)
+        for i in range(4)
     ]
-    delivery = choose_delivery(picks, max_singles=2, max_doubles=2)
-    single_ids = {p.event_id for p, _tier in delivery["singles"]}
-    parlay_ids = {p.event_id for acc in delivery["doubles"] for p in acc["legs"]}
-    assert single_ids.isdisjoint(parlay_ids)
+    delivery = choose_delivery(picks, max_singles=4, max_doubles=1)
+    assert delivery["singles"]
+    assert delivery["doubles"]
+    assert len(delivery["doubles"][0]["legs"]) == 2

@@ -37,6 +37,7 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
 
     first_half = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "goal_before_ht"]
     another_goal = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "another_goal"]
+    prematch_singles = [row for row in today_rows if str(row.get("origin") or "") == "prematch"]
     parlays = [row for row in today_rows if str(row.get("origin") or "") == "prematch_parlay"]
     steam = [row for row in today_rows if _layer(row) == "STEAM"]
 
@@ -47,6 +48,8 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
         f"🟡 <b>Гол в 1-м тайме</b>\n{multi_menu._stats_line(first_half)}",
         "",
         f"⚽ <b>Ещё гол</b>\n{multi_menu._stats_line(another_goal)}",
+        "",
+        f"🎟 <b>PREMATCH ординары</b>\n{multi_menu._stats_line(prematch_singles)}",
         "",
         f"🔗 <b>Экспрессы</b>\n{multi_menu._stats_line(parlays)}",
         "",

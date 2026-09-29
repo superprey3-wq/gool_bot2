@@ -118,7 +118,7 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
     return telegram.broadcast_photo(png, caption=caption)
 
 
-def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "") -> dict[str, Any]:
+def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "", flashscore_meta: dict[str, Any] | None = None) -> dict[str, Any]:
     """Convert a calibrated PrematchPick into the shared production journal/card schema."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -142,6 +142,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
         "selection": str(pick.selection),
         "odd": float(pick.odds),
         "bookmaker": str(bookmaker or ""),
+        "flashscore_meta": dict(flashscore_meta or {}),
         "model_probability": float(pick.model_probability),
         "probability": float(pick.model_probability),
         "market_probability": float(pick.market_probability),
@@ -184,7 +185,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             continue
         seen.add(key)
         info = meta.get(str(pick.event_id)) or {}
-        row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""))
+        row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {}))
         before = len(load_signal_journal(journal_path))
         delivered = _emit_prematch_signal(row, journal_path)
         after = len(load_signal_journal(journal_path))
@@ -204,12 +205,11 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         legs = []
         for p in acc.get("legs") or []:
             info = meta.get(str(p.event_id)) or {}
-            legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or "")))
+            legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {})))
         if not legs:
             continue
-        # Hard guard: an accumulator may never be a repackaging of sent singles.
-        if any(f"{x['event_id']}:{x['market']}" in seen for x in legs):
-            continue
+        # A parlay is an independent betting product. Its legs may also have been
+        # published as singles; the parent entry remains separately journaled/settled.
         # Stable identity includes every selection, independent of list order.
         def identity(items):
             return sorted((str(x.get("event_id") or ""), str(x.get("market") or ""), str(x.get("selection") or "")) for x in items)

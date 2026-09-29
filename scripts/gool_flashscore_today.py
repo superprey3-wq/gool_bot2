@@ -38,7 +38,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
  for f in as_completed([pool.submit(one,r) for r in rows]):
   z=f.result()
   if not z:continue
-  p,x,r=z; priced.append(p); meta[p.event_id]=x; m=r["match"]
+  p,x,r=z; priced.append(p); m=r["match"]; meta[p.event_id]={**x, "flashscore_meta": dict(m.meta or {})}
   kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x["bookmaker"],market_probability=p.market_probability,model_probability=p.model_probability)
   append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
 print("EXACT_PRIMARY_PRICED",len(priced),flush=True)

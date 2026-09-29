@@ -21,7 +21,7 @@ EXPERIMENT_HEADS = ("both_teams_to_score", "team_to_score")
 ALL_HEADS = MAIN_HEADS + EXPERIMENT_HEADS
 ACTIVE_HEADS = ALL_HEADS
 MENU_KEYBOARD = {
-    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🧠 Анализ"}]],
+    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🎟 Ординары"}, {"text": "🔗 Экспрессы"}], [{"text": "🧠 Анализ"}]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -139,6 +139,65 @@ def report_text(path: Path, experiment_path: Path | None = None):
         *_stats(rows),
     ]
     return "\n".join(lines)
+
+
+
+def _today_prematch_rows(path: Path, origin: str) -> list[dict]:
+    tz = _tz()
+    today = datetime.now(tz).date()
+    rows = []
+    for row in _load_rows(path):
+        if str(row.get("origin") or "").casefold() != origin:
+            continue
+        dt = _parse_dt(row.get("created_at") or row.get("captured_at"))
+        if dt and dt.astimezone(tz).date() == today:
+            rows.append(row)
+    rows.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    return rows
+
+
+def _result_icon(row: dict) -> str:
+    return {"won":"✅", "lost":"❌", "push":"↩️", "void":"↩️"}.get(str(row.get("result") or "pending").casefold(), "⏳")
+
+
+def prematch_singles_sections(path: Path) -> list[str]:
+    rows = _today_prematch_rows(path, "prematch")
+    if not rows:
+        return ["🎟 <b>ОРДИНАРЫ · СЕГОДНЯ</b>\n\nСегодня PREMATCH-ординаров ещё не отправляли."]
+    parts = [f"🎟 <b>ОРДИНАРЫ · СЕГОДНЯ</b> · <b>{len(rows)}</b>"]
+    for i, row in enumerate(rows, 1):
+        parts.append(
+            f"<b>{i}.</b> {_result_icon(row)} {_h(row.get('home'))} — {_h(row.get('away'))}\n"
+            f"↳ {_h(row.get('market') or row.get('selection'))} @ <b>{float(row.get('odd') or 0):.2f}</b>"
+        )
+    return _chunk_menu(parts, "🎟 <b>ОРДИНАРЫ · продолжение</b>")
+
+
+def prematch_parlays_sections(path: Path) -> list[str]:
+    rows = _today_prematch_rows(path, "prematch_parlay")
+    if not rows:
+        return ["🔗 <b>ЭКСПРЕССЫ · СЕГОДНЯ</b>\n\nСегодня PREMATCH-экспрессов ещё не отправляли."]
+    parts = [f"🔗 <b>ЭКСПРЕССЫ · СЕГОДНЯ</b> · <b>{len(rows)}</b>"]
+    for i, row in enumerate(rows, 1):
+        legs = []
+        for leg in row.get("legs") or []:
+            legs.append(f"{_result_icon(leg)} {_h(leg.get('home'))} — {_h(leg.get('away'))} · {_h(leg.get('market') or leg.get('selection'))} @ {float(leg.get('odd') or 0):.2f}")
+        parts.append(f"<b>{i}.</b> {_result_icon(row)} Экспресс @ <b>{float(row.get('odd') or 0):.2f}</b>\n" + "\n".join("↳ " + x for x in legs))
+    return _chunk_menu(parts, "🔗 <b>ЭКСПРЕССЫ · продолжение</b>")
+
+
+def _chunk_menu(parts: list[str], continuation: str) -> list[str]:
+    messages: list[str] = []
+    chunk = parts[0]
+    for part in parts[1:]:
+        candidate = chunk + "\n\n" + part
+        if len(candidate) > 3800:
+            messages.append(chunk)
+            chunk = continuation + "\n\n" + part
+        else:
+            chunk = candidate
+    messages.append(chunk)
+    return messages
 
 
 def _latest_live_states(path):

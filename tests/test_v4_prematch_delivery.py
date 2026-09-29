@@ -68,3 +68,12 @@ def test_prematch_result_delivery_finalizes_by_entry_id(tmp_path):
     assert stored["result_notification_pending"] is False
     assert stored["result_telegram_sent"] is True
     assert pending_result_notifications(path)==[]
+
+
+def test_prematch_row_keeps_flashscore_team_metadata():
+    from gool_bot2.v4_prematch_delivery import prematch_row_from_pick
+    from gool_bot2.v4_prematch_engine import PrematchPick
+    pick = PrematchPick("e-logo", "Home", "Away", "FT_OVER_2.5", "FT_OVER_2.5", 1.7, .72, .60, .9)
+    meta = {"home_team_id":"h1","away_team_id":"a1","home_team_slug":"home","away_team_slug":"away"}
+    row = prematch_row_from_pick(pick, flashscore_meta=meta)
+    assert row["flashscore_meta"] == meta

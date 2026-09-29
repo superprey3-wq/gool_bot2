@@ -74,3 +74,11 @@ def test_parlay_combined_and_effective_odds_are_products():
     assert settle_parlay(row)
     assert row["result"] == "won"
     assert row["effective_odd"] == 3.06
+
+
+def test_future_prematch_cannot_settle_from_stale_finished_provider_state(monkeypatch):
+    import time
+    row = {"origin": "prematch", "result": "pending", "match_id": "future", "event_id": "future", "market": "FT_OVER_2.5", "selection": "over 2.5", "market_family": "match_total", "kickoff_ts": time.time() + 3600}
+    record = {"match": {"flashscore_event_id": "future", "is_finished": True, "home_score": 0, "away_score": 0}}
+    assert settle_prematch_row(row, record) is False
+    assert row["result"] == "pending"

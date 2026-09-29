@@ -31,8 +31,18 @@ def _max_replay_age_hours() -> float:
         return 4.0
 
 
-def _signal_age_hours(row: dict[str, Any]) -> float | None:
-    created = _parse_dt(row.get("created_at") or row.get("telegram_sent_at"))
+def _result_age_hours(row: dict[str, Any]) -> float | None:
+    """Age the result notification, not the original signal.
+
+    PREMATCH bets can legitimately be published many hours before kickoff.
+    A result created now must therefore remain fresh even if the bet itself is old.
+    """
+    created = _parse_dt(
+        row.get("result_notification_created_at")
+        or row.get("settled_at")
+        or row.get("created_at")
+        or row.get("telegram_sent_at")
+    )
     if created is None:
         return None
     return max(0.0, (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600.0)
@@ -76,7 +86,7 @@ def _suppress_stale_result_replays(journal_path: Path) -> int:
         for row in rows:
             if not bool(row.get("result_notification_pending")):
                 continue
-            age = _signal_age_hours(row)
+            age = _result_age_hours(row)
             explicitly_suppressed = bool(row.get("result_notification_suppressed"))
             too_old = age is not None and age > max_age
             if not (explicitly_suppressed or too_old):
@@ -98,11 +108,12 @@ def _pending_without_stale_replay(
     journal_path: Path,
     *,
     match_id: str | None = None,
+    origins: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     _suppress_stale_result_replays(journal_path)
     if _ORIGINAL_PENDING is None:
         return []
-    return _ORIGINAL_PENDING(journal_path, match_id=match_id)
+    return _ORIGINAL_PENDING(journal_path, match_id=match_id, origins=origins)
 
 
 def install_stale_replay_guard() -> None:

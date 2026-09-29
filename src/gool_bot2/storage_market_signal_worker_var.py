@@ -42,6 +42,7 @@ _ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
 _LAST_BANK_REPORT_ATTEMPT = 0.0
 _INLINE_TELEGRAM_OFFSET = 0
 _LAST_INLINE_TELEGRAM_POLL = 0.0
+_LAST_PREMATCH_RESULT_MAINTENANCE = 0.0
 _DIRECT_TELEGRAM_OFFSET = 0
 _TELEGRAM_RESPONDER_THREAD: threading.Thread | None = None
 _TELEGRAM_RESPONDER_STOP = threading.Event()
@@ -213,6 +214,32 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             if callback_chat_id is not None and _direct_send_message(token, callback_chat_id, "⚠️ Не удалось подготовить V4-разбор этого матча. Попробуй нажать ещё раз.", reply_markup=telegram_mod.MENU_KEYBOARD):
                 changed += 1
         return changed
+    if data.startswith("v4ig:"):
+        entry_id = data.split(":", 1)[1]
+        callback_message = callback.get("message") or {}
+        callback_chat_id = (callback_message.get("chat") or {}).get("id")
+        message_id = callback_message.get("message_id")
+        callback_id = str(callback.get("id") or "")
+        try:
+            from .v4_prematch_delivery import mark_prematch_in_game, prematch_keyboard
+            path = multi_journal_path()
+            marked = mark_prematch_in_game(path, entry_id, chat_id=callback_chat_id)
+            if marked:
+                changed += 1
+                if callback_chat_id is not None and message_id is not None:
+                    _direct_edit_reply_markup(
+                        token,
+                        callback_chat_id,
+                        int(message_id),
+                        prematch_keyboard(entry_id, entered=True),
+                    )
+                _direct_answer_callback(token, callback_id, "Отмечено: в игре")
+            else:
+                _direct_answer_callback(token, callback_id, "Ставка уже рассчитана или не найдена")
+        except Exception as exc:
+            print(f"V4_PREMATCH_DIRECT_CALLBACK_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return changed
+
     if not data.startswith("ig:"):
         return changed
     parts = data.split(":", 2)
@@ -241,12 +268,42 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
     return changed
 
 
+def _prematch_result_maintenance(*, force: bool = False) -> int:
+    """Continuously reconcile and deliver PREMATCH results independently of Telegram updates."""
+    global _LAST_PREMATCH_RESULT_MAINTENANCE
+    now_mono = time.monotonic()
+    try:
+        interval = max(5.0, float(os.getenv("GOOL_PREMATCH_RESULT_MONITOR_SECONDS", "20")))
+    except (TypeError, ValueError):
+        interval = 20.0
+    if not force and now_mono - _LAST_PREMATCH_RESULT_MAINTENANCE < interval:
+        return 0
+    _LAST_PREMATCH_RESULT_MAINTENANCE = now_mono
+
+    path = multi_journal_path()
+    try:
+        from .v4_prematch_settlement import reconcile_pending_prematch
+        changed = int(reconcile_pending_prematch(path) or 0)
+        sent = int(telegram_mod._drain_prematch_result_notifications(path) or 0)
+        if changed or sent:
+            print(
+                f"GOOL_PREMATCH_RESULT_MONITOR changed={changed} sent={sent} journal={path}",
+                flush=True,
+            )
+        return sent
+    except Exception as exc:
+        print(f"GOOL_PREMATCH_RESULT_MONITOR_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return 0
+
+
 def _telegram_responder_loop(token: str) -> None:
     global _DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET
     journal_path = _telegram_journal_path()
     print("GOOL_TELEGRAM_RESPONDER started mode=background", flush=True)
     _TELEGRAM_RESPONDER_STOP.wait(0.8)
+    _prematch_result_maintenance(force=True)
     while not _TELEGRAM_RESPONDER_STOP.is_set():
+        _prematch_result_maintenance()
         with _TELEGRAM_OFFSET_LOCK:
             offset = max(_DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET)
         result = _direct_bot_api(

@@ -90,3 +90,31 @@ def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
     assert "Upcoming" in text
     assert "Old Lost" not in text
     assert "Already Started" not in text
+
+
+def test_background_prematch_monitor_reconciles_and_drains_multi_journal(tmp_path, monkeypatch):
+    journal = tmp_path / "gool_multi_journal.json"
+    journal.write_text("[]", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(worker, "multi_journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.v4_prematch_settlement.reconcile_pending_prematch", lambda path: calls.append(("reconcile", path)) or 1)
+    monkeypatch.setattr(worker.telegram_mod, "_drain_prematch_result_notifications", lambda path: calls.append(("drain", path)) or 1)
+    worker._LAST_PREMATCH_RESULT_MAINTENANCE = 0.0
+    assert worker._prematch_result_maintenance(force=True) == 1
+    assert calls == [("reconcile", journal), ("drain", journal)]
+
+
+def test_background_responder_handles_v4_prematch_in_game_callback(tmp_path, monkeypatch):
+    journal = tmp_path / "gool_multi_journal.json"
+    monkeypatch.setattr(worker, "multi_journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.v4_prematch_delivery.mark_prematch_in_game", lambda path, entry_id, chat_id=None: path == journal and entry_id == "e1")
+    edits = []
+    answers = []
+    monkeypatch.setattr(worker, "_direct_edit_reply_markup", lambda token, chat, mid, markup: edits.append((chat, mid, markup)) or True)
+    monkeypatch.setattr(worker, "_direct_answer_callback", lambda token, cbid, text: answers.append(text) or True)
+    actions = worker._handle_direct_telegram_update(
+        "token", tmp_path / "signal.json",
+        {"callback_query":{"id":"cb1","data":"v4ig:e1","message":{"chat":{"id":123},"message_id":77}}},
+    )
+    assert actions == 1
+    assert edits and answers == ["Отмечено: в игре"]

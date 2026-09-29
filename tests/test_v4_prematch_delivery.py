@@ -77,3 +77,19 @@ def test_prematch_row_keeps_flashscore_team_metadata():
     meta = {"home_team_id":"h1","away_team_id":"a1","home_team_slug":"home","away_team_slug":"away"}
     row = prematch_row_from_pick(pick, flashscore_meta=meta)
     assert row["flashscore_meta"] == meta
+
+
+def test_prematch_result_claim_does_not_claim_live_rows(tmp_path):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    from gool_bot2.multi_delivery import pending_result_notifications
+    path = tmp_path / "journal.json"
+    rows = [
+        {"entry_id":"pre1","origin":"prematch","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T12:00:00+00:00"},
+        {"entry_key":"live1","origin":"live","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T12:00:00+00:00"},
+    ]
+    save_signal_journal(path, rows)
+    claimed = pending_result_notifications(path, origins={"prematch","prematch_parlay","parlay"})
+    assert [r.get("entry_id") for r in claimed] == ["pre1"]
+    stored = load_signal_journal(path)
+    assert stored[0].get("result_notification_claim_id")
+    assert not stored[1].get("result_notification_claim_id")

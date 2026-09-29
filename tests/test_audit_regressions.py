@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -155,3 +156,18 @@ def test_cumulative_pressure_without_recent_window_stays_no_bet():
     assert all(d.decision == 'NO_BET' for d in evaluate_live_goals(r))
     r['live_momentum'] = {'minutes_in_epoch': 5, 'xg_total_last_5m': 0, 'shots_total_last_5m': 0}
     assert all(d.decision == 'NO_BET' for d in evaluate_live_goals(r))
+
+
+def test_old_prematch_signal_with_fresh_settlement_is_not_suppressed(tmp_path):
+    path = tmp_path / "journal.json"
+    now = datetime.now(timezone.utc)
+    row = {
+        "entry_id":"prematch:old-signal","origin":"prematch","result":"won","telegram_sent":True,
+        "created_at":(now - timedelta(hours=10)).isoformat(),
+        "settled_at":now.isoformat(),"result_notification_created_at":now.isoformat(),
+        "result_notification_pending":True,
+    }
+    save_signal_journal(path, [row])
+    claimed = pending_result_notifications(path, origins={"prematch"})
+    assert len(claimed) == 1
+    assert claimed[0]["entry_id"] == "prematch:old-signal"

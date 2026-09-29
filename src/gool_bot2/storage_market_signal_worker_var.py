@@ -153,6 +153,10 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"📊 отчёт", "📊 отчет"}:
                 telegram_mod._force_reconcile_pending(journal_path)
                 replies = [telegram_mod.report_text(journal_path)]
+            elif text == "/prematchaudit":
+                from .prematch_day_audit import prematch_day_audit_text
+                prematch_journal = Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)
+                replies = [prematch_day_audit_text(prematch_journal)]
             elif text == "🟢 в игре":
                 telegram_mod._force_reconcile_pending(journal_path)
                 replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))

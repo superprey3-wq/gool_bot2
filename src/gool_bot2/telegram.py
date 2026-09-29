@@ -210,6 +210,11 @@ def _force_reconcile_pending(journal_path:Path)->int:
 _MATCH_SEARCH_WAITING:set[str]=set()
 
 def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[int,int]:
+ try:
+  from .v4_prematch_settlement import reconcile_pending_prematch
+  reconcile_pending_prematch(journal_path)
+ except Exception as exc:
+  print(f"V4_PREMATCH_RECONCILE_ERROR {type(exc).__name__}:{exc}",flush=True)
  result=_api_call("getUpdates",{"offset":offset,"timeout":timeout,"allowed_updates":["message","callback_query"]},timeout=max(5,timeout+5))
  if not result or not result.get("ok"):return offset,0
  changed=0;next_offset=offset

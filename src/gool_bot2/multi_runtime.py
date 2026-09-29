@@ -33,6 +33,7 @@ from .v4_prematch_settlement import sync_prematch_journal
 from .v4_prematch_delivery import emit_prematch_result, emit_parlay_result
 from .xbet_market_demand import request_live_market
 from .xbet_market_pressure import live_1x2_context, load_market_state
+from .threat_sequence_live import apply_threat_modifier
 
 
 def _live_only() -> bool:
@@ -517,6 +518,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
 
     ordinary_experts = routing_experts(match, experts)
     decision = analyze_multi_match(match, market, ordinary_experts, data_quality=quality)
+    decision = apply_threat_modifier(decision, record)
 
     decision = enforce_goal_state_policy(decision, experts)
 

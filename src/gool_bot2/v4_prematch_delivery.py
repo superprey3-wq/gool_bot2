@@ -289,6 +289,35 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
     return sent
 
 
+def drain_prematch_result_notifications(journal_path: Path) -> int:
+    """Deliver every settled PREMATCH/parlay result waiting in the shared journal.
+
+    Claims are origin-scoped so this monitor can never steal LIVE result work.
+    """
+    from .multi_delivery import pending_result_notifications, finalize_result_delivery
+
+    sent_total = 0
+    rows = pending_result_notifications(
+        journal_path,
+        origins={"prematch", "prematch_parlay", "parlay"},
+    )
+    for row in rows:
+        origin = str(row.get("origin") or "").casefold()
+        try:
+            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
+            if finalize_result_delivery(journal_path, row, sent):
+                sent_total += int(sent or 0)
+        except Exception as exc:
+            print(
+                f"V4_PREMATCH_RESULT_DRAIN_ERROR entry={row.get('entry_id')} "
+                f"error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+    if rows:
+        print(f"GOOL_PREMATCH_RESULT_DRAIN claimed={len(rows)} sent={sent_total}", flush=True)
+    return sent_total
+
+
 def emit_parlay_result(row: dict[str, Any]) -> int:
     if str(row.get("origin") or "").casefold() not in {"prematch_parlay", "parlay"}:
         raise ValueError("PREMATCH parlay renderer received non-parlay row")

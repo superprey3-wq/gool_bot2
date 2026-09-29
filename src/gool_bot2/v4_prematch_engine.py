@@ -328,6 +328,38 @@ def picks_from_1x2_profile(
     ]
 
 
+def picks_from_btts_profile(
+    *, event_id: str, home: str, away: str, profile: dict, market: dict,
+    data_quality: float = 1.0,
+) -> list[PrematchPick]:
+    """Price BTTS Yes/No from the same team goal rates used by the score model."""
+    first = profile.get("first_half") or {}
+    second = profile.get("second_half") or {}
+    full = profile.get("full_match") or {}
+    try:
+        if first.get("available") and second.get("available"):
+            home_lambda = float(first["home_expected_goals"]) + float(second["home_expected_goals"])
+            away_lambda = float(first["away_expected_goals"]) + float(second["away_expected_goals"])
+        elif full.get("available"):
+            home_lambda = float(full["home_expected_goals"])
+            away_lambda = float(full["away_expected_goals"])
+        else:
+            return []
+        prices = market.get("btts") or {}
+        yes_odd = float(prices["yes"]); no_odd = float(prices["no"])
+    except (TypeError, ValueError, KeyError):
+        return []
+    if min(yes_odd, no_odd) <= 1.0 or min(home_lambda, away_lambda) < 0:
+        return []
+    import math
+    model_yes = (1.0 - math.exp(-home_lambda)) * (1.0 - math.exp(-away_lambda))
+    fair_yes, fair_no = devig_two_way(yes_odd, no_odd)
+    return [
+        PrematchPick(event_id, home, away, "btts", "yes", yes_odd, model_yes, fair_yes, data_quality),
+        PrematchPick(event_id, home, away, "btts", "no", no_odd, 1.0 - model_yes, fair_no, data_quality),
+    ]
+
+
 def build_prematch_candidates(
     *,
     event_id: str,
@@ -343,6 +375,10 @@ def build_prematch_candidates(
             market=market, data_quality=data_quality,
         ),
         *picks_from_1x2_profile(
+            event_id=event_id, home=home, away=away, profile=profile,
+            market=market, data_quality=data_quality,
+        ),
+        *picks_from_btts_profile(
             event_id=event_id, home=home, away=away, profile=profile,
             market=market, data_quality=data_quality,
         ),

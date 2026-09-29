@@ -66,28 +66,78 @@ def _pct(wins: int, losses: int) -> str:
     return "—" if total <= 0 else f"{wins / total * 100:.1f}%"
 
 
+def _unit_profit(row: dict[str, Any]) -> float | None:
+    result = str(row.get("result") or "").lower()
+    if result not in {"won", "lost", "push", "void"}:
+        return None
+    if row.get("profit_units") is not None:
+        try:
+            return float(row.get("profit_units"))
+        except (TypeError, ValueError):
+            pass
+    if result == "lost":
+        return -1.0
+    if result in {"push", "void"}:
+        return 0.0
+    # Historical rows may predate profit_units. Reconstruct flat 1u P/L from
+    # the actual taken price; parlay settlement stores effective_odd.
+    try:
+        odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
+    except (TypeError, ValueError):
+        odd = 0.0
+    return odd - 1.0 if odd > 1.0 else None
+
+
+def _profit_info(rows: list[dict[str, Any]]) -> tuple[float, int]:
+    profit = 0.0
+    missing = 0
+    for row in rows:
+        if str(row.get("result") or "").lower() not in {"won", "lost", "push", "void"}:
+            continue
+        value = _unit_profit(row)
+        if value is None:
+            missing += 1
+        else:
+            profit += value
+    return profit, missing
+
+
 def _profit(rows: list[dict[str, Any]]) -> float:
-    return sum(
-        float(row.get("profit_units") or 0.0)
-        for row in rows
-        if str(row.get("result") or "") in {"won", "lost", "push", "void"}
-    )
+    return _profit_info(rows)[0]
 
 
 def _roi(rows: list[dict[str, Any]]) -> str:
-    settled = [row for row in rows if str(row.get("result") or "") in {"won", "lost"}]
+    settled = [row for row in rows if str(row.get("result") or "").lower() in {"won", "lost"}]
     if not settled:
         return "—"
-    return f"{_profit(settled) / len(settled) * 100:+.1f}%"
+    profit, missing = _profit_info(settled)
+    if missing:
+        return f"{profit / max(1, len(settled) - missing) * 100:+.1f}%*"
+    return f"{profit / len(settled) * 100:+.1f}%"
+
+
+def _avg_odd(rows: list[dict[str, Any]]) -> str:
+    odds = []
+    for row in rows:
+        try:
+            odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if odd > 1.0:
+            odds.append(odd)
+    return "—" if not odds else f"{sum(odds) / len(odds):.2f}"
 
 
 def _stats_line(rows: list[dict[str, Any]]) -> str:
     counts = Counter(str(row.get("result") or "pending").lower() for row in rows)
+    profit, missing = _profit_info(rows)
+    pl = f"{profit:+.2f}u" + (f"*" if missing else "")
     return (
         f"✅ <b>{counts['won']}</b> · ❌ <b>{counts['lost']}</b> · "
         f"⏳ <b>{counts['pending']}</b> · ↩️ <b>{counts['void'] + counts['push']}</b> · "
         f"проход <b>{_pct(counts['won'], counts['lost'])}</b> · "
-        f"P/L <b>{_profit(rows):+.2f}u</b> · ROI <b>{_roi(rows)}</b>"
+        f"ср.кэф <b>{_avg_odd(rows)}</b> · "
+        f"P/L <b>{pl}</b> · ROI <b>{_roi(rows)}</b>"
     )
 
 

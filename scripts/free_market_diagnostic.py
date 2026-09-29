@@ -103,6 +103,13 @@ def choose_event():
             if pair[0].lower() in h.lower() and pair[1].lower() in a.lower(): priority=10;break
         candidates.append((priority,-(s1+s2),str(e.get("I") or ""),h,a,s1,s2))
     candidates.sort(reverse=True)
+    # Prefer a candidate whose GetGameZip actually contains live stats.
+    for cand in candidates[:20]:
+        probe=game(cand[2])
+        sc=probe.get("SC") or {}
+        blocks=sc.get("ST") or []
+        if any(isinstance(b,dict) and (b.get("Value") or []) for b in blocks):
+            return cand
     return candidates[0] if candidates else None
 
 def game(event_id):
@@ -194,9 +201,9 @@ def main():
     else:
         _,_,eid,h,a,s1,s2=ch
         ss=[]
-        for i in range(7):
+        for i in range(5):
             ss.append(snapshot(eid))
-            if i<6:time.sleep(12)
+            if i<4:time.sleep(10)
         hist=threat_history(ss,[s1,s2])
         result={"event":{"id":eid,"home":h,"away":a,"score_at_pick":[s1,s2]},
                 "snapshots":ss,"summary":summarize(ss),

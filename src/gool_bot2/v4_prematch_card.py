@@ -159,7 +159,10 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     draw.rounded_rectangle((790, 36, 1020, 80), 14, fill=(9, 19, 31), outline=accent, width=2)
     _center_in_box(draw, result_label, (790, 36, 1020, 80), sc._font(15, True), accent)
 
-    _center(draw, f"🏆 {league}", 122, _fit(draw, f"🏆 {league}", 900, 17, True), MUTED)
+    _center(draw, f"🏆 {league}", 118, _fit(draw, f"🏆 {league}", 900, 17, True), MUTED)
+    kickoff = str(row.get("scheduled_start") or "")
+    if kickoff:
+        _center(draw, f"СТАРТ · {kickoff}", 151, _fit(draw, f"СТАРТ · {kickoff}", 700, 14, True), MUTED)
     sc._badge(img, draw, 205, 270, sc._logo(meta, "home"), home, accent)
     sc._badge(img, draw, 875, 270, sc._logo(meta, "away"), away, accent)
 

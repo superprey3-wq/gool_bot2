@@ -2,215 +2,126 @@ from __future__ import annotations
 import json,time,re,importlib.util
 from pathlib import Path
 from urllib.request import Request,urlopen
-from urllib.parse import urlencode
 from datetime import datetime,timezone
 
-UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
-ROOT="https://1xbet.fi/service-api/LiveFeed"
-INDEX_Q="sports=1&count=1000&lng=en&mode=4&country=1&getEmpty=true"
 ROOTDIR=Path(__file__).resolve().parents[1]
-def _load(name, path):
-    spec=importlib.util.spec_from_file_location(name, path)
-    mod=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-THREAT=_load("threat_sequence_expert", ROOTDIR/"src/gool_bot2/threat_sequence_expert.py")
-AUDIT=_load("signal_quality_auditor", ROOTDIR/"src/gool_bot2/signal_quality_auditor.py")
+def load_module(name,path):
+    spec=importlib.util.spec_from_file_location(name,path)
+    mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); return mod
+THREAT=load_module("threat_sequence_expert",ROOTDIR/"src/gool_bot2/threat_sequence_expert.py")
 
-HEADERS={
- "User-Agent":UA,"Accept":"application/json,*/*","Origin":"https://1xbet.com",
- "Referer":"https://1xbet.com/live/football/","X-Requested-With":"XMLHttpRequest",
- "is-srv":"false","x-app-n":"__BETTING_APP__","x-svc-source":"__BETTING_APP__","x-mobile-project-id":"0"
-}
+UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+FSIGN="SW9D1eZo"
+BASES=("https://local-global.flashscore.ninja/2/x/feed","https://global.flashscore.ninja/2/x/feed","https://2.flashscore.ninja/2/x/feed")
+STAT_MAP={"432":"xg","34":"shots","13":"sot","16":"corners","459":"big","471":"touches_box"}
 
-def get(url,timeout=10):
+def text(url,headers,timeout=10):
     try:
-        with urlopen(Request(url,headers=HEADERS),timeout=timeout) as r:
-            d=json.loads(r.read().decode("utf-8","replace"))
-            return d if isinstance(d,dict) else {}
-    except Exception as e:return {"__error__":f"{type(e).__name__}:{e}"}
+        with urlopen(Request(url,headers=headers),timeout=timeout) as r:
+            return r.read().decode("utf-8","replace")
+    except Exception:return ""
 
-def nodes(o,out=None,path=""):
-    out=[] if out is None else out
-    if isinstance(o,dict):
-        if "T" in o and "C" in o:
-            try:
-                odd=float(o.get("C"));t=int(o.get("T"));line=None if o.get("P") is None else float(o.get("P"))
-            except: odd=0;t=-1;line=None
-            if odd>1.001 and t>0:
-                out.append({"T":t,"C":odd,"P":line,"G":o.get("G"),"path":path,
-                            "sub":bool(re.search(r"(?:^|/)SG\[\d+\]",path))})
-        for k,v in o.items():nodes(v,out,f"{path}/{k}"[-260:])
-    elif isinstance(o,list):
-        for i,v in enumerate(o):nodes(v,out,f"{path}[{i}]"[-260:])
+def fs(path):
+    h={"User-Agent":UA,"x-fsign":FSIGN,"Origin":"https://www.flashscore.com","Referer":"https://www.flashscore.com/","Accept":"*/*","Cache-Control":"no-cache"}
+    for b in BASES:
+        body=text(f"{b}/{path}",h)
+        if body and not body.lstrip().startswith("<"): return body
+    return ""
+
+def fields(raw):
+    out={}
+    for tok in raw.split("¬"):
+        if "÷" in tok:
+            k,v=tok.split("÷",1)
+            if k and k not in out:out[k]=v
     return out
 
-def totals(game):
-    ns=nodes(game); groups=(17,4)
-    for g in groups:
-        by={}
-        for n in ns:
-            if n["sub"] or n["P"] is None or int(n.get("G") or -1)!=g:continue
-            if n["T"] not in (9,10):continue
-            r=by.setdefault(float(n["P"]),{"line":float(n["P"])})
-            r["over" if n["T"]==9 else "under"]=float(n["C"])
-        rows=[by[k] for k in sorted(by)]
-        if rows:return rows
-    return []
+def asint(v,d=0):
+    try:return int(float(str(v)))
+    except:return d
 
-def fair(row):
-    o=row.get("over");u=row.get("under")
-    if not o or not u:return None
-    a=1/float(o);b=1/float(u)
-    return a/(a+b) if a+b else None
+def minute(f,now):
+    ac=f.get("AC","");ao=asint(f.get("AO"));ad=asint(f.get("AD"))
+    if ac=="38":return 45
+    if ac=="12":
+        base=ao or ad; return max(1,min(45,(max(0,now-base)//60)+1 if base else 1))
+    if ac=="13":
+        base=ao or ad; return max(46,min(90,45+(max(0,now-base)//60)+1 if base else 46))
+    return 1
 
-def stats(game):
-    sc=game.get("SC") or {}
-    rows=[]
-    st=sc.get("ST") or []
-    for block in st:
-        if not isinstance(block,dict):continue
-        vals=block.get("Value") or []
-        for x in vals:
-            if isinstance(x,dict) and x.get("N"):
-                rows.append((str(x["N"]),x.get("S1"),x.get("S2")))
-    wanted={"xG","Attacks","Dangerous attacks","Possession %","Shots on target","Shots off target","Corner","Red card"}
-    d={n:[a,b] for n,a,b in rows if n in wanted}
-    return {
-      "period":sc.get("CPS"),"clock":sc.get("SLS"),"ts":sc.get("TS"),
-      "score":sc.get("FS"),"stats":d
-    }
+def live_matches():
+    now=int(time.time()); found={}; league=""
+    for path in ("f_1_0_3_en_1","f_1_0_0_en_1"):
+        body=fs(path)
+        for chunk in body.split("~"):
+            if chunk.startswith("ZA÷"): league=fields(chunk).get("ZA","").strip(); continue
+            if not chunk.startswith("AA÷"):continue
+            eid,sep,rest=chunk[3:].partition("¬")
+            if not sep:continue
+            f=fields(rest)
+            if f.get("AB")!="2":continue
+            home=(f.get("AE") or f.get("CX") or "").strip();away=(f.get("AF") or "").strip()
+            if not home or not away:continue
+            found[eid]={"id":eid,"home":home,"away":away,"league":league,"minute":minute(f,now),
+                        "score":[asint(f.get("AG"),asint(f.get("AT"))),asint(f.get("AH"),asint(f.get("AU")))],
+                        "status":f.get("AC")}
+    return sorted(found.values(),key=lambda x:(x["minute"],x["league"],x["home"]))
 
-def index():
-    p=get(f"{ROOT}/Get1x2_VZip?{INDEX_Q}")
-    return p.get("Value") if isinstance(p.get("Value"),list) else []
-
-def choose_event():
-    rows=index()
-    # Prefer live national teams still in first half and 0-0/0-1/1-0 to avoid post-goal distortion.
-    candidates=[]
-    for e in rows:
-        if not isinstance(e,dict):continue
-        h=str(e.get("O1") or "");a=str(e.get("O2") or "");sc=e.get("SC") or {}
-        if str(sc.get("CPS") or "").lower()!="1st half":continue
-        fs=sc.get("FS") or {}
-        s1=int(fs.get("S1") or 0);s2=int(fs.get("S2") or 0)
-        if s1+s2>1:continue
-        name=(h+" "+a).lower()
-        # target known current internationals first
-        priority=0
-        for pair in [("Lesotho","Morocco"),("South Sudan","Egypt"),("Mozambique","Sudan"),("Ethiopia","Senegal"),("Bulgaria U19","Romania U19")]:
-            if pair[0].lower() in h.lower() and pair[1].lower() in a.lower(): priority=10;break
-        candidates.append((priority,-(s1+s2),str(e.get("I") or ""),h,a,s1,s2))
-    candidates.sort(reverse=True)
-    # Prefer a candidate whose GetGameZip actually contains live stats.
-    for cand in candidates[:20]:
-        probe=game(cand[2])
-        sc=probe.get("SC") or {}
-        blocks=sc.get("ST") or []
-        if any(isinstance(b,dict) and (b.get("Value") or []) for b in blocks):
-            return cand
-    return candidates[0] if candidates else None
-
-def game(event_id):
-    params={"id":event_id,"lng":"en","cfview":0,"isSubGames":"true","GroupEvents":"true",
-            "allEventsGroupSubGames":"true","countevents":250,"grMode":2}
-    p=get(f"{ROOT}/GetGameZip?{urlencode(params)}")
-    v=p.get("Value")
-    return v if isinstance(v,dict) else {}
-
-def choose_line(rows,current_goals):
-    # GOOL 'another goal' target is current total + 0.5 if quoted.
-    target=current_goals+0.5
-    exact=next((r for r in rows if abs(float(r["line"])-target)<1e-9 and r.get("over") and r.get("under")),None)
-    if exact:return exact
-    paired=[r for r in rows if r.get("over") and r.get("under")]
-    if not paired:return None
-    # otherwise closest active total around current score
-    return min(paired,key=lambda r:abs(float(r["line"])-target))
-
-def snapshot(event_id):
-    g=game(event_id)
-    info=stats(g);fs=(g.get("SC") or {}).get("FS") or {}
-    goals=int(fs.get("S1") or 0)+int(fs.get("S2") or 0)
-    rows=totals(g);sel=choose_line(rows,goals)
-    return {
-      "at":datetime.now(timezone.utc).isoformat(),
-      "info":info,"totals":rows,
-      "selected":None if not sel else {**sel,"fair_over":round(fair(sel),6) if fair(sel) is not None else None}
-    }
-
-def summarize(ss):
-    valid=[s for s in ss if (s.get("selected") or {}).get("fair_over") is not None]
-    if len(valid)<2:return {"ok":False,"reason":"not enough paired total quotes"}
-    f,l=valid[0],valid[-1]
-    # only compare same line to avoid mistaking line migration for price movement
-    line=f["selected"]["line"]
-    same=[]
-    for s in valid:
-        row=next((r for r in s.get("totals") or [] if abs(float(r["line"])-float(line))<1e-9 and r.get("over") and r.get("under")),None)
-        if row:
-            same.append({"at":s["at"],"over":row["over"],"under":row["under"],"fair_over":round(fair(row),6),
-                         "clock":s["info"].get("clock"),"score":s["info"].get("score"),"stats":s["info"].get("stats")})
-    if len(same)<2:return {"ok":False,"reason":"selected line disappeared","line":line}
-    a,b=same[0],same[-1]
-    return {"ok":True,"line":line,"points":same,
-            "over_odd_start":a["over"],"over_odd_end":b["over"],
-            "fair_over_start":a["fair_over"],"fair_over_end":b["fair_over"],
-            "fair_over_delta_pp":round((b["fair_over"]-a["fair_over"])*100,3),
-            "score_start":a["score"],"score_end":b["score"]}
-
-def threat_history(ss, score_at_pick):
-    out=[]
-    for s in ss:
-        info=s.get("info") or {}
-        stats=info.get("stats") or {}
-        def pair(name):
-            vals=stats.get(name) or [0,0]
-            try: a=float(vals[0] or 0)
-            except: a=0.0
-            try: b=float(vals[1] or 0)
-            except: b=0.0
-            return a+b
-        sel=s.get("selected") or {}
-        out.append({
-            "score": list(score_at_pick),
-            "xg_total": pair("xG"),
-            "sot_total": pair("Shots on target"),
-            "shots_total": pair("Shots on target")+pair("Shots off target"),
-            "danger_total": pair("Dangerous attacks"),
-            "corners_total": pair("Corner"),
-            "over_prob": sel.get("fair_over"),
-        })
+def stats(eid):
+    body=fs(f"df_st_1_{eid}"); out={}
+    for chunk in body.split("~"):
+        m=re.search(r"SD(?:÷|¬)(\d+).*?SH(?:÷|¬)([^¬~]+).*?SI(?:÷|¬)([^¬~]+)",chunk)
+        if not m:continue
+        sid,h,a=m.groups();name=STAT_MAP.get(sid)
+        if not name:continue
+        def num(x):
+            try:return float(str(x).replace("%","").strip())
+            except:return 0.0
+        out[name]=[num(h),num(a)]
     return out
 
-def auditor_selftest():
+def point(match):
+    st=stats(match["id"])
+    def total(k):
+        v=st.get(k)
+        return None if not v else float(v[0])+float(v[1])
+    xg=total("xg")
+    if xg is None:
+        sh=total("shots") or 0;sot=total("sot") or 0;big=total("big") or 0;box=total("touches_box") or 0;cor=total("corners") or 0
+        xg=0.025*sh+0.07*sot+0.18*big+0.01*box+0.008*cor if sum([sh,sot,big,box,cor])>0 else 0.0
+    return {"at":datetime.now(timezone.utc).isoformat(),"score":match["score"],"minute":match["minute"],
+            "xg_total":xg,"sot_total":total("sot") or 0.0,"shots_total":total("shots") or 0.0,
+            "danger_total":0.0,"corners_total":total("corners") or 0.0,"over_prob":None,"raw_stats":st}
+
+def choose(ms,n=4):
+    # prioritize 1H matches with at least some attack stats
     rows=[]
-    for i in range(24):
-        rows.append({"result":"won" if i%10<7 else "lost","probability":0.70,"odd":1.55,"closing_odd":1.48,
-                     "league":"A" if i%2==0 else "B","created_at":f"2026-08-{(i%24)+1:02d}T12:00:00+00:00"})
-    for i in range(10):
-        rows.append({"result":"won" if i<4 else "lost","probability":0.74,"odd":1.45,"closing_odd":1.55,
-                     "league":"A" if i%2==0 else "B","created_at":f"2026-09-{i+1:02d}T12:00:00+00:00"})
-    return AUDIT.summarize_quality(rows)
+    for m in ms:
+        if m["minute"]>45:continue
+        st=stats(m["id"])
+        richness=sum(1 for k in ("xg","shots","sot","corners","big","touches_box") if k in st)
+        activity=sum(sum(v) for v in st.values()) if st else 0
+        rows.append((richness,activity,-m["minute"],m))
+    rows.sort(reverse=True,key=lambda x:(x[0],x[1],x[2]))
+    return [x[3] for x in rows[:n]]
 
 def main():
-    ch=choose_event()
-    if not ch:
-        result={"error":"no suitable 1H national-team event"}
-    else:
-        _,_,eid,h,a,s1,s2=ch
-        ss=[]
-        for i in range(5):
-            ss.append(snapshot(eid))
-            if i<4:time.sleep(10)
-        hist=threat_history(ss,[s1,s2])
-        result={"event":{"id":eid,"home":h,"away":a,"score_at_pick":[s1,s2]},
-                "snapshots":ss,"summary":summarize(ss),
-                "threat_sequence":THREAT.evaluate_threat_sequence(hist),
-                "auditor_selftest":auditor_selftest()}
-    print("=== 1XBET NATIONAL FIRST-HALF ODDS SEQUENCE ===")
-    print(json.dumps(result,ensure_ascii=False,indent=2))
-    open("diagnostic_result.json","w",encoding="utf-8").write(json.dumps(result,ensure_ascii=False,indent=2))
+    ms=live_matches(); selected=choose(ms,4)
+    histories={m["id"]:[] for m in selected}
+    for i in range(4):
+        current={m["id"]:m for m in live_matches()}
+        for base in selected:
+            m=current.get(base["id"],base)
+            histories[base["id"]].append(point(m))
+        if i<3:time.sleep(15)
+    results=[]
+    for m in selected:
+        hist=histories[m["id"]]
+        results.append({"match":m,"history":hist,"threat":THREAT.evaluate_threat_sequence(hist)})
+    payload={"captured_at":datetime.now(timezone.utc).isoformat(),"flashscore_live_count":len(ms),
+             "selected_count":len(selected),"results":results}
+    print("=== FLASHSCORE LIVE THREAT-SEQUENCE TEST ===")
+    print(json.dumps(payload,ensure_ascii=False,indent=2))
+    open("diagnostic_result.json","w",encoding="utf-8").write(json.dumps(payload,ensure_ascii=False,indent=2))
 
 if __name__=="__main__":main()

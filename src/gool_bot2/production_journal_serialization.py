@@ -74,9 +74,18 @@ def _finalize_signal(journal_path: Path, entry: dict[str, Any] | None, sent: int
         return bool(_ORIGINALS["finalize_signal"](journal_path, entry, sent))
 
 
-def _pending_results(journal_path: Path, *, match_id: str | None = None):
+def _pending_results(
+    journal_path: Path,
+    *,
+    match_id: str | None = None,
+    origins: set[str] | None = None,
+):
     with _locked(Path(journal_path)):
-        return _ORIGINALS["pending_results"](journal_path, match_id=match_id)
+        return _ORIGINALS["pending_results"](
+            journal_path,
+            match_id=match_id,
+            origins=origins,
+        )
 
 
 def _finalize_result(journal_path: Path, row: dict[str, Any], sent: int) -> bool:

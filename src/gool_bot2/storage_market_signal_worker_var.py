@@ -487,8 +487,16 @@ from .runtime_hardening import install_runtime_hardening
 
 install_runtime_hardening()
 
+# Product/runtime installers are allowed to patch legacy Telegram helpers. The
+# production process must finish installation with the canonical reply keyboard
+# restored, because app.main() sends startup/status messages through telegram.
+telegram_mod.MENU_KEYBOARD = _bot_menu.MENU_KEYBOARD
+
 
 def main() -> None:
+    # Re-assert at the actual process boundary too: this protects startup
+    # messages even if a future installer mutates Telegram module globals.
+    telegram_mod.MENU_KEYBOARD = _bot_menu.MENU_KEYBOARD
     _start_telegram_responder()
     app.main()
 

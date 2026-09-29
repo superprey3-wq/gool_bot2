@@ -17,6 +17,12 @@ from . import storage_signal_worker as storage
 from . import telegram as telegram_mod
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
+from . import bot_menu as _bot_menu
+
+# Import order in the production worker is complex and several product installers
+# mutate Telegram helpers. Re-bind the reply keyboard after all Telegram/product
+# imports so /start always uses the canonical six-button menu.
+telegram_mod.MENU_KEYBOARD = _bot_menu.MENU_KEYBOARD
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
 from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
 from .multi_late_refresh import refresh_late_another_goal_model
@@ -157,7 +163,10 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             replies = ["⚠️ <b>GOOL MULTI</b>\n\nНе удалось подготовить ответ. Бот продолжает работать."]
 
         for reply in replies:
-            if _direct_send_message(token, chat_id, reply, reply_markup=telegram_mod.MENU_KEYBOARD):
+            # Read the canonical keyboard at send time. Product installers may
+            # mutate telegram_mod globals during import/runtime; bot_menu is the
+            # single source of truth for the production reply keyboard.
+            if _direct_send_message(token, chat_id, reply, reply_markup=_bot_menu.MENU_KEYBOARD):
                 changed += 1
         return changed
 
@@ -166,7 +175,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             from .manual_match_analysis import analyse_match_text, find_today_matches, match_choices
             matches = find_today_matches(raw_text, limit=6)
             if not matches:
-                _direct_send_message(token, chat_id, "❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.", reply_markup=telegram_mod.MENU_KEYBOARD)
+                _direct_send_message(token, chat_id, "❌ Сегодня матч с таким названием не найден. Попробуй написать название короче.", reply_markup=_bot_menu.MENU_KEYBOARD)
             elif len(matches) == 1:
                 _DIRECT_MATCH_SEARCH_WAITING.discard(str(chat_id))
                 _direct_send_message(token, chat_id, analyse_match_text(matches[0]), reply_markup=telegram_mod.MENU_KEYBOARD)

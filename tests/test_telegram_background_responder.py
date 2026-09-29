@@ -32,3 +32,43 @@ def test_main_poll_does_not_compete_with_background_responder(tmp_path: Path, mo
 
     assert next_offset == 50
     assert actions == 0
+
+
+def test_production_start_uses_expanded_six_button_keyboard(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(worker.telegram_mod, "subscribe", lambda _chat_id: True)
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(reply_markup) or True,
+    )
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 11, "message": {"chat": {"id": 123}, "text": "/start"}},
+    )
+    assert actions == 1
+    labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🧠 Анализ", "🔎 Найти матч"]
+
+
+def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(worker.telegram_mod, "prematch_singles_sections", lambda _path: ["SINGLES"])
+    monkeypatch.setattr(worker.telegram_mod, "prematch_parlays_sections", lambda _path: ["PARLAYS"])
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    journal = tmp_path / "signal_journal.json"
+    a = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 12, "message": {"chat": {"id": 123}, "text": "🎟 Ординары"}},
+    )
+    b = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 13, "message": {"chat": {"id": 123}, "text": "🔗 Экспрессы"}},
+    )
+    assert (a, b) == (1, 1)
+    assert sent == ["SINGLES", "PARLAYS"]

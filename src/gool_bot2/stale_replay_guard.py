@@ -98,11 +98,16 @@ def _pending_without_stale_replay(
     journal_path: Path,
     *,
     match_id: str | None = None,
+    origins: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     _suppress_stale_result_replays(journal_path)
     if _ORIGINAL_PENDING is None:
         return []
-    return _ORIGINAL_PENDING(journal_path, match_id=match_id)
+    return _ORIGINAL_PENDING(
+        journal_path,
+        match_id=match_id,
+        origins=origins,
+    )
 
 
 def install_stale_replay_guard() -> None:

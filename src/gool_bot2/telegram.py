@@ -214,7 +214,10 @@ def _drain_prematch_result_notifications(journal_path: Path) -> int:
     from .multi_delivery import pending_result_notifications, finalize_result_delivery
     from .v4_prematch_delivery import emit_prematch_result, emit_parlay_result
     sent_total = 0
-    for row in pending_result_notifications(journal_path):
+    for row in pending_result_notifications(
+        journal_path,
+        origins={"prematch", "prematch_parlay", "parlay"},
+    ):
         origin = str(row.get("origin") or "").casefold()
         if origin not in {"prematch", "prematch_parlay", "parlay"}:
             continue

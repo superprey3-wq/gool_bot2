@@ -77,3 +77,40 @@ def test_prematch_row_keeps_flashscore_team_metadata():
     meta = {"home_team_id":"h1","away_team_id":"a1","home_team_slug":"home","away_team_slug":"away"}
     row = prematch_row_from_pick(pick, flashscore_meta=meta)
     assert row["flashscore_meta"] == meta
+
+
+def test_prematch_notification_claim_does_not_capture_live_rows(tmp_path):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    from gool_bot2.multi_delivery import pending_result_notifications
+    path = tmp_path / "journal.json"
+    rows = [
+        {"entry_key":"live:1","origin":"live","mode":"active","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T12:00:00+00:00"},
+        {"entry_id":"prematch:1","origin":"prematch","result":"won","telegram_sent":True,"result_notification_pending":True,"result_notification_created_at":"2026-09-29T12:00:00+00:00"},
+    ]
+    save_signal_journal(path, rows)
+    claimed = pending_result_notifications(path, origins={"prematch","prematch_parlay","parlay"})
+    assert [row.get("entry_id") for row in claimed] == ["prematch:1"]
+    stored = load_signal_journal(path)
+    live = next(row for row in stored if row.get("origin") == "live")
+    assert not live.get("result_notification_claim_id")
+
+
+def test_prematch_result_watchdog_delivers_without_menu_poll(tmp_path, monkeypatch):
+    from gool_bot2.journal import save_signal_journal, load_signal_journal
+    from gool_bot2 import v4_prematch_delivery as delivery
+    path = tmp_path / "journal.json"
+    row = {
+        "entry_id":"prematch:done","origin":"prematch","card_family":"prematch_single",
+        "result":"won","telegram_sent":True,"result_notification_pending":True,
+        "result_notification_created_at":"2026-09-29T12:00:00+00:00",
+        "home":"A","away":"B","market":"FT_OVER_2.5","selection":"over 2.5","odd":1.7,
+        "settled_score":[2,1],
+    }
+    save_signal_journal(path, [row])
+    monkeypatch.setattr("gool_bot2.v4_prematch_settlement.reconcile_pending_prematch", lambda p: 0)
+    monkeypatch.setattr(delivery, "emit_prematch_result", lambda row, record=None: 1)
+    result = delivery.reconcile_and_deliver_prematch_results(path)
+    assert result == {"settled":0,"delivered":1}
+    stored = load_signal_journal(path)[0]
+    assert stored["result_notification_pending"] is False
+    assert stored["result_telegram_sent"] is True

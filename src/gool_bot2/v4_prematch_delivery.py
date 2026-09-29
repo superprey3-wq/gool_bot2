@@ -303,3 +303,34 @@ def emit_parlay_result(row: dict[str, Any]) -> int:
         caption=f"{icon} <b>{kind} · {label}</b>\nИтоговый кэф: <b>{float(row.get('effective_odd') or row.get('odd') or 0):.2f}</b>",
         reply_markup=telegram.MENU_KEYBOARD,
     )
+
+
+def reconcile_and_deliver_prematch_results(journal_path: Path) -> dict[str, int]:
+    """Continuously settle and deliver PREMATCH/parlay results independently of menu polling."""
+    from .multi_delivery import pending_result_notifications, finalize_result_delivery
+    from .v4_prematch_settlement import reconcile_pending_prematch
+
+    settled = int(reconcile_pending_prematch(journal_path) or 0)
+    sent_total = 0
+    claimed = pending_result_notifications(
+        journal_path,
+        origins={"prematch", "prematch_parlay", "parlay"},
+    )
+    for row in claimed:
+        origin = str(row.get("origin") or "").casefold()
+        try:
+            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
+            if sent > 0 and finalize_result_delivery(journal_path, row, sent):
+                sent_total += int(sent)
+        except Exception as exc:
+            print(
+                f"GOOL_PREMATCH_RESULT_WATCH_ERROR entry={row.get('entry_id')} "
+                f"origin={origin} error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+    if settled or sent_total:
+        print(
+            f"GOOL_PREMATCH_RESULT_WATCH settled={settled} delivered={sent_total}",
+            flush=True,
+        )
+    return {"settled": settled, "delivered": sent_total}

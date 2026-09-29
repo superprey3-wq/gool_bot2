@@ -17,6 +17,12 @@ from . import storage_signal_worker as storage
 from . import telegram as telegram_mod
 from . import telegram_in_game_guard as _telegram_in_game_guard  # noqa: F401
 from . import first_half_product as _first_half_product  # noqa: F401
+from . import bot_menu as _bot_menu
+
+# Import order in the production worker is complex and several product installers
+# mutate Telegram helpers. Re-bind the reply keyboard after all Telegram/product
+# imports so /start always uses the canonical six-button menu.
+telegram_mod.MENU_KEYBOARD = _bot_menu.MENU_KEYBOARD
 from . import journal_reconcile_all as _journal_reconcile_all  # noqa: F401
 from .multi_bank import daily_report_due_date, mark_daily_report_sent, render_daily_bank_report
 from .multi_late_refresh import refresh_late_another_goal_model

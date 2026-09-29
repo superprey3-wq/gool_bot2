@@ -149,6 +149,7 @@ def pending_result_notifications(
     journal_path: Path,
     *,
     match_id: str | None = None,
+    origins: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Atomically claim newly settled public rows that need a result card.
 
@@ -160,6 +161,7 @@ def pending_result_notifications(
     and is therefore allowed through even if an older claim still exists.
     """
     wanted = str(match_id or "")
+    wanted_origins = {str(x).casefold() for x in (origins or set())}
     now = datetime.now(timezone.utc)
     claimed: list[dict[str, Any]] = []
 
@@ -167,6 +169,9 @@ def pending_result_notifications(
         rows = load_signal_journal(journal_path)
         dirty = False
         for row in rows:
+            origin = str(row.get("origin") or "").casefold()
+            if wanted_origins and origin not in wanted_origins:
+                continue
             if not bool(row.get("result_notification_pending")):
                 continue
             # Durable at-most-once barrier: a stale settlement writer may

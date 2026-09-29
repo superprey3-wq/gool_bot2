@@ -24,7 +24,7 @@ def test_prematch_card_renders(tmp_path, monkeypatch):
     monkeypatch.setattr("gool_bot2.signal_cards._save", lambda img: _save(img, tmp_path / "pre.png"))
     path = Path(render_v4_prematch_card(_row()))
     with Image.open(path) as img:
-        assert img.size == (1080, 980)
+        assert img.size == (1080, 1120)
 
 
 def test_same_card_can_render_live_state(tmp_path, monkeypatch):
@@ -33,7 +33,7 @@ def test_same_card_can_render_live_state(tmp_path, monkeypatch):
     monkeypatch.setattr("gool_bot2.signal_cards._save", lambda img: _save(img, tmp_path / "live.png"))
     path = Path(render_v4_prematch_card(row, in_game=True))
     with Image.open(path) as img:
-        assert img.size == (1080, 980)
+        assert img.size == (1080, 1120)
 
 
 def _save(img, path):
@@ -74,3 +74,10 @@ def test_result_cards_render_win_and_loss(tmp_path, monkeypatch):
         assert img.size == (1080, 900)
     with Image.open(lost) as img:
         assert img.size == (1080, 900)
+
+
+def test_market_label_supports_dynamic_prematch_markets():
+    from gool_bot2.v4_prematch_card import _market_label
+    assert _market_label("over 3.5") == "ТБ 3.5"
+    assert _market_label("under 1.5") == "ТМ 1.5"
+    assert _market_label("BTTS_NO") == "Обе забьют — Нет"

@@ -1,0 +1,75 @@
+name: GOOL AI debate reviewer diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/ai-debate-reviewer
+    paths:
+      - src/gool_bot2/ai_debate_reviewer.py
+      - tests/test_ai_debate_reviewer.py
+      - scripts/ai_debate_live_eval.py
+      - .github/workflows/ai_debate_reviewer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_ai_debate_reviewer.py
+
+  live-debate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Qwen
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ${{ runner.os }}-ollama-qwen3-1.7b-debate-v1
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 2
+          done
+          for i in 1 2 3 4; do
+            if ollama pull qwen3:1.7b; then
+              break
+            fi
+            echo "ollama pull failed attempt=$i; retrying"
+            sleep $((i * 10))
+          done
+          ollama list | grep -q 'qwen3:1.7b'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Debate nearest real GOOL candidates
+        env:
+          GOOL_AI_PREMATCH_MODEL: qwen3:1.7b
+          GOOL_AI_DEBATE_WINDOW_MINUTES: "240"
+          GOOL_AI_DEBATE_MAX_FIXTURES: "18"
+          GOOL_AI_DEBATE_MAX_CANDIDATES: "3"
+          XBET_PREMATCH_SEARCH_WORKERS: "12"
+        run: python scripts/ai_debate_live_eval.py
+      - name: Show result
+        if: always()
+        run: cat ai_debate_live_result.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gool-ai-debate-live-result
+          path: ai_debate_live_result.json
+          if-no-files-found: warn

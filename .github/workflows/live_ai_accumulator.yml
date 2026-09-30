@@ -1,0 +1,55 @@
+name: Live AI accumulator diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/ai-reviewer-fast
+    paths:
+      - scripts/ai_accumulator_live_eval.py
+      - .github/workflows/live_ai_accumulator.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qwen-acca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Qwen
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ${{ runner.os }}-ollama-qwen3-1.7b-acca-v1
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 2
+          done
+          ollama pull qwen3:1.7b
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Build live accumulator
+        env:
+          GOOL_AI_PREMATCH_MODEL: qwen3:1.7b
+          GOOL_AI_ACCA_WINDOW_MINUTES: "150"
+          GOOL_AI_ACCA_MAX_FIXTURES: "12"
+          GOOL_AI_ACCA_MAX_CANDIDATES: "10"
+          XBET_PREMATCH_SEARCH_WORKERS: "12"
+        run: python scripts/ai_accumulator_live_eval.py
+      - name: Show ticket
+        if: always()
+        run: cat ai_accumulator_live_result.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-ai-accumulator
+          path: ai_accumulator_live_result.json
+          if-no-files-found: warn

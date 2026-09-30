@@ -42,6 +42,7 @@ _ORIG_ENSURE_MODEL = cards.CardAllMatchSignalWorker._ensure_model
 _LAST_BANK_REPORT_ATTEMPT = 0.0
 _INLINE_TELEGRAM_OFFSET = 0
 _LAST_INLINE_TELEGRAM_POLL = 0.0
+_LAST_PREMATCH_RESULT_SWEEP = 0.0
 _DIRECT_TELEGRAM_OFFSET = 0
 _TELEGRAM_RESPONDER_THREAD: threading.Thread | None = None
 _TELEGRAM_RESPONDER_STOP = threading.Event()
@@ -259,12 +260,42 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
     return changed
 
 
+def _prematch_result_sweep(*, force: bool = False) -> int:
+    """Reconcile and deliver PREMATCH results independently of Telegram updates."""
+    global _LAST_PREMATCH_RESULT_SWEEP
+    now_mono = time.monotonic()
+    try:
+        interval = max(5.0, float(os.getenv("GOOL_PREMATCH_RESULT_SWEEP_SECONDS", "15")))
+    except (TypeError, ValueError):
+        interval = 15.0
+    if not force and now_mono - _LAST_PREMATCH_RESULT_SWEEP < interval:
+        return 0
+    _LAST_PREMATCH_RESULT_SWEEP = now_mono
+
+    path = multi_journal_path()
+    try:
+        from .v4_prematch_settlement import reconcile_pending_prematch
+        settled = int(reconcile_pending_prematch(path) or 0)
+        sent = int(telegram_mod._drain_prematch_result_notifications(path) or 0)
+        if settled or sent:
+            print(
+                f"GOOL_PREMATCH_RESULT_SWEEP settled={settled} sent={sent} path={path}",
+                flush=True,
+            )
+        return sent
+    except Exception as exc:
+        print(f"GOOL_PREMATCH_RESULT_SWEEP_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return 0
+
+
 def _telegram_responder_loop(token: str) -> None:
     global _DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET
     journal_path = _telegram_journal_path()
     print("GOOL_TELEGRAM_RESPONDER started mode=background", flush=True)
     _TELEGRAM_RESPONDER_STOP.wait(0.8)
     while not _TELEGRAM_RESPONDER_STOP.is_set():
+        # PREMATCH result delivery must not depend on incoming Telegram updates.
+        _prematch_result_sweep()
         with _TELEGRAM_OFFSET_LOCK:
             offset = max(_DIRECT_TELEGRAM_OFFSET, _INLINE_TELEGRAM_OFFSET)
         result = _direct_bot_api(

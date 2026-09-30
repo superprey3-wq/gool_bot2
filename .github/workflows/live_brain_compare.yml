@@ -1,0 +1,53 @@
+name: Live Brain V3 vs V4 vs numeric Judge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/live-brain-vs-judge
+    paths:
+      - src/gool_bot2/live_for_against_judge.py
+      - tests/test_live_for_against_judge.py
+      - scripts/live_brain_compare.py
+      - .github/workflows/live_brain_compare.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_live_for_against_judge.py
+
+  live-compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Collect sequential live snapshots and compare brains
+        env:
+          GOOL_LIVE_COMPARE_POLL_SECONDS: "55"
+          GOOL_LIVE_COMPARE_POLL_COUNT: "7"
+          GOOL_LIVE_COMPARE_MAX_MATCHES: "8"
+          GOOL_BRAIN_V3_TRACE: "0"
+        run: python scripts/live_brain_compare.py
+      - name: Show comparison
+        if: always()
+        run: cat live_brain_compare.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-brain-compare
+          path: live_brain_compare.json
+          if-no-files-found: warn

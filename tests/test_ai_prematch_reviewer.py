@@ -85,7 +85,7 @@ def test_hallucinated_candidate_is_rejected():
             )
 
 
-def test_skip_cannot_hide_an invented_candidate():
+def test_skip_cannot_hide_an_invented_candidate():
     body = {
         "decision": "SKIP",
         "candidate_id": "evt:away_o05",

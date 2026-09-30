@@ -268,6 +268,7 @@ def main() -> None:
 
     latest_records: dict[str, dict] = {}
     halftime_records: dict[str, tuple[Any, dict]] = {}
+    shadow_observations: dict[str, list[dict[str, Any]]] = {}
 
     for poll in range(POLL_COUNT):
         current = {
@@ -295,6 +296,40 @@ def main() -> None:
             record = momentum.attach(record)
             build_brain_v3_memory(record, mid)
             latest_records[mid] = record
+
+            live_match = record.get("match") or {}
+            live_minute = int(live_match.get("minute") or 0)
+            if _market_for_minute(live_minute) is not None:
+                try:
+                    snap = _active_result(record)
+                    shadow_observations.setdefault(mid, []).append({
+                        "poll": poll + 1,
+                        "minute": snap["minute"],
+                        "score": snap["score"],
+                        "score_total": sum(snap["score"]),
+                        "market": snap["market"],
+                        "consensus": snap["consensus"],
+                        "bet_votes": snap["bet_votes"],
+                        "brain_v3_status": snap["brain_v3"]["status"],
+                        "brain_v3_probability": snap["brain_v3"]["probability"],
+                        "v4_status": None if snap["live_brain_v4"] is None else snap["live_brain_v4"]["decision"],
+                        "v4_probability": None if snap["live_brain_v4"] is None else snap["live_brain_v4"]["probability"],
+                        "judge_status": None if snap["numeric_judge"] is None else snap["numeric_judge"]["decision"],
+                        "judge_score": None if snap["numeric_judge"] is None else snap["numeric_judge"]["judge_score"],
+                    })
+                    print(
+                        f"SHADOW poll={poll + 1} {snap['minute']}' {snap['home']} - {snap['away']} "
+                        f"{snap['score'][0]}:{snap['score'][1]} | V3={snap['brain_v3']['status']}/"
+                        f"{snap['brain_v3']['probability']} V4="
+                        f"{None if snap['live_brain_v4'] is None else snap['live_brain_v4']['decision']}/"
+                        f"{None if snap['live_brain_v4'] is None else snap['live_brain_v4']['probability']} "
+                        f"J={None if snap['numeric_judge'] is None else snap['numeric_judge']['decision']}/"
+                        f"{None if snap['numeric_judge'] is None else snap['numeric_judge']['judge_score']} "
+                        f"=> {snap['consensus']}",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(f"SHADOW_FAIL {mid} {type(exc).__name__}:{exc}", flush=True)
 
         if poll < POLL_COUNT - 1:
             time.sleep(POLL_SECONDS)
@@ -382,6 +417,58 @@ def main() -> None:
             "reason": "Outside configured live signal window." if cur else "Match left the live feed while sequential snapshots were collected.",
         })
 
+    # Settle each point-in-time shadow decision against only FUTURE snapshots.
+    # This avoids the previous mistake of judging a match only after a goal/reset.
+    shadow_rows = []
+    for mid, observations in shadow_observations.items():
+        observations = sorted(observations, key=lambda row: (row["poll"], row["minute"]))
+        for i, obs in enumerate(observations):
+            future = observations[i + 1:]
+            goal5 = False
+            goal10 = False
+            first_goal_after = None
+            for nxt in future:
+                if int(nxt["score_total"]) <= int(obs["score_total"]):
+                    continue
+                delta_min = max(0, int(nxt["minute"]) - int(obs["minute"]))
+                if first_goal_after is None:
+                    first_goal_after = delta_min
+                if delta_min <= 5:
+                    goal5 = True
+                if delta_min <= 10:
+                    goal10 = True
+            settled5 = any(int(nxt["minute"]) - int(obs["minute"]) >= 5 for nxt in future) or goal5
+            settled10 = any(int(nxt["minute"]) - int(obs["minute"]) >= 10 for nxt in future) or goal10
+            row = {
+                "event_id": mid,
+                **obs,
+                "goal_within_5m": goal5 if settled5 else None,
+                "goal_within_10m": goal10 if settled10 else None,
+                "first_goal_after_minutes": first_goal_after,
+            }
+            shadow_rows.append(row)
+
+    signal_rows = [row for row in shadow_rows if row["consensus"] == "BET"]
+    v3_rows = [row for row in shadow_rows if row["brain_v3_status"] == "BET"]
+    v4_rows = [row for row in shadow_rows if row["v4_status"] == "BET"]
+    judge_rows = [row for row in shadow_rows if row["judge_status"] == "BET"]
+
+    def _settled_rate(rows, field):
+        settled = [row for row in rows if row[field] is not None]
+        if not settled:
+            return {"n": 0, "hits": 0, "rate": None}
+        hits = sum(bool(row[field]) for row in settled)
+        return {"n": len(settled), "hits": hits, "rate": round(hits / len(settled), 4)}
+
+    shadow_summary = {
+        "snapshots": len(shadow_rows),
+        "consensus_bet_5m": _settled_rate(signal_rows, "goal_within_5m"),
+        "brain_v3_bet_5m": _settled_rate(v3_rows, "goal_within_5m"),
+        "live_v4_bet_5m": _settled_rate(v4_rows, "goal_within_5m"),
+        "judge_bet_5m": _settled_rate(judge_rows, "goal_within_5m"),
+        "consensus_bet_10m": _settled_rate(signal_rows, "goal_within_10m"),
+    }
+
     active_rows.sort(
         key=lambda row: (
             row["consensus"] == "BET",
@@ -406,6 +493,8 @@ def main() -> None:
         "initial_live_count": len(tracked),
         "poll_count": POLL_COUNT,
         "poll_seconds": POLL_SECONDS,
+        "shadow_summary": shadow_summary,
+        "shadow_observations": shadow_rows,
         "summary": {
             "active_analysed": len(active_rows),
             "halftime_analysed": len(halftime_rows),

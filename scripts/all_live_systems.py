@@ -14,6 +14,7 @@ from gool_bot2.brain_v3_memory import build_brain_v3_memory
 from gool_bot2.halftime_second_half import choose_second_half_market, evaluate_halftime_second_half
 from gool_bot2.live_for_against_judge import evaluate_argument_judge
 from gool_bot2.live_goal_brain_v4 import evaluate_live_goals
+from gool_bot2.live_momentum import LiveMomentumTracker
 from gool_bot2.multi_runtime import _data_quality
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.providers.flashscore import FlashscoreProvider
@@ -253,6 +254,7 @@ def _halftime_result(match, record: dict[str, Any], xbet_index, collector: Robus
 def main() -> None:
     fs = FlashscoreProvider()
     fusion = FootballDataFusion()
+    momentum = LiveMomentumTracker(max_points=30)
 
     initial = fs.live_matches()[:MAX_MATCHES]
     tracked = {str(m.provider_match_id): m for m in initial}
@@ -290,6 +292,7 @@ def main() -> None:
             if bool(match_obj.is_halftime):
                 halftime_records.setdefault(mid, (match_obj, record))
                 continue
+            record = momentum.attach(record)
             build_brain_v3_memory(record, mid)
             latest_records[mid] = record
 

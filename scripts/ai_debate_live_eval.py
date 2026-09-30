@@ -48,11 +48,30 @@ def _fusion(match, base_quality: float) -> tuple[dict, float, dict]:
         float(base_quality or 0),
         min(1.0, 0.78 * min(1.0, sample / 8.0) + 0.22 * min(1.0, active_sources / 3.0)),
     )
+    full = profile.get("full_match") or {}
+    first = profile.get("first_half") or {}
+    second = profile.get("second_half") or {}
     evidence = {
         "source_coverage": coverage,
-        "full_match": profile.get("full_match") or {},
-        "first_half": profile.get("first_half") or {},
-        "second_half": profile.get("second_half") or {},
+        "full_match": {
+            k: full.get(k)
+            for k in (
+                "pair_sample", "home_expected_goals", "away_expected_goals",
+                "expected_total", "over_1_5_rate", "over_2_5_rate",
+                "over_3_5_rate", "btts_rate",
+            )
+            if full.get(k) is not None
+        },
+        "first_half": {
+            k: first.get(k)
+            for k in ("pair_sample", "expected_total", "over_0_5_rate", "over_1_5_rate")
+            if first.get(k) is not None
+        },
+        "second_half": {
+            k: second.get(k)
+            for k in ("pair_sample", "expected_total", "over_0_5_rate", "over_1_5_rate")
+            if second.get(k) is not None
+        },
     }
     return profile, quality, evidence
 
@@ -169,7 +188,7 @@ def main() -> None:
     }
 
     for pick, tier in ranked:
-        candidate_id = f"{pick.event_id}:{pick.market}:{pick.selection}"
+        candidate_id = f"{pick.event_id}:c{len(output['cases']) + 1}"
         candidate = DebateCandidate(
             candidate_id=candidate_id,
             event_id=str(pick.event_id),

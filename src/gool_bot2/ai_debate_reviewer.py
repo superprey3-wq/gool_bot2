@@ -60,7 +60,6 @@ class AdvocateRead(BaseModel):
 
 class JudgeRead(BaseModel):
     decision: Literal["BET", "SKIP"]
-    candidate_id: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
     contextual_delta: float = Field(ge=-0.12, le=0.12)
     reason: str = Field(min_length=1, max_length=360)
@@ -131,7 +130,7 @@ GOOL's numeric model is the anchor. The FOR and AGAINST analysts provide qualita
 You may confirm the already-qualified candidate or veto it. You may NOT select another market.
 
 Hard rules:
-- candidate_id must be the supplied candidate_id for BET; null for SKIP;
+- You are judging exactly ONE supplied candidate. Do not output or choose any candidate_id; the caller already knows it.
 - never invent facts or a new market;
 - do not rewrite model_probability, market_probability, odds, edge or EV;
 - contextual_delta is only a small qualitative nudge in [-0.12,+0.12];
@@ -261,13 +260,6 @@ class OllamaDebateReviewer:
             "max_contextual_delta": self.max_contextual_delta,
         }
         judge = self._chat(system=JUDGE_PROMPT, user_payload=judge_payload, schema_model=JudgeRead)
-
-        if judge.decision == "BET" and judge.candidate_id != c.candidate_id:
-            raise DebateReviewerError(
-                f"Judge BET must select exact candidate_id={c.candidate_id!r}; got {judge.candidate_id!r}"
-            )
-        if judge.decision == "SKIP" and judge.candidate_id not in (None, ""):
-            raise DebateReviewerError("Judge SKIP must use candidate_id=null")
 
         raw_delta = max(-self.max_contextual_delta, min(self.max_contextual_delta, judge.contextual_delta))
         applied_delta = self.reviewer_weight * raw_delta

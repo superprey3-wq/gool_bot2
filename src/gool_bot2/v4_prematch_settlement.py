@@ -23,8 +23,8 @@ def _line(row: dict[str, Any]) -> float | None:
             pass
     text = " ".join(str(row.get(k) or "") for k in ("market", "selection"))
     text = re.sub(r"(?i)\b[12]H[_ ]|[12]-й\s*тайм\s*:", "", text)
-    m = re.search(r"(\d+(?:[.,]\d+)?)", text)
-    return float(m.group(1).replace(",", ".")) if m else None
+    nums = re.findall(r"(\d+(?:[.,]\d+)?)", text)
+    return float(nums[-1].replace(",", ".")) if nums else None
 
 
 def _side(row: dict[str, Any]) -> str:
@@ -59,6 +59,18 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, 
         if yes == no:
             return None
         return "won" if (home_score > 0 and away_score > 0) == yes else "lost"
+
+    if family in {"home_total", "away_total"} or market in {"home_total", "away_total"}:
+        side = _side(row)
+        line = _line(row)
+        if not side or line is None:
+            return None
+        goals = home_score if (family == "home_total" or market == "home_total") else away_score
+        if goals == line:
+            return "push"
+        if side == "over":
+            return "won" if goals > line else "lost"
+        return "won" if goals < line else "lost"
 
     first_half = family == "first_half_total" or market.startswith("1h_") or "1-й тайм" in market
     second_half = family == "second_half_total" or market.startswith("2h_") or "2-й тайм" in market

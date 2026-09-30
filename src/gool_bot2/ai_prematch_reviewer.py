@@ -230,41 +230,88 @@ class OllamaPrematchReviewer:
             "format": AIPrematchReview.model_json_schema(),
             "options": {"temperature": 0.1, "num_ctx": 8192},
         }
-        request = urllib.request.Request(
-            f"{self.base_url}/api/chat",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                raw_response = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise AIReviewerError(f"Ollama reviewer request failed: {exc}") from exc
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(user_payload, ensure_ascii=False, separators=(",", ":")),
+            },
+        ]
 
-        content = raw_response.get("message", {}).get("content", "")
-        if not isinstance(content, str) or not content.strip():
-            raise AIReviewerError("Ollama reviewer returned an empty response")
-
-        try:
-            review = AIPrematchReview.model_validate_json(content)
-        except ValidationError as exc:
-            raise AIReviewerError(f"Ollama reviewer returned invalid structured output: {exc}") from exc
-
-        if review.decision == "BET":
-            if not review.candidate_id or review.candidate_id not in allowed_ids:
-                raise AIReviewerError(
-                    f"Reviewer selected unsupported candidate_id={review.candidate_id!r}"
-                )
-        elif review.candidate_id not in (None, ""):
-            raise AIReviewerError("SKIP response must not select candidate_id")
-
-        invalid_avoid = [cid for cid in review.avoid_candidate_ids if cid not in allowed_ids]
-        if invalid_avoid:
-            raise AIReviewerError(
-                f"Reviewer invented avoid_candidate_ids={invalid_avoid!r}"
+        last_problem = ""
+        last_content = ""
+        for attempt in range(2):
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "think": self.think,
+                "format": AIPrematchReview.model_json_schema(),
+                "options": {"temperature": 0.1, "num_ctx": 8192},
+            }
+            request = urllib.request.Request(
+                f"{self.base_url}/api/chat",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
             )
-        return review
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw_response = json.loads(response.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                raise AIReviewerError(f"Ollama reviewer request failed: {exc}") from exc
+
+            content = raw_response.get("message", {}).get("content", "")
+            last_content = content if isinstance(content, str) else repr(content)
+            if not isinstance(content, str) or not content.strip():
+                last_problem = "empty response"
+            else:
+                try:
+                    review = AIPrematchReview.model_validate_json(content)
+                except ValidationError as exc:
+                    last_problem = f"invalid structured output: {exc}"
+                else:
+                    problem = ""
+                    if review.decision == "BET":
+                        if not review.candidate_id or review.candidate_id not in allowed_ids:
+                            problem = (
+                                "decision=BET requires candidate_id to be exactly one of "
+                                f"{sorted(allowed_ids)!r}; got {review.candidate_id!r}"
+                            )
+                    elif review.candidate_id not in (None, ""):
+                        problem = "decision=SKIP requires candidate_id=null"
+
+                    invalid_avoid = [
+                        cid for cid in review.avoid_candidate_ids if cid not in allowed_ids
+                    ]
+                    if invalid_avoid:
+                        problem = f"invented avoid_candidate_ids={invalid_avoid!r}"
+
+                    if not problem:
+                        return review
+                    last_problem = problem
+
+            if attempt == 0:
+                messages = [
+                    *messages,
+                    {"role": "assistant", "content": last_content},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your previous structured answer violated the output contract. "
+                            f"Problem: {last_problem}. "
+                            "Correct it now. If decision is BET, candidate_id MUST be exactly one "
+                            f"of these IDs: {sorted(allowed_ids)}. "
+                            "If none is sufficiently supported, use decision=SKIP and candidate_id=null. "
+                            "Return only the corrected structured object."
+                        ),
+                    },
+                ]
+
+        preview = last_content[:600].replace("\n", " ")
+        raise AIReviewerError(
+            f"Reviewer failed contract after repair retry: {last_problem}; raw={preview!r}"
+        )
 
 
 def reviewer_enabled() -> bool:

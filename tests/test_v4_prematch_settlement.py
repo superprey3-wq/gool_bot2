@@ -122,3 +122,10 @@ def test_reconcile_settles_parlay_only_legs(tmp_path, monkeypatch):
     parent = load_signal_journal(path)[0]
     assert [leg["result"] for leg in parent["legs"]] == ["won", "won"]
     assert parent["result"] == "won"
+
+
+def test_team_totals_settle_against_correct_team_score():
+    assert settle_prematch_pick({"market_family":"home_total","selection":"ИТБ1 0.5"},1,1) == "won"
+    assert settle_prematch_pick({"market_family":"home_total","selection":"ИТБ1 1.5"},1,1) == "lost"
+    assert settle_prematch_pick({"market_family":"away_total","selection":"ИТБ2 0.5"},1,1) == "won"
+    assert settle_prematch_pick({"market_family":"away_total","selection":"ИТМ2 1.5"},3,1) == "won"

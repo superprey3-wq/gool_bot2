@@ -5,11 +5,12 @@ from zoneinfo import ZoneInfo
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
-from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery
+from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
 from gool_bot2.providers.prematch_fusion import PrematchDataFusion
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
+from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from pathlib import Path
 import os
 
@@ -62,30 +63,63 @@ if fusion_rows:
 print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in rows)),flush=True)
 
+# Market-choice stage: the football brain selects interesting matches, then the
+# market brain compares every supported real market instead of blindly betting
+# the single primary trend.
+runtime=Path(os.getenv("RUNTIME_DATA_DIR","data"))
+xbet_state=Path(os.getenv("XBET_PREMATCH_STATE",str(runtime/"live"/"xbet_prematch_market.json")))
+try:
+ XBetPrematchCollector(xbet_state).collect_once(targets=[r["match"] for r in rows])
+except Exception as exc:
+ print("PREMATCH_XBET_MARKET_ERROR",type(exc).__name__,str(exc),flush=True)
+
 def one(r):
- try:p=exact_trend_price(fetch_event_odds(r["match"].provider_match_id),r["primary_trend"]["name"])
- except Exception:return None
- if not p:return None
- m=r["match"]; t=r["primary_trend"]; kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
- pick=PrematchPick(str(m.provider_match_id),m.home,m.away,t["name"],t["name"],p["best_odds"],float(t["probability"]),p["market_probability"],float(r["quality"]),m.league or "",kick)
- return pick,p,r
+ m=r["match"]; kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
+ market=find_prematch_market(m.home,m.away,path=xbet_state)
+ picks=[]
+ info=None
+ if market:
+  raw=build_prematch_candidates(
+   event_id=str(m.provider_match_id),home=m.home,away=m.away,
+   profile=r["profile"],market=market,data_quality=float(r["quality"]),
+  )
+  for q in raw:
+   picks.append(PrematchPick(
+    q.event_id,q.home,q.away,q.market,q.selection,q.odds,
+    q.model_probability,q.market_probability,q.data_quality,m.league or "",kick,
+   ))
+  info={"bookmaker":"1xBet","market_match_score":market.get("match_score")}
+ # Fallback preserves current behaviour when 1xBet cannot address the fixture.
+ if not picks:
+  try: price=exact_trend_price(fetch_event_odds(m.provider_match_id),r["primary_trend"]["name"])
+  except Exception: price=None
+  if price:
+   t=r["primary_trend"]
+   picks=[PrematchPick(
+    str(m.provider_match_id),m.home,m.away,t["name"],t["name"],
+    price["best_odds"],float(t["probability"]),price["market_probability"],
+    float(r["quality"]),m.league or "",kick,
+   )]
+   info=price
+ return picks,info,r
 
 priced=[]; meta={}
 with ThreadPoolExecutor(max_workers=20) as pool:
- for f in as_completed([pool.submit(one,r) for r in rows]):
-  z=f.result()
-  if not z:continue
-  p,x,r=z; priced.append(p); m=r["match"]
-  fs_meta=dict(m.meta or {})
+ for ftr in as_completed([pool.submit(one,r) for r in rows]):
+  picks,x,r=ftr.result()
+  if not picks or not x:continue
+  m=r["match"]; fs_meta=dict(m.meta or {})
   home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
   if home_logo: fs_meta["home_logo_url"]=home_logo
   if away_logo: fs_meta["away_logo_url"]=away_logo
-  meta[p.event_id]={**x, "flashscore_meta": fs_meta}
-  kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x["bookmaker"],market_probability=p.market_probability,model_probability=p.model_probability)
-  append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
-print("EXACT_PRIMARY_PRICED",len(priced),flush=True)
-print("PRICED_TREND_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
+  meta[str(m.provider_match_id)]={**x,"flashscore_meta":fs_meta}
+  for p in picks:
+   priced.append(p)
+   kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
+   append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
+print("MULTI_MARKET_PRICED",len(priced),flush=True)
+print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
 d=choose_delivery(priced)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))

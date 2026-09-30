@@ -1,0 +1,54 @@
+name: Analyse all current live matches with GOOL systems
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - scripts/all_live_systems.py
+      - .github/workflows/all_live_systems.yml
+      - src/gool_bot2/live_for_against_judge.py
+      - src/gool_bot2/halftime_second_half.py
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_live_for_against_judge.py tests/test_halftime_second_half.py
+
+  all-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Sequentially analyse every current live match
+        env:
+          GOOL_ALL_LIVE_POLL_SECONDS: "50"
+          GOOL_ALL_LIVE_POLL_COUNT: "7"
+          GOOL_ALL_LIVE_MAX_MATCHES: "80"
+          GOOL_ALL_LIVE_WORKERS: "12"
+          GOOL_BRAIN_V3_TRACE: "0"
+        run: python scripts/all_live_systems.py
+      - name: Show report
+        if: always()
+        run: cat all_live_systems_result.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: all-live-systems-result
+          path: all_live_systems_result.json
+          if-no-files-found: warn

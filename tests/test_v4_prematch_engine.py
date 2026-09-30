@@ -151,3 +151,32 @@ def test_goal_profile_compares_multiple_half_goal_total_lines():
     picks = picks_from_goal_profile(event_id="t1", home="A", away="B", profile=profile, market=market)
     assert {p.selection for p in picks} == {"over 1.5", "under 1.5", "over 2.5", "under 2.5", "over 3.5", "under 3.5"}
     assert all("3" not in p.selection or "3.5" in p.selection for p in picks)
+
+
+def test_team_totals_are_priced_from_team_lambdas():
+    from gool_bot2.v4_prematch_engine import picks_from_team_totals_profile
+    profile = {"full_match": {"available": True, "home_expected_goals": 1.8, "away_expected_goals": 0.7}}
+    market = {
+        "home_totals": [{"line": 0.5, "over": 1.30, "under": 3.50}, {"line": 1.5, "over": 1.95, "under": 1.85}],
+        "away_totals": [{"line": 0.5, "over": 1.85, "under": 1.95}],
+    }
+    picks = picks_from_team_totals_profile(event_id="tt1", home="A", away="B", profile=profile, market=market, data_quality=.9)
+    labels = {p.selection for p in picks}
+    assert {"ИТБ1 0.5", "ИТБ1 1.5", "ИТБ2 0.5"} <= labels
+    home_goal = next(p for p in picks if p.selection == "ИТБ1 0.5")
+    away_goal = next(p for p in picks if p.selection == "ИТБ2 0.5")
+    assert home_goal.model_probability > away_goal.model_probability
+
+
+def test_build_candidates_compares_team_totals_with_match_markets():
+    profile = {"full_match": {"available": True, "expected_total": 2.5, "home_expected_goals": 1.8, "away_expected_goals": 0.7}}
+    market = {
+        "match_totals": [{"line": 2.5, "over": 1.95, "under": 1.85}],
+        "home_totals": [{"line": 0.5, "over": 1.30, "under": 3.50}],
+        "away_totals": [{"line": 0.5, "over": 1.85, "under": 1.95}],
+    }
+    picks = build_prematch_candidates(event_id="all1", home="A", away="B", profile=profile, market=market, data_quality=.9)
+    markets = {p.market for p in picks}
+    assert "match_total" in markets
+    assert "home_total" in markets
+    assert "away_total" in markets

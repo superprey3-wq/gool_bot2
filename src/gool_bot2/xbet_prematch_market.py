@@ -104,7 +104,8 @@ def _usable_snapshot(markets: dict[str, Any]) -> bool:
     """A candidate is usable when at least one supported market can be priced."""
     one_x_two = markets.get("match_1x2") or {}
     has_1x2 = all(one_x_two.get(name) for name in ("home", "draw", "away"))
-    return bool(has_1x2 or _main_total(markets))
+    has_team_total = bool(markets.get("home_total") or markets.get("away_total"))
+    return bool(has_1x2 or _main_total(markets) or has_team_total)
 
 
 def _safe_team_name(value: Any) -> str:
@@ -372,6 +373,8 @@ class XBetPrematchCollector:
                         "btts": dict(markets.get("btts") or {}),
                         "main_total": _main_total(markets),
                         "match_totals": [dict(x) for x in (markets.get("match_total") or []) if isinstance(x, dict)],
+                        "home_totals": [dict(x) for x in (markets.get("home_total") or []) if isinstance(x, dict)],
+                        "away_totals": [dict(x) for x in (markets.get("away_total") or []) if isinstance(x, dict)],
                     }
                     stored[event_id] = snapshot
                     refreshed += 1

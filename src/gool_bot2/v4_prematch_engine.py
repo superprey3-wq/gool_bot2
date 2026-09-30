@@ -364,6 +364,56 @@ def picks_from_btts_profile(
     ]
 
 
+
+def picks_from_team_totals_profile(
+    *, event_id: str, home: str, away: str, profile: dict, market: dict,
+    data_quality: float = 1.0,
+) -> list[PrematchPick]:
+    """Price home/away team totals from the same team lambdas as the score model."""
+    first = profile.get("first_half") or {}
+    second = profile.get("second_half") or {}
+    full = profile.get("full_match") or {}
+    try:
+        if first.get("available") and second.get("available"):
+            home_lambda = float(first["home_expected_goals"]) + float(second["home_expected_goals"])
+            away_lambda = float(first["away_expected_goals"]) + float(second["away_expected_goals"])
+        elif full.get("available"):
+            home_lambda = float(full["home_expected_goals"])
+            away_lambda = float(full["away_expected_goals"])
+        else:
+            return []
+    except (TypeError, ValueError, KeyError):
+        return []
+
+    import math
+    out: list[PrematchPick] = []
+    for side, lam, rows, market_name in (
+        ("home", home_lambda, market.get("home_totals") or [], "home_total"),
+        ("away", away_lambda, market.get("away_totals") or [], "away_total"),
+    ):
+        for row in rows:
+            try:
+                line = float(row.get("line"))
+                over_odd = float(row.get("over"))
+                under_odd = float(row.get("under"))
+            except (TypeError, ValueError):
+                continue
+            if min(over_odd, under_odd) <= 1.0:
+                continue
+            # Exact binary pricing only for half-goal lines.
+            if abs((line * 2) - round(line * 2)) > 1e-9 or int(round(line * 2)) % 2 == 0:
+                continue
+            threshold = int(math.floor(line)) + 1
+            cdf = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(threshold))
+            model_over = max(0.0, min(1.0, 1.0 - cdf))
+            fair_over, fair_under = devig_two_way(over_odd, under_odd)
+            label = "ИТБ1" if side == "home" else "ИТБ2"
+            out.extend([
+                PrematchPick(event_id, home, away, market_name, f"{label} {line:g}", over_odd, model_over, fair_over, data_quality),
+                PrematchPick(event_id, home, away, market_name, f"ИТМ{'1' if side == 'home' else '2'} {line:g}", under_odd, 1.0-model_over, fair_under, data_quality),
+            ])
+    return out
+
 def build_prematch_candidates(
     *,
     event_id: str,
@@ -383,6 +433,10 @@ def build_prematch_candidates(
             market=market, data_quality=data_quality,
         ),
         *picks_from_btts_profile(
+            event_id=event_id, home=home, away=away, profile=profile,
+            market=market, data_quality=data_quality,
+        ),
+        *picks_from_team_totals_profile(
             event_id=event_id, home=home, away=away, profile=profile,
             market=market, data_quality=data_quality,
         ),

@@ -31,7 +31,14 @@ jobs:
             curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && break
             sleep 2
           done
-          ollama pull qwen3:1.7b
+          for i in 1 2 3 4; do
+            if ollama pull qwen3:1.7b; then
+              exit 0
+            fi
+            echo "ollama pull failed attempt=$i; retrying..."
+            sleep $((i * 10))
+          done
+          exit 1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

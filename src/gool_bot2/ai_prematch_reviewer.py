@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 class AIReviewerError(RuntimeError):
@@ -29,9 +29,22 @@ class AIPrematchReview(BaseModel):
     decision: Literal["BET", "SKIP"]
     candidate_id: str | None = None
     review_score: float = Field(ge=0.0, le=1.0)
-    scenario: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    avoid_candidate_ids: list[str] = Field(default_factory=list)
+    scenario: str = Field(min_length=1, max_length=220)
+    reason: str = Field(min_length=1, max_length=320)
+    avoid_candidate_ids: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("review_score", mode="before")
+    @classmethod
+    def normalize_review_score(cls, value):
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            return value
+        if 1.0 < score <= 10.0:
+            return score / 10.0
+        if 10.0 < score <= 100.0:
+            return score / 100.0
+        return score
 
     def selected_candidate(self, candidates: list[AICandidate]) -> AICandidate | None:
         if self.decision == "SKIP":
@@ -72,7 +85,7 @@ OUTPUT
 Return only the structured object.
 For BET, candidate_id MUST be exactly one ID from allowed_candidates.
 For SKIP, candidate_id MUST be null.
-Keep scenario and reason concise and evidence-based.
+Keep scenario under 180 characters and reason under 260 characters. Be terse and evidence-based.
 avoid_candidate_ids may contain only supplied IDs that are specifically contradicted by the evidence.
 """
 
@@ -139,7 +152,7 @@ class OllamaPrematchReviewer:
                 "stream": False,
                 "think": self.think,
                 "format": AIPrematchReview.model_json_schema(),
-                "options": {"temperature": 0.1, "num_ctx": 4096, "num_predict": 220},
+                "options": {"temperature": 0.1, "num_ctx": 4096, "num_predict": 300},
             }
             request = urllib.request.Request(
                 f"{self.base_url}/api/chat",

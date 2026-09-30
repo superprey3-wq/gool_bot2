@@ -23,8 +23,8 @@ def _line(row: dict[str, Any]) -> float | None:
             pass
     text = " ".join(str(row.get(k) or "") for k in ("market", "selection"))
     text = re.sub(r"(?i)\b[12]H[_ ]|[12]-й\s*тайм\s*:", "", text)
-    m = re.search(r"(\d+(?:[.,]\d+)?)", text)
-    return float(m.group(1).replace(",", ".")) if m else None
+    nums = re.findall(r"(\d+(?:[.,]\d+)?)", text)
+    return float(nums[-1].replace(",", ".")) if nums else None
 
 
 def _side(row: dict[str, Any]) -> str:

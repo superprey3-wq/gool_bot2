@@ -1,0 +1,76 @@
+name: Fast local AI prematch reviewer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/ai-reviewer-fast
+    paths:
+      - src/gool_bot2/ai_prematch_reviewer.py
+      - tests/test_ai_prematch_reviewer.py
+      - scripts/fast_ai_reviewer_eval.py
+      - .github/workflows/fast_ai_reviewer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_ai_prematch_reviewer.py
+
+  local-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Ollama model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ${{ runner.os }}-ollama-qwen3-4b-v1
+
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull compact reviewer model
+        run: ollama pull qwen3:4b
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install GOOL
+        run: pip install -e .
+
+      - name: Run fast blind reviewer
+        env:
+          GOOL_AI_PREMATCH_MODEL: qwen3:4b
+        run: python scripts/fast_ai_reviewer_eval.py
+
+      - name: Show result
+        if: always()
+        run: cat fast_ai_reviewer_result.json 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-ai-reviewer-result
+          path: fast_ai_reviewer_result.json
+          if-no-files-found: warn

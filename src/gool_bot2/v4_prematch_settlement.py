@@ -60,6 +60,18 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, 
             return None
         return "won" if (home_score > 0 and away_score > 0) == yes else "lost"
 
+    if family in {"home_total", "away_total"} or market in {"home_total", "away_total"}:
+        side = _side(row)
+        line = _line(row)
+        if not side or line is None:
+            return None
+        goals = home_score if (family == "home_total" or market == "home_total") else away_score
+        if goals == line:
+            return "push"
+        if side == "over":
+            return "won" if goals > line else "lost"
+        return "won" if goals < line else "lost"
+
     first_half = family == "first_half_total" or market.startswith("1h_") or "1-й тайм" in market
     second_half = family == "second_half_total" or market.startswith("2h_") or "2-й тайм" in market
     if first_half or second_half:

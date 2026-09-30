@@ -59,6 +59,7 @@ def main() -> None:
     model = os.getenv("GOOL_AI_PREMATCH_MODEL", "qwen3:4b")
     reviewer = OllamaPrematchReviewer(model=model, timeout_seconds=240, think=False)
     output = {"model": model, "think": False, "cases": []}
+    error_count = 0
 
     for case in CASES:
         print(f"REVIEW {case['id']} with {model}", flush=True)
@@ -73,6 +74,7 @@ def main() -> None:
             row["elapsed_s"] = round(time.time() - started, 2)
             row["review"] = review.model_dump()
         except Exception as exc:
+            error_count += 1
             row["elapsed_s"] = round(time.time() - started, 2)
             row["error"] = f"{type(exc).__name__}: {exc}"
         output["cases"].append(row)
@@ -82,6 +84,8 @@ def main() -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
     print(f"WROTE {path}", flush=True)
+    if error_count:
+        raise SystemExit(f"{error_count} reviewer case(s) failed")
 
 
 if __name__ == "__main__":

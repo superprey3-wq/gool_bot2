@@ -78,7 +78,6 @@ def test_valid_debate_stays_anchored_to_math():
     }
     judge = {
         "decision": "BET",
-        "candidate_id": "evt:over25",
         "confidence": 0.82,
         "contextual_delta": 0.12,
         "reason": "FOR evidence is stronger and there is no material contradiction.",
@@ -100,34 +99,13 @@ def test_valid_debate_stays_anchored_to_math():
     assert verdict.adjusted_probability - verdict.base_probability <= 0.02 + 1e-9
 
 
-def test_judge_cannot_invent_candidate():
-    good_for = {
-        "candidate_id": "evt:over25", "stance": "FOR", "strength": 0.7,
-        "thesis": "support", "evidence_points": [], "self_critique": "risk",
-    }
-    good_against = {
-        "candidate_id": "evt:over25", "stance": "AGAINST", "strength": 0.5,
-        "thesis": "oppose", "evidence_points": [], "self_critique": "support exists",
-    }
-    bad_judge = {
-        "decision": "BET", "candidate_id": "invented", "confidence": 0.8,
-        "contextual_delta": 0.01, "reason": "x", "decisive_risks": [],
-    }
-    with patch(
-        "urllib.request.urlopen",
-        side_effect=[_Response(good_for), _Response(good_against), _Response(bad_judge)],
-    ):
-        with pytest.raises(DebateReviewerError, match="exact candidate_id"):
-            OllamaDebateReviewer().review(candidate())
-
-
 def test_score_normalization_accepts_small_model_0_to_10():
     a = AdvocateRead.model_validate({
         "candidate_id": "x", "stance": "FOR", "strength": 8,
         "thesis": "x", "evidence_points": [], "self_critique": "y",
     })
     j = JudgeRead.model_validate({
-        "decision": "SKIP", "candidate_id": None, "confidence": 9,
+        "decision": "SKIP", "confidence": 9,
         "contextual_delta": -0.02, "reason": "x", "decisive_risks": [],
     })
     assert a.strength == 0.8

@@ -77,7 +77,7 @@ def test_hallucinated_candidate_is_rejected():
         "urllib.request.urlopen",
         return_value=_Response({"message": {"content": json.dumps(body)}}),
     ):
-        with pytest.raises(AIReviewerError, match="unsupported candidate"):
+        with pytest.raises(AIReviewerError, match="failed contract after repair retry"):
             OllamaPrematchReviewer(model="dummy").review(
                 match_context={},
                 deterministic_facts={},
@@ -98,12 +98,47 @@ def test_skip_cannot_hide_an_invented_candidate():
         "urllib.request.urlopen",
         return_value=_Response({"message": {"content": json.dumps(body)}}),
     ):
-        with pytest.raises(AIReviewerError, match="SKIP response"):
+        with pytest.raises(AIReviewerError, match="failed contract after repair retry"):
             OllamaPrematchReviewer(model="dummy").review(
                 match_context={},
                 deterministic_facts={},
                 candidates=[_candidate("evt:away_o05")],
             )
+
+
+
+def test_invalid_bet_is_repaired_to_allowed_candidate():
+    invalid = {
+        "decision": "BET",
+        "candidate_id": None,
+        "review_score": 0.78,
+        "scenario": "Away side has the clearer scoring direction.",
+        "reason": "Supported by recent scoring and H2H.",
+        "avoid_candidate_ids": [],
+    }
+    repaired = {
+        "decision": "BET",
+        "candidate_id": "evt:away_o05",
+        "review_score": 0.78,
+        "scenario": "Away side has the clearer scoring direction.",
+        "reason": "The conservative away scoring line is directly supported.",
+        "avoid_candidate_ids": [],
+    }
+    with patch(
+        "urllib.request.urlopen",
+        side_effect=[
+            _Response({"message": {"content": json.dumps(invalid)}}),
+            _Response({"message": {"content": json.dumps(repaired)}}),
+        ],
+    ) as mocked:
+        review = OllamaPrematchReviewer(model="dummy").review(
+            match_context={"home": "A", "away": "B"},
+            deterministic_facts={"away_scored_2plus_in_last4": 4},
+            candidates=[_candidate("evt:away_o05")],
+        )
+    assert mocked.call_count == 2
+    assert review.decision == "BET"
+    assert review.candidate_id == "evt:away_o05"
 
 
 def test_no_candidates_short_circuits_to_skip_without_network():

@@ -1,0 +1,52 @@
+name: Halftime second-half live diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - src/gool_bot2/halftime_second_half.py
+      - tests/test_halftime_second_half.py
+      - scripts/halftime_second_half_live.py
+      - .github/workflows/halftime_second_half.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q tests/test_halftime_second_half.py
+
+  live-halftime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Analyse matches currently at halftime
+        env:
+          GOOL_HT_POLL_SECONDS: "15"
+          GOOL_HT_POLL_COUNT: "5"
+          GOOL_HT_MAX_MATCHES: "10"
+        run: python scripts/halftime_second_half_live.py
+      - name: Show result
+        if: always()
+        run: cat halftime_second_half_result.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: halftime-second-half-result
+          path: halftime_second_half_result.json
+          if-no-files-found: warn

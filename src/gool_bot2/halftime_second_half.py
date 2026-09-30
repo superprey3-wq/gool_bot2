@@ -25,6 +25,9 @@ class HalftimeSecondHalfAnalysis:
     first_half_big_chances: float
     first_half_touches_box: float
     prematch_second_half_sample: int
+    real_stats_providers: int
+    real_core_stat_keys: int
+    flashscore_core_stats: int
     reasons: tuple[str, ...]
     cautions: tuple[str, ...]
 
@@ -108,6 +111,40 @@ def _first_half_activity(record: dict[str, Any]) -> dict[str, float]:
     }
 
 
+def _real_live_stat_evidence(record: dict[str, Any]) -> tuple[int, int, int]:
+    """Count actual provider-published attacking stats.
+
+    This deliberately does NOT count attack_proxy output. A provider must publish
+    real live fields such as xG/shots/SOT/big chances/touches in box.
+    """
+    providers = record.get("providers") or {}
+    core = ("xg", "xgot", "shots", "shots_on_target", "big_chances", "touches_box")
+    provider_count_real = 0
+    unique_keys: set[str] = set()
+    flashscore_keys = 0
+    for name, payload in providers.items():
+        if not isinstance(payload, dict):
+            continue
+        stats = payload.get("stats") or {}
+        present = []
+        for key in core:
+            if key not in stats:
+                continue
+            value = stats.get(key)
+            if isinstance(value, (list, tuple)) and len(value) >= 2:
+                try:
+                    float(value[0]); float(value[1])
+                    present.append(key)
+                except (TypeError, ValueError):
+                    pass
+        if present:
+            provider_count_real += 1
+            unique_keys.update(present)
+            if str(name) == "flashscore":
+                flashscore_keys = len(set(present))
+    return provider_count_real, len(unique_keys), flashscore_keys
+
+
 def evaluate_halftime_second_half(
     record: dict[str, Any],
     *,
@@ -119,6 +156,7 @@ def evaluate_halftime_second_half(
     margin = abs(hs - aws)
 
     activity = _first_half_activity(record)
+    real_stats_providers, real_core_stat_keys, flashscore_core_stats = _real_live_stat_evidence(record)
     try:
         xh, xa, xg_source, _ = xg_or_proxy_pair(record)
     except Exception:
@@ -163,6 +201,7 @@ def evaluate_halftime_second_half(
 
     reasons: list[str] = [
         f"1H xg_or_proxy={xg_total:.2f}",
+        f"real_stats_providers={real_stats_providers}, core_keys={real_core_stat_keys}, flashscore_core={flashscore_core_stats}",
         f"1H shots={activity['shots']:.0f}, sot={activity['sot']:.0f}, big={activity['big']:.0f}",
         f"prematch_2H_lambda={float(prior_total):.2f}, sample={pair_sample}",
     ]
@@ -222,19 +261,21 @@ def evaluate_halftime_second_half(
     ph = 1.0 - math.exp(-home_lam)
     pa = 1.0 - math.exp(-away_lam)
 
-    sources = provider_count(record)
     stat_pairs = sum(
         1 for key in ("xg", "shots", "shots_on_target", "big_chances", "touches_box")
         if any(v > 0 for v in _pair(record, key))
     )
     confidence = (
-        0.38
-        + 0.07 * min(3, sources)
-        + (0.13 if xg_source == "provider_xg" else 0.05)
-        + 0.025 * min(5, stat_pairs)
-        + 0.11 * min(1.0, pair_sample / 6.0)
+        0.30
+        + 0.10 * min(2, real_stats_providers)
+        + (0.16 if xg_source == "provider_xg" else 0.02)
+        + 0.035 * min(5, real_core_stat_keys)
+        + 0.09 * min(1.0, pair_sample / 6.0)
         - (0.12 if red_total else 0.0)
     )
+    if real_stats_providers == 0 or real_core_stat_keys < 2:
+        confidence = min(confidence, 0.49)
+        cautions.append("insufficient real live statistics; proxy-only evidence cannot produce BET")
     confidence = _clamp(confidence, 0.35, 0.94)
 
     return HalftimeSecondHalfAnalysis(
@@ -254,6 +295,9 @@ def evaluate_halftime_second_half(
         first_half_big_chances=round(activity["big"], 2),
         first_half_touches_box=round(activity["box"], 2),
         prematch_second_half_sample=pair_sample,
+        real_stats_providers=real_stats_providers,
+        real_core_stat_keys=real_core_stat_keys,
+        flashscore_core_stats=flashscore_core_stats,
         reasons=tuple(reasons),
         cautions=tuple(cautions),
     )
@@ -314,7 +358,9 @@ def choose_second_half_market(
             min_odd = 1.38 if side == "OVER" and line == 0.5 else 1.45
             max_odd = 2.65
             qualifies = (
-                analysis.confidence >= 0.58
+                analysis.real_stats_providers >= 1
+                and analysis.real_core_stat_keys >= 2
+                and analysis.confidence >= 0.58
                 and model_p >= floor
                 and edge >= 0.04
                 and ev >= 0.025
@@ -363,6 +409,20 @@ def choose_second_half_market(
             reason="Real 2H market passed probability, edge, EV and data-quality gates.",
         )
 
+    if analysis.real_stats_providers == 0 or analysis.real_core_stat_keys < 2:
+        return HalftimeMarketPick(
+            decision="LEAN",
+            market="SECOND_HALF_TOTAL",
+            selection=None,
+            line=None,
+            odds=None,
+            model_probability=None,
+            market_probability=None,
+            edge=None,
+            expected_value=None,
+            confidence=analysis.confidence,
+            reason="LOW_DATA: no sufficient real live statistics; attack proxy is not allowed to create a BET.",
+        )
     if analysis.probability_goal_2h >= 0.72 and analysis.confidence >= 0.58:
         return HalftimeMarketPick(
             decision="LEAN",

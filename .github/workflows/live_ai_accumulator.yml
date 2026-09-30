@@ -46,8 +46,8 @@ jobs:
       - name: Build live accumulator
         env:
           GOOL_AI_PREMATCH_MODEL: qwen3:1.7b
-          GOOL_AI_ACCA_WINDOW_MINUTES: "150"
-          GOOL_AI_ACCA_MAX_FIXTURES: "12"
+          GOOL_AI_ACCA_WINDOW_MINUTES: "240"
+          GOOL_AI_ACCA_MAX_FIXTURES: "20"
           GOOL_AI_ACCA_MAX_CANDIDATES: "10"
           XBET_PREMATCH_SEARCH_WORKERS: "12"
         run: python scripts/ai_accumulator_live_eval.py

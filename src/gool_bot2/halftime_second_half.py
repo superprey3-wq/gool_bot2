@@ -301,22 +301,49 @@ def choose_second_half_market(
             edge = model_p - market_p
             ev = model_p * odd - 1.0
 
-            # Conservative qualification. A 2H total should beat both model and
-            # market gates; no line is selected simply because a price exists.
-            floor = 0.66 if line == 0.5 else 0.46 if line == 1.5 else 0.27
+            # We are not looking for the safest possible line. The objective is
+            # an actionable 2H bet with real price/value. Tiny odds such as 1.20
+            # on U2.5 are informationally weak even when the raw hit probability
+            # is high, so they are excluded from BET and may only appear as context.
+            floor = 0.64 if line == 0.5 else 0.45 if line == 1.5 else 0.24
             if side == "UNDER":
-                floor = 0.60 if line == 1.5 else 0.46 if line == 2.5 else 0.30
+                floor = 0.60 if line == 1.5 else 0.52 if line == 2.5 else 0.34
+
+            # Main value band: avoid trivial insurance prices and very speculative
+            # long shots. Overs are slightly preferred for this halftime-goals task.
+            min_odd = 1.38 if side == "OVER" and line == 0.5 else 1.45
+            max_odd = 2.65
             qualifies = (
                 analysis.confidence >= 0.58
                 and model_p >= floor
-                and edge >= 0.035
-                and ev >= 0.02
-                and 1.20 <= odd <= 3.00
+                and edge >= 0.04
+                and ev >= 0.025
+                and min_odd <= odd <= max_odd
             )
+
+            # Rank by value first, not by raw hit probability. A moderate-probability
+            # +EV O1.5 should beat a near-certain U2.5 at 1.24.
+            odds_quality = 1.0 - min(1.0, abs(odd - 1.85) / 1.15)
+            market_usefulness = 1.0
+            if side == "UNDER" and line >= 2.5:
+                market_usefulness = 0.55
+            elif side == "OVER" and line == 0.5:
+                market_usefulness = 0.80
+            elif side == "OVER" and line == 1.5:
+                market_usefulness = 1.12
+
+            rank = (
+                0.34 * max(0.0, edge)
+                + 0.34 * max(0.0, ev)
+                + 0.14 * model_p
+                + 0.10 * analysis.confidence
+                + 0.08 * odds_quality
+            ) * market_usefulness
+
             candidates.append({
                 "side": side, "line": line, "odd": odd, "model_p": model_p,
                 "market_p": market_p, "edge": edge, "ev": ev, "qualifies": qualifies,
-                "rank": 0.44 * model_p + 0.30 * max(0.0, edge) + 0.20 * max(0.0, ev) + 0.06 * analysis.confidence,
+                "rank": rank,
             })
 
     qualified = [row for row in candidates if row["qualifies"]]

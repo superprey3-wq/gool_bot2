@@ -1,0 +1,67 @@
+name: Local LLM football benchmark v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/free-market-mechanics
+    paths:
+      - scripts/local_llm_benchmark_v2.py
+      - .github/workflows/local_llm_benchmark_v2.yml
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        model:
+          - qwen3:8b
+          - deepseek-r1:7b
+          - gemma3:4b
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Ollama model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ${{ runner.os }}-ollama-${{ matrix.model }}
+
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull model
+        run: |
+          ollama pull "${{ matrix.model }}"
+          ollama list
+
+      - name: Blind benchmark on two matches
+        env:
+          LOCAL_LLM_MODEL: ${{ matrix.model }}
+        run: python scripts/local_llm_benchmark_v2.py
+
+      - name: Show result
+        if: always()
+        run: |
+          ls -lh local_llm_benchmark_*.json 2>/dev/null || true
+          cat local_llm_benchmark_*.json 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-llm-benchmark-${{ strategy.job-index }}
+          path: local_llm_benchmark_*.json
+          if-no-files-found: warn

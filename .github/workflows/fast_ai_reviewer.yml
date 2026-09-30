@@ -26,18 +26,24 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q tests/test_ai_prematch_reviewer.py
 
-  local-review:
+  ollama-small-models:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: qwen3:1.7b
+            slug: qwen3-1.7b
+          - model: gemma3:1b
+            slug: gemma3-1b
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - name: Cache Ollama model
         uses: actions/cache@v4
         with:
           path: ~/.ollama/models
-          key: ${{ runner.os }}-ollama-qwen3-4b-v1
-
+          key: ${{ runner.os }}-ollama-${{ matrix.slug }}-v1
       - name: Install and start Ollama
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
@@ -48,29 +54,80 @@ jobs:
           done
           cat /tmp/ollama.log
           exit 1
-
       - name: Pull compact reviewer model
-        run: ollama pull qwen3:4b
-
+        run: ollama pull ${{ matrix.model }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install GOOL
-        run: pip install -e .
-
-      - name: Run fast blind reviewer
+      - run: pip install -e .
+      - name: Review live GOOL picks
         env:
-          GOOL_AI_PREMATCH_MODEL: qwen3:4b
+          GOOL_AI_PREMATCH_MODEL: ${{ matrix.model }}
         run: python scripts/fast_ai_reviewer_eval.py
-
       - name: Show result
         if: always()
         run: cat fast_ai_reviewer_result.json 2>/dev/null || true
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fast-ai-reviewer-result
+          name: fast-ai-reviewer-${{ matrix.slug }}
+          path: fast_ai_reviewer_result.json
+          if-no-files-found: warn
+
+  minicpm5-1b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache MiniCPM5 GGUF
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gool-minicpm5
+          key: ${{ runner.os }}-minicpm5-1b-q4km-v1
+      - name: Install Ollama and HF client
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          python -m pip install -U huggingface_hub
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
+            sleep 2
+          done
+          mkdir -p ~/.cache/gool-minicpm5
+          if [ ! -f ~/.cache/gool-minicpm5/MiniCPM5-1B-Q4_K_M.gguf ]; then
+            hf download openbmb/MiniCPM5-1B-GGUF MiniCPM5-1B-Q4_K_M.gguf --local-dir ~/.cache/gool-minicpm5
+          fi
+          cat > ~/.cache/gool-minicpm5/Modelfile <<'EOF'
+          FROM ./MiniCPM5-1B-Q4_K_M.gguf
+          TEMPLATE """{{- if .Messages -}}
+          {{- range .Messages -}}
+          <|im_start|>{{ .Role }}
+          {{ .Content }}<|im_end|>
+          {{ end -}}
+          <|im_start|>assistant
+          {{ end -}}"""
+          PARAMETER stop "<|im_end|>"
+          PARAMETER stop "</s>"
+          PARAMETER temperature 0.7
+          PARAMETER top_p 0.95
+          PARAMETER num_ctx 4096
+          EOF
+          cd ~/.cache/gool-minicpm5
+          ollama create minicpm5-1b -f Modelfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Review live GOOL picks with MiniCPM5
+        env:
+          GOOL_AI_PREMATCH_MODEL: minicpm5-1b
+        run: python scripts/fast_ai_reviewer_eval.py
+      - name: Show result
+        if: always()
+        run: cat fast_ai_reviewer_result.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-ai-reviewer-minicpm5-1b
           path: fast_ai_reviewer_result.json
           if-no-files-found: warn

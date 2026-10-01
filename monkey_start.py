@@ -255,6 +255,9 @@ def main() -> None:
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ["GOOL_PREMATCH_DELIVER"] = "1"
     os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")
+    os.environ["GOOL_PREMATCH_FULL_MARKET_ACTIVE"] = "1"
+    os.environ.setdefault("GOOL_PREMATCH_FULL_MARKET_MIN_CONFIDENCE", "70")
+    os.environ["GOOL_LIVE_CONSENSUS_ACTIVE"] = "1"
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")
     os.environ.setdefault("GOOL_MULTI_MIN_RATING", "70")
@@ -314,6 +317,7 @@ def main() -> None:
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
         "GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM exchange_money=off "
+        "prematch_full_market=active live_consensus=2of3 "
         "matchbook_worker=off betdaq_worker=off sx_board=off",
         flush=True,
     )

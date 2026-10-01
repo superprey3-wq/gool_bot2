@@ -105,6 +105,7 @@ def main() -> None:
 
     # Raven's free 1.5 GB container: use direct 365Scores HTTP provider and skip Chromium.
     os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
+    os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "0")
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "1")
     os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "90")
     os.environ.setdefault("XBET_GAME_WORKERS", "3")

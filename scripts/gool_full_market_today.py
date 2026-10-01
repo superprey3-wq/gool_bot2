@@ -72,7 +72,11 @@ def compact(row: dict, match: dict) -> dict:
         "quality": row.get("quality"),
         "status": row.get("status"),
         "scope_source": row.get("scope_source"),
-        "rank_score": rank_score(row),
+        "confidence_score": row.get("confidence_score"),
+        "confidence_grade": row.get("confidence_grade"),
+        "confidence_components": row.get("confidence_components"),
+        "decision": row.get("decision"),
+        "rank_score": float(row.get("confidence_score") or rank_score(row)),
     }
 
 
@@ -88,11 +92,7 @@ def analyse_fixture(match) -> dict:
     odds = fetch_event_odds(match.provider_match_id)
     analysis = analyze_full_market(odds, profile, quality=q)
     candidates = list(analysis.get("candidates") or [])
-    primary = (
-        next((x for x in candidates if x.get("status") == "BET"), None)
-        or next((x for x in candidates if x.get("status") == "LEAN"), None)
-        or (candidates[0] if candidates else None)
-    )
+    primary = analysis.get("best_pick")
     return {
         "event_id": str(match.provider_match_id),
         "home": match.home,
@@ -165,17 +165,17 @@ def main() -> None:
     status_counts = Counter()
     for match in matches:
         p = match.get("primary") or {}
-        status = str(p.get("status") or "SKIP")
+        status = str(p.get("decision") or p.get("status") or "SKIP")
         status_counts[status] += 1
         if p:
             primary_types[(str(p.get("scope")), str(p.get("market_type")))] += 1
-        for row in match.get("candidates") or []:
-            if row.get("status") in {"BET", "LEAN"}:
-                all_rows.append(compact(row, match))
+        primary = match.get("primary") or {}
+        if primary and primary.get("decision") in {"BET", "LEAN"}:
+            all_rows.append(compact(primary, match))
 
     bet_rows = [
         row for row in all_rows
-        if row["status"] == "BET"
+        if row.get("decision") == "BET"
         and 1.40 <= float(row["odds"] or 0) <= 2.40
         and float(row["probability"] or 0) >= 0.64
         and float(row["quality"] or 0) >= 0.60
@@ -247,7 +247,8 @@ def main() -> None:
             f"{x['selection']} @{float(x['odds']):.2f} honest={float(x['honest_probability'] or 0):.4f} "
             f"range={float(x['probability_range_low'] or 0):.4f}-{float(x['probability_range_high'] or 0):.4f} "
             f"raw={float(x['raw_model_probability'] or 0):.4f} market={float(x['market_probability'] or 0):.4f} "
-            f"hist_n={int(x['calibration_sample'] or 0)} edge={float(x['edge'] or 0):+.4f} ev={float(x['ev'] or 0):+.4f}",
+            f"hist_n={int(x['calibration_sample'] or 0)} edge={float(x['edge'] or 0):+.4f} "
+            f"ev={float(x['ev'] or 0):+.4f} confidence={float(x['confidence_score'] or 0):.1f}",
             flush=True,
         )
 

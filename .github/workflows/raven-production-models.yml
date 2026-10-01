@@ -1,0 +1,67 @@
+name: raven-production-models
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/raven-production-models.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+
+      - name: Train archive foundation and hazard
+        run: |
+          python -m gool_bot2.train_wyscout_statsbomb_stream             --work-dir data/raven_combined             --step 3             --workers 6
+
+      - name: Train Football-Data goal model
+        run: |
+          python -m gool_bot2.train_football_data_foundation             --work-dir data/raven_football_data
+
+      - name: Build Raven model bundle
+        run: |
+          mkdir -p raven_models
+          cp data/raven_combined/models/archive_foundation_wyscout_statsbomb.pkl raven_models/archive_foundation.pkl
+          cp data/raven_combined/models/archive_hazard_wyscout_statsbomb.pkl raven_models/archive_hazard.pkl
+          cp data/raven_football_data/models/football_data_goal_models.pkl raven_models/football_data_goal_models.pkl
+          cp data/raven_combined/artifacts/combined_training_summary.json raven_models/
+          cp data/raven_football_data/artifacts/football_data_training_summary.json raven_models/
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root = Path("raven_models")
+          manifest = {}
+          for p in sorted(root.glob("*.pkl")):
+              b = p.read_bytes()
+              manifest[p.name] = {"bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()}
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2), "utf-8")
+          print(json.dumps(manifest, indent=2))
+          PY
+          (cd raven_models && zip -9 ../gool-raven-models.zip *)
+
+      - name: Publish latest Raven model release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete raven-models-latest --yes --cleanup-tag || true
+          git push origin :refs/tags/raven-models-latest || true
+          gh release create raven-models-latest             gool-raven-models.zip             --title "GOOL Raven production models"             --notes "Automatically rebuilt production models for Raven Host deployment."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gool-raven-models
+          path: gool-raven-models.zip
+          retention-days: 14

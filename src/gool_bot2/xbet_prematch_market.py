@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from .providers.common import pair_score
-from .xbet_market_pressure import _http_json, decode_markets
+from .xbet_market_pressure import _http_json
+from .xbet_market_robust import decode_standard_markets
+from .xbet_market_memory import record_market_snapshot
 
 
 ROOTS = (
@@ -173,9 +175,48 @@ class XBetPrematchCollector:
         self.state_path = state_path
         self.active_root = ROOTS[0]
         self._stop = threading.Event()
+        self._next_poll_at: dict[str, float] = {}
 
     def stop(self, *_: object) -> None:
         self._stop.set()
+
+    @staticmethod
+    def _poll_interval_seconds(start_ts: float | None, now: float) -> float:
+        if not start_ts:
+            return 600.0
+        remaining = float(start_ts) - float(now)
+        if remaining <= 0:
+            return 999999.0
+        if remaining <= 15 * 60:
+            return 60.0
+        if remaining <= 60 * 60:
+            return 120.0
+        if remaining <= 6 * 60 * 60:
+            return 300.0
+        return 600.0
+
+    def _due_prematch_candidates(self, rows: list[dict[str, Any]], now: float) -> list[dict[str, Any]]:
+        horizon = max(6 * 3600, int(os.getenv("XBET_PREMATCH_TRACK_HORIZON_SECONDS", str(26 * 3600))))
+        maximum = max(8, min(80, int(os.getenv("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "32"))))
+        due: list[tuple[float, dict[str, Any]]] = []
+        for row in rows:
+            event_id = str(row.get("event_id") or "")
+            start_ts = _event_start(row.get("event") or {})
+            if not event_id or not start_ts:
+                continue
+            remaining = float(start_ts) - float(now)
+            if remaining <= 0 or remaining > horizon:
+                continue
+            if now + 0.001 < float(self._next_poll_at.get(event_id, 0.0)):
+                continue
+            due.append((remaining, row))
+        due.sort(key=lambda item: item[0])
+        selected = [row for _, row in due[:maximum]]
+        for row in selected:
+            event_id = str(row.get("event_id") or "")
+            start_ts = _event_start(row.get("event") or {})
+            self._next_poll_at[event_id] = now + self._poll_interval_seconds(start_ts, now)
+        return selected
 
     def _index(self) -> tuple[str | None, list[dict[str, Any]]]:
         roots = [self.active_root, *[root for root in ROOTS if root != self.active_root]]
@@ -323,7 +364,8 @@ class XBetPrematchCollector:
                         )
             candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
         else:
-            candidates = [{**row, "root": root} for row in candidates[:limit]]
+            indexed = [{**row, "root": root} for row in candidates[:limit]]
+            candidates = self._due_prematch_candidates(indexed, now)
 
         refreshed = 0
         if candidates:
@@ -345,7 +387,7 @@ class XBetPrematchCollector:
                     if not game:
                         price_failures += 1
                     else:
-                        markets = decode_markets(game)
+                        markets = decode_standard_markets(game)
                         if not _usable_snapshot(markets):
                             price_failures += 1
                             game = None
@@ -375,8 +417,18 @@ class XBetPrematchCollector:
                         "match_totals": [dict(x) for x in (markets.get("match_total") or []) if isinstance(x, dict)],
                         "home_totals": [dict(x) for x in (markets.get("home_total") or []) if isinstance(x, dict)],
                         "away_totals": [dict(x) for x in (markets.get("away_total") or []) if isinstance(x, dict)],
+                        "first_half_totals": [dict(x) for x in (markets.get("first_half_total") or []) if isinstance(x, dict)],
                     }
                     stored[event_id] = snapshot
+                    record_market_snapshot(
+                        event_id=event_id,
+                        home=row["home"],
+                        away=row["away"],
+                        phase="PREMATCH",
+                        markets=markets,
+                        captured_at=snapshot["captured_at"],
+                        scheduled_start_ts=snapshot["scheduled_start_ts"],
+                    )
                     refreshed += 1
 
         # Retain disappeared prematch snapshots long enough for a live match to

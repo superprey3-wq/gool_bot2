@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import xbet_market_pressure as market
+from .xbet_market_memory import record_market_snapshot
 
 
 def _half_goal_only(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -230,6 +231,7 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 now = time.time()
                 score = (int(fs.home_score or 0), int(fs.away_score or 0))
                 pressure = self._pressure(str(fs.provider_match_id), score, now, markets)
+                captured_at = datetime.now(timezone.utc).isoformat()
                 output[str(fs.provider_match_id)] = {
                     "flashscore_event_id": str(fs.provider_match_id),
                     "xbet_event_id": event_id,
@@ -238,11 +240,22 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                     "minute": int(fs.minute or 0),
                     "score_home": score[0],
                     "score_away": score[1],
-                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "captured_at": captured_at,
                     "markets": markets,
                     "pressure": pressure,
                     "line_move": False,
                 }
+                record_market_snapshot(
+                    event_id=event_id,
+                    home=fs.home,
+                    away=fs.away,
+                    phase="LIVE",
+                    markets=markets,
+                    captured_at=captured_at,
+                    minute=int(fs.minute or 0),
+                    score_home=score[0],
+                    score_away=score[1],
+                )
         state = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "root": root,

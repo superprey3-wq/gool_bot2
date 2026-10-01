@@ -193,3 +193,46 @@ def test_unmodeled_scope_is_reported_not_given_fake_probability():
         x["scope"] == "FULL_TIME_OVER_TIME"
         for x in result["candidates"]
     )
+
+
+def test_half_full_time_uses_derived_period_split_when_history_missing():
+    p = {
+        "full_match": {
+            "available": True,
+            "home_expected_goals": 1.85,
+            "away_expected_goals": 1.05,
+            "expected_total": 2.90,
+            "pair_sample": 10,
+        },
+        "first_half": {"available": False, "pair_sample": 0},
+        "second_half": {"available": False, "pair_sample": 0},
+    }
+    result = analyze_full_market(market_data(), p, quality=1.0)
+    covered = {(x["scope"], x["type"]) for x in result["modeled_market_types"]}
+    assert ("FULL_TIME", "HALF_FULL_TIME") in covered
+    assert not any(
+        x["scope"] == "FULL_TIME" and x["type"] == "HALF_FULL_TIME"
+        for x in result["unmodeled_market_types"]
+    )
+
+
+def test_market_assisted_half_scope_cannot_be_full_bet():
+    p = {
+        "full_match": {
+            "available": True,
+            "home_expected_goals": 2.3,
+            "away_expected_goals": 0.8,
+            "expected_total": 3.1,
+            "pair_sample": 10,
+        },
+        "first_half": {"available": False, "pair_sample": 0},
+        "second_half": {"available": False, "pair_sample": 0},
+    }
+    result = analyze_full_market(market_data(), p, quality=1.0)
+    assisted = [
+        x for x in result["candidates"]
+        if x["scope"] in {"FIRST_HALF", "SECOND_HALF"}
+        and x.get("scope_source") == "ft_model_with_market_period_split"
+    ]
+    assert assisted
+    assert all(x["status"] != "BET" for x in assisted)

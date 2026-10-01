@@ -71,6 +71,107 @@ def _compact(row: dict) -> dict:
     }
 
 
+def _build_conservative_accumulator(matches: list[dict]) -> dict:
+    """Build a small conservative accumulator from the full 8-match scan.
+
+    Never forces a leg from every match. It prefers full-time, simpler markets,
+    positive EV, higher honest probability and a reasonably useful price.
+    """
+    allowed_types = {
+        "OVER_UNDER",
+        "DOUBLE_CHANCE",
+        "DRAW_NO_BET",
+        "ASIAN_HANDICAP",
+        "EUROPEAN_HANDICAP",
+    }
+
+    def pick_pool(honest_floor: float, low_floor: float, odds_cap: float) -> list[dict]:
+        per_match = []
+        for item in matches:
+            if item.get("status") == "ERROR":
+                continue
+            options = []
+            for x in item.get("all_candidates") or []:
+                if x.get("status") not in {"BET", "LEAN"}:
+                    continue
+                if x.get("scope") != "FULL_TIME":
+                    continue
+                if x.get("market_type") not in allowed_types:
+                    continue
+                try:
+                    odds = float(x.get("odds") or 0.0)
+                    honest = float(x.get("honest_p") or 0.0)
+                    p_low = float(x.get("p_low") or 0.0)
+                    ev = float(x.get("ev") or 0.0)
+                    confidence = float(x.get("confidence_score") or 0.0)
+                except (TypeError, ValueError):
+                    continue
+                if not (1.25 <= odds <= odds_cap):
+                    continue
+                if honest < honest_floor or p_low < low_floor or ev < 0.0:
+                    continue
+
+                # Conservative ranking: probability first, then lower bound and
+                # confidence; lightly penalise price inflation.
+                risk_score = (
+                    honest
+                    + 0.30 * p_low
+                    + 0.0010 * confidence
+                    - 0.03 * max(0.0, odds - 1.40)
+                )
+                row = dict(x)
+                row.update({
+                    "home": item.get("home"),
+                    "away": item.get("away"),
+                    "league": item.get("league"),
+                    "risk_score": round(risk_score, 6),
+                })
+                options.append(row)
+
+            if options:
+                per_match.append(max(options, key=lambda z: float(z.get("risk_score") or 0.0)))
+        return per_match
+
+    strict = pick_pool(honest_floor=0.65, low_floor=0.50, odds_cap=1.62)
+    policy = "strict"
+    pool = strict
+    if len(pool) < 2:
+        pool = pick_pool(honest_floor=0.62, low_floor=0.47, odds_cap=1.72)
+        policy = "fallback"
+
+    pool.sort(
+        key=lambda z: (
+            float(z.get("risk_score") or 0.0),
+            float(z.get("honest_p") or 0.0),
+        ),
+        reverse=True,
+    )
+
+    # Keep the ticket small: accumulator risk compounds quickly.
+    legs = pool[:3]
+    combined_odds = 1.0
+    naive_joint = 1.0
+    naive_joint_low = 1.0
+    for leg in legs:
+        combined_odds *= float(leg.get("odds") or 1.0)
+        naive_joint *= float(leg.get("honest_p") or 0.0)
+        naive_joint_low *= float(leg.get("p_low") or 0.0)
+
+    return {
+        "policy": policy,
+        "analysed_matches": len([m for m in matches if m.get("status") != "ERROR"]),
+        "eligible_match_legs": len(pool),
+        "legs": legs,
+        "combined_odds": round(combined_odds, 3) if legs else None,
+        "naive_joint_probability": round(naive_joint, 4) if legs else None,
+        "naive_joint_low": round(naive_joint_low, 4) if legs else None,
+        "note": (
+            "Joint probabilities are a simple independence product and are not a guarantee. "
+            "The accumulator deliberately does not force one leg from every analysed match."
+        ),
+    }
+
+
 def main() -> None:
     fs = FlashscoreProvider()
     fusion = PrematchDataFusion(fs)
@@ -201,6 +302,35 @@ def main() -> None:
                 f"edge={x['edge']} ev={x['ev']}",
                 flush=True,
             )
+
+    accumulator = _build_conservative_accumulator(report["matches"])
+    report["conservative_accumulator"] = accumulator
+    print(
+        "CONSERVATIVE_EXPRESS "
+        + json.dumps(
+            {
+                "policy": accumulator["policy"],
+                "analysed_matches": accumulator["analysed_matches"],
+                "eligible_match_legs": accumulator["eligible_match_legs"],
+                "legs": len(accumulator["legs"]),
+                "combined_odds": accumulator["combined_odds"],
+                "naive_joint_probability": accumulator["naive_joint_probability"],
+                "naive_joint_low": accumulator["naive_joint_low"],
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    for i, leg in enumerate(accumulator["legs"], 1):
+        print(
+            f"  E{i}. {leg.get('home')} - {leg.get('away')} | "
+            f"{leg.get('scope')} {leg.get('market_type')} {leg.get('selection')} "
+            f"@{leg.get('odds')} honest={leg.get('honest_p')} "
+            f"range={leg.get('p_low')}-{leg.get('p_high')} "
+            f"ev={leg.get('ev')} confidence={leg.get('confidence_score')} "
+            f"grade={leg.get('confidence_grade')}",
+            flush=True,
+        )
 
     report["summary"] = {
         "status_counts": dict(status_counts),

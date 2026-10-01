@@ -44,6 +44,9 @@ class FullMarketCandidate:
     expected_value: float | None
     quality: float
     status: str
+    confidence_score: float
+    confidence_grade: str
+    confidence_components: dict[str, float]
     settlement: dict[str, float]
     scope_source: str | None = None
     observations: int = 1
@@ -241,6 +244,142 @@ def _model_for_key(
     return None, None, {}
 
 
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _confidence_score(
+    *,
+    probability: float | None,
+    probability_low: float | None,
+    edge: float | None,
+    expected_value: float | None,
+    quality: float,
+    calibration_confidence: str,
+    calibration_sample: int,
+    observations: int,
+    odds: float,
+    market_type: str,
+    scope_source: str,
+) -> tuple[float, str, dict[str, float]]:
+    """Confidence in *market selection*, not a promised hit probability.
+
+    Components intentionally reward both robustness and value. High raw/model
+    probability alone cannot win the ranking if price, edge, calibration or
+    data support are weak.
+    """
+    if probability is None or expected_value is None:
+        return 0.0, "NO_DATA", {
+            "probability": 0.0,
+            "lower_bound": 0.0,
+            "edge": 0.0,
+            "ev": 0.0,
+            "quality": _clamp01(quality),
+            "calibration": 0.0,
+            "market_depth": 0.0,
+        }
+
+    p_component = _clamp01((float(probability) - 0.50) / 0.30)
+    low_component = _clamp01(((float(probability_low) if probability_low is not None else float(probability) - 0.12) - 0.45) / 0.25)
+    edge_component = _clamp01(max(0.0, float(edge or 0.0)) / 0.10)
+    ev_component = _clamp01(max(0.0, float(expected_value)) / 0.18)
+    quality_component = _clamp01(quality)
+    calibration_component = {
+        "HIGH": 1.00,
+        "MEDIUM": 0.72,
+        "LOW": 0.38,
+    }.get(str(calibration_confidence or "").upper(), 0.25)
+    if calibration_sample <= 0:
+        calibration_component = min(calibration_component, 0.32)
+    depth_component = _clamp01(float(observations) / 5.0)
+
+    components = {
+        "probability": p_component,
+        "lower_bound": low_component,
+        "edge": edge_component,
+        "ev": ev_component,
+        "quality": quality_component,
+        "calibration": calibration_component,
+        "market_depth": depth_component,
+    }
+    score = 100.0 * (
+        0.28 * p_component
+        + 0.17 * low_component
+        + 0.20 * edge_component
+        + 0.15 * ev_component
+        + 0.10 * quality_component
+        + 0.07 * calibration_component
+        + 0.03 * depth_component
+    )
+
+    # Hard reliability caps. They stop "pretty" high-p markets from winning
+    # when the evidence behind them is weak or circular.
+    if not 1.40 <= float(odds) <= 3.25:
+        score = min(score, 45.0)
+    if float(probability) < 0.55:
+        score = min(score, 54.0)
+    if float(expected_value) <= 0:
+        score = min(score, 49.0)
+    if edge is not None and float(edge) <= 0:
+        score = min(score, 49.0)
+    if quality < 0.60:
+        score = min(score, 55.0)
+    if calibration_sample <= 0:
+        score = min(score, 73.0)
+    if scope_source == "ft_model_with_market_period_split":
+        score = min(score, 66.0)
+    if market_type in {"CORRECT_SCORE", "HALF_FULL_TIME"}:
+        score = min(score, 60.0)
+
+    score = round(max(0.0, min(100.0, score)), 2)
+    if score >= 82:
+        grade = "VERY_HIGH"
+    elif score >= 74:
+        grade = "HIGH"
+    elif score >= 64:
+        grade = "MEDIUM"
+    elif score >= 55:
+        grade = "LOW"
+    else:
+        grade = "WEAK"
+    return score, grade, {k: round(v, 4) for k, v in components.items()}
+
+
+def _best_pick(candidates: list[FullMarketCandidate]) -> dict[str, Any] | None:
+    if not candidates:
+        return None
+    eligible = [
+        c for c in candidates
+        if c.model_probability is not None
+        and c.expected_value is not None
+        and 1.40 <= c.odds <= 3.25
+        and c.expected_value > 0
+        and (c.edge is None or c.edge > 0)
+    ]
+    pool = eligible or candidates
+    chosen = max(
+        pool,
+        key=lambda c: (
+            c.confidence_score,
+            c.probability_range_low if c.probability_range_low is not None else 0.0,
+            c.expected_value if c.expected_value is not None else -99.0,
+            c.edge if c.edge is not None else -99.0,
+        ),
+    )
+    decision = "BET" if chosen.confidence_score >= 74.0 else "LEAN" if chosen.confidence_score >= 64.0 else "SKIP"
+    # Preserve stricter market-level safety gates: confidence can demote, never
+    # magically promote a market whose underlying gate rejected it.
+    if chosen.status == "SKIP":
+        decision = "SKIP"
+    elif chosen.status == "LEAN" and decision == "BET":
+        decision = "LEAN"
+    return {
+        **chosen.to_dict(),
+        "decision": decision,
+    }
+
+
 def analyze_full_market(
     data: dict[str, Any],
     profile: dict[str, Any],
@@ -371,6 +510,19 @@ def analyze_full_market(
                 label = f"DRAW (HOME {float(line):+g})"
         else:
             label = str(sel) if line is None else f"{sel} {float(line):g}"
+        confidence_score, confidence_grade, confidence_components = _confidence_score(
+            probability=p,
+            probability_low=range_low,
+            edge=edge,
+            expected_value=ev,
+            quality=quality,
+            calibration_confidence=calibration_confidence,
+            calibration_sample=calibration_sample,
+            observations=len(obs),
+            odds=best_odds,
+            market_type=typ,
+            scope_source=scope_source,
+        )
         candidates.append(FullMarketCandidate(
             scope=scope,
             market_type=typ,
@@ -392,25 +544,29 @@ def analyze_full_market(
             expected_value=ev,
             quality=float(quality),
             status=status,
+            confidence_score=confidence_score,
+            confidence_grade=confidence_grade,
+            confidence_components=confidence_components,
             settlement={k: float(v) for k, v in settlement.items()},
             scope_source=scope_source or None,
             observations=len(obs),
         ))
 
     def rank(c: FullMarketCandidate):
-        status_rank = {"BET": 2, "LEAN": 1, "SKIP": 0}.get(c.status, 0)
         return (
-            status_rank,
+            c.confidence_score,
+            c.probability_range_low if c.probability_range_low is not None else 0.0,
             c.expected_value if c.expected_value is not None else -99,
             c.edge if c.edge is not None else -99,
-            c.model_probability if c.model_probability is not None else 0,
         )
 
     candidates.sort(key=rank, reverse=True)
+    best_pick = _best_pick(candidates)
     coverage = Counter((c.scope, c.market_type) for c in candidates)
     return {
         "participant_ids": {"home": home_pid, "away": away_pid},
         "scope_sources": scope_sources,
+        "best_pick": best_pick,
         "modeled_market_types": [
             {"scope": a, "type": b, "selections": n}
             for (a, b), n in sorted(coverage.items())

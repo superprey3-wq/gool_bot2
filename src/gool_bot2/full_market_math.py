@@ -201,3 +201,27 @@ def _half_full_prob(profile: dict[str, Any], winner: str) -> float | None:
             if state(h1 + h2, a1 + a2) == target_ft:
                 p += p1 * p2
     return p
+
+
+def _half_full_prob_from_distributions(
+    first_dist: dict[tuple[int, int], float],
+    second_dist: dict[tuple[int, int], float],
+    winner: str,
+) -> float | None:
+    if "/" not in str(winner):
+        return None
+    target_ht, target_ft = str(winner).split("/", 1)
+
+    def state(x: int, y: int) -> str:
+        return "1" if x > y else "X" if x == y else "2"
+
+    if target_ht not in {"1", "X", "2"} or target_ft not in {"1", "X", "2"}:
+        return None
+    p = 0.0
+    for (h1, a1), p1 in first_dist.items():
+        if state(h1, a1) != target_ht:
+            continue
+        for (h2, a2), p2 in second_dist.items():
+            if state(h1 + h2, a1 + a2) == target_ft:
+                p += p1 * p2
+    return p

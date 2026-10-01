@@ -371,6 +371,96 @@ def _build_low_odds_all_match_accumulator(matches: list[dict]) -> dict:
     }
 
 
+def _build_target_odds_all_match_accumulator(matches: list[dict]) -> dict:
+    """Force one leg from every match with target odds 1.30-1.50, maximising certainty."""
+    allowed_types = {
+        "OVER_UNDER",
+        "DOUBLE_CHANCE",
+        "DRAW_NO_BET",
+        "ASIAN_HANDICAP",
+        "EUROPEAN_HANDICAP",
+    }
+
+    legs = []
+    missing = []
+
+    for item in matches:
+        if item.get("status") == "ERROR":
+            missing.append({"home": item.get("home"), "away": item.get("away"), "reason": "analysis_error"})
+            continue
+
+        options = []
+        for x in item.get("all_candidates") or []:
+            if x.get("scope") != "FULL_TIME":
+                continue
+            if x.get("market_type") not in allowed_types:
+                continue
+            try:
+                odds = float(x.get("odds") or 0.0)
+                honest = float(x.get("honest_p") or 0.0)
+                p_low = float(x.get("p_low") or 0.0)
+                confidence = float(x.get("confidence_score") or 0.0)
+                ev = float(x.get("ev") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if not (1.30 <= odds <= 1.50):
+                continue
+
+            # Inside the requested odds band, maximise probability first.
+            # Lower-bound probability is a strong tie-breaker, then confidence/EV.
+            score = (
+                1.30 * honest
+                + 0.75 * p_low
+                + 0.0012 * confidence
+                + 0.015 * max(-0.10, min(0.20, ev))
+                - 0.015 * abs(odds - 1.38)
+            )
+            row = dict(x)
+            row.update({
+                "home": item.get("home"),
+                "away": item.get("away"),
+                "league": item.get("league"),
+                "target_odds_score": round(score, 6),
+            })
+            options.append(row)
+
+        if not options:
+            missing.append({
+                "home": item.get("home"),
+                "away": item.get("away"),
+                "reason": "no_market_in_1.30_1.50",
+            })
+            continue
+
+        best = max(
+            options,
+            key=lambda z: (
+                float(z.get("target_odds_score") or -999.0),
+                float(z.get("honest_p") or 0.0),
+                float(z.get("p_low") or 0.0),
+            ),
+        )
+        legs.append(best)
+
+    combined_odds = 1.0
+    naive_joint = 1.0
+    naive_joint_low = 1.0
+    for leg in legs:
+        combined_odds *= float(leg.get("odds") or 1.0)
+        naive_joint *= float(leg.get("honest_p") or 0.0)
+        naive_joint_low *= max(0.0, float(leg.get("p_low") or 0.0))
+
+    return {
+        "policy": "all_matches_target_odds_1.30_1.50_max_certainty",
+        "analysed_matches": len([m for m in matches if m.get("status") != "ERROR"]),
+        "legs": legs,
+        "missing": missing,
+        "combined_odds": round(combined_odds, 3) if legs else None,
+        "naive_joint_probability": round(naive_joint, 4) if legs else None,
+        "naive_joint_low": round(naive_joint_low, 4) if legs else None,
+    }
+
+
 def main() -> None:
     fs = FlashscoreProvider()
     fusion = PrematchDataFusion(fs)
@@ -586,6 +676,35 @@ def main() -> None:
             f"range={leg.get('p_low')}-{leg.get('p_high')} "
             f"confidence={leg.get('confidence_score')} grade={leg.get('confidence_grade')} "
             f"tier={leg.get('selection_tier')}",
+            flush=True,
+        )
+
+    target_odds_acc = _build_target_odds_all_match_accumulator(report["matches"])
+    report["target_odds_all_match_accumulator"] = target_odds_acc
+    print(
+        "TARGET_130_150_ALL_MATCH_EXPRESS "
+        + json.dumps(
+            {
+                "policy": target_odds_acc["policy"],
+                "analysed_matches": target_odds_acc["analysed_matches"],
+                "legs": len(target_odds_acc["legs"]),
+                "missing": target_odds_acc["missing"],
+                "combined_odds": target_odds_acc["combined_odds"],
+                "naive_joint_probability": target_odds_acc["naive_joint_probability"],
+                "naive_joint_low": target_odds_acc["naive_joint_low"],
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    for i, leg in enumerate(target_odds_acc["legs"], 1):
+        print(
+            f"  T{i}. {leg.get('home')} - {leg.get('away')} | "
+            f"{leg.get('scope')} {leg.get('market_type')} {leg.get('selection')} "
+            f"@{leg.get('odds')} honest={leg.get('honest_p')} "
+            f"range={leg.get('p_low')}-{leg.get('p_high')} "
+            f"ev={leg.get('ev')} confidence={leg.get('confidence_score')} "
+            f"grade={leg.get('confidence_grade')}",
             flush=True,
         )
 

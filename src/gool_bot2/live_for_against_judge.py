@@ -82,6 +82,12 @@ def evaluate_argument_judge(record: dict[str, Any]) -> LiveArgumentDecision | No
         "FALLING" if "FALLING" in {home_trend, away_trend} else "STEADY"
     )
 
+    acute_threat = (
+        (sot5 is not None and sot5 >= 2.0 and shots5 is not None and shots5 >= 3.0)
+        or (big5 is not None and big5 >= 1.0 and sot5 is not None and sot5 >= 1.0)
+        or (xg5 is not None and xg5 >= 0.28)
+    )
+
     for_score = 0.0
     reasons_for: list[str] = []
     if xg5 is not None:
@@ -102,11 +108,14 @@ def evaluate_argument_judge(record: dict[str, Any]) -> LiveArgumentDecision | No
         for_score += part
         reasons_for.append(f"shots5={shots5:.0f}(+{part:.1f})")
     if state in {"HOME_SIEGE", "AWAY_SIEGE", "END_TO_END"}:
-        for_score += 14.0
-        reasons_for.append(f"pressure={state}(+14)")
+        for_score += 16.0
+        reasons_for.append(f"pressure={state}(+16)")
     elif state in {"HOME_PRESSURE", "AWAY_PRESSURE", "HOME_BUILDING", "AWAY_BUILDING"}:
-        for_score += 9.0
-        reasons_for.append(f"pressure={state}(+9)")
+        for_score += 11.0
+        reasons_for.append(f"pressure={state}(+11)")
+    if acute_threat:
+        for_score += 14.0
+        reasons_for.append("acute_threat(+14)")
     if strongest_trend == "RISING":
         for_score += 7.0
         reasons_for.append("trend=RISING(+7)")
@@ -127,14 +136,16 @@ def evaluate_argument_judge(record: dict[str, Any]) -> LiveArgumentDecision | No
         against_score += 35.0
         reasons_against.append("no_5m_window(+35)")
     if xg5 is not None and xg5 < 0.12:
-        against_score += 18.0
-        reasons_against.append(f"low_xg5={xg5:.2f}(+18)")
+        low_xg_penalty = 8.0 if acute_threat else 18.0
+        against_score += low_xg_penalty
+        reasons_against.append(f"low_xg5={xg5:.2f}(+{low_xg_penalty:.0f})")
     if (sot5 is not None and sot5 <= 0) and (big5 is not None and big5 <= 0):
         against_score += 14.0
         reasons_against.append("no_sot_or_big5(+14)")
     if state in {"CALM", "NO_DATA", "WARMING"}:
-        against_score += 16.0
-        reasons_against.append(f"pressure={state}(+16)")
+        calm_penalty = 8.0 if acute_threat and state == "CALM" else 16.0
+        against_score += calm_penalty
+        reasons_against.append(f"pressure={state}(+{calm_penalty:.0f})")
     if strongest_trend == "FALLING":
         against_score += 12.0
         reasons_against.append("trend=FALLING(+12)")
@@ -170,11 +181,25 @@ def evaluate_argument_judge(record: dict[str, Any]) -> LiveArgumentDecision | No
 
     for_score = _clamp100(for_score)
     against_score = _clamp100(against_score)
-    judge_score = _clamp100(48.0 + 0.62 * for_score - 0.72 * against_score)
-    evidence_ready = w5 is not None and epoch_samples >= 4
-    if evidence_ready and for_score >= 55.0 and against_score <= 42.0 and judge_score >= 62.0:
+    judge_score = _clamp100(48.0 + 0.64 * for_score - 0.68 * against_score)
+    evidence_ready = w5 is not None and epoch_samples >= 3
+    balanced_bet = (
+        evidence_ready
+        and for_score >= 50.0
+        and against_score <= 45.0
+        and judge_score >= 58.0
+    )
+    surge_bet = (
+        evidence_ready
+        and acute_threat
+        and sources >= 2
+        and against_score <= 34.0
+        and judge_score >= 55.0
+        and not (epoch_age < 3 and sum(epoch.get("score") or [0, 0]) > 0)
+    )
+    if balanced_bet or surge_bet:
         decision = "BET"
-    elif evidence_ready and judge_score >= 52.0:
+    elif evidence_ready and judge_score >= 48.0:
         decision = "WATCH"
     else:
         decision = "NO_BET"

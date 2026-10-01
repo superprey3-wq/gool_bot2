@@ -10,6 +10,7 @@ from .full_market_math import (
     _asian_handicap_net,
     _asian_total_net,
     _half_full_prob,
+    _half_full_prob_from_distributions,
     _period_lambdas,
     _result_probs,
     _settlement_summary,
@@ -36,6 +37,7 @@ class FullMarketCandidate:
     quality: float
     status: str
     settlement: dict[str, float]
+    scope_source: str | None = None
     observations: int = 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -136,6 +138,10 @@ def _model_for_key(
 
     if typ == "HALF_FULL_TIME":
         p = _half_full_prob(profile, str(sel))
+        if p is None and "FIRST_HALF" in dists and "SECOND_HALF" in dists:
+            p = _half_full_prob_from_distributions(
+                dists["FIRST_HALF"], dists["SECOND_HALF"], str(sel)
+            )
         return p, None if p is None else p * odds - 1.0, {}
 
     if dist is None:
@@ -297,6 +303,16 @@ def analyze_full_market(
         if typ in {"CORRECT_SCORE", "HALF_FULL_TIME"} and best_odds > 3.25:
             status = "SKIP"
 
+        scope_source = str((scope_sources.get(scope) or {}).get("source") or "")
+        if (
+            status == "BET"
+            and scope in {"FIRST_HALF", "SECOND_HALF"}
+            and scope_source == "ft_model_with_market_period_split"
+        ):
+            # Period split came partly from bookmaker totals. It is useful for
+            # comparing markets but not independent enough for a full BET label.
+            status = "LEAN"
+
         if typ == "EUROPEAN_HANDICAP" and line is not None:
             # line is canonical HOME handicap. Show the handicap of the selected
             # side so "AWAY" under HOME -3 is displayed as AWAY +3.
@@ -325,6 +341,7 @@ def analyze_full_market(
             quality=float(quality),
             status=status,
             settlement={k: float(v) for k, v in settlement.items()},
+            scope_source=scope_source or None,
             observations=len(obs),
         ))
 

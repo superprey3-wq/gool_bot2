@@ -49,6 +49,13 @@ def _compact(row: dict) -> dict:
         "odds": row.get("odds"),
         "bookmaker": row.get("bookmaker"),
         "p": row.get("model_probability"),
+        "honest_p": row.get("honest_probability"),
+        "p_low": row.get("probability_range_low"),
+        "p_high": row.get("probability_range_high"),
+        "calibration_sample": row.get("calibration_sample"),
+        "calibration_confidence": row.get("calibration_confidence"),
+        "calibration_source": row.get("calibration_source"),
+        "profile_sample": row.get("profile_sample"),
         "raw_p": row.get("raw_model_probability"),
         "market_p": row.get("market_probability"),
         "edge": row.get("edge"),
@@ -176,7 +183,9 @@ def main() -> None:
         print(
             f"FULL_MARKET_RESULT {m.home} - {m.away} | {status} | "
             f"{p.get('scope')} {p.get('market_type')} {p.get('selection')} "
-            f"@{p.get('odds')} p={p.get('p')} edge={p.get('edge')} ev={p.get('ev')} | "
+            f"@{p.get('odds')} honest={p.get('honest_p')} range={p.get('p_low')}-{p.get('p_high')} "
+            f"raw={p.get('raw_p')} market={p.get('market_p')} hist_n={p.get('calibration_sample')} "
+            f"edge={p.get('edge')} ev={p.get('ev')} | "
             f"modeled_types={len(item['modeled_market_types'])} candidates={len(candidates)} "
             f"actionable={len(actionable)} unmodeled_types={len(item['unmodeled_market_types'])}",
             flush=True,
@@ -184,7 +193,9 @@ def main() -> None:
         for i, x in enumerate(top_actionable[:6], 1):
             print(
                 f"  A{i}. {x['status']} {x['scope']} {x['market_type']} {x['selection']} "
-                f"@{x['odds']} p={x['p']} edge={x['edge']} ev={x['ev']}",
+                f"@{x['odds']} honest={x['honest_p']} range={x['p_low']}-{x['p_high']} "
+                f"raw={x['raw_p']} market={x['market_p']} hist_n={x['calibration_sample']} "
+                f"edge={x['edge']} ev={x['ev']}",
                 flush=True,
             )
 

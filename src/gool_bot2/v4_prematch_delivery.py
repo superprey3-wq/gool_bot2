@@ -142,6 +142,39 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
     return telegram.broadcast_photo(png, caption=caption)
 
 
+
+def _prematch_market_family(market: str) -> str:
+    key = str(market or "").strip().casefold()
+    upper = key.upper()
+    if upper.startswith("1H_"):
+        return "first_half_total"
+    if upper.startswith("2H_"):
+        return "second_half_total"
+    if key in {"match_1x2", "1x2"}:
+        return "match_1x2"
+    if key == "double_chance":
+        return "double_chance"
+    if key == "draw_no_bet":
+        return "draw_no_bet"
+    if key == "asian_handicap":
+        return "asian_handicap"
+    if key == "european_handicap":
+        return "european_handicap"
+    if key == "home_total":
+        return "home_total"
+    if key == "away_total":
+        return "away_total"
+    if "btts" in key:
+        return "btts"
+    return "match_total"
+
+
+def _prematch_market_key(market: str, selection: str) -> str:
+    family = _prematch_market_family(market)
+    normalized = " ".join(str(selection or "").strip().casefold().replace("_", " ").split())
+    return f"{family}:{normalized or str(market or '').strip().casefold()}"
+
+
 def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "", flashscore_meta: dict[str, Any] | None = None) -> dict[str, Any]:
     """Convert a calibrated PrematchPick into the shared production journal/card schema."""
     from datetime import datetime

@@ -121,7 +121,13 @@ with ThreadPoolExecutor(max_workers=20) as pool:
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
 print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
-d=choose_delivery(priced)
+max_singles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_SINGLES","0")))
+max_doubles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_DOUBLES","0")))
+d=choose_delivery(
+ priced,
+ max_singles=None if max_singles<=0 else max_singles,
+ max_doubles=None if max_doubles<=0 else max_doubles,
+)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}:
  retried=retry_pending_prematch_deliveries(journal)

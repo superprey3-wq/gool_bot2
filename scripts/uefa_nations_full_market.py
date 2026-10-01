@@ -172,6 +172,108 @@ def _build_conservative_accumulator(matches: list[dict]) -> dict:
     }
 
 
+def _build_all_match_accumulator(matches: list[dict]) -> dict:
+    """Force exactly one full-time leg from every analysed Nations League match.
+
+    This mode intentionally includes all matches, even when the brain's normal
+    decision is SKIP. Within each match it still chooses the most conservative
+    available modeled option rather than forcing the primary market.
+    """
+    allowed_types = {
+        "OVER_UNDER",
+        "DOUBLE_CHANCE",
+        "DRAW_NO_BET",
+        "ASIAN_HANDICAP",
+        "EUROPEAN_HANDICAP",
+    }
+
+    legs = []
+    missing = []
+    for item in matches:
+        if item.get("status") == "ERROR":
+            missing.append({"home": item.get("home"), "away": item.get("away"), "reason": "analysis_error"})
+            continue
+
+        options = []
+        for x in item.get("all_candidates") or []:
+            if x.get("scope") != "FULL_TIME":
+                continue
+            if x.get("market_type") not in allowed_types:
+                continue
+            try:
+                odds = float(x.get("odds") or 0.0)
+                honest = float(x.get("honest_p") or 0.0)
+                p_low = float(x.get("p_low") or 0.0)
+                ev = float(x.get("ev") or 0.0)
+                confidence = float(x.get("confidence_score") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if odds < 1.20 or odds > 2.10:
+                continue
+
+            # Safety-first score: honest probability and its lower bound dominate.
+            # Positive EV and the brain's confidence only break close calls.
+            score = (
+                honest
+                + 0.45 * p_low
+                + 0.0008 * confidence
+                + 0.02 * max(-0.10, min(0.20, ev))
+                - 0.02 * max(0.0, odds - 1.55)
+            )
+            row = dict(x)
+            row.update({
+                "home": item.get("home"),
+                "away": item.get("away"),
+                "league": item.get("league"),
+                "forced_from_skip": str((item.get("primary") or {}).get("decision") or "SKIP") == "SKIP",
+                "all_match_score": round(score, 6),
+            })
+            options.append(row)
+
+        # Prefer BET/LEAN candidates when present, but never omit the match.
+        actionable = [x for x in options if x.get("status") in {"BET", "LEAN"}]
+        pool = actionable or options
+        if not pool:
+            primary = item.get("primary")
+            if primary:
+                row = dict(primary)
+                row.update({
+                    "home": item.get("home"),
+                    "away": item.get("away"),
+                    "league": item.get("league"),
+                    "forced_from_skip": True,
+                    "all_match_score": None,
+                })
+                legs.append(row)
+            else:
+                missing.append({"home": item.get("home"), "away": item.get("away"), "reason": "no_candidate"})
+            continue
+
+        legs.append(max(pool, key=lambda z: float(z.get("all_match_score") or -999.0)))
+
+    combined_odds = 1.0
+    naive_joint = 1.0
+    naive_joint_low = 1.0
+    for leg in legs:
+        combined_odds *= float(leg.get("odds") or 1.0)
+        naive_joint *= float(leg.get("honest_p") or 0.0)
+        naive_joint_low *= max(0.0, float(leg.get("p_low") or 0.0))
+
+    return {
+        "policy": "force_all_matches_safety_first",
+        "analysed_matches": len([m for m in matches if m.get("status") != "ERROR"]),
+        "legs": legs,
+        "missing": missing,
+        "combined_odds": round(combined_odds, 3) if legs else None,
+        "naive_joint_probability": round(naive_joint, 4) if legs else None,
+        "naive_joint_low": round(naive_joint_low, 4) if legs else None,
+        "note": (
+            "Exactly one leg is forced from every analysed match. Some legs can come from matches "
+            "the normal brain would SKIP, so this ticket is materially riskier than the conservative accumulator."
+        ),
+    }
+
+
 def main() -> None:
     fs = FlashscoreProvider()
     fusion = PrematchDataFusion(fs)
@@ -329,6 +431,35 @@ def main() -> None:
             f"range={leg.get('p_low')}-{leg.get('p_high')} "
             f"ev={leg.get('ev')} confidence={leg.get('confidence_score')} "
             f"grade={leg.get('confidence_grade')}",
+            flush=True,
+        )
+
+    all_match_acc = _build_all_match_accumulator(report["matches"])
+    report["all_match_accumulator"] = all_match_acc
+    print(
+        "ALL_MATCH_EXPRESS "
+        + json.dumps(
+            {
+                "policy": all_match_acc["policy"],
+                "analysed_matches": all_match_acc["analysed_matches"],
+                "legs": len(all_match_acc["legs"]),
+                "missing": all_match_acc["missing"],
+                "combined_odds": all_match_acc["combined_odds"],
+                "naive_joint_probability": all_match_acc["naive_joint_probability"],
+                "naive_joint_low": all_match_acc["naive_joint_low"],
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    for i, leg in enumerate(all_match_acc["legs"], 1):
+        print(
+            f"  X{i}. {leg.get('home')} - {leg.get('away')} | "
+            f"{leg.get('scope')} {leg.get('market_type')} {leg.get('selection')} "
+            f"@{leg.get('odds')} honest={leg.get('honest_p')} "
+            f"range={leg.get('p_low')}-{leg.get('p_high')} "
+            f"ev={leg.get('ev')} confidence={leg.get('confidence_score')} "
+            f"grade={leg.get('confidence_grade')} forced_from_skip={leg.get('forced_from_skip')}",
             flush=True,
         )
 

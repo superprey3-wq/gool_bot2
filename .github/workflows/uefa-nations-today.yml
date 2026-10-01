@@ -1,0 +1,36 @@
+name: UEFA Nations League today per-match forecast
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - scripts/uefa_nations_today.py
+      - .github/workflows/uefa-nations-today.yml
+
+permissions:
+  contents: read
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Forecast every UEFA Nations League match today
+        env:
+          XBET_PREMATCH_FETCH_EVENTS: "100"
+          XBET_PREMATCH_WORKERS: "8"
+          XBET_PREMATCH_SEARCH_WORKERS: "12"
+        run: python scripts/uefa_nations_today.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uefa-nations-today
+          path: uefa_nations_today.json
+          if-no-files-found: warn

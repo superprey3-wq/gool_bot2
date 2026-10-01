@@ -326,7 +326,7 @@ def _confidence_score(
     if quality < 0.60:
         score = min(score, 55.0)
     if calibration_sample <= 0:
-        score = min(score, 73.0)
+        score = min(score, 79.0)
     if scope_source == "ft_model_with_market_period_split":
         score = min(score, 66.0)
     if market_type in {"CORRECT_SCORE", "HALF_FULL_TIME"}:
@@ -351,7 +351,8 @@ def _best_pick(candidates: list[FullMarketCandidate]) -> dict[str, Any] | None:
         return None
     eligible = [
         c for c in candidates
-        if c.model_probability is not None
+        if c.status in {"BET", "LEAN"}
+        and c.model_probability is not None
         and c.expected_value is not None
         and 1.40 <= c.odds <= 3.25
         and c.expected_value > 0

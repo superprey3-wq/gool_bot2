@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -29,6 +30,49 @@ def _full_match_strategy(match: dict[str, Any]) -> str | None:
         return "another_goal"
     return None
 
+
+
+def _live_consensus_snapshot(record: dict[str, Any], brain_status: str) -> dict[str, Any]:
+    match = dict(record.get("match") or {})
+    strategy = _full_match_strategy(match)
+    v4 = dict((record.get("live_v4_runtime") or {}).get(strategy) or {}) if strategy else {}
+
+    judge_payload: dict[str, Any] | None = None
+    try:
+        from .live_for_against_judge import evaluate_argument_judge
+        judge = evaluate_argument_judge(record)
+        if judge is not None:
+            judge_payload = judge.to_dict()
+    except Exception as exc:
+        judge_payload = {"decision": "ERROR", "error": f"{type(exc).__name__}:{exc}"}
+
+    expected_judge_market = {
+        "goal_before_ht": "GOAL_BEFORE_HT",
+        "another_goal": "ANOTHER_GOAL",
+    }.get(str(strategy or ""))
+    judge_matches = bool(
+        judge_payload
+        and str(judge_payload.get("market") or "") == str(expected_judge_market or "")
+    )
+
+    votes = {
+        "brain_v3": str(brain_status).upper() == "BET",
+        "live_v4": bool(v4)
+        and str(v4.get("decision") or "").upper() == "BET"
+        and bool(v4.get("policy_allowed")),
+        "numeric_judge": bool(judge_matches)
+        and str((judge_payload or {}).get("decision") or "").upper() == "BET",
+    }
+    bet_votes = sum(bool(value) for value in votes.values())
+    return {
+        "strategy": strategy,
+        "votes": votes,
+        "bet_votes": bet_votes,
+        "required_votes": 2,
+        "allowed": bet_votes >= 2,
+        "v4": v4,
+        "judge": judge_payload,
+    }
 
 def _full_match_routing_experts(
     match: dict[str, Any],
@@ -166,6 +210,23 @@ def _production_brain_audit(
         return decision
 
     pre_status = str(decision.get("status") or "WATCH")
+    consensus = None
+    if str(os.getenv("GOOL_LIVE_CONSENSUS_ACTIVE", "0")).strip().casefold() in {"1", "true", "yes", "on"}:
+        consensus = _live_consensus_snapshot(record, pre_status)
+        decision["live_consensus"] = consensus
+        if pre_status == "BET" and not bool(consensus.get("allowed")):
+            decision["status"] = "READY"
+            existing = [str(x) for x in list(decision.get("blocks") or [])]
+            existing.append("live_consensus_below_2_of_3")
+            decision["blocks"] = list(dict.fromkeys(existing))
+        print(
+            f"GOOL_LIVE_CONSENSUS match={match_id} strategy={consensus.get('strategy') or '-'} "
+            f"votes={consensus.get('bet_votes')}/3 allowed={int(bool(consensus.get('allowed')))} "
+            f"v3={int(bool((consensus.get('votes') or {}).get('brain_v3')))} "
+            f"v4={int(bool((consensus.get('votes') or {}).get('live_v4')))} "
+            f"judge={int(bool((consensus.get('votes') or {}).get('numeric_judge')))}",
+            flush=True,
+        )
     countercase = audit._under_countercase(decision)
     decision["countercase"] = countercase
     score, score_reasons = audit._selection_score(decision, countercase)
@@ -236,6 +297,17 @@ def _production_brain_audit(
         selection_audit["tournament"] = tournament
         selection_audit["why_this_match"] = "independent_live_quality_passed"
         out["selection_audit"] = selection_audit
+        selection._sync_expert(experts, out)
+
+    # Re-apply consensus after tournament diagnostics; a stronger-rival diagnostic
+    # must never resurrect a BET that failed the active 2-of-3 live confirmation.
+    if consensus is not None and pre_status == "BET" and not bool(consensus.get("allowed")):
+        out["status"] = "READY"
+        out["blocks"] = list(dict.fromkeys([
+            *[str(block) for block in list(out.get("blocks") or [])],
+            "live_consensus_below_2_of_3",
+        ]))
+        out["live_consensus"] = consensus
         selection._sync_expert(experts, out)
 
     record["brain_v3_decision"] = out

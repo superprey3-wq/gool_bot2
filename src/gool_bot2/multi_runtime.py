@@ -91,6 +91,7 @@ def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_pat
         return
 
     mapping = {"GOAL_BEFORE_HT": "goal_before_ht", "ANOTHER_GOAL": "another_goal"}
+    runtime_decisions: dict[str, dict[str, Any]] = {}
     snapshot = {
         "type": "live_v4",
         "match_id": mid,
@@ -134,6 +135,16 @@ def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_pat
             f"brain_shadow={decision.decision}",
             flush=True,
         )
+        runtime_decisions[key] = {
+            "market": str(decision.market),
+            "decision": str(decision.decision),
+            "probability": float(decision.probability),
+            "confidence": float(decision.confidence),
+            "policy_allowed": bool(policy.allowed),
+            "policy_score": float(policy.score),
+            "policy_tier": policy.tier,
+            "policy_reason": policy.reason,
+        }
         if mode != "active":
             continue
         row["probability"] = float(decision.probability)
@@ -153,6 +164,8 @@ def _apply_live_v4(record: dict[str, Any], experts: dict[str, Any], analysis_pat
         if not policy.allowed:
             blocks.append(f"live_v4_policy_{policy.reason}")
         row["blocks"] = blocks
+
+    record["live_v4_runtime"] = runtime_decisions
 
 
 def _expert_probabilities(experts: dict[str, Any]) -> dict[str, float]:
@@ -440,6 +453,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     )
     _ensure_any_goal_coverage_proxy(experts)
     _apply_live_v4(brain_record, experts, analysis_path)
+    if brain_record.get("live_v4_runtime") is not None:
+        record["live_v4_runtime"] = dict(brain_record.get("live_v4_runtime") or {})
     live_probabilities = _expert_probabilities(experts)
 
     # Keep PREMATCH in the bot for collection, research and diagnostics. In

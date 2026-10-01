@@ -42,13 +42,87 @@ class FullMarketCandidate:
         return asdict(self)
 
 
-def _scope_distributions(profile: dict[str, Any]) -> dict[str, dict[tuple[int, int], float]]:
+def _poisson_over_probability(lam: float, line: float) -> float:
+    import math
+    threshold = int(math.floor(line)) + 1
+    cdf = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(threshold))
+    return max(0.0, min(1.0, 1.0 - cdf))
+
+
+def _lambda_from_over_probability(line: float, probability: float) -> float | None:
+    # Half-goal binary lines have no push, so their de-vig market probability
+    # can safely identify a Poisson intensity. This is used only to learn the
+    # market's FIRST_HALF/SECOND_HALF split, never as the final model p.
+    if abs(line * 2 - round(line * 2)) > 1e-9 or int(round(line * 2)) % 2 == 0:
+        return None
+    target = max(0.005, min(0.995, float(probability)))
+    lo, hi = 0.01, 7.0
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        if _poisson_over_probability(mid, line) < target:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def _market_scope_lambda(observations: dict[tuple, list[dict[str, Any]]], scope: str) -> float | None:
+    values = []
+    for key, rows in observations.items():
+        k_scope, typ, sel, line = key
+        if k_scope != scope or typ != "OVER_UNDER" or sel != "OVER" or line is None:
+            continue
+        ps = [
+            float(row["market_probability"])
+            for row in rows
+            if row.get("market_probability") is not None
+        ]
+        if not ps:
+            continue
+        market_p = statistics.median(ps)
+        lam = _lambda_from_over_probability(float(line), market_p)
+        if lam is not None and 0.05 <= lam <= 6.0:
+            values.append(lam)
+    return statistics.median(values) if values else None
+
+
+def _scope_distributions(
+    profile: dict[str, Any],
+    observations: dict[tuple, list[dict[str, Any]]],
+) -> tuple[dict[str, dict[tuple[int, int], float]], dict[str, Any]]:
     out = {}
+    derived = {}
+    full = _period_lambdas(profile, "FULL_TIME")
     for scope in ("FULL_TIME", "FIRST_HALF", "SECOND_HALF"):
         pair = _period_lambdas(profile, scope)
         if pair is not None:
             out[scope] = score_distribution(*pair)
-    return out
+            derived[scope] = {"source": "historical_period_profile", "home_lambda": pair[0], "away_lambda": pair[1]}
+
+    # When half-specific historical scores are unavailable, do not use a fixed
+    # 45/55 assumption. Infer only the relative period split from the de-vig
+    # bookmaker totals, then apply that split to GOOL's independent FT lambda.
+    if full is not None and ("FIRST_HALF" not in out or "SECOND_HALF" not in out):
+        market_first = _market_scope_lambda(observations, "FIRST_HALF")
+        market_second = _market_scope_lambda(observations, "SECOND_HALF")
+        if market_first is not None and market_second is not None and market_first + market_second > 0:
+            total_model = full[0] + full[1]
+            home_share = full[0] / total_model if total_model > 0 else .5
+            first_total = total_model * market_first / (market_first + market_second)
+            second_total = total_model - first_total
+            for scope, total in (("FIRST_HALF", first_total), ("SECOND_HALF", second_total)):
+                if scope in out:
+                    continue
+                pair = (max(.01, total * home_share), max(.01, total * (1.0 - home_share)))
+                out[scope] = score_distribution(*pair)
+                derived[scope] = {
+                    "source": "ft_model_with_market_period_split",
+                    "home_lambda": pair[0],
+                    "away_lambda": pair[1],
+                    "market_split_lambda_first": market_first,
+                    "market_split_lambda_second": market_second,
+                }
+    return out, derived
 
 
 def _model_for_key(
@@ -163,7 +237,7 @@ def analyze_full_market(
     rows = [r for r in (data.get("odds") or []) if isinstance(r, dict)]
     home_pid, away_pid = _find_participant_ids(rows)
     observations = _selection_observations(data, home_pid, away_pid)
-    dists = _scope_distributions(profile)
+    dists, scope_sources = _scope_distributions(profile, observations)
     candidates: list[FullMarketCandidate] = []
     unmodeled = Counter()
 
@@ -223,7 +297,19 @@ def analyze_full_market(
         if typ in {"CORRECT_SCORE", "HALF_FULL_TIME"} and best_odds > 3.25:
             status = "SKIP"
 
-        label = str(sel) if line is None else f"{sel} {float(line):g}"
+        if typ == "EUROPEAN_HANDICAP" and line is not None:
+            # line is canonical HOME handicap. Show the handicap of the selected
+            # side so "AWAY" under HOME -3 is displayed as AWAY +3.
+            if str(sel) == "HOME":
+                shown_line = float(line)
+                label = f"HOME {shown_line:+g}"
+            elif str(sel) == "AWAY":
+                shown_line = -float(line)
+                label = f"AWAY {shown_line:+g}"
+            else:
+                label = f"DRAW (HOME {float(line):+g})"
+        else:
+            label = str(sel) if line is None else f"{sel} {float(line):g}"
         candidates.append(FullMarketCandidate(
             scope=scope,
             market_type=typ,
@@ -255,6 +341,7 @@ def analyze_full_market(
     coverage = Counter((c.scope, c.market_type) for c in candidates)
     return {
         "participant_ids": {"home": home_pid, "away": away_pid},
+        "scope_sources": scope_sources,
         "modeled_market_types": [
             {"scope": a, "type": b, "selections": n}
             for (a, b), n in sorted(coverage.items())

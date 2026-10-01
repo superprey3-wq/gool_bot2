@@ -120,6 +120,30 @@ def _write_state(payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _snapshot_ts(value: Any) -> float:
+    try:
+        dt = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except Exception:
+        return time.time()
+
+
+def _window_delta(points: list[dict[str, Any]], key: str, current: float, now_ts: float, seconds: float) -> dict[str, float] | None:
+    target = now_ts - float(seconds)
+    candidates = [p for p in points if float(p.get("ts") or 0.0) <= target and key in (p.get("markets") or {})]
+    if not candidates:
+        return None
+    base = float((candidates[-1].get("markets") or {}).get(key))
+    return {
+        "from": round(base, 4),
+        "to": round(float(current), 4),
+        "odd_change": round(float(current) - base, 4),
+        "implied_change_pp": round((_implied(float(current)) - _implied(base)) * 100.0, 2),
+    }
+
+
 def _update_summary(snapshot: dict[str, Any]) -> None:
     payload = _load_state()
     matches = payload.setdefault("matches", {})
@@ -133,10 +157,23 @@ def _update_summary(snapshot: dict[str, Any]) -> None:
             "scheduled_start_ts": snapshot.get("scheduled_start_ts"),
             "first_captured_at": snapshot.get("captured_at"),
             "opening": {},
+            "points": [],
         }
     current = _flatten(snapshot.get("markets") or {})
     opening = row.setdefault("opening", {})
+    previous_phase = str(row.get("phase") or "")
+    incoming_phase = str(snapshot.get("phase") or "")
+    if incoming_phase == "LIVE" and previous_phase == "PREMATCH" and not row.get("closing"):
+        row["closing"] = dict(row.get("current") or {})
+        row["closing_captured_at"] = row.get("last_captured_at")
+
+    now_ts = _snapshot_ts(snapshot.get("captured_at"))
+    points = [p for p in (row.get("points") or []) if isinstance(p, dict) and now_ts - float(p.get("ts") or 0.0) <= 2 * 3600]
+    points.append({"ts": now_ts, "phase": incoming_phase, "markets": current})
+    points = points[-240:]
+
     movement: dict[str, Any] = {}
+    recent: dict[str, Any] = {}
     for key, odd in current.items():
         if key not in opening:
             opening[key] = round(float(odd), 5)
@@ -147,22 +184,31 @@ def _update_summary(snapshot: dict[str, Any]) -> None:
             "odd_change": round(float(odd) - open_odd, 4),
             "implied_change_pp": round((_implied(float(odd)) - _implied(open_odd)) * 100.0, 2),
         }
+        windows: dict[str, Any] = {}
+        for label, seconds in (("5m", 300.0), ("15m", 900.0), ("60m", 3600.0)):
+            delta = _window_delta(points[:-1], key, float(odd), now_ts, seconds)
+            if delta is not None:
+                windows[label] = delta
+        if windows:
+            recent[key] = windows
+
     row.update({
         "home": snapshot.get("home"),
         "away": snapshot.get("away"),
         "scheduled_start_ts": snapshot.get("scheduled_start_ts") or row.get("scheduled_start_ts"),
         "last_captured_at": snapshot.get("captured_at"),
-        "phase": snapshot.get("phase"),
+        "phase": incoming_phase,
         "minute": snapshot.get("minute"),
         "score_home": snapshot.get("score_home"),
         "score_away": snapshot.get("score_away"),
         "current": current,
         "movement": movement,
+        "recent_movement": recent,
+        "points": points,
     })
     matches[event_id] = row
     payload["captured_at"] = snapshot.get("captured_at")
     _write_state(payload)
-
 
 def _prune(now: float) -> None:
     global _LAST_PRUNE_AT

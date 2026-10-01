@@ -75,3 +75,29 @@ def test_no_market_returns_lean_or_skip_not_fake_price():
     pick = choose_second_half_market(analysis, None)
     assert pick.odds is None
     assert pick.decision in {"LEAN", "SKIP"}
+
+
+def test_proxy_only_without_second_half_history_cannot_bet():
+    record = _record()
+    # Remove provider xG while retaining real shots/SOT/big-chance statistics.
+    record["providers"]["flashscore"]["stats"].pop("xg", None)
+    record["providers"]["fotmob"]["stats"].pop("xg", None)
+    record["consensus"].pop("xg", None)
+    profile = {
+        "second_half": {"pair_sample": 0},
+        "full_match": {"expected_total": 2.30},
+    }
+    analysis = evaluate_halftime_second_half(record, prematch_profile=profile)
+    assert analysis.first_half_xg_source == "attack_proxy"
+    assert analysis.prematch_second_half_sample == 0
+
+    markets = {
+        "match_total": [
+            {"line": 1.5, "over": 2.30, "under": 1.62},
+            {"line": 2.5, "over": 3.00, "under": 1.48},
+        ]
+    }
+    pick = choose_second_half_market(analysis, markets)
+    assert pick.decision == "LEAN"
+    assert pick.odds is None
+    assert "UNCALIBRATED_HT" in pick.reason

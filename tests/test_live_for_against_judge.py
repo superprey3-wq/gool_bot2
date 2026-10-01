@@ -63,3 +63,14 @@ def test_post_goal_reset_blocks():
 
 def test_outside_window_returns_none():
     assert evaluate_argument_judge(_record(minute=44)) is None
+
+
+def test_acute_five_minute_surge_can_bet_even_if_pressure_state_lags():
+    # Pressure-state can lag a fast attacking burst. Two SOT + three shots in the
+    # last 5m across multiple providers is enough for the surge path.
+    d = evaluate_argument_judge(
+        _record(state="CALM", epoch_samples=4, xg5=0.06, sot5=2, shots5=3, big5=0)
+    )
+    assert d is not None
+    assert d.decision == "BET"
+    assert "acute_threat(+14)" in d.reasons_for

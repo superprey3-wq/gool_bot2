@@ -1,0 +1,41 @@
+name: UEFA Nations full market brain
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - src/gool_bot2/full_market_math.py
+      - src/gool_bot2/full_market_decode.py
+      - src/gool_bot2/full_market_brain.py
+      - tests/test_full_market_brain.py
+      - scripts/uefa_nations_full_market.py
+      - .github/workflows/uefa-nations-full-market.yml
+
+permissions:
+  contents: read
+
+jobs:
+  full-market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: pip install -e .
+      - name: Install test runner
+        run: pip install pytest
+      - name: Test full market brain
+        run: pytest -q tests/test_full_market_brain.py
+      - name: Analyse every market for today's Nations League
+        run: python scripts/uefa_nations_full_market.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uefa-nations-full-market
+          path: uefa_nations_full_market.json
+          if-no-files-found: warn

@@ -357,8 +357,13 @@ def choose_second_half_market(
             # long shots. Overs are slightly preferred for this halftime-goals task.
             min_odd = 1.38 if side == "OVER" and line == 0.5 else 1.45
             max_odd = 2.65
+            calibrated_enough = not (
+                analysis.prematch_second_half_sample == 0
+                and analysis.first_half_xg_source != "provider_xg"
+            )
             qualifies = (
-                analysis.real_stats_providers >= 1
+                calibrated_enough
+                and analysis.real_stats_providers >= 1
                 and analysis.real_core_stat_keys >= 2
                 and analysis.confidence >= 0.58
                 and model_p >= floor
@@ -409,6 +414,23 @@ def choose_second_half_market(
             reason="Real 2H market passed probability, edge, EV and data-quality gates.",
         )
 
+    if (
+        analysis.prematch_second_half_sample == 0
+        and analysis.first_half_xg_source != "provider_xg"
+    ):
+        return HalftimeMarketPick(
+            decision="LEAN",
+            market="SECOND_HALF_TOTAL",
+            selection=None,
+            line=None,
+            odds=None,
+            model_probability=None,
+            market_probability=None,
+            edge=None,
+            expected_value=None,
+            confidence=analysis.confidence,
+            reason="UNCALIBRATED_HT: no historical 2H sample and xG is proxy-only; BET is blocked.",
+        )
     if analysis.real_stats_providers == 0 or analysis.real_core_stat_keys < 2:
         return HalftimeMarketPick(
             decision="LEAN",

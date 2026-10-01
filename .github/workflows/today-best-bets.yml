@@ -32,4 +32,6 @@ jobs:
           XBET_PREMATCH_WORKERS: "10"
           XBET_PREMATCH_SEARCH_WORKERS: "14"
           GOOL_PREMATCH_DELIVER: "0"
+          GOOL_PREMATCH_MAX_SINGLES: "3"
+          GOOL_PREMATCH_MAX_DOUBLES: "1"
         run: python scripts/gool_flashscore_today.py

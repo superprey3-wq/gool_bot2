@@ -58,7 +58,15 @@ def compact(row: dict, match: dict) -> dict:
         "odds": row.get("odds"),
         "bookmaker": row.get("bookmaker"),
         "probability": row.get("model_probability"),
+        "honest_probability": row.get("honest_probability"),
+        "probability_range_low": row.get("probability_range_low"),
+        "probability_range_high": row.get("probability_range_high"),
+        "raw_model_probability": row.get("raw_model_probability"),
         "market_probability": row.get("market_probability"),
+        "calibration_sample": row.get("calibration_sample"),
+        "calibration_confidence": row.get("calibration_confidence"),
+        "calibration_source": row.get("calibration_source"),
+        "profile_sample": row.get("profile_sample"),
         "edge": row.get("edge"),
         "ev": row.get("expected_value"),
         "quality": row.get("quality"),
@@ -236,8 +244,10 @@ def main() -> None:
     for i, x in enumerate(singles, 1):
         print(
             f"S{i}. {x['home']} - {x['away']} | {x['scope']} {x['market_type']} "
-            f"{x['selection']} @{float(x['odds']):.2f} p={float(x['probability']):.4f} "
-            f"edge={float(x['edge'] or 0):+.4f} ev={float(x['ev'] or 0):+.4f}",
+            f"{x['selection']} @{float(x['odds']):.2f} honest={float(x['honest_probability'] or 0):.4f} "
+            f"range={float(x['probability_range_low'] or 0):.4f}-{float(x['probability_range_high'] or 0):.4f} "
+            f"raw={float(x['raw_model_probability'] or 0):.4f} market={float(x['market_probability'] or 0):.4f} "
+            f"hist_n={int(x['calibration_sample'] or 0)} edge={float(x['edge'] or 0):+.4f} ev={float(x['ev'] or 0):+.4f}",
             flush=True,
         )
 
@@ -250,7 +260,8 @@ def main() -> None:
         for i, x in enumerate(acca_legs, 1):
             print(
                 f"A{i}. {x['home']} - {x['away']} | {x['scope']} {x['market_type']} "
-                f"{x['selection']} @{float(x['odds']):.2f} p={float(x['probability']):.4f}",
+                f"{x['selection']} @{float(x['odds']):.2f} honest={float(x['honest_probability'] or 0):.4f} "
+                f"hist_n={int(x['calibration_sample'] or 0)}",
                 flush=True,
             )
     else:

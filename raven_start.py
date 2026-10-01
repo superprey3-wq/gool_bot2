@@ -105,9 +105,11 @@ def main() -> None:
 
     # Raven's free 1.5 GB container needs slightly tighter defaults than the old host.
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "1")
-    os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "45")
-    os.environ.setdefault("XBET_GAME_WORKERS", "6")
-    os.environ.setdefault("GOOL_PREMATCH_FUSION_WORKERS", "4")
+    os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "90")
+    os.environ.setdefault("XBET_GAME_WORKERS", "3")
+    os.environ.setdefault("GOOL_PREMATCH_FUSION_WORKERS", "2")
+    os.environ.setdefault("SIGNAL_WORKER_SLEEP", "8")
+    os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "20")
 
     from monkey_start import main as production_main
     production_main()

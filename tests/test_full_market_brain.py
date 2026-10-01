@@ -236,3 +236,39 @@ def test_market_assisted_half_scope_cannot_be_full_bet():
     ]
     assert assisted
     assert all(x["status"] != "BET" for x in assisted)
+
+
+def test_confidence_layer_selects_exactly_one_best_market():
+    result = analyze_full_market(market_data(), profile(), quality=1.0)
+    best = result.get("best_pick")
+    assert best is not None
+    assert 0.0 <= float(best["confidence_score"]) <= 100.0
+    assert best["confidence_grade"] in {"VERY_HIGH", "HIGH", "MEDIUM", "LOW", "WEAK", "NO_DATA"}
+    assert best["decision"] in {"BET", "LEAN", "SKIP"}
+
+    actionable = [
+        x for x in result["candidates"]
+        if x["status"] in {"BET", "LEAN"}
+        and x["model_probability"] is not None
+        and x["expected_value"] is not None
+        and 1.40 <= float(x["odds"]) <= 3.25
+        and float(x["expected_value"]) > 0
+        and (x["edge"] is None or float(x["edge"]) > 0)
+    ]
+    if actionable:
+        assert float(best["confidence_score"]) == max(float(x["confidence_score"]) for x in actionable)
+
+
+def test_confidence_is_not_just_hit_probability():
+    result = analyze_full_market(market_data(), profile(), quality=1.0)
+    rows = [
+        x for x in result["candidates"]
+        if x["model_probability"] is not None and x["confidence_score"] is not None
+    ]
+    assert rows
+    # The score has independent value/reliability components; it must not be
+    # a disguised p*100 field.
+    assert any(
+        abs(float(x["confidence_score"]) - 100.0 * float(x["model_probability"])) > 1.0
+        for x in rows
+    )

@@ -1,0 +1,32 @@
+name: UEFA Nations full market catalog
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - scripts/uefa_nations_market_catalog.py
+      - .github/workflows/uefa-nations-market-catalog.yml
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Dump every available bookmaker market for today's Nations League
+        run: python scripts/uefa_nations_market_catalog.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uefa-nations-market-catalog
+          path: uefa_nations_market_catalog.json
+          if-no-files-found: warn

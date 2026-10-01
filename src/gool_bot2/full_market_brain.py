@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from .full_market_decode import _find_participant_ids, _selection_observations
+from .prematch_probability_calibration import calibrate_probability, load_prematch_calibration_rows
 from .full_market_math import (
     _asian_handicap_net,
     _asian_total_net,
@@ -30,6 +31,13 @@ class FullMarketCandidate:
     bookmaker: str
     raw_model_probability: float | None
     model_probability: float | None
+    honest_probability: float | None
+    probability_range_low: float | None
+    probability_range_high: float | None
+    calibration_sample: int
+    calibration_confidence: str
+    calibration_source: str
+    profile_sample: int
     market_probability: float | None
     edge: float | None
     raw_expected_value: float | None
@@ -239,6 +247,7 @@ def analyze_full_market(
     *,
     quality: float = 1.0,
     model_weight: float = MODEL_WEIGHT,
+    calibration_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rows = [r for r in (data.get("odds") or []) if isinstance(r, dict)]
     home_pid, away_pid = _find_participant_ids(rows)
@@ -266,19 +275,55 @@ def analyze_full_market(
             continue
 
         p = None
+        honest_p = None
+        range_low = None
+        range_high = None
+        calibration_sample = 0
+        calibration_confidence = "LOW"
+        calibration_source = "unavailable"
+        profile_sample = 0
         edge = None
         ev = None
+        calibration = None
         if raw_p is not None:
+            calibration = calibrate_probability(
+                raw_model_probability=raw_p,
+                market_probability=market_p,
+                profile=profile,
+                scope=scope,
+                market_type=typ,
+                selection=str(sel),
+                quality=quality,
+                rows=calibration_rows,
+            )
+            honest_p = float(calibration["honest_probability"])
+            p = honest_p
+            range_low = float(calibration["range_low"])
+            range_high = float(calibration["range_high"])
+            calibration_sample = int(calibration["calibration_sample"])
+            calibration_confidence = str(calibration["confidence"])
+            calibration_source = str(calibration["source"])
+            profile_sample = int(calibration["profile_sample"])
             if market_p is not None:
-                p = model_weight * raw_p + (1 - model_weight) * market_p
-                edge = p - market_p
-            else:
-                p = raw_p
+                edge = honest_p - market_p
 
         if raw_ev is not None:
-            ev = model_weight * raw_ev
             if p is not None and not settlement:
                 ev = p * best_odds - 1.0
+            elif (
+                p is not None
+                and market_p is not None
+                and raw_p is not None
+                and abs(raw_p - market_p) > 1e-9
+            ):
+                # Settlement markets (DNB/Asian) have pushes or half outcomes.
+                # Keep their exact raw settlement EV, but shrink it by the same
+                # empirical distance-to-market that produced honest_probability.
+                ratio = (p - market_p) / (raw_p - market_p)
+                ratio = max(0.0, min(1.0, ratio))
+                ev = raw_ev * ratio
+            else:
+                ev = raw_ev * 0.35
 
         status = "SKIP"
         non_loss = float(settlement.get("non_loss", p or 0.0))
@@ -334,6 +379,13 @@ def analyze_full_market(
             bookmaker=str(best["bookmaker"]),
             raw_model_probability=raw_p,
             model_probability=p,
+            honest_probability=honest_p,
+            probability_range_low=range_low,
+            probability_range_high=range_high,
+            calibration_sample=calibration_sample,
+            calibration_confidence=calibration_confidence,
+            calibration_source=calibration_source,
+            profile_sample=profile_sample,
             market_probability=market_p,
             edge=edge,
             raw_expected_value=raw_ev,

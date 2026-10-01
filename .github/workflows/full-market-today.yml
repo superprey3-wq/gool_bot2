@@ -9,7 +9,9 @@ on:
       - src/gool_bot2/full_market_math.py
       - src/gool_bot2/full_market_decode.py
       - src/gool_bot2/full_market_brain.py
+      - src/gool_bot2/prematch_probability_calibration.py
       - tests/test_full_market_brain.py
+      - tests/test_prematch_probability_calibration.py
       - scripts/gool_full_market_today.py
       - .github/workflows/full-market-today.yml
 
@@ -29,8 +31,8 @@ jobs:
         run: pip install -e .
       - name: Install test runner
         run: pip install pytest
-      - name: Test full market brain
-        run: pytest -q tests/test_full_market_brain.py
+      - name: Test full market brain and probability calibration
+        run: pytest -q tests/test_full_market_brain.py tests/test_prematch_probability_calibration.py
       - name: Analyse every remaining match today across all modeled markets
         env:
           GOOL_FULL_MARKET_WORKERS: "10"

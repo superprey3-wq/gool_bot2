@@ -62,6 +62,10 @@ def _compact(row: dict) -> dict:
         "ev": row.get("expected_value"),
         "raw_ev": row.get("raw_expected_value"),
         "status": row.get("status"),
+        "confidence_score": row.get("confidence_score"),
+        "confidence_grade": row.get("confidence_grade"),
+        "confidence_components": row.get("confidence_components"),
+        "decision": row.get("decision"),
         "settlement": row.get("settlement"),
         "observations": row.get("observations"),
     }
@@ -129,10 +133,8 @@ def main() -> None:
 
         candidates = list(analysis.get("candidates") or [])
         actionable = [x for x in candidates if x.get("status") in {"BET", "LEAN"}]
-        best = candidates[0] if candidates else None
-        best_bet = next((x for x in candidates if x.get("status") == "BET"), None)
-        primary = best_bet or next((x for x in candidates if x.get("status") == "LEAN"), None) or best
-        status = str((primary or {}).get("status") or "SKIP")
+        primary = analysis.get("best_pick")
+        status = str((primary or {}).get("decision") or "SKIP")
         status_counts[status] += 1
         if primary:
             winner_types[(primary.get("scope"), primary.get("market_type"))] += 1
@@ -185,7 +187,8 @@ def main() -> None:
             f"{p.get('scope')} {p.get('market_type')} {p.get('selection')} "
             f"@{p.get('odds')} honest={p.get('honest_p')} range={p.get('p_low')}-{p.get('p_high')} "
             f"raw={p.get('raw_p')} market={p.get('market_p')} hist_n={p.get('calibration_sample')} "
-            f"edge={p.get('edge')} ev={p.get('ev')} | "
+            f"edge={p.get('edge')} ev={p.get('ev')} confidence={p.get('confidence_score')} "
+            f"grade={p.get('confidence_grade')} | "
             f"modeled_types={len(item['modeled_market_types'])} candidates={len(candidates)} "
             f"actionable={len(actionable)} unmodeled_types={len(item['unmodeled_market_types'])}",
             flush=True,

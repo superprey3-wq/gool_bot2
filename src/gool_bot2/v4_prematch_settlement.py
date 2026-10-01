@@ -36,6 +36,16 @@ def _side(row: dict[str, Any]) -> str:
     return ""
 
 
+def _signed_line(value: str) -> float | None:
+    found = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(value or ""))
+    if not found:
+        return None
+    try:
+        return float(found[-1].replace(",", "."))
+    except ValueError:
+        return None
+
+
 def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, *, half_time_score: tuple[int, int] | None = None) -> str | None:
     """Settle supported V4 prematch 1X2 and full-match totals."""
     market = str(row.get("market") or "").casefold()
@@ -51,6 +61,58 @@ def settle_prematch_pick(row: dict[str, Any], home_score: int, away_score: int, 
         }
         chosen = next((key for key, names in aliases.items() if selection.strip() in names), "")
         return "won" if chosen and chosen == outcome else "lost" if chosen else None
+
+    if family == "double_chance" or market == "double_chance":
+        chosen = selection.replace("_", " ").replace("-", " ").strip()
+        home_win = home_score > away_score
+        away_win = away_score > home_score
+        draw = home_score == away_score
+        if chosen in {"home or draw", "1x", "1х"}:
+            return "won" if home_win or draw else "lost"
+        if chosen in {"draw or away", "x2", "х2"}:
+            return "won" if draw or away_win else "lost"
+        if chosen in {"home or away", "12"}:
+            return "won" if home_win or away_win else "lost"
+        return None
+
+    if family == "draw_no_bet" or market == "draw_no_bet":
+        chosen = selection.strip()
+        if home_score == away_score:
+            return "push"
+        if chosen in {"home", "1", "п1", "хозяева"}:
+            return "won" if home_score > away_score else "lost"
+        if chosen in {"away", "2", "п2", "гости"}:
+            return "won" if away_score > home_score else "lost"
+        return None
+
+    if family == "asian_handicap" or market == "asian_handicap":
+        line = _signed_line(selection)
+        if line is None:
+            return None
+        if selection.strip().startswith("home"):
+            adjusted = home_score + line - away_score
+        elif selection.strip().startswith("away"):
+            adjusted = away_score + line - home_score
+        else:
+            return None
+        if abs(adjusted) < 1e-9:
+            return "push"
+        return "won" if adjusted > 0 else "lost"
+
+    if family == "european_handicap" or market == "european_handicap":
+        line = _signed_line(selection)
+        if line is None:
+            return None
+        chosen = selection.strip()
+        if chosen.startswith("home"):
+            return "won" if home_score + line > away_score else "lost"
+        if chosen.startswith("away"):
+            return "won" if away_score + line > home_score else "lost"
+        if chosen.startswith("draw"):
+            # Full-market labels encode this as: draw (home -N).
+            adjusted = home_score + line - away_score
+            return "won" if abs(adjusted) < 1e-9 else "lost"
+        return None
 
     if family == "btts" or "btts" in market or "обе забьют" in market:
         text = f"{market} {selection}"

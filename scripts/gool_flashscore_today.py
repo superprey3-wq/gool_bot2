@@ -4,6 +4,8 @@ from datetime import datetime,timezone
 from zoneinfo import ZoneInfo
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
+from gool_bot2.full_market_brain import analyze_full_market
+from gool_bot2.prematch_full_market_runtime import select_production_full_market_pick
 from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
 from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
@@ -78,7 +80,39 @@ def one(r):
  market=find_prematch_market(m.home,m.away,path=xbet_state)
  picks=[]
  info=None
- if market:
+ odds_payload=None
+
+ # Production priority 1: the tested full-market brain compares the real market
+ # catalogue and may choose a supported high-confidence BET instead of being tied
+ # to the legacy trend family. Unsupported settlement shapes stay research-only.
+ if str(os.getenv("GOOL_PREMATCH_FULL_MARKET_ACTIVE","1")).lower() in {"1","true","yes","on"}:
+  try:
+   odds_payload=fetch_event_odds(m.provider_match_id)
+   full_analysis=analyze_full_market(odds_payload,r["profile"],quality=float(r["quality"]))
+   selected=select_production_full_market_pick(
+    full_analysis,
+    event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    league=m.league or "",kickoff_ts=kick,
+    min_confidence=float(os.getenv("GOOL_PREMATCH_FULL_MARKET_MIN_CONFIDENCE","70")),
+   )
+   if selected:
+    pick,full_meta=selected
+    picks=[pick]
+    info={**full_meta,"bookmaker":full_meta.get("bookmaker") or "Flashscore odds","full_market_active":True}
+    print(
+     "PREMATCH_FULL_MARKET",
+     m.home,"-",m.away,
+     pick.market,pick.selection,f"@{pick.odds:.2f}",
+     f"p={pick.model_probability:.3f}",
+     f"confidence={float(full_meta.get('full_market_confidence') or 0):.1f}",
+     flush=True,
+    )
+  except Exception as exc:
+   print("PREMATCH_FULL_MARKET_ERROR",m.home,"-",m.away,type(exc).__name__,str(exc),flush=True)
+
+ # Production priority 2: preserve the existing 1xBet multi-market engine when
+ # the full-market brain has no journal-safe BET.
+ if not picks and market:
   raw=build_prematch_candidates(
    event_id=str(m.provider_match_id),home=m.home,away=m.away,
    profile=r["profile"],market=market,data_quality=float(r["quality"]),
@@ -88,11 +122,16 @@ def one(r):
     q.event_id,q.home,q.away,q.market,q.selection,q.odds,
     q.model_probability,q.market_probability,q.data_quality,m.league or "",kick,
    ))
-  info={"bookmaker":"1xBet","market_match_score":market.get("match_score")}
- # Fallback preserves current behaviour when 1xBet cannot address the fixture.
+  info={"bookmaker":"1xBet","market_match_score":market.get("match_score"),"full_market_active":False}
+
+ # Final fallback preserves the previous exact-trend behaviour.
  if not picks:
-  try: price=exact_trend_price(fetch_event_odds(m.provider_match_id),r["primary_trend"]["name"])
-  except Exception: price=None
+  try:
+   if odds_payload is None:
+    odds_payload=fetch_event_odds(m.provider_match_id)
+   price=exact_trend_price(odds_payload,r["primary_trend"]["name"])
+  except Exception:
+   price=None
   if price:
    t=r["primary_trend"]
    picks=[PrematchPick(

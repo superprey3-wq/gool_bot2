@@ -1,0 +1,35 @@
+name: GOOL today best singles and accumulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - .github/workflows/today-best-bets.yml
+
+permissions:
+  contents: read
+
+jobs:
+  analyse-today:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Analyse all remaining matches today and build best products
+        env:
+          GOOL_FIXTURE_SOURCE: "flashscore"
+          GOOL_PREMATCH_PRICE_CAP: "0"
+          GOOL_PREMATCH_WORKERS: "20"
+          GOOL_PREMATCH_FUSION_LIMIT: "80"
+          GOOL_PREMATCH_FUSION_WORKERS: "8"
+          XBET_PREMATCH_FETCH_EVENTS: "160"
+          XBET_PREMATCH_WORKERS: "10"
+          XBET_PREMATCH_SEARCH_WORKERS: "14"
+          GOOL_PREMATCH_DELIVER: "0"
+        run: python scripts/gool_flashscore_today.py

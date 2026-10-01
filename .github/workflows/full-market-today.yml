@@ -1,0 +1,43 @@
+name: GOOL full market today
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/halftime-second-half
+    paths:
+      - src/gool_bot2/full_market_math.py
+      - src/gool_bot2/full_market_decode.py
+      - src/gool_bot2/full_market_brain.py
+      - tests/test_full_market_brain.py
+      - scripts/gool_full_market_today.py
+      - .github/workflows/full-market-today.yml
+
+permissions:
+  contents: read
+
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: pip install -e .
+      - name: Install test runner
+        run: pip install pytest
+      - name: Test full market brain
+        run: pytest -q tests/test_full_market_brain.py
+      - name: Analyse every remaining match today across all modeled markets
+        env:
+          GOOL_FULL_MARKET_WORKERS: "10"
+        run: python scripts/gool_full_market_today.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-market-today
+          path: full_market_today.json
+          if-no-files-found: warn

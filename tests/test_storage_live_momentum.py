@@ -45,7 +45,7 @@ def _collector(monkeypatch):
     collector._attach_flashscore_assets = lambda record, meta: None
     collector._prematch_store = SimpleNamespace(save=lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        module,
+        module._LEGACY,
         "football_prefilter",
         lambda *args, **kwargs: SimpleNamespace(score=0.0, candidate=False, reasons=[]),
     )
@@ -81,13 +81,14 @@ def test_production_active_records_persist_real_5m_momentum(monkeypatch):
     assert momentum["big_total_last_5m"] == 1.0
 
 
-def test_production_detail_windows_match_v4_decision_windows():
+def test_production_detail_windows_cover_full_live_match():
     assert StorageLiveSnapshotCollector._entry_window(1) is True
     assert StorageLiveSnapshotCollector._entry_window(35) is True
     assert StorageLiveSnapshotCollector._entry_window(42) is True
-    assert StorageLiveSnapshotCollector._entry_window(43) is False
-    assert StorageLiveSnapshotCollector._entry_window(45) is False
+    assert StorageLiveSnapshotCollector._entry_window(43) is True
+    assert StorageLiveSnapshotCollector._entry_window(45) is True
     assert StorageLiveSnapshotCollector._entry_window(46) is True
     assert StorageLiveSnapshotCollector._entry_window(75) is True
     assert StorageLiveSnapshotCollector._entry_window(82) is True
-    assert StorageLiveSnapshotCollector._entry_window(83) is False
+    assert StorageLiveSnapshotCollector._entry_window(95) is True
+    assert StorageLiveSnapshotCollector._entry_window(96) is False

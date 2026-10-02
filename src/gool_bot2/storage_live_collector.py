@@ -53,7 +53,10 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
 
     @staticmethod
     def _entry_window(minute: int) -> bool:
-        return 1 <= int(minute) <= 35 or 46 <= int(minute) <= 75
+        # Keep expensive detail aligned with the actual V4 decision windows:
+        # GOAL_BEFORE_HT is open through 42' and ANOTHER_GOAL through 82'.
+        # Outside these windows a cheap score/market snapshot is sufficient.
+        return 1 <= int(minute) <= 42 or 46 <= int(minute) <= 82
 
     @staticmethod
     def _top_league(league: Any) -> bool:
@@ -248,7 +251,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
             if int(m.minute or 0) > 0 and str(m.provider_match_id) not in active_ids
         ]
         halftime = [m for m in market_watch if bool(m.is_halftime)]
-        dead_first_half = [m for m in market_watch if 36 <= int(m.minute or 0) <= 45 and not m.is_halftime]
+        dead_first_half = [m for m in market_watch if 43 <= int(m.minute or 0) <= 45 and not m.is_halftime]
 
         counters: dict[str, Any] = {
             "live": len(matches),
@@ -278,7 +281,7 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                 "meta": dict(match.meta or {}),
             }
 
-        # Use the otherwise dead 36-45/HT window to warm PREMATCH in the background
+        # Use the otherwise dead 43-45/HT window to warm PREMATCH in the background
         # for the second-half system without delaying score snapshots.
         for match in dead_first_half + halftime:
             self._schedule_history(match)
@@ -304,9 +307,9 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
                     flush=True,
                 )
 
-        # Every non-ordinary LIVE minute still gets a cheap snapshot. This keeps
-        # autonomous 1xBet STEAM and Matchbook MONEY FLOW alive at 36-45, HT,
-        # 76-89 and 90+ without spending expensive football-detail calls there.
+        # Every non-decision LIVE minute still gets a cheap snapshot. This keeps
+        # autonomous market tracking alive at 43-45, HT, 83-89 and 90+ without
+        # spending expensive football-detail calls where V4 no longer opens bets.
         for match in market_watch:
             try:
                 self._append(self._cheap_record(match, now), now)

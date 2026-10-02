@@ -160,18 +160,21 @@ def choose_delivery(
     max_singles: int | None = None,
     max_doubles: int | None = None,
 ) -> dict:
-    """Build independent products: singles are never auto-reused as parlay legs."""
+    """Build singles and parlays as independent products.
+
+    A strong fixture may legitimately be published as a single and also be one
+    leg of a parlay. Correlation protection is enforced inside each parlay:
+    build_accumulators/build_super_accumulator allow only one selection per event.
+    """
     rows = list(picks)
     single_limit = len(rows) if max_singles is None else max(0, int(max_singles))
     singles = rank_prematch_for_delivery(rows, limit=single_limit)
-    single_event_ids = {str(item[0].event_id) for item in singles}
 
-    # Strict product separation: once an event is published as a single, that
-    # fixture may not appear in any parlay under another market either.
-    # Parlays therefore use only other events, favouring the lower-price pool.
+    # Parlays have their own confidence/value selection. Do not starve them just
+    # because the same high-quality fixtures were already selected as singles.
     parlay_pool = [
         p for p in rows
-        if str(p.event_id) not in single_event_ids and 1.15 <= float(p.odds) <= 1.70
+        if 1.15 <= float(p.odds) <= 1.70
     ]
 
     super_ticket = build_super_accumulator(

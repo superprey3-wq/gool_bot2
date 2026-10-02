@@ -201,6 +201,11 @@ class StorageLiveSnapshotCollector(LiveSnapshotCollector):
         self._attach_secondary_cache(record, mid)
         if pref.candidate:
             self._attach_flashscore_assets(record, match.meta)
+
+        # Production storage collector builds active records itself instead of
+        # calling LiveSnapshotCollector._live_record(). Keep the same sequential
+        # momentum enrichment here; otherwise 5m/10m deltas are never persisted.
+        record = self._momentum.attach(record)
         return record, refreshed
 
     def _final_record(self, match_id: str, info: dict[str, Any], state: dict[str, Any], now: datetime) -> dict[str, Any]:

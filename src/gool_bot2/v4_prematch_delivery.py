@@ -57,6 +57,55 @@ def append_prematch_entry(path: Path, row: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
+def suppress_duplicate_prematch_rows(path: Path) -> int:
+    """Keep one official PREMATCH single per fixture; retain later rows only for audit."""
+    rows = load_signal_journal(path)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if str(row.get("origin") or "").casefold() != "prematch":
+            continue
+        event_id = str(row.get("event_id") or row.get("match_id") or "").strip()
+        if not event_id:
+            continue
+        groups.setdefault(event_id, []).append(row)
+
+    changed = 0
+    for event_rows in groups.values():
+        if len(event_rows) <= 1:
+            row = event_rows[0]
+            if row.pop("public_duplicate", None) is not None:
+                changed += 1
+            continue
+
+        # Prefer the first row that was actually sent; otherwise preserve journal order.
+        primary = next((row for row in event_rows if bool(row.get("telegram_sent"))), event_rows[0])
+        for row in event_rows:
+            duplicate = row is not primary
+            if duplicate:
+                if not bool(row.get("public_duplicate")):
+                    row["public_duplicate"] = True
+                    row["public_duplicate_reason"] = "same_fixture_multiple_prematch_rows"
+                    row["public_duplicate_of"] = str(primary.get("entry_id") or "")
+                    changed += 1
+                if row.get("result_notification_pending"):
+                    row["result_notification_pending"] = False
+                    changed += 1
+                if row.pop("result_notification_claim_id", None) is not None:
+                    changed += 1
+                if row.pop("result_notification_claimed_at", None) is not None:
+                    changed += 1
+            else:
+                if row.pop("public_duplicate", None) is not None:
+                    changed += 1
+                row.pop("public_duplicate_reason", None)
+                row.pop("public_duplicate_of", None)
+
+    if changed:
+        save_signal_journal(path, rows)
+        print(f"PREMATCH_DUPLICATE_SUPPRESS changed={changed}", flush=True)
+    return changed
+
+
 def mark_prematch_in_game(path: Path, entry_id: str, chat_id: str | int | None = None) -> bool:
     with _locked(path):
         return _mark_prematch_in_game(path, entry_id, chat_id)
@@ -360,6 +409,7 @@ def reconcile_and_deliver_prematch_results(journal_path: Path) -> dict[str, int]
     from .v4_prematch_settlement import reconcile_pending_prematch
 
     settled = int(reconcile_pending_prematch(journal_path) or 0)
+    suppress_duplicate_prematch_rows(journal_path)
     sent_total = 0
     claimed = pending_result_notifications(
         journal_path,

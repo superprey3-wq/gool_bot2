@@ -246,7 +246,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -254,6 +254,9 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path);replies=in_game_sections(journal_path,_analysis_path(journal_path))
+   elif text=="/prematchaudit":
+    from .prematch_day_audit import prematch_day_audit_text
+    replies=[prematch_day_audit_text(journal_path)]
    elif text=="🎟 ординары":
     replies=prematch_singles_sections(journal_path)
    elif text=="🔗 экспрессы":

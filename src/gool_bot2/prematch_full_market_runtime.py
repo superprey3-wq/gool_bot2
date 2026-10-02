@@ -103,6 +103,75 @@ def _market_and_selection(row: dict[str, Any]) -> tuple[str, str] | None:
     return market, selection.replace("_", " ").lower()
 
 
+def production_full_market_picks(
+    analysis: dict[str, Any],
+    *,
+    event_id: str,
+    home: str,
+    away: str,
+    league: str,
+    kickoff_ts: float,
+    min_confidence: float = 70.0,
+) -> list[tuple[PrematchPick, dict[str, Any]]]:
+    """Return every journal-safe BET candidate, strongest first.
+
+    Singles can take the first/best candidate while the parlay builder may use a
+    different qualified market from the same fixture. A single parlay still has
+    its own one-event-per-ticket correlation guard.
+    """
+    candidates = [
+        row for row in list(analysis.get("candidates") or [])
+        if isinstance(row, dict) and _supported(row, min_confidence=min_confidence)
+    ]
+    if not candidates:
+        return []
+
+    def rank(row: dict[str, Any]) -> tuple[float, float, float, float]:
+        return (
+            float(row.get("confidence_score") or 0.0),
+            float(row.get("probability_range_low") or 0.0),
+            float(row.get("honest_probability") or row.get("model_probability") or 0.0),
+            float(row.get("expected_value") or 0.0),
+        )
+
+    out: list[tuple[PrematchPick, dict[str, Any]]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in sorted(candidates, key=rank, reverse=True):
+        converted = _market_and_selection(row)
+        if converted is None:
+            continue
+        market, selection = converted
+        identity = (market, selection)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        pick = PrematchPick(
+            str(event_id),
+            str(home),
+            str(away),
+            market,
+            selection,
+            float(row.get("odds") or 0.0),
+            float(row.get("honest_probability") or row.get("model_probability") or 0.0),
+            float(row.get("market_probability") or 0.0),
+            float(row.get("quality") or 0.0),
+            str(league or ""),
+            float(kickoff_ts or 0.0),
+        )
+        meta = {
+            "bookmaker": str(row.get("bookmaker") or ""),
+            "full_market_scope": str(row.get("scope") or ""),
+            "full_market_type": str(row.get("market_type") or ""),
+            "full_market_confidence": float(row.get("confidence_score") or 0.0),
+            "full_market_grade": str(row.get("confidence_grade") or ""),
+            "full_market_probability_low": row.get("probability_range_low"),
+            "full_market_probability_high": row.get("probability_range_high"),
+            "full_market_selection": str(row.get("selection") or ""),
+        }
+        out.append((pick, meta))
+    return out
+
+
 def select_production_full_market_pick(
     analysis: dict[str, Any],
     *,
@@ -113,51 +182,16 @@ def select_production_full_market_pick(
     kickoff_ts: float,
     min_confidence: float = 70.0,
 ) -> tuple[PrematchPick, dict[str, Any]] | None:
-    candidates = [
-        row for row in list(analysis.get("candidates") or [])
-        if isinstance(row, dict) and _supported(row, min_confidence=min_confidence)
-    ]
-    if not candidates:
-        return None
-
-    def rank(row: dict[str, Any]) -> tuple[float, float, float, float]:
-        return (
-            float(row.get("confidence_score") or 0.0),
-            float(row.get("probability_range_low") or 0.0),
-            float(row.get("honest_probability") or row.get("model_probability") or 0.0),
-            float(row.get("expected_value") or 0.0),
-        )
-
-    row = max(candidates, key=rank)
-    converted = _market_and_selection(row)
-    if converted is None:
-        return None
-    market, selection = converted
-
-    pick = PrematchPick(
-        str(event_id),
-        str(home),
-        str(away),
-        market,
-        selection,
-        float(row.get("odds") or 0.0),
-        float(row.get("honest_probability") or row.get("model_probability") or 0.0),
-        float(row.get("market_probability") or 0.0),
-        float(row.get("quality") or 0.0),
-        str(league or ""),
-        float(kickoff_ts or 0.0),
+    picks = production_full_market_picks(
+        analysis,
+        event_id=event_id,
+        home=home,
+        away=away,
+        league=league,
+        kickoff_ts=kickoff_ts,
+        min_confidence=min_confidence,
     )
-    meta = {
-        "bookmaker": str(row.get("bookmaker") or ""),
-        "full_market_scope": str(row.get("scope") or ""),
-        "full_market_type": str(row.get("market_type") or ""),
-        "full_market_confidence": float(row.get("confidence_score") or 0.0),
-        "full_market_grade": str(row.get("confidence_grade") or ""),
-        "full_market_probability_low": row.get("probability_range_low"),
-        "full_market_probability_high": row.get("probability_range_high"),
-        "full_market_selection": str(row.get("selection") or ""),
-    }
-    return pick, meta
+    return picks[0] if picks else None
 
 
-__all__ = ["select_production_full_market_pick"]
+__all__ = ["production_full_market_picks", "select_production_full_market_pick"]

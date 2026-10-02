@@ -264,6 +264,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")
     os.environ["GOOL_PREMATCH_FULL_MARKET_ACTIVE"] = "1"
     os.environ.setdefault("GOOL_PREMATCH_FULL_MARKET_MIN_CONFIDENCE", "70")
+    os.environ.setdefault("GOOL_PREMATCH_MAX_DOUBLES", "3")
     os.environ["GOOL_LIVE_CONSENSUS_ACTIVE"] = "1"
     os.environ.setdefault("VAR_WIN_CONFIRM_SECONDS", "45")
     os.environ.setdefault("VAR_WIN_CONFIRM_SNAPSHOTS", "2")

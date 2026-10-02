@@ -101,6 +101,7 @@ def prematch_day_audit_text(journal_path: Path) -> str:
         and dt.astimezone(tz).date()==today
         and str(r.get("result") or "").lower() in {"won","lost"}
         and bool(r.get("telegram_sent"))
+        and not bool(r.get("public_duplicate"))
     ]
     if not pm:
         return "🧠 PREMATCH AUDIT\nСегодня нет закрытых реально отправленных prematch-ординаров."

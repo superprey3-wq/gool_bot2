@@ -30,7 +30,7 @@ def production_report_text(_: Path | None = None, experiment_path: Path | None =
     from . import multi_menu
 
     all_rows = load_signal_journal(multi_menu.journal_path())
-    rows = [row for row in all_rows if was_publicly_sent(row)]
+    rows = [row for row in all_rows if was_publicly_sent(row) and not bool(row.get("public_duplicate"))]
     tz = multi_menu._tz()
     today = datetime.now(tz).date()
     today_rows = _today(rows, tz, today)

@@ -79,3 +79,15 @@ def test_production_active_records_persist_real_5m_momentum(monkeypatch):
     assert momentum["sot_total_last_5m"] == 2.0
     assert momentum["xg_total_last_5m"] == 0.4
     assert momentum["big_total_last_5m"] == 1.0
+
+
+def test_production_detail_windows_match_v4_decision_windows():
+    assert StorageLiveSnapshotCollector._entry_window(1) is True
+    assert StorageLiveSnapshotCollector._entry_window(35) is True
+    assert StorageLiveSnapshotCollector._entry_window(42) is True
+    assert StorageLiveSnapshotCollector._entry_window(43) is False
+    assert StorageLiveSnapshotCollector._entry_window(45) is False
+    assert StorageLiveSnapshotCollector._entry_window(46) is True
+    assert StorageLiveSnapshotCollector._entry_window(75) is True
+    assert StorageLiveSnapshotCollector._entry_window(82) is True
+    assert StorageLiveSnapshotCollector._entry_window(83) is False

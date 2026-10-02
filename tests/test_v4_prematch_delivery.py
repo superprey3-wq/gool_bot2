@@ -136,3 +136,51 @@ def test_same_fixture_cannot_create_second_public_prematch_single(tmp_path):
     assert len(rows) == 1
     assert second["entry_id"] == first["entry_id"]
     assert rows[0]["market"] == "FT_OVER_2.5"
+
+
+def test_only_one_super_is_publicly_sent_per_moscow_day(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    journal = tmp_path / "journal.json"
+    sent = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *args, **kwargs: b"png")
+    monkeypatch.setattr(
+        delivery.telegram,
+        "broadcast_photo",
+        lambda png, caption="", reply_markup=None: sent.append(caption) or 1,
+    )
+
+    def ticket(prefix):
+        legs = [
+            PrematchPick(
+                f"{prefix}{i}", f"H{i}", f"A{i}", "match_total", "over 1.5",
+                1.30, .85, .75, .90, "L", 1790950000.0 + i,
+            )
+            for i in range(10)
+        ]
+        return {
+            "mode": "SUPER",
+            "super": {
+                "kind": "SUPER",
+                "legs": legs,
+                "combined_probability": .20,
+                "combined_odds": 13.79,
+            },
+            "doubles": [],
+            "singles": [],
+        }, {p.event_id: {"bookmaker": "Test"} for p in legs}
+
+    first, meta1 = ticket("a")
+    second, meta2 = ticket("b")
+
+    out1 = delivery.emit_delivery_selection(first, meta1, journal)
+    out2 = delivery.emit_delivery_selection(second, meta2, journal)
+
+    assert out1["parlays"] == 1
+    assert out2["parlays"] == 0
+    assert len(sent) == 1
+    rows = load_signal_journal(journal)
+    supers = [r for r in rows if str(r.get("kind") or "").upper() == "SUPER"]
+    assert len(supers) == 1
+    assert supers[0]["telegram_sent"] is True

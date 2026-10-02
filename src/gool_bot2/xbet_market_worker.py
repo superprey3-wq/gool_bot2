@@ -10,6 +10,7 @@ from typing import Any
 from .storage_runtime import trim_file_tail
 from .xbet_market_demand import load_active_demands
 from .xbet_market_robust import RobustXBetMarketCollector
+from .xbet_market_memory import purge_finished_ephemeral
 from .xbet_multisport_steam import MultiSportSteamWorker
 from .xbet_prematch_market import XBetPrematchCollector
 from .xbet_robust_event_guard import install as install_robust_event_guard
@@ -81,6 +82,15 @@ class DemandDrivenXBetMarketCollector(BoundedRobustXBetMarketCollector):
         # Existing robust score/VAR/red-card guards are preserved by calling the
         # normal collector with the complete LIVE market-watch set.
         all_matches = list(self.flashscore.live_matches())
+        try:
+            deleted = purge_finished_ephemeral(
+                self.flashscore,
+                {str(match.provider_match_id) for match in all_matches},
+            )
+            if deleted:
+                print(f"XBET_MARKET_MEMORY_FINISHED deleted={deleted}", flush=True)
+        except Exception as exc:
+            print(f"XBET_MARKET_MEMORY_CLEANUP_ERROR {type(exc).__name__}:{exc}", flush=True)
         selected, stats = self._select_matches(all_matches)
         original_live_matches = self.flashscore.live_matches
         self.flashscore.live_matches = lambda: list(selected)  # type: ignore[method-assign]

@@ -305,6 +305,18 @@ def emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jour
         return _emit_delivery_selection(delivery, meta, journal_path)
 
 
+def _delivery_meta_for_pick(meta: dict[str, Any], pick: Any) -> dict[str, Any]:
+    base = dict(meta.get(str(pick.event_id)) or {})
+    candidate_meta = base.get("candidate_meta") or {}
+    if isinstance(candidate_meta, dict):
+        specific = candidate_meta.get(f"{pick.market}|{pick.selection}")
+        if isinstance(specific, dict):
+            merged = dict(base)
+            merged.update(specific)
+            return merged
+    return base
+
+
 def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], journal_path: Path) -> dict[str, int]:
     """Send independent singles plus independent parlay products."""
     sent = {"cards": 0, "entries": 0, "parlays": 0}
@@ -317,7 +329,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         if key in seen:
             continue
         seen.add(key)
-        info = meta.get(str(pick.event_id)) or {}
+        info = _delivery_meta_for_pick(meta, pick)
         row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {}))
         before = len(load_signal_journal(journal_path))
         delivered = _emit_prematch_signal(row, journal_path)
@@ -337,7 +349,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
     for idx, (kind, acc) in enumerate(groups, 1):
         legs = []
         for p in acc.get("legs") or []:
-            info = meta.get(str(p.event_id)) or {}
+            info = _delivery_meta_for_pick(meta, p)
             legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {})))
         if not legs:
             continue

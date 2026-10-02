@@ -255,6 +255,7 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                     minute=int(fs.minute or 0),
                     score_home=score[0],
                     score_away=score[1],
+                    flashscore_event_id=str(fs.provider_match_id),
                 )
         state = {
             "captured_at": datetime.now(timezone.utc).isoformat(),

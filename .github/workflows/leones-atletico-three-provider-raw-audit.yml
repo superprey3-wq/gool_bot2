@@ -1,0 +1,50 @@
+name: Leones Atletico three-provider raw audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/leones_atletico_three_provider_raw_audit.py'
+      - '.github/workflows/leones-atletico-three-provider-raw-audit.yml'
+  workflow_dispatch:
+
+jobs:
+  raw-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install GOOL Bot 2
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Run targeted raw audit
+        run: python scripts/leones_atletico_three_provider_raw_audit.py
+
+      - name: Show report
+        if: always()
+        run: |
+          echo '=== REPORT ==='
+          if [ -f artifacts/leones_atletico_three_provider_raw/report.json ]; then
+            cat artifacts/leones_atletico_three_provider_raw/report.json
+          fi
+          echo '=== FILES ==='
+          find artifacts/leones_atletico_three_provider_raw -maxdepth 1 -type f -printf '%f %s bytes\n' 2>/dev/null | sort || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: leones-atletico-three-provider-raw
+          path: artifacts/leones_atletico_three_provider_raw/
+          if-no-files-found: warn
+          retention-days: 7

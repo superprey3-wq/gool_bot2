@@ -114,3 +114,25 @@ def test_prematch_result_watchdog_delivers_without_menu_poll(tmp_path, monkeypat
     stored = load_signal_journal(path)[0]
     assert stored["result_notification_pending"] is False
     assert stored["result_telegram_sent"] is True
+
+
+def test_same_fixture_cannot_create_second_public_prematch_single(tmp_path):
+    path = tmp_path / "journal.json"
+    first = append_prematch_entry(path, {
+        "entry_id": "prematch:e2:FT_OVER_2.5",
+        "event_id": "e2", "match_id": "e2",
+        "home": "A", "away": "B",
+        "market": "FT_OVER_2.5", "selection": "FT_OVER_2.5",
+        "odd": 1.70,
+    })
+    second = append_prematch_entry(path, {
+        "entry_id": "prematch:e2:match_total",
+        "event_id": "e2", "match_id": "e2",
+        "home": "A", "away": "B",
+        "market": "match_total", "selection": "over 2.5",
+        "odd": 1.68,
+    })
+    rows = load_signal_journal(path)
+    assert len(rows) == 1
+    assert second["entry_id"] == first["entry_id"]
+    assert rows[0]["market"] == "FT_OVER_2.5"

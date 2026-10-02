@@ -256,8 +256,8 @@ def main() -> None:
     os.environ.setdefault("XBET_PREMATCH_INTERVAL_SECONDS", "60")
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")
     os.environ.setdefault("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "24")
-    os.environ.setdefault("XBET_MARKET_MEMORY_RETENTION_DAYS", "30")
-    os.environ.setdefault("XBET_MARKET_MEMORY_MAX_BYTES", str(3 * 1024 * 1024 * 1024))
+    os.environ.setdefault("XBET_MARKET_MEMORY_RETENTION_DAYS", "2")
+    os.environ.setdefault("XBET_MARKET_MEMORY_MAX_BYTES", str(160 * 1024 * 1024))
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
     os.environ["GOOL_PREMATCH_DELIVER"] = "1"
     os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -167,6 +168,22 @@ def _today_prematch_rows(path: Path, origin: str) -> list[dict]:
         dt = _parse_dt(row.get("created_at") or row.get("captured_at"))
         if dt and dt.astimezone(tz).date() == today:
             rows.append(row)
+
+    # PREMATCH singles are a one-fixture/one-public-signal product. Historical
+    # buggy cycles may have journaled the same fixture under different market
+    # names; keep the first official row visible and hide later duplicates.
+    if origin == "prematch":
+        unique: list[dict] = []
+        seen_events: set[str] = set()
+        for row in rows:
+            event_key = str(row.get("event_id") or row.get("match_id") or row.get("entry_id") or "")
+            if event_key and event_key in seen_events:
+                continue
+            if event_key:
+                seen_events.add(event_key)
+            unique.append(row)
+        rows = unique
+
     rows.sort(key=lambda r: float(r.get("kickoff_ts") or 0.0))
     return rows
 
@@ -176,17 +193,49 @@ def _result_icon(row: dict) -> str:
 
 
 def _prematch_market_label(value: object) -> str:
-    key = str(value or "").upper()
+    raw = str(value or "").strip()
+    key = raw.upper()
     labels = {
         "FT_OVER_2.5": "Тотал больше 2.5",
         "FT_UNDER_2.5": "Тотал меньше 2.5",
         "BTTS_YES": "Обе забьют — Да",
+        "BTTS_NO": "Обе забьют — Нет",
         "1H_OVER_0.5": "1-й тайм: тотал больше 0.5",
         "1H_OVER_1.5": "1-й тайм: тотал больше 1.5",
         "2H_OVER_0.5": "2-й тайм: тотал больше 0.5",
         "2H_OVER_1.5": "2-й тайм: тотал больше 1.5",
     }
-    return labels.get(key, str(value or "?").replace("_", " "))
+    if key in labels:
+        return labels[key]
+    low = raw.casefold().replace("_", " ")
+    match = re.search(r"\\b(over|under)\\s+([-+]?\\d+(?:[.,]\\d+)?)", low)
+    if match:
+        side = "больше" if match.group(1) == "over" else "меньше"
+        return f"Тотал {side} {match.group(2).replace(',', '.')}"
+    return raw.replace("_", " ") or "?"
+
+
+def _prematch_row_market_label(row: dict) -> str:
+    market = str(row.get("market") or "").strip().casefold()
+    selection = str(row.get("selection") or "").strip()
+    base = _prematch_market_label(selection or market)
+    number = None
+    match = re.search(r"([-+]?\\d+(?:[.,]\\d+)?)", selection)
+    if match:
+        number = match.group(1).replace(",", ".")
+    over = "over" in selection.casefold() or "больше" in base.casefold()
+    under = "under" in selection.casefold() or "меньше" in base.casefold()
+    if market == "home_total" and number:
+        return f"ИТБ1 {number}" if over else (f"ИТМ1 {number}" if under else f"ИТ1 {number}")
+    if market == "away_total" and number:
+        return f"ИТБ2 {number}" if over else (f"ИТМ2 {number}" if under else f"ИТ2 {number}")
+    if market in {"match_total", "over_under"} and number:
+        return f"Тотал больше {number}" if over else (f"Тотал меньше {number}" if under else base)
+    if market == "btts":
+        return "Обе забьют — Нет" if "no" in selection.casefold() else "Обе забьют — Да"
+    if market == "match_1x2":
+        return {"home": "Победа хозяев", "draw": "Ничья", "away": "Победа гостей"}.get(selection.casefold(), base)
+    return base
 
 
 def _prematch_ru_name(value: object) -> str:
@@ -259,7 +308,7 @@ def prematch_singles_sections(path: Path) -> list[str]:
             f"<b>{i}. {_result_icon(row)} {_h(_prematch_ru_name(row.get('home')))} — {_h(_prematch_ru_name(row.get('away')))}</b>\n"
             f"🏆 {_h(_prematch_league_label(row.get('league')))}\n"
             f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
-            f"⚽ {_h(_prematch_market_label(row.get('market') or row.get('selection')))}\n"
+            f"⚽ {_h(_prematch_row_market_label(row))}\n"
             f"💰 Кэф: <b>{float(row.get('odd') or 0):.2f}</b>"
         )
     return _chunk_menu(parts, "🎟 <b>ОРДИНАРЫ · продолжение</b>")
@@ -278,7 +327,7 @@ def prematch_parlays_sections(path: Path) -> list[str]:
                 f"{_result_icon(leg)} <b>{_h(_prematch_ru_name(leg.get('home')))} — {_h(_prematch_ru_name(leg.get('away')))}</b>\n"
                 f"🏆 {_h(_prematch_league_label(leg.get('league')))}\n"
                 f"{'🕐 ' + _h(time_label) + chr(10) if time_label else ''}"
-                f"⚽ {_h(_prematch_market_label(leg.get('market') or leg.get('selection')))}\n"
+                f"⚽ {_h(_prematch_row_market_label(leg))}\n"
                 f"💰 Кэф: <b>{float(leg.get('odd') or 0):.2f}</b>"
             )
         parts.append(f"<b>{i}.</b> {_result_icon(row)} Экспресс @ <b>{float(row.get('odd') or 0):.2f}</b>\n" + "\n\n".join(legs))

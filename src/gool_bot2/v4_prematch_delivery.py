@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from html import escape
 from hashlib import sha256
 import json
@@ -15,6 +16,31 @@ from .v4_prematch_card import render_v4_parlay_card, render_v4_prematch_card, re
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _moscow_day(value: Any = None):
+    try:
+        if value:
+            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = datetime.now(timezone.utc)
+        return dt.astimezone(ZoneInfo("Europe/Moscow")).date()
+    except Exception:
+        return datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Moscow")).date()
+
+
+def _today_super(rows: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
+    today = _moscow_day()
+    for row in rows:
+        if str(row.get("origin") or "").casefold() not in {"prematch_parlay", "parlay"}:
+            continue
+        if str(row.get("kind") or "").upper() != "SUPER":
+            continue
+        if _moscow_day(row.get("created_at")) == today:
+            return row
+    return None
 
 
 def prematch_keyboard(entry_id: str, entered: bool = False) -> dict[str, Any]:
@@ -361,9 +387,29 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         key = identity(legs)
         digest = sha256(json.dumps(key).encode()).hexdigest()[:24]
         pid = f"parlay:{kind.lower()}:{digest}"
-        parent = next((x for x in rows if str(x.get("origin") or "") in {"prematch_parlay", "parlay"} and identity(x.get("legs") or []) == key), None)
+
+        # SUPER is one public daily product, not one message per recalculated
+        # composition. PREMATCH discovery reruns during the day and may replace
+        # one or more legs; that must not create another public SUPER 10.
+        if kind == "SUPER":
+            parent = _today_super(rows)
+        else:
+            parent = next(
+                (
+                    x for x in rows
+                    if str(x.get("origin") or "") in {"prematch_parlay", "parlay"}
+                    and identity(x.get("legs") or []) == key
+                ),
+                None,
+            )
+
         if parent is not None:
             if parent.get("telegram_sent") or str(parent.get("result") or "pending") != "pending":
+                if kind == "SUPER":
+                    print(
+                        f"PREMATCH_SUPER_SKIP reason=already_sent_today entry={parent.get('entry_id')}",
+                        flush=True,
+                    )
                 continue
         else:
             parent = {

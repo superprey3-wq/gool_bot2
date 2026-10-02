@@ -90,3 +90,22 @@ def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
     assert "Upcoming" in text
     assert "Old Lost" not in text
     assert "Already Started" not in text
+
+
+def test_production_prematchaudit_command_is_routed(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.delenv("GOOL_MULTI_JOURNAL_PATH", raising=False)
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    journal = tmp_path / "signal_journal.json"
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        journal,
+        {"update_id": 14, "message": {"chat": {"id": 123}, "text": "/prematchaudit"}},
+    )
+    assert actions == 1
+    assert sent
+    assert "PREMATCH" in sent[0]

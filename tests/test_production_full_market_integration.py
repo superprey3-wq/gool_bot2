@@ -1,4 +1,4 @@
-from gool_bot2.prematch_full_market_runtime import select_production_full_market_pick
+from gool_bot2.prematch_full_market_runtime import production_full_market_picks, select_production_full_market_pick
 from gool_bot2.v4_prematch_settlement import settle_prematch_pick
 
 
@@ -59,3 +59,37 @@ def test_new_full_time_settlement_families():
     assert settle_prematch_pick({"market": "asian_handicap", "market_family": "asian_handicap", "selection": "home -1"}, 2, 1) == "push"
     assert settle_prematch_pick({"market": "european_handicap", "market_family": "european_handicap", "selection": "away +2"}, 2, 1) == "won"
     assert settle_prematch_pick({"market": "european_handicap", "market_family": "european_handicap", "selection": "draw (home -1)"}, 2, 1) == "won"
+
+
+def test_full_market_exposes_alternative_team_total_for_parlay():
+    analysis = {
+        "candidates": [
+            _row(
+                market_type="OVER_UNDER",
+                selection="OVER 2.5",
+                odds=1.82,
+                honest_probability=0.76,
+                market_probability=0.57,
+                expected_value=0.08,
+                confidence_score=84.0,
+            ),
+            _row(
+                market_type="OVER_UNDER",
+                selection="HOME_OVER 1.5",
+                odds=1.56,
+                honest_probability=0.78,
+                market_probability=0.66,
+                expected_value=0.06,
+                confidence_score=80.0,
+            ),
+        ]
+    }
+    rows = production_full_market_picks(
+        analysis,
+        event_id="m-alt", home="A", away="B", league="L", kickoff_ts=1.0,
+    )
+    assert len(rows) == 2
+    assert rows[0][0].market == "match_total"
+    assert rows[0][0].selection == "over 2.5"
+    assert rows[1][0].market == "home_total"
+    assert rows[1][0].selection == "over 1.5"

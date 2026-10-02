@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.full_market_brain import analyze_full_market
-from gool_bot2.prematch_full_market_runtime import select_production_full_market_pick
+from gool_bot2.prematch_full_market_runtime import production_full_market_picks
 from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
 from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
@@ -89,22 +89,32 @@ def one(r):
   try:
    odds_payload=fetch_event_odds(m.provider_match_id)
    full_analysis=analyze_full_market(odds_payload,r["profile"],quality=float(r["quality"]))
-   selected=select_production_full_market_pick(
+   selected_rows=production_full_market_picks(
     full_analysis,
     event_id=str(m.provider_match_id),home=m.home,away=m.away,
     league=m.league or "",kickoff_ts=kick,
     min_confidence=float(os.getenv("GOOL_PREMATCH_FULL_MARKET_MIN_CONFIDENCE","70")),
    )
-   if selected:
-    pick,full_meta=selected
-    picks=[pick]
-    info={**full_meta,"bookmaker":full_meta.get("bookmaker") or "Flashscore odds","full_market_active":True}
+   if selected_rows:
+    picks=[pick for pick,_meta in selected_rows]
+    primary_pick,primary_meta=selected_rows[0]
+    candidate_meta={
+     f"{pick.market}|{pick.selection}": meta_row
+     for pick,meta_row in selected_rows
+    }
+    info={
+     **primary_meta,
+     "bookmaker":primary_meta.get("bookmaker") or "Flashscore odds",
+     "full_market_active":True,
+     "candidate_meta":candidate_meta,
+    }
     print(
      "PREMATCH_FULL_MARKET",
      m.home,"-",m.away,
-     pick.market,pick.selection,f"@{pick.odds:.2f}",
-     f"p={pick.model_probability:.3f}",
-     f"confidence={float(full_meta.get('full_market_confidence') or 0):.1f}",
+     primary_pick.market,primary_pick.selection,f"@{primary_pick.odds:.2f}",
+     f"p={primary_pick.model_probability:.3f}",
+     f"confidence={float(primary_meta.get('full_market_confidence') or 0):.1f}",
+     f"alternatives={max(0,len(selected_rows)-1)}",
      flush=True,
     )
   except Exception as exc:

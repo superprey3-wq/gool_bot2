@@ -14,6 +14,7 @@ _MOSCOW = ZoneInfo("Europe/Moscow")
 _LOCK = threading.Lock()
 _LAST_WRITE: dict[str, tuple[float, str]] = {}
 _LAST_PRUNE_AT = 0.0
+_LAST_FINISHED_CHECK_AT = 0.0
 
 
 def _runtime() -> Path:
@@ -26,6 +27,21 @@ def memory_dir() -> Path:
 
 def state_path() -> Path:
     return Path(os.getenv("XBET_MARKET_MEMORY_STATE", str(_runtime() / "live" / "market_memory_state.json")))
+
+
+def _truthy(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _safe_event_name(event_id: str) -> str:
+    return "".join(ch for ch in str(event_id) if ch.isalnum() or ch in {"-", "_"}) or "unknown"
+
+
+def _event_path(event_id: str) -> Path:
+    return memory_dir() / "active" / f"{_safe_event_name(event_id)}.jsonl"
 
 
 def _number(value: Any) -> float | None:
@@ -152,6 +168,7 @@ def _update_summary(snapshot: dict[str, Any]) -> None:
     if not isinstance(row, dict):
         row = {
             "event_id": event_id,
+            "flashscore_event_id": snapshot.get("flashscore_event_id"),
             "home": snapshot.get("home"),
             "away": snapshot.get("away"),
             "scheduled_start_ts": snapshot.get("scheduled_start_ts"),
@@ -193,6 +210,7 @@ def _update_summary(snapshot: dict[str, Any]) -> None:
             recent[key] = windows
 
     row.update({
+        "flashscore_event_id": snapshot.get("flashscore_event_id") or row.get("flashscore_event_id"),
         "home": snapshot.get("home"),
         "away": snapshot.get("away"),
         "scheduled_start_ts": snapshot.get("scheduled_start_ts") or row.get("scheduled_start_ts"),
@@ -218,17 +236,17 @@ def _prune(now: float) -> None:
     root = memory_dir()
     if not root.exists():
         return
-    retention_days = max(2, int(os.getenv("XBET_MARKET_MEMORY_RETENTION_DAYS", "30")))
+    retention_days = max(1, int(os.getenv("XBET_MARKET_MEMORY_RETENTION_DAYS", "30")))
     cutoff = now - retention_days * 86400
-    files = sorted(root.glob("*.jsonl"))
+    files = sorted(root.rglob("*.jsonl"))
     for path in list(files):
         try:
             if path.stat().st_mtime < cutoff:
                 path.unlink()
         except OSError:
             pass
-    cap = max(256 * 1024 * 1024, int(os.getenv("XBET_MARKET_MEMORY_MAX_BYTES", str(3 * 1024 * 1024 * 1024))))
-    files = sorted(root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime)
+    cap = max(32 * 1024 * 1024, int(os.getenv("XBET_MARKET_MEMORY_MAX_BYTES", str(3 * 1024 * 1024 * 1024))))
+    files = sorted(root.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime)
     total = 0
     sizes: list[tuple[Path, int]] = []
     for path in files:
@@ -248,6 +266,74 @@ def _prune(now: float) -> None:
             pass
 
 
+
+def delete_market_memory(event_id: str) -> bool:
+    """Delete one match's detailed memory in ephemeral (Monkey) mode."""
+    event_id = str(event_id or "").strip()
+    if not event_id:
+        return False
+    changed = False
+    with _LOCK:
+        path = _event_path(event_id)
+        try:
+            if path.exists():
+                path.unlink()
+                changed = True
+        except OSError:
+            pass
+        payload = _load_state()
+        matches = payload.get("matches") or {}
+        if isinstance(matches, dict) and event_id in matches:
+            matches.pop(event_id, None)
+            payload["matches"] = matches
+            payload["captured_at"] = datetime.now(timezone.utc).isoformat()
+            _write_state(payload)
+            changed = True
+        for phase in ("PREMATCH", "LIVE"):
+            _LAST_WRITE.pop(f"{phase}:{event_id}", None)
+    if changed:
+        print(f"XBET_MARKET_MEMORY_DELETE event={event_id} reason=finished", flush=True)
+    return changed
+
+
+def purge_finished_ephemeral(provider: Any, live_flashscore_ids: set[str] | None = None) -> int:
+    """Confirm FINISHED with Flashscore, then remove Monkey's per-match odds history."""
+    global _LAST_FINISHED_CHECK_AT
+    if not _truthy("XBET_MARKET_MEMORY_EPHEMERAL", False):
+        return 0
+    now = time.time()
+    interval = max(30.0, float(os.getenv("XBET_MARKET_MEMORY_FINISH_CHECK_SECONDS", "120")))
+    if now - _LAST_FINISHED_CHECK_AT < interval:
+        return 0
+    _LAST_FINISHED_CHECK_AT = now
+    live_ids = {str(x) for x in (live_flashscore_ids or set()) if str(x)}
+    payload = _load_state()
+    matches = payload.get("matches") or {}
+    if not isinstance(matches, dict):
+        return 0
+    candidates: dict[str, str] = {}
+    for event_id, row in matches.items():
+        if not isinstance(row, dict) or str(row.get("phase") or "").upper() != "LIVE":
+            continue
+        fs_id = str(row.get("flashscore_event_id") or "").strip()
+        if not fs_id or fs_id in live_ids:
+            continue
+        candidates[str(event_id)] = fs_id
+    if not candidates:
+        return 0
+    try:
+        states = provider.event_states(set(candidates.values())) or {}
+    except Exception as exc:
+        print(f"XBET_MARKET_MEMORY_FINISH_CHECK_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return 0
+    deleted = 0
+    for event_id, fs_id in candidates.items():
+        state = states.get(fs_id) or {}
+        if bool(state.get("is_finished")):
+            deleted += int(delete_market_memory(event_id))
+    return deleted
+
+
 def record_market_snapshot(
     *,
     event_id: str,
@@ -260,6 +346,7 @@ def record_market_snapshot(
     minute: int | None = None,
     score_home: int | None = None,
     score_away: int | None = None,
+    flashscore_event_id: str | None = None,
 ) -> bool:
     event_id = str(event_id or "").strip()
     cleaned = compact_markets(markets)
@@ -283,6 +370,7 @@ def record_market_snapshot(
         "moscow_day": local_day,
         "phase": str(phase).upper(),
         "event_id": event_id,
+        "flashscore_event_id": str(flashscore_event_id or "") or None,
         "home": str(home or ""),
         "away": str(away or ""),
         "scheduled_start_ts": scheduled_start_ts,
@@ -294,7 +382,11 @@ def record_market_snapshot(
     with _LOCK:
         root = memory_dir()
         root.mkdir(parents=True, exist_ok=True)
-        path = root / f"{local_day}.jsonl"
+        if _truthy("XBET_MARKET_MEMORY_EPHEMERAL", False):
+            path = _event_path(event_id)
+            path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            path = root / f"{local_day}.jsonl"
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")) + "\n")
         _LAST_WRITE[cache_key] = (now, signature)
@@ -303,4 +395,7 @@ def record_market_snapshot(
     return True
 
 
-__all__ = ["compact_markets", "memory_dir", "record_market_snapshot", "state_path"]
+__all__ = [
+    "compact_markets", "delete_market_memory", "memory_dir",
+    "purge_finished_ephemeral", "record_market_snapshot", "state_path",
+]

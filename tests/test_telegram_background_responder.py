@@ -109,3 +109,23 @@ def test_production_prematchaudit_command_is_routed(tmp_path: Path, monkeypatch)
     assert actions == 1
     assert sent
     assert "PREMATCH" in sent[0]
+
+
+def test_production_livecheck_command_is_routed(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        "gool_bot2.live_data_check.live_data_check_text",
+        lambda: "LIVE_CHECK_OK",
+    )
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 15, "message": {"chat": {"id": 123}, "text": "/livecheck"}},
+    )
+    assert actions == 1
+    assert sent == ["LIVE_CHECK_OK"]

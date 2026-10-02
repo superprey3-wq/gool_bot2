@@ -36,6 +36,22 @@ def append_prematch_entry(path: Path, row: dict[str, Any]) -> dict[str, Any]:
     existing = next((x for x in rows if str(x.get("entry_id") or "") == str(entry["entry_id"])), None)
     if existing is not None:
         return existing
+
+    # Public PREMATCH policy: one official single per fixture. Repeated discovery
+    # cycles may choose a different market/price for the same event, but once an
+    # official single has been journaled we must not publish another one.
+    event_id = str(entry.get("event_id") or entry.get("match_id") or "")
+    if event_id:
+        existing_event = next(
+            (
+                x for x in rows
+                if str(x.get("origin") or "").casefold() == "prematch"
+                and str(x.get("event_id") or x.get("match_id") or "") == event_id
+            ),
+            None,
+        )
+        if existing_event is not None:
+            return existing_event
     rows.append(entry)
     save_signal_journal(path, rows)
     return entry
@@ -248,7 +264,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
     seen: set[str] = set()
     for item in delivery.get("singles") or []:
         pick, tier = item if isinstance(item, tuple) else (item, "NORMAL")
-        key = f"{pick.event_id}:{pick.market}"
+        key = str(pick.event_id)
         if key in seen:
             continue
         seen.add(key)

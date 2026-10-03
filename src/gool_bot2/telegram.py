@@ -216,13 +216,13 @@ def _drain_prematch_result_notifications(journal_path: Path) -> int:
     sent_total = 0
     for row in pending_result_notifications(
         journal_path,
-        origins={"prematch", "prematch_parlay", "parlay"},
+        origins={"prematch", "prematch_value", "prematch_parlay", "parlay"},
     ):
         origin = str(row.get("origin") or "").casefold()
         if origin not in {"prematch", "prematch_parlay", "parlay"}:
             continue
         try:
-            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
+            sent = emit_prematch_result(row, {}) if origin in {"prematch", "prematch_value"} else emit_parlay_result(row)
             if finalize_result_delivery(journal_path, row, sent):
                 sent_total += int(sent or 0)
         except Exception as exc:
@@ -246,7 +246,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -263,6 +263,9 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text=="/livecheck":
     from .live_data_check import live_data_check_text
     replies=[live_data_check_text()]
+   elif text=="/valuehunter":
+    from .v4_value_hunter_delivery import value_hunter_report_text
+    replies=[value_hunter_report_text(journal_path)]
    elif text=="🎟 ординары":
     replies=prematch_singles_sections(journal_path)
    elif text=="🔗 экспрессы":

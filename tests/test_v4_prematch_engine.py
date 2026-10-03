@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery, signal_tier
 
 
 def test_devig_two_way_removes_margin():
@@ -80,7 +80,7 @@ def test_rank_singles_dedupes_same_event_market():
 
 def test_super_accumulator_requires_ten_distinct_low_price_legs():
     picks = [
-        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.80, 0.9)
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.68, 0.9)
         for i in range(10)
     ]
     row = build_super_accumulator(picks)
@@ -151,3 +151,20 @@ def test_goal_profile_compares_multiple_half_goal_total_lines():
     picks = picks_from_goal_profile(event_id="t1", home="A", away="B", profile=profile, market=market)
     assert {p.selection for p in picks} == {"over 1.5", "under 1.5", "over 2.5", "under 2.5", "over 3.5", "under 3.5"}
     assert all("3" not in p.selection or "3.5" in p.selection for p in picks)
+
+
+
+def test_public_prematch_requires_six_point_edge():
+    weak_public = PrematchPick("edge-low", "A", "B", "match_total", "over 2.5", 1.65, .70, .65, .90)
+    strong_enough = PrematchPick("edge-ok", "C", "D", "match_total", "over 2.5", 1.65, .72, .64, .90)
+    assert signal_tier(weak_public) is None
+    assert signal_tier(strong_enough) in {"NORMAL", "STRONG"}
+
+
+def test_delivery_doubles_require_six_point_edge_after_market_blend():
+    low = [
+        PrematchPick("l1", "A", "B", "match_total", "over 1.5", 1.55, .72, .66, .90),
+        PrematchPick("l2", "C", "D", "match_total", "over 1.5", 1.55, .72, .66, .90),
+    ]
+    delivery = choose_delivery(low, max_singles=0, max_doubles=3)
+    assert delivery["doubles"] == []

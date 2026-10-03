@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from html import escape
 from pathlib import Path
 from typing import Any, Iterable
@@ -15,6 +16,21 @@ from .v4_prematch_delivery import prematch_row_from_pick, prematch_keyboard, _ma
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+MSK = ZoneInfo("Europe/Moscow")
+
+
+def _moscow_day(value: Any | None = None):
+    if value is None:
+        return datetime.now(MSK).date()
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(MSK).date()
+    except Exception:
+        return None
 
 
 def _i(name: str, default: int) -> int:
@@ -113,7 +129,16 @@ def emit_value_hunter(
         rows = load_signal_journal(journal_path)
         sent["retried"] = _retry_pending(rows, journal_path)
         sent["cards"] += sent["retried"]
-        for pick, meta in ranked:
+        today = _moscow_day()
+        daily_cap = max(1, _i("GOOL_VALUE_HUNTER_MAX_PER_DAY", 8))
+        sent_today = sum(
+            1 for row in rows
+            if str(row.get("origin") or "").casefold() == "prematch_value"
+            and bool(row.get("telegram_sent"))
+            and _moscow_day(row.get("created_at")) == today
+        )
+        remaining_today = max(0, daily_cap - sent_today)
+        for pick, meta in ranked[:remaining_today]:
             event_id = str(pick.event_id)
             if _already_public_single(rows, event_id):
                 sent["skipped_existing"] += 1

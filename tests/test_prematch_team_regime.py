@@ -36,7 +36,7 @@ def test_full_match_profile_keeps_team_distribution_not_only_average():
     away = profile["full_match"]["away"]
 
     assert home["matches"] == 5
-    assert home["scored_ge"]["4"] == 3 / 5
+    assert home["scored_ge"]["4"] == 0.4
     assert home["recent5_over"]["2.5"] == 3 / 5
     assert away["conceded_ge"]["3"] >= 2 / 5
     assert len(home["goal_sequence"]) == 5

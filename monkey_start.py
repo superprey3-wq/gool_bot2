@@ -273,6 +273,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTI_TELEGRAM_MODE", "active")
     # MonkeyBytes/Pterodactyl is the production launcher here; make V4 authoritative here too.
     os.environ["GOOL_LIVE_V4_MODE"] = "active"
+    os.environ.setdefault("GOOL_LIVE_MULTI_ALL_MARKETS_SHADOW", "1")
 
     # Hard production kill-switches for every exchange-money lane. Values from an
     # old gool.env cannot re-enable them accidentally after this deployment.

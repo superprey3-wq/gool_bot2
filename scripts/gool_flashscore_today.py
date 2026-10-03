@@ -14,6 +14,7 @@ from gool_bot2.providers.prematch_fusion import PrematchDataFusion
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
+from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from pathlib import Path
 import os
 
@@ -67,6 +68,21 @@ if fusion_rows:
 
 print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in rows)),flush=True)
+
+brain_eligible_total=len(rows)
+rows,shortlist_stats=select_confident_prematch_rows(rows)
+print("PREMATCH_SHORTLIST",shortlist_stats,flush=True)
+update_prematch_status(
+ stage="market_lookup",
+ brain_eligible=brain_eligible_total,
+ shortlist=len(rows),
+ shortlist_cap=int(shortlist_stats.get("cap") or 0),
+ shortlist_qualified=int(shortlist_stats.get("qualified") or 0),
+ shortlist_rejected_sample=int(shortlist_stats.get("rejected_sample") or 0),
+ shortlist_rejected_agreement=int(shortlist_stats.get("rejected_agreement") or 0),
+ shortlist_rejected_separation=int(shortlist_stats.get("rejected_separation") or 0),
+ shortlist_rejected_probability=int(shortlist_stats.get("rejected_probability") or 0),
+)
 
 # Market-choice stage: the football brain selects interesting matches, then the
 # market brain compares every supported real market instead of blindly betting

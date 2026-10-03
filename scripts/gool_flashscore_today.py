@@ -16,6 +16,7 @@ from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_m
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from gool_bot2.prematch_quality import prematch_evidence_quality
+from gool_bot2.prematch_team_regime import apply_team_regime
 from pathlib import Path
 import os
 
@@ -169,6 +170,28 @@ def one(r):
     float(r["quality"]),m.league or "",kick,
    )]
    info=price
+
+ if picks:
+  adjusted=[]
+  candidate_meta=dict((info or {}).get("candidate_meta") or {})
+  for p in picks:
+   q,regime=apply_team_regime(p,r["profile"])
+   adjusted.append(q)
+   if regime.get("tags"):
+    key=f"{q.market}|{q.selection}"
+    specific=dict(candidate_meta.get(key) or {})
+    specific["team_regime"]=regime
+    candidate_meta[key]=specific
+    print(
+     "PREMATCH_TEAM_REGIME",m.home,"-",m.away,
+     q.market,q.selection,
+     f"adj={float(regime.get('adjustment_pp') or 0):+.1f}pp",
+     ",".join(regime.get("tags") or []),
+     flush=True,
+    )
+  picks=adjusted
+  if info is not None and candidate_meta:
+   info={**info,"candidate_meta":candidate_meta}
  return picks,info,r
 
 priced=[]; meta={}

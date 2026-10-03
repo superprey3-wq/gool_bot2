@@ -195,10 +195,17 @@ class XBetPrematchCollector:
             return 300.0
         return 600.0
 
-    def _due_prematch_candidates(self, rows: list[dict[str, Any]], now: float) -> list[dict[str, Any]]:
+    def _due_prematch_candidates(
+        self,
+        rows: list[dict[str, Any]],
+        now: float,
+        *,
+        known_event_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         horizon = max(6 * 3600, int(os.getenv("XBET_PREMATCH_TRACK_HORIZON_SECONDS", str(26 * 3600))))
         maximum = max(8, min(80, int(os.getenv("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "32"))))
-        due: list[tuple[float, dict[str, Any]]] = []
+        known = known_event_ids or set()
+        due: list[tuple[int, float, dict[str, Any]]] = []
         for row in rows:
             event_id = str(row.get("event_id") or "")
             start_ts = _event_start(row.get("event") or {})
@@ -209,9 +216,13 @@ class XBetPrematchCollector:
                 continue
             if now + 0.001 < float(self._next_poll_at.get(event_id, 0.0)):
                 continue
-            due.append((remaining, row))
-        due.sort(key=lambda item: item[0])
-        selected = [row for _, row in due[:maximum]]
+            # Bootstrap unseen events before repeatedly refreshing the nearest
+            # already-known ones. This guarantees broad catalogue coverage while
+            # preserving the existing near-kickoff refresh cadence afterwards.
+            unseen_rank = 0 if event_id not in known else 1
+            due.append((unseen_rank, remaining, row))
+        due.sort(key=lambda item: (item[0], item[1]))
+        selected = [row for _, _, row in due[:maximum]]
         for row in selected:
             event_id = str(row.get("event_id") or "")
             start_ts = _event_start(row.get("event") or {})
@@ -221,14 +232,21 @@ class XBetPrematchCollector:
     def _index(self) -> tuple[str | None, list[dict[str, Any]]]:
         roots = [self.active_root, *[root for root in ROOTS if root != self.active_root]]
         for root in roots:
+            merged: dict[str, dict[str, Any]] = {}
             for query in INDEX_QUERIES:
                 payload = _http_json(f"{root}/Get1x2_VZip?{query}")
                 value = payload.get("Value") if isinstance(payload, dict) else None
-                if isinstance(value, list) and value:
-                    rows = [row for row in value if isinstance(row, dict)]
-                    if rows:
-                        self.active_root = root
-                        return root, rows
+                if not isinstance(value, list):
+                    continue
+                for row in value:
+                    if not isinstance(row, dict):
+                        continue
+                    event_id = str(row.get("I") or "").strip()
+                    if event_id:
+                        merged[event_id] = row
+            if merged:
+                self.active_root = root
+                return root, list(merged.values())
         return None, []
 
     @staticmethod
@@ -307,7 +325,7 @@ class XBetPrematchCollector:
         root, index = self._index()
         previous = _load(self.state_path)
         stored = dict(previous.get("matches") or {}) if isinstance(previous.get("matches"), dict) else {}
-        limit = max(40, min(120, int(os.getenv("XBET_PREMATCH_FETCH_EVENTS", "80"))))
+        track_cap = max(120, min(5000, int(os.getenv("XBET_PREMATCH_TRACK_MAX_EVENTS", "2000"))))
         workers = max(2, min(16, int(os.getenv("XBET_PREMATCH_WORKERS", "8"))))
         now = time.time()
         candidates: list[dict[str, Any]] = []
@@ -364,8 +382,17 @@ class XBetPrematchCollector:
                         )
             candidates = selected  # every brain-selected fixture is processed; display limits belong elsewhere
         else:
-            indexed = [{**row, "root": root} for row in candidates[:limit]]
-            candidates = self._due_prematch_candidates(indexed, now)
+            # Background memory collection is deliberately separate from the
+            # production betting shortlist. Rotate through the whole available
+            # bookmaker catalogue in bounded batches; do not truncate to the
+            # first 80/120 events.
+            indexed = [{**row, "root": root} for row in candidates[:track_cap]]
+            indexed.sort(key=lambda row: _event_start(row.get("event") or {}) or float("inf"))
+            candidates = self._due_prematch_candidates(
+                indexed,
+                now,
+                known_event_ids={str(x) for x in stored.keys()},
+            )
 
         refreshed = 0
         if candidates:
@@ -447,6 +474,8 @@ class XBetPrematchCollector:
             "root": root,
             "latency_ms": int((time.time() - started) * 1000),
             "index_events": len(index),
+            "track_cap": track_cap,
+            "tracked_catalog_events": min(len(candidates) if targets else len(index), track_cap),
             "refreshed": refreshed,
             "matches": kept,
         }

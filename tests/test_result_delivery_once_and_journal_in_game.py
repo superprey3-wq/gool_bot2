@@ -79,3 +79,75 @@ def test_in_game_membership_comes_from_delivered_unsettled_journal_and_renderer_
     assert "Won Home" not in text
     assert "Never Sent" not in text
     assert "@ —" in text
+
+
+
+def test_in_game_prematch_markets_are_human_readable(tmp_path):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    rows = [
+        {
+            "entry_id": "prematch:1",
+            "entry_key": "prematch:1",
+            "match_id": "fs-1",
+            "home": "A",
+            "away": "B",
+            "origin": "prematch",
+            "lifecycle": "in_game",
+            "in_game": True,
+            "mode": "active",
+            "result": "pending",
+            "telegram_sent": True,
+            "minute": 0,
+            "score": [0, 0],
+            "market": "match_total",
+            "selection": "over 2.5",
+            "odd": 1.55,
+        },
+        {
+            "entry_id": "prematch:2",
+            "entry_key": "prematch:2",
+            "match_id": "fs-2",
+            "home": "C",
+            "away": "D",
+            "origin": "prematch",
+            "lifecycle": "in_game",
+            "in_game": True,
+            "mode": "active",
+            "result": "pending",
+            "telegram_sent": True,
+            "minute": 0,
+            "score": [0, 0],
+            "market": "home_total",
+            "selection": "under 4.5",
+            "odd": 2.12,
+        },
+        {
+            "entry_id": "prematch:3",
+            "entry_key": "prematch:3",
+            "match_id": "fs-3",
+            "home": "E",
+            "away": "F",
+            "origin": "prematch",
+            "lifecycle": "in_game",
+            "in_game": True,
+            "mode": "active",
+            "result": "pending",
+            "telegram_sent": True,
+            "minute": 0,
+            "score": [0, 0],
+            "market": "btts",
+            "selection": "yes",
+            "odd": 1.70,
+        },
+    ]
+    journal.write_text(json.dumps(rows), "utf-8")
+    analysis.write_text("", "utf-8")
+
+    text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
+
+    assert "ТБ 2.5 @ 1.55" in text
+    assert "ИТМ1 4.5 @ 2.12" in text
+    assert "Обе забьют — Да @ 1.70" in text
+    assert "match_total" not in text
+    assert "home_total" not in text

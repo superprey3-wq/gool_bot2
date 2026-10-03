@@ -32,6 +32,7 @@ def _deliver_results() -> None:
 def main() -> None:
     discovery_interval = max(1800, int(os.getenv("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")))
     result_interval = max(30, int(os.getenv("GOOL_PREMATCH_RESULT_INTERVAL_SECONDS", "60")))
+    cycle_timeout = max(1800, int(os.getenv("GOOL_PREMATCH_CYCLE_TIMEOUT_SECONDS", "7200")))
     os.environ["GOOL_PREMATCH_DELIVER"] = "1"
     # Discovery/pricing may be infrequent, but settlement/result cards must be watched continuously.
     next_discovery = 0.0
@@ -49,7 +50,7 @@ def main() -> None:
             try:
                 if not SCRIPT.is_file():
                     raise RuntimeError(f"prematch_script_missing={SCRIPT}")
-                proc = subprocess.run([sys.executable, str(SCRIPT)], cwd=str(ROOT), env=os.environ.copy(), timeout=1800)
+                proc = subprocess.run([sys.executable, str(SCRIPT)], cwd=str(ROOT), env=os.environ.copy(), timeout=cycle_timeout)
                 update_prematch_status(
                     running=False,
                     last_cycle_finished_at=datetime.now(timezone.utc).isoformat(),

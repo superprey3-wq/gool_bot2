@@ -354,16 +354,63 @@ def _active_profile(record: dict[str, Any], first_half: dict[str, Any], second_h
 
 
 def _full_match_profile(context: dict[str, Any], home: str, away: str) -> dict[str, Any]:
-    """Full-time fallback for prematch pricing when historical HT splits are unavailable."""
+    """Full-time profile preserving each team's distribution, not only averages."""
     def team(rows: list[dict[str, Any]], name: str) -> dict[str, Any]:
-        gf=[]; ga=[]
+        games: list[tuple[int, int]] = []
         for row in _dedupe(rows):
             hs=_number(row.get("home_score")); aws=_number(row.get("away_score"))
-            if hs is None or aws is None: continue
-            if _similar(str(row.get("home") or ""), name): gf.append(hs); ga.append(aws)
-            elif _similar(str(row.get("away") or ""), name): gf.append(aws); ga.append(hs)
-        if not gf: return {"matches":0,"avg_for":None,"avg_against":None}
-        return {"matches":len(gf),"avg_for":sum(gf)/len(gf),"avg_against":sum(ga)/len(ga)}
+            if hs is None or aws is None:
+                continue
+            if _similar(str(row.get("home") or ""), name):
+                games.append((max(0,int(hs)),max(0,int(aws))))
+            elif _similar(str(row.get("away") or ""), name):
+                games.append((max(0,int(aws)),max(0,int(hs))))
+        if not games:
+            return {
+                "matches":0,"avg_for":None,"avg_against":None,"avg_total":None,
+                "over":{f"{line:.1f}":None for line in TOTAL_LINES},
+                "recent5_over":{f"{line:.1f}":None for line in TOTAL_LINES},
+                "scored_ge":{str(n):None for n in range(1,5)},
+                "conceded_ge":{str(n):None for n in range(1,5)},
+                "recent5_scored_ge":{str(n):None for n in range(1,5)},
+                "recent5_conceded_ge":{str(n):None for n in range(1,5)},
+            }
+        totals=[gf+ga for gf,ga in games]
+        recent5=games[:5]
+        recent5_totals=[gf+ga for gf,ga in recent5]
+        count=len(games)
+        n5=len(recent5)
+        return {
+            "matches":count,
+            "avg_for":sum(gf for gf,_ in games)/count,
+            "avg_against":sum(ga for _,ga in games)/count,
+            "avg_total":sum(totals)/count,
+            "over":{
+                f"{line:.1f}":sum(1 for total in totals if total>line)/count
+                for line in TOTAL_LINES
+            },
+            "recent5_over":{
+                f"{line:.1f}":sum(1 for total in recent5_totals if total>line)/n5
+                for line in TOTAL_LINES
+            },
+            "scored_ge":{
+                str(n):sum(1 for gf,_ in games if gf>=n)/count
+                for n in range(1,5)
+            },
+            "conceded_ge":{
+                str(n):sum(1 for _,ga in games if ga>=n)/count
+                for n in range(1,5)
+            },
+            "recent5_scored_ge":{
+                str(n):sum(1 for gf,_ in recent5 if gf>=n)/n5
+                for n in range(1,5)
+            },
+            "recent5_conceded_ge":{
+                str(n):sum(1 for _,ga in recent5 if ga>=n)/n5
+                for n in range(1,5)
+            },
+            "goal_sequence":[{"gf":gf,"ga":ga,"total":gf+ga} for gf,ga in games[:10]],
+        }
     hp=team(list(context.get("home_recent") or []), home); ap=team(list(context.get("away_recent") or []), away)
     hl=_mean([_number(hp.get("avg_for")),_number(ap.get("avg_against"))])
     al=_mean([_number(ap.get("avg_for")),_number(hp.get("avg_against"))])

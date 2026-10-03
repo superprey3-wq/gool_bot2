@@ -9,6 +9,7 @@ from .goal_state_engine import build_goal_state_experts
 from .goal_state_policy import enforce_goal_state_policy
 from .match_context import provider_count, xg_or_proxy_pair
 from .live_goal_brain_v4 import evaluate_live_goals
+from .live_multi_shadow import observe_live_multi_all_markets_shadow
 from .v4_live_policy import LiveV4Input, decide_live_v4
 from .matchbook_exchange import matchbook_context
 from .multi_another_goal_guard import enforce_another_goal_context
@@ -483,6 +484,16 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
         experts.pop("goal_before_ht", None)
 
     market = _market_row(record)
+
+    # Research-only full LIVE market arbiter. It sees the exact production
+    # snapshot plus the real 1xBet market catalogue, but it cannot mutate the
+    # active GOOL decision or send Telegram signals. Tomorrow's comparison is
+    # therefore apples-to-apples against the current public LIVE product.
+    try:
+        observe_live_multi_all_markets_shadow(record, market, analysis_path)
+    except Exception as exc:
+        print(f"GOOL_LIVE_MULTI_ALL_SHADOW_ERROR match={mid} error={type(exc).__name__}:{exc}", flush=True)
+
     record["xbet_live_1x2"] = live_1x2_context(market)
     record["matchbook_exchange"] = matchbook_context(record)
     intelligence = apply_match_intelligence(

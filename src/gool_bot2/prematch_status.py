@@ -52,6 +52,7 @@ def prematch_status_text() -> str:
     lines = [
         "🩺 <b>PREMATCH STATUS</b>",
         f"Состояние: <b>{'RUNNING' if running else 'IDLE'}</b>",
+        f"Этап: <b>{_fmt(data.get('stage'))}</b>",
         f"Последний старт: <code>{_fmt(data.get('last_cycle_started_at'))}</code>",
         f"Последнее завершение: <code>{_fmt(data.get('last_cycle_finished_at'))}</code>",
         f"Exit code: <b>{_fmt(exit_code)}</b>",
@@ -64,6 +65,7 @@ def prematch_status_text() -> str:
         f"ординары: <b>{_fmt(data.get('singles'))}</b>",
         f"экспрессы: <b>{_fmt(data.get('doubles'))}</b>",
         f"SUPER: <b>{'да' if data.get('super') else 'нет'}</b>",
+        f"1xBet matched/stored: <b>{_fmt(data.get('xbet_matches'))}</b> · refreshed: <b>{_fmt(data.get('xbet_refreshed'))}</b>",
         "",
         "<b>Отправка</b>",
         f"cards: <b>{_fmt(data.get('delivered_cards'))}</b> · "

@@ -34,6 +34,81 @@ def _odd(row: dict[str, Any]) -> str:
     return f"{value:.2f}" if value > 1.0 else "—"
 
 
+def _display_market(row: dict[str, Any]) -> str:
+    """Human-readable market label for LIVE and PREMATCH journal rows."""
+    import re
+
+    market = str(row.get("market") or "").strip()
+    selection = str(row.get("selection") or "").strip()
+    origin = str(row.get("origin") or "").strip().casefold()
+
+    # LIVE entries already store a public label such as "1Т ТБ 0.5".
+    if origin != "prematch":
+        return market or selection or "?"
+
+    family = market.casefold().replace("-", "_").replace(" ", "_")
+    low = " ".join(selection.casefold().replace("_", " ").split())
+
+    def line_side() -> tuple[str | None, str | None]:
+        m = re.search(r"\b(over|under)\s+([+-]?\d+(?:[.,]\d+)?)", low)
+        if not m:
+            return None, None
+        return m.group(1), m.group(2).replace(",", ".")
+
+    side, line = line_side()
+    if family in {"match_total", "ft_over_under"} and side and line:
+        return f"{'ТБ' if side == 'over' else 'ТМ'} {line}"
+    if family == "home_total" and side and line:
+        return f"{'ИТБ1' if side == 'over' else 'ИТМ1'} {line}"
+    if family == "away_total" and side and line:
+        return f"{'ИТБ2' if side == 'over' else 'ИТМ2'} {line}"
+    if family in {"1h_over_under", "first_half_total"} and side and line:
+        return f"1-й тайм: {'ТБ' if side == 'over' else 'ТМ'} {line}"
+    if family in {"2h_over_under", "second_half_total"} and side and line:
+        return f"2-й тайм: {'ТБ' if side == 'over' else 'ТМ'} {line}"
+
+    if family in {"btts", "btts_yes", "btts_no"} or "btts" in low:
+        negative = family.endswith("_no") or low in {"no", "нет"} or " no" in f" {low}"
+        return "Обе забьют — Нет" if negative else "Обе забьют — Да"
+
+    if family in {"match_1x2", "1x2", "home_draw_away"}:
+        if low in {"home", "1", "home win", "п1"}:
+            return "Победа хозяев"
+        if low in {"away", "2", "away win", "п2"}:
+            return "Победа гостей"
+        if low in {"draw", "x", "ничья"}:
+            return "Ничья"
+
+    if family == "double_chance":
+        compact = selection.upper().replace(" ", "").replace("_", "")
+        aliases = {"HOMEORDRAW": "1X", "DRAWORAWAY": "X2", "HOMEORAWAY": "12"}
+        return f"Двойной шанс {aliases.get(compact, selection.upper().replace('_', ' '))}"
+
+    # Legacy exact-trend identifiers.
+    exact = {
+        "FT_OVER_2.5": "ТБ 2.5",
+        "FT_UNDER_2.5": "ТМ 2.5",
+        "BTTS_YES": "Обе забьют — Да",
+        "BTTS_NO": "Обе забьют — Нет",
+        "1H_OVER_0.5": "1-й тайм: ТБ 0.5",
+        "1H_OVER_1.5": "1-й тайм: ТБ 1.5",
+        "2H_OVER_0.5": "2-й тайм: ТБ 0.5",
+        "2H_OVER_1.5": "2-й тайм: ТБ 1.5",
+    }
+    if market.upper() in exact:
+        return exact[market.upper()]
+
+    # If production selected a readable full-market selection, prefer it to an
+    # internal family name. Never expose match_total/home_total to Telegram.
+    if selection:
+        pretty = selection.replace("_", " ")
+        m = re.search(r"\b(over|under)\s+(\d+(?:[.,]\d+)?)", pretty.casefold())
+        if m:
+            return f"{'ТБ' if m.group(1) == 'over' else 'ТМ'} {m.group(2).replace(',', '.')}"
+        return pretty
+    return market.replace("_", " ") or "?"
+
+
 def _latest_analysis(path: Path | None) -> dict[str, dict[str, Any]]:
     if path is None or not path.exists():
         return {}
@@ -120,7 +195,7 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
         block = (
             f"<b>{index}. {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
             f"сейчас <b>{current_minute}' · {current_score[0]}:{current_score[1]}</b>\n"
-            f"🎯 <b>{_h(row.get('market'))} @ {_odd(row)}</b>\n"
+            f"🎯 <b>{_h(_display_market(row))} @ {_odd(row)}</b>\n"
             f"🧠 <b>{rating:.0f}/100</b> · {_h(source)}\n"
             f"↳ вход {int(row.get('minute') or 0)}' · {entry_score[0]}:{entry_score[1]}"
         )

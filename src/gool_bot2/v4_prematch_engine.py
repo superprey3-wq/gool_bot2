@@ -179,7 +179,7 @@ def choose_delivery(
 
     super_ticket = build_super_accumulator(
         parlay_pool, target_legs=10, min_leg_probability=.74,
-        min_quality=.80, min_edge=.035, min_ev=.02, max_same_market=6,
+        min_quality=.80, min_edge=.060, min_ev=.02, max_same_market=6,
     )
     doubles = build_accumulators(
         parlay_pool, legs=2, min_combined_probability=.50,
@@ -189,7 +189,7 @@ def choose_delivery(
     used = set()
     for acc in doubles:
         legs = acc["legs"]
-        if any(p.model_probability < .69 or p.data_quality < .75 or p.edge < .045 for p in legs):
+        if any(p.model_probability < .69 or p.data_quality < .75 or p.edge < .060 for p in legs):
             continue
         if any(p.event_id in used for p in legs):
             continue
@@ -502,10 +502,10 @@ def signal_tier(
     pick: PrematchPick,
     *,
     normal_min_probability: float = 0.60,
-    normal_min_edge: float = 0.025,
+    normal_min_edge: float = 0.060,
     normal_min_ev: float = 0.01,
     strong_min_probability: float = 0.68,
-    strong_min_edge: float = 0.055,
+    strong_min_edge: float = 0.080,
     strong_min_ev: float = 0.04,
     min_quality: float = 0.55,
 ) -> str | None:

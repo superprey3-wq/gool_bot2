@@ -80,7 +80,7 @@ def test_rank_singles_dedupes_same_event_market():
 
 def test_super_accumulator_requires_ten_distinct_low_price_legs():
     picks = [
-        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.68, 0.9)
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.86, 0.80, 0.9)
         for i in range(10)
     ]
     row = build_super_accumulator(picks)

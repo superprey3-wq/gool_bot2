@@ -4,7 +4,10 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+
+from .prematch_status import update_prematch_status
 
 ROOT = Path("/home/container")
 SCRIPT = ROOT / "scripts" / "gool_flashscore_today.py"
@@ -36,14 +39,32 @@ def main() -> None:
         now = time.time()
         if now >= next_discovery:
             started = now
+            next_discovery = started + discovery_interval
+            update_prematch_status(
+                running=True,
+                last_cycle_started_at=datetime.fromtimestamp(started, timezone.utc).isoformat(),
+                next_cycle_at=datetime.fromtimestamp(next_discovery, timezone.utc).isoformat(),
+                last_error=None,
+            )
             try:
                 if not SCRIPT.is_file():
                     raise RuntimeError(f"prematch_script_missing={SCRIPT}")
                 proc = subprocess.run([sys.executable, str(SCRIPT)], cwd=str(ROOT), env=os.environ.copy(), timeout=1800)
+                update_prematch_status(
+                    running=False,
+                    last_cycle_finished_at=datetime.now(timezone.utc).isoformat(),
+                    last_exit_code=int(proc.returncode),
+                    last_error=None if proc.returncode == 0 else f"script_exit_{proc.returncode}",
+                )
                 print(f"GOOL_PREMATCH cycle_exit={proc.returncode}", flush=True)
             except Exception as exc:
+                update_prematch_status(
+                    running=False,
+                    last_cycle_finished_at=datetime.now(timezone.utc).isoformat(),
+                    last_exit_code=-1,
+                    last_error=f"{type(exc).__name__}:{exc}",
+                )
                 print(f"GOOL_PREMATCH cycle_error={type(exc).__name__}:{exc}", flush=True)
-            next_discovery = started + discovery_interval
 
         _deliver_results()
         time.sleep(float(result_interval))

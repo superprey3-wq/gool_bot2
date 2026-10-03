@@ -27,7 +27,9 @@ def leg(p,meta):
 fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); day=datetime.now(MSK).date()
 fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and float(m.meta["scheduled_start_ts"])>now and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
 print("PIPELINE_START",len(fixtures),flush=True)
+update_prematch_status(stage="brain", fixtures=len(fixtures), brain_eligible=0, priced=0)
 rows,fail=_analyse_fixtures(fs,fixtures); rows=[r for r in rows if r.get("primary_trend")]
+update_prematch_status(stage="market_lookup", fixtures=len(fixtures), brain_eligible=len(rows), brain_failures=len(fail))
 print("BRAIN_ELIGIBLE",len(rows),"FAIL",len(fail),flush=True)
 
 # Second-stage football confirmation. Do not fan out secondary providers across the
@@ -72,8 +74,10 @@ print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in ro
 runtime=Path(os.getenv("RUNTIME_DATA_DIR","data"))
 xbet_state=Path(os.getenv("XBET_PREMATCH_STATE",str(runtime/"live"/"xbet_prematch_market.json")))
 try:
- XBetPrematchCollector(xbet_state).collect_once(targets=[r["match"] for r in rows])
+ xbet_result=XBetPrematchCollector(xbet_state).collect_once(targets=[r["match"] for r in rows])
+ update_prematch_status(stage="pricing", xbet_matches=len((xbet_result or {}).get("matches") or {}), xbet_refreshed=int((xbet_result or {}).get("refreshed") or 0))
 except Exception as exc:
+ update_prematch_status(stage="pricing", xbet_error=f"{type(exc).__name__}:{exc}")
  print("PREMATCH_XBET_MARKET_ERROR",type(exc).__name__,str(exc),flush=True)
 
 def one(r):
@@ -169,6 +173,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
+update_prematch_status(stage="delivery", priced=len(priced))
 print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
 max_singles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_SINGLES","0")))
@@ -202,6 +207,7 @@ if d["singles"]:
 if d["mode"]=="NO_BET":print("NO QUALIFIED BETS",flush=True)
 
 update_prematch_status(
+ stage="done",
  fixtures=len(fixtures),
  brain_eligible=len(rows),
  priced=len(priced),

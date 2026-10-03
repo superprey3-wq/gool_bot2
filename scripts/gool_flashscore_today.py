@@ -15,6 +15,7 @@ from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
+from gool_bot2.prematch_quality import prematch_evidence_quality
 from pathlib import Path
 import os
 
@@ -46,10 +47,7 @@ if fusion_rows:
    profile=build_prematch_goal_profile({"match":{"home":m.home,"away":m.away},"prematch_context":history})
    samples=[int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half","second_half","full_match")]
    sample=max(samples or [0])
-   coverage=sum(1 for v in (history.get("source_coverage") or {}).values() if int(v or 0)>0)
-   sample_quality=min(1.0,sample/8.0)
-   source_quality=min(1.0,coverage/3.0)
-   quality=max(float(r.get("quality") or 0.0), min(1.0,0.78*sample_quality+0.22*source_quality))
+   quality=prematch_evidence_quality(profile, source_coverage=history.get("source_coverage") or {})
    trends=_trend_signals(profile,quality); primary=_primary_trend(trends)
    return {**r,"profile":profile,"sample":sample,"quality":quality,"brain_score":_brain_score(profile,quality),
            "trends":trends,"primary_trend":primary,"sources":history.get("sources") or [],

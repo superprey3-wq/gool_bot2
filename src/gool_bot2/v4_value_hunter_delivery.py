@@ -24,6 +24,52 @@ def _i(name: str, default: int) -> int:
         return int(default)
 
 
+def _caption(row: dict[str, Any]) -> str:
+    p = float(row.get("model_probability") or row.get("probability") or 0.0)
+    mp = float(row.get("market_probability") or 0.0)
+    odd = float(row.get("odd") or 0.0)
+    fair = 1.0 / max(.0001, p)
+    edge = p - mp
+    ev = p * odd - 1.0
+    return (
+        f"🔥 <b>GOOL VALUE HUNTER · HIGH ODDS</b>\n"
+        f"{escape(str(row.get('home') or '?'))} — {escape(str(row.get('away') or '?'))}\n"
+        f"<b>{escape(_market_label(str(row.get('selection') or row.get('market') or '?')))} @ {odd:.2f}</b>\n"
+        f"🧠 GOOL {p*100:.1f}% · рынок {mp*100:.1f}%\n"
+        f"⚖️ Fair GOOL {fair:.2f} · edge {edge*100:+.1f} п.п. · EV {ev*100:+.1f}%"
+    )
+
+
+def _retry_pending(rows: list[dict[str, Any]], journal_path: Path) -> int:
+    delivered = 0
+    for row in rows:
+        if str(row.get("origin") or "").casefold() != "prematch_value":
+            continue
+        if bool(row.get("telegram_sent")):
+            continue
+        if str(row.get("result") or "pending").casefold() != "pending":
+            continue
+        try:
+            png = render_v4_prematch_card(row)
+            sent = telegram.broadcast_photo(
+                png,
+                caption=_caption(row),
+                reply_markup=prematch_keyboard(str(row.get("entry_id") or "")),
+            )
+        except Exception as exc:
+            print(f"VALUE_HUNTER_RETRY_ERROR entry={row.get('entry_id')} error={type(exc).__name__}:{exc}", flush=True)
+            sent = 0
+        if sent:
+            row["telegram_sent"] = True
+            row["telegram_sent_at"] = _now()
+            row["telegram_delivery_count"] = int(sent)
+            delivered += 1
+    if delivered:
+        save_signal_journal(journal_path, rows)
+        print(f"VALUE_HUNTER_RETRY delivered={delivered}", flush=True)
+    return delivered
+
+
 def _already_public_single(rows: list[dict[str, Any]], event_id: str) -> bool:
     for row in rows:
         if str(row.get("origin") or "").casefold() not in {"prematch", "prematch_value"}:
@@ -62,9 +108,11 @@ def emit_value_hunter(
     cap = max(1, _i("GOOL_VALUE_HUNTER_MAX_PER_CYCLE", 5))
     ranked = ranked[:cap]
 
-    sent = {"cards": 0, "entries": 0, "skipped_existing": 0}
+    sent = {"cards": 0, "entries": 0, "skipped_existing": 0, "retried": 0}
     with _locked(journal_path):
         rows = load_signal_journal(journal_path)
+        sent["retried"] = _retry_pending(rows, journal_path)
+        sent["cards"] += sent["retried"]
         for pick, meta in ranked:
             event_id = str(pick.event_id)
             if _already_public_single(rows, event_id):
@@ -98,17 +146,9 @@ def emit_value_hunter(
             save_signal_journal(journal_path, rows)
 
             png = render_v4_prematch_card(row)
-            fair = 1.0 / max(.0001, float(pick.model_probability))
-            caption = (
-                f"🔥 <b>GOOL VALUE HUNTER · HIGH ODDS</b>\n"
-                f"{escape(str(pick.home))} — {escape(str(pick.away))}\n"
-                f"<b>{escape(_market_label(str(pick.selection or pick.market)))} @ {float(pick.odds):.2f}</b>\n"
-                f"🧠 GOOL {float(pick.model_probability)*100:.1f}% · рынок {float(pick.market_probability)*100:.1f}%\n"
-                f"⚖️ Fair GOOL {fair:.2f} · edge {float(pick.edge)*100:+.1f} п.п. · EV {float(pick.expected_value)*100:+.1f}%"
-            )
             delivered = telegram.broadcast_photo(
                 png,
-                caption=caption,
+                caption=_caption(row),
                 reply_markup=prematch_keyboard(str(row["entry_id"])),
             )
             if delivered:

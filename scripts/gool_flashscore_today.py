@@ -256,10 +256,8 @@ d=choose_delivery(
  max_doubles=None if max_doubles<=0 else max_doubles,
 )
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
-value_delivered={"cards":0,"entries":0,"skipped_existing":0}
-if value_candidates:
- value_delivered=emit_value_hunter(value_candidates,journal)
- print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)
+value_delivered=emit_value_hunter(value_candidates,journal)
+print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)
 
 delivered={"cards":0,"entries":0,"parlays":0}
 if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}:

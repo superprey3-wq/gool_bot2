@@ -83,7 +83,9 @@ def render_v4_prematch_card(
     while len(score) < 2: score.append(0)
 
     tier = str(row.get("tier") or "NORMAL").upper()
-    accent = GOLD if tier == "STRONG" else ACCENT
+    product = str(row.get("product") or "").casefold()
+    is_value = product == "value_hunter" or tier == "VALUE"
+    accent = GOLD if tier == "STRONG" or is_value else ACCENT
     odd = float(row.get("odd") or 0.0)
     market = _market_label(str(row.get("selection") or row.get("market") or "?"))
     probability = float(row.get("probability") or row.get("model_probability") or 0.0)
@@ -97,9 +99,9 @@ def render_v4_prematch_card(
     draw.rounded_rectangle((24,20,1056,112),24,fill=PANEL,outline=accent,width=2)
     draw.rectangle((24,20,40,112),fill=accent)
     draw.text((58,36),"GOOL V4",font=sc._font(36,True),fill=accent)
-    draw.text((58,78),"PREMATCH • MODEL RADAR",font=sc._font(15,True),fill=TEXT)
+    draw.text((58,78),"VALUE HUNTER • HIGH ODDS" if is_value else "PREMATCH • MODEL RADAR",font=sc._font(15,True),fill=TEXT)
     draw.rounded_rectangle((825,38,1028,93),16,fill=accent)
-    _center_in_box(draw,"В ИГРЕ" if live else "PREMATCH",(825,38,1028,93),sc._font(18,True),BG)
+    _center_in_box(draw,"В ИГРЕ" if live else ("VALUE" if is_value else "PREMATCH"),(825,38,1028,93),sc._font(18,True),BG)
 
     _center(draw, f"🏆 {league}", 145, _fit(draw, f"🏆 {league}", 930, 18, True), MUTED)
     sc._badge(img, draw, 180, 300, sc._logo(meta,"home"), home, accent)
@@ -132,7 +134,8 @@ def render_v4_prematch_card(
     draw.text((735,790),f"{edge*100:+.1f} п.п.",font=sc._font(36,True),fill=accent if edge>0 else MUTED)
 
     draw.rounded_rectangle((55,910,1025,985),20,fill=PANEL2,outline=accent,width=2)
-    _center(draw,"GOOL ВЫБРАЛ ЛУЧШИЙ ДОСТУПНЫЙ РЫНОК ДЛЯ ЭТОГО МАТЧА",932,_fit(draw,"GOOL ВЫБРАЛ ЛУЧШИЙ ДОСТУПНЫЙ РЫНОК ДЛЯ ЭТОГО МАТЧА",900,16,True),TEXT)
+    footer_text = "GOOL НАШЁЛ ЗАВЫШЕННУЮ ЦЕНУ БУКМЕКЕРА" if is_value else "GOOL ВЫБРАЛ ЛУЧШИЙ ДОСТУПНЫЙ РЫНОК ДЛЯ ЭТОГО МАТЧА"
+    _center(draw,footer_text,932,_fit(draw,footer_text,900,16,True),TEXT)
     _center(draw,"PREMATCH  •  В ИГРЕ  •  РЕЗУЛЬТАТ",1030,sc._font(15,True),MUTED)
     _center(draw,"GOOL V4 • MODEL SIGNAL",1068,sc._font(12,True),accent)
     return sc._save(img)

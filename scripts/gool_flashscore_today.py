@@ -17,6 +17,8 @@ from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
+from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick
+from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
 
@@ -101,6 +103,7 @@ def one(r):
  picks=[]
  info=None
  odds_payload=None
+ value_pick=None
 
  # Production priority 1: the tested full-market brain compares the real market
  # catalogue and may choose a supported high-confidence BET instead of being tied
@@ -109,6 +112,34 @@ def one(r):
   try:
    odds_payload=fetch_event_odds(m.provider_match_id)
    full_analysis=analyze_full_market(odds_payload,r["profile"],quality=float(r["quality"]))
+
+   # VALUE HUNTER examines every modeled FULL_TIME market, including prices
+   # intentionally too large for the ordinary PREMATCH product.
+   hunter_rows=[]
+   for hp,hm in analysis_value_rows(
+    full_analysis,
+    event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    league=m.league or "",kickoff_ts=kick,
+   ):
+    before=float(hp.model_probability)
+    hq,regime=apply_team_regime(hp,r["profile"])
+    hmeta={**hm,"probability_before_regime":before}
+    if regime.get("tags"):
+     hmeta["team_regime"]=regime
+    hunter_rows.append((hq,hmeta))
+   value_pick=select_best_value_pick(hunter_rows)
+   if value_pick:
+    vp,vm=value_pick
+    print(
+     "VALUE_HUNTER_CANDIDATE",m.home,"-",m.away,
+     vp.market,vp.selection,f"@{vp.odds:.2f}",
+     f"p={vp.model_probability:.3f}",
+     f"edge={vp.edge*100:+.1f}pp",
+     f"ev={vp.expected_value*100:+.1f}%",
+     f"score={float(vm.get('value_score') or 0):.1f}",
+     flush=True,
+    )
+
    selected_rows=production_full_market_picks(
     full_analysis,
     event_id=str(m.provider_match_id),home=m.home,away=m.away,
@@ -192,18 +223,22 @@ def one(r):
   picks=adjusted
   if info is not None and candidate_meta:
    info={**info,"candidate_meta":candidate_meta}
- return picks,info,r
+ return picks,info,r,value_pick
 
-priced=[]; meta={}
+priced=[]; meta={}; value_candidates=[]
 with ThreadPoolExecutor(max_workers=20) as pool:
  for ftr in as_completed([pool.submit(one,r) for r in rows]):
-  picks,x,r=ftr.result()
-  if not picks or not x:continue
+  picks,x,r,value_pick=ftr.result()
   m=r["match"]; fs_meta=dict(m.meta or {})
   home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
   if home_logo: fs_meta["home_logo_url"]=home_logo
   if away_logo: fs_meta["away_logo_url"]=away_logo
+  if value_pick:
+   vp,vm=value_pick
+   value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
+  if not picks or not x:
+   continue
   meta[str(m.provider_match_id)]={**x,"flashscore_meta":fs_meta}
   for p in picks:
    priced.append(p)
@@ -221,6 +256,11 @@ d=choose_delivery(
  max_doubles=None if max_doubles<=0 else max_doubles,
 )
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
+value_delivered={"cards":0,"entries":0,"skipped_existing":0}
+if value_candidates:
+ value_delivered=emit_value_hunter(value_candidates,journal)
+ print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)
+
 delivered={"cards":0,"entries":0,"parlays":0}
 if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}:
  retried=retry_pending_prematch_deliveries(journal)
@@ -255,4 +295,6 @@ update_prematch_status(
  delivered_cards=int(delivered.get("cards") or 0),
  delivered_entries=int(delivered.get("entries") or 0),
  delivered_parlays=int(delivered.get("parlays") or 0),
+ value_hunter_candidates=len(value_candidates),
+ value_hunter_sent=int(value_delivered.get("entries") or 0),
 )

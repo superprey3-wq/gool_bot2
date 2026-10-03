@@ -167,7 +167,7 @@ def settle_prematch_row(row: dict[str, Any], record: dict[str, Any]) -> bool:
     first_half = str(row.get("market_family") or "") == "first_half_total" or str(row.get("market") or "").upper().startswith("1H_")
     if not bool(match.get("is_finished")) and not (first_half and bool(match.get("is_halftime"))):
         return False
-    if str(row.get("origin") or "").casefold() != "prematch":
+    if str(row.get("origin") or "").casefold() not in {"prematch", "prematch_value"}:
         return False
     if str(row.get("result") or "pending").casefold() != "pending":
         return False
@@ -299,7 +299,7 @@ def reconcile_pending_prematch(journal_path) -> int:
         pending_rows: list[dict[str, Any]] = []
         for row in rows:
             origin = str(row.get("origin") or "").casefold()
-            if origin == "prematch" and str(row.get("result") or "pending").casefold() == "pending":
+            if origin in {"prematch", "prematch_value"} and str(row.get("result") or "pending").casefold() == "pending":
                 pending_rows.append(row)
             elif origin in {"prematch_parlay", "parlay"} and str(row.get("result") or "pending").casefold() == "pending":
                 pending_rows.extend(

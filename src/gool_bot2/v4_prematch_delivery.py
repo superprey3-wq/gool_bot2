@@ -43,6 +43,31 @@ def _today_super(rows: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
+def _today_used_double_events(rows: Iterable[dict[str, Any]]) -> set[str]:
+    """Fixtures already published in ordinary doubles today.
+
+    PREMATCH is recalculated several times per day. Without a day-level guard,
+    one strong fixture can be paired with a different second leg on every cycle
+    and appear in many public doubles. SUPER is intentionally independent.
+    """
+    today = _moscow_day()
+    used: set[str] = set()
+    for row in rows:
+        if str(row.get("origin") or "").casefold() not in {"prematch_parlay", "parlay"}:
+            continue
+        if str(row.get("kind") or "").upper() != "DOUBLES":
+            continue
+        if _moscow_day(row.get("created_at")) != today:
+            continue
+        if not bool(row.get("telegram_sent")):
+            continue
+        for leg in row.get("legs") or []:
+            event_id = str((leg or {}).get("event_id") or (leg or {}).get("match_id") or "").strip()
+            if event_id:
+                used.add(event_id)
+    return used
+
+
 def prematch_keyboard(entry_id: str, entered: bool = False) -> dict[str, Any]:
     text = "✅ В игре" if entered else "🎯 В игре"
     return {"inline_keyboard": [[{"text": text, "callback_data": f"v4ig:{entry_id}"}]]}
@@ -402,6 +427,21 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                 ),
                 None,
             )
+
+        if kind == "DOUBLES":
+            used_today = _today_used_double_events(rows)
+            leg_ids = {
+                str(leg.get("event_id") or leg.get("match_id") or "").strip()
+                for leg in legs
+                if str(leg.get("event_id") or leg.get("match_id") or "").strip()
+            }
+            overlap = sorted(leg_ids & used_today)
+            if overlap:
+                print(
+                    f"PREMATCH_DOUBLE_SKIP reason=fixture_already_used_today events={','.join(overlap)}",
+                    flush=True,
+                )
+                continue
 
         if parent is not None:
             if parent.get("telegram_sent") or str(parent.get("result") or "pending") != "pending":

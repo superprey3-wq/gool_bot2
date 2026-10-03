@@ -184,3 +184,42 @@ def test_only_one_super_is_publicly_sent_per_moscow_day(tmp_path, monkeypatch):
     supers = [r for r in rows if str(r.get("kind") or "").upper() == "SUPER"]
     assert len(supers) == 1
     assert supers[0]["telegram_sent"] is True
+
+
+
+def test_fixture_is_not_reused_across_public_doubles_same_day(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    journal = tmp_path / "journal.json"
+    sent = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *args, **kwargs: b"png")
+    monkeypatch.setattr(
+        delivery.telegram,
+        "broadcast_photo",
+        lambda png, caption="", reply_markup=None: sent.append(caption) or 1,
+    )
+
+    def pick(event_id, home):
+        return PrematchPick(
+            event_id, home, "Away", "match_total", "over 1.5",
+            1.45, .82, .68, .90, "L", 1790950000.0,
+        )
+
+    a, b, c = pick("a", "A"), pick("b", "B"), pick("c", "C")
+    first = {
+        "mode": "DOUBLES", "super": None, "singles": [],
+        "doubles": [{"legs": [a, b], "combined_probability": .60, "combined_odds": 2.10}],
+    }
+    second = {
+        "mode": "DOUBLES", "super": None, "singles": [],
+        "doubles": [{"legs": [a, c], "combined_probability": .59, "combined_odds": 2.12}],
+    }
+    meta = {p.event_id: {"bookmaker": "Test"} for p in (a, b, c)}
+
+    out1 = delivery.emit_delivery_selection(first, meta, journal)
+    out2 = delivery.emit_delivery_selection(second, meta, journal)
+
+    assert out1["parlays"] == 1
+    assert out2["parlays"] == 0
+    assert len(sent) == 1

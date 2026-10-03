@@ -12,6 +12,7 @@ from .providers.fotmob import FotMobProvider
 from .providers.fixture_sources import all_fixture_sources
 from .providers.prematch_fusion import PrematchDataFusion
 from .prematch_goal_profile import build_prematch_goal_profile
+from .prematch_quality import prematch_evidence_quality
 from .v4_prematch_engine import (
     build_prematch_candidates, devig_three_way, devig_two_way, rank_prematch_for_delivery, build_accumulators,
 )
@@ -300,7 +301,7 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0])
-            quality = min(1.0, sample / 8.0)
+            quality = prematch_evidence_quality(profile, source_coverage=history.get("source_coverage") or {})
             score = _brain_score(profile, quality)
             trends = _trend_signals(profile, quality)
             primary_trend = _primary_trend(trends)

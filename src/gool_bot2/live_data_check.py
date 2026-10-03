@@ -168,8 +168,11 @@ def live_data_check_text(runtime: Path | None = None) -> str:
         "<b>Источники со stats</b>",
         ", ".join(f"{k}:{v}" for k, v in source_counts.most_common()) or "нет",
         "",
-        "<b>1xBet LIVE</b>",
+        "<b>1xBet LIVE / PREMATCH</b>",
         f"state matches: <b>{len(xbet_matches)}</b> · с рынками: <b>{xbet_with_markets}</b>",
+        f"catalog events: <b>{xbet_state.get('index_events') or '—'}</b> · "
+        f"track cap: <b>{xbet_state.get('track_cap') or '—'}</b> · "
+        f"refreshed last cycle: <b>{xbet_state.get('refreshed') if xbet_state.get('refreshed') is not None else '—'}</b>",
         f"last state: <code>{xbet_state.get('captured_at') or '—'}</code>",
         "",
         "<b>Market Memory</b>",

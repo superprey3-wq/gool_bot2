@@ -13,6 +13,7 @@ from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending
 from gool_bot2.providers.prematch_fusion import PrematchDataFusion
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
+from gool_bot2.prematch_status import update_prematch_status
 from pathlib import Path
 import os
 
@@ -178,6 +179,7 @@ d=choose_delivery(
  max_doubles=None if max_doubles<=0 else max_doubles,
 )
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
+delivered={"cards":0,"entries":0,"parlays":0}
 if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}:
  retried=retry_pending_prematch_deliveries(journal)
  if retried:
@@ -198,3 +200,16 @@ if d["singles"]:
   p=item[0] if isinstance(item,tuple) else item
   print(f"S{i:02d}. "+leg(p,meta),flush=True)
 if d["mode"]=="NO_BET":print("NO QUALIFIED BETS",flush=True)
+
+update_prematch_status(
+ fixtures=len(fixtures),
+ brain_eligible=len(rows),
+ priced=len(priced),
+ mode=str(d.get("mode") or "NO_BET"),
+ singles=len(d.get("singles") or []),
+ doubles=len(d.get("doubles") or []),
+ super=bool(d.get("super")),
+ delivered_cards=int(delivered.get("cards") or 0),
+ delivered_entries=int(delivered.get("entries") or 0),
+ delivered_parlays=int(delivered.get("parlays") or 0),
+)

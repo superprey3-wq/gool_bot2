@@ -96,7 +96,7 @@ def append_prematch_entry(path: Path, row: dict[str, Any]) -> dict[str, Any]:
         existing_event = next(
             (
                 x for x in rows
-                if str(x.get("origin") or "").casefold() == "prematch"
+                if str(x.get("origin") or "").casefold() in {"prematch", "prematch_value"}
                 and str(x.get("event_id") or x.get("match_id") or "") == event_id
             ),
             None,
@@ -244,14 +244,16 @@ def parlay_leg_states(row: dict[str, Any], live_rows: Iterable[dict[str, Any]]) 
 
 
 def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = None) -> int:
-    if str(row.get("origin") or "").casefold() != "prematch":
+    if str(row.get("origin") or "").casefold() not in {"prematch", "prematch_value"}:
         raise ValueError("PREMATCH result renderer received non-prematch row")
     print(f"GOOL_CARD_ROUTE family=prematch_single stage=result match={row.get('match_id')}", flush=True)
     png = render_v4_prematch_result_card(row, record=record)
     result = str(row.get("result") or "void").lower()
     icon = {"won": "✅", "lost": "❌", "push": "↩️", "void": "↩️"}.get(result, "ℹ️")
+    product = str(row.get("product") or "").casefold()
+    result_title = "GOOL VALUE HUNTER · RESULT" if product == "value_hunter" else "GOOL V4 · PREMATCH RESULT"
     caption = (
-        f"{icon} <b>GOOL V4 · PREMATCH RESULT</b>\n"
+        f"{icon} <b>{result_title}</b>\n"
         f"{escape(str(row.get('home','?')))} — {escape(str(row.get('away','?')))}\n"
         f"<b>{escape(_market_label(str(row.get('selection') or row.get('market') or '?')))} @ {float(row.get('odd') or 0):.2f}</b>"
     )
@@ -511,12 +513,12 @@ def reconcile_and_deliver_prematch_results(journal_path: Path) -> dict[str, int]
     sent_total = 0
     claimed = pending_result_notifications(
         journal_path,
-        origins={"prematch", "prematch_parlay", "parlay"},
+        origins={"prematch", "prematch_value", "prematch_parlay", "parlay"},
     )
     for row in claimed:
         origin = str(row.get("origin") or "").casefold()
         try:
-            sent = emit_prematch_result(row, {}) if origin == "prematch" else emit_parlay_result(row)
+            sent = emit_prematch_result(row, {}) if origin in {"prematch", "prematch_value"} else emit_parlay_result(row)
             if sent > 0 and finalize_result_delivery(journal_path, row, sent):
                 sent_total += int(sent)
         except Exception as exc:

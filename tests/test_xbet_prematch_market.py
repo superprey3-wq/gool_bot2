@@ -87,3 +87,76 @@ def test_prematch_game_uses_current_betb2b_parameters(monkeypatch, tmp_path):
     assert "isNewBuilder=true" in seen[0]
     assert "isSubGames=true" in seen[0]
     assert "GroupEvents=true" in seen[0]
+
+
+
+def test_prematch_index_merges_catalog_slices(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    monkeypatch.setattr(prematch, "INDEX_QUERIES", ("q1", "q2"))
+    def fake_http(url):
+        if url.endswith("q1"):
+            return {"Value": [
+                {"I": "1", "O1": "A", "O2": "B"},
+                {"I": "2", "O1": "C", "O2": "D"},
+            ]}
+        if url.endswith("q2"):
+            return {"Value": [
+                {"I": "2", "O1": "C", "O2": "D"},
+                {"I": "3", "O1": "E", "O2": "F"},
+            ]}
+        return {"Value": []}
+
+    monkeypatch.setattr(prematch, "_http_json", fake_http)
+    collector = prematch.XBetPrematchCollector(tmp_path / "state.json")
+    root, rows = collector._index()
+    assert root == prematch.ROOTS[0]
+    assert {str(row["I"]) for row in rows} == {"1", "2", "3"}
+
+
+def test_prematch_due_bootstraps_unseen_before_refreshing_known(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    monkeypatch.setenv("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "8")
+    now = 1_800_000_000.0
+    collector = prematch.XBetPrematchCollector(tmp_path / "state.json")
+
+    def event(event_id, starts_in):
+        return {
+            "event_id": event_id,
+            "event": {"I": event_id, "S": now + starts_in},
+            "root": prematch.ROOTS[0],
+        }
+
+    rows = [
+        event("known-near", 300),
+        event("new-far", 3600),
+    ]
+    selected = collector._due_prematch_candidates(
+        rows,
+        now,
+        known_event_ids={"known-near"},
+    )
+    assert [row["event_id"] for row in selected][:2] == ["new-far", "known-near"]
+
+
+def test_background_tracking_does_not_truncate_catalog_to_120(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    now = 1_800_000_000.0
+    rows = [
+        {"I": str(i), "O1": f"H{i}", "O2": f"A{i}", "S": now + 7200 + i}
+        for i in range(180)
+    ]
+    collector = prematch.XBetPrematchCollector(tmp_path / "state.json")
+    monkeypatch.setattr(collector, "_index", lambda: (prematch.ROOTS[0], rows))
+
+    seen = {}
+    def fake_due(indexed, current_now, *, known_event_ids=None):
+        seen["count"] = len(indexed)
+        return []
+
+    monkeypatch.setattr(collector, "_due_prematch_candidates", fake_due)
+    state = collector.collect_once()
+    assert seen["count"] == 180
+    assert state["index_events"] == 180

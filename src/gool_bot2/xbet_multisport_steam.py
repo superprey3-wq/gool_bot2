@@ -3085,6 +3085,23 @@ class MultiSportSteamWorker:
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,
             "flashscore_live": len(fs_live),
+            # Authoritative LIVE identity/status from Flashscore. Keep this
+            # independently from 1xBet mapping so PREMATCH picks move to
+            # "In Game" immediately even when bookmaker matching is delayed.
+            "flashscore_live_matches": [
+                {
+                    "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
+                    "home": str(row.get("home") or ""),
+                    "away": str(row.get("away") or ""),
+                    "league": str(row.get("league") or ""),
+                    "score": list(row.get("score") or [0, 0]),
+                    "score_parts": list(row.get("score_parts") or []),
+                    "status_code": str(row.get("status_code") or ""),
+                    "coarse_status": str(row.get("coarse_status") or ""),
+                    "start_ts": int(row.get("start_ts") or 0),
+                }
+                for row in fs_live[:120]
+            ],
             "xbet_live": len(xbet_live),
             "mapped": len(mapped),
             "decoded": decoded,

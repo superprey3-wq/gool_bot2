@@ -296,12 +296,32 @@ def multisport_in_game_sections() -> list[str]:
     for sport in ("hockey", "basketball"):
         icon, title = SPORT_META[sport]
         current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
-        live_matches = [row for row in (current.get("matches") or []) if isinstance(row, dict)]
+        # Flashscore is authoritative for "has the match started?".
+        # current["matches"] contains only Flashscore+1xBet mapped games and may
+        # lag behind even while the match is already live.
+        fs_live_matches = [
+            row for row in (current.get("flashscore_live_matches") or [])
+            if isinstance(row, dict)
+        ]
+        mapped_matches = [
+            row for row in (current.get("matches") or [])
+            if isinstance(row, dict)
+        ]
         live_by_fs = {
-            str(row.get("flashscore_event_id") or ""): row
-            for row in live_matches
+            str(row.get("flashscore_event_id") or ""): dict(row)
+            for row in fs_live_matches
             if str(row.get("flashscore_event_id") or "")
         }
+        # Enrich authoritative Flashscore rows with decoded/mapped LIVE details
+        # when they are available, but never require them for the menu.
+        for mapped in mapped_matches:
+            fs_id = str(mapped.get("flashscore_event_id") or "")
+            if not fs_id:
+                continue
+            if fs_id in live_by_fs:
+                live_by_fs[fs_id] = {**live_by_fs[fs_id], **mapped}
+            else:
+                live_by_fs[fs_id] = dict(mapped)
         active: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for row in rows:
             if str(row.get("sport") or "") != sport:
@@ -321,7 +341,7 @@ def multisport_in_game_sections() -> list[str]:
         lines = [f"{icon} <b>{title} · В ИГРЕ</b> · <b>{len(active)}</b>"]
         for idx, (pick, live) in enumerate(active, 1):
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or "LIVE")
+            period = str(live.get("period") or "LIVE · Flashscore")
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
             lines.append(

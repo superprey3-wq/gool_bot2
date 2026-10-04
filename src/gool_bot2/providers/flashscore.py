@@ -27,6 +27,105 @@ STAT_MAP = {
 }
 
 
+MULTISPORT_STAT_ALIASES = {
+    "shots on goal": "shots_on_goal",
+    "shots on target": "shots_on_goal",
+    "total shots": "shots",
+    "shots": "shots",
+    "blocked shots": "blocked_shots",
+    "saves": "saves",
+    "faceoffs won": "faceoffs_won",
+    "face-offs won": "faceoffs_won",
+    "penalties": "penalties",
+    "penalty minutes": "penalty_minutes",
+    "2-minute penalties": "penalties_2m",
+    "2 minute penalties": "penalties_2m",
+    "powerplay goals": "powerplay_goals",
+    "power play goals": "powerplay_goals",
+    "powerplay opportunities": "powerplay_opportunities",
+    "power play opportunities": "powerplay_opportunities",
+    "field goals": "field_goals",
+    "2 point field goals": "two_point_field_goals",
+    "2-point field goals": "two_point_field_goals",
+    "3 point field goals": "three_point_field_goals",
+    "3-point field goals": "three_point_field_goals",
+    "free throws": "free_throws",
+    "rebounds": "rebounds",
+    "total rebounds": "rebounds",
+    "offensive rebounds": "offensive_rebounds",
+    "defensive rebounds": "defensive_rebounds",
+    "assists": "assists",
+    "turnovers": "turnovers",
+    "steals": "steals",
+    "blocks": "blocks",
+    "fouls": "fouls",
+    "personal fouls": "fouls",
+    "possessions": "possessions",
+    "possession": "possession",
+}
+
+
+def _clean_stat_label(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").replace("\xa0", " ").strip()).casefold()
+
+
+def _stat_key(label: str, stat_id: str = "") -> str:
+    clean = _clean_stat_label(label)
+    if clean in MULTISPORT_STAT_ALIASES:
+        return MULTISPORT_STAT_ALIASES[clean]
+    if stat_id and str(stat_id) in STAT_MAP:
+        return STAT_MAP[str(stat_id)]
+    key = re.sub(r"[^a-z0-9]+", "_", clean).strip("_")
+    return key or (f"stat_{stat_id}" if stat_id else "unknown")
+
+
+def _stat_section_key(label: str) -> str:
+    clean = _clean_stat_label(label)
+    aliases = {
+        "match": "FULL_MATCH", "full match": "FULL_MATCH", "overall": "FULL_MATCH",
+        "1st period": "PERIOD_1", "1 period": "PERIOD_1", "period 1": "PERIOD_1",
+        "2nd period": "PERIOD_2", "2 period": "PERIOD_2", "period 2": "PERIOD_2",
+        "3rd period": "PERIOD_3", "3 period": "PERIOD_3", "period 3": "PERIOD_3",
+        "1st quarter": "QUARTER_1", "1 quarter": "QUARTER_1", "quarter 1": "QUARTER_1",
+        "2nd quarter": "QUARTER_2", "2 quarter": "QUARTER_2", "quarter 2": "QUARTER_2",
+        "3rd quarter": "QUARTER_3", "3 quarter": "QUARTER_3", "quarter 3": "QUARTER_3",
+        "4th quarter": "QUARTER_4", "4 quarter": "QUARTER_4", "quarter 4": "QUARTER_4",
+        "1st half": "FIRST_HALF", "1 half": "FIRST_HALF", "first half": "FIRST_HALF",
+        "2nd half": "SECOND_HALF", "2 half": "SECOND_HALF", "second half": "SECOND_HALF",
+        "overtime": "OVERTIME", "ot": "OVERTIME",
+    }
+    if clean in aliases:
+        return aliases[clean]
+    for name, key in aliases.items():
+        if name and name in clean:
+            return key
+    return "FULL_MATCH" if not clean else re.sub(r"[^A-Z0-9]+", "_", clean.upper()).strip("_")
+
+
+def _stat_value(raw: Any) -> dict[str, Any]:
+    text = str(raw or "").strip()
+    percent = text.endswith("%")
+    clean = text[:-1].strip() if percent else text
+    made = attempts = None
+    if "/" in clean:
+        left, right = clean.split("/", 1)
+        try: made = float(left.strip())
+        except (TypeError, ValueError): made = None
+        try: attempts = float(right.strip())
+        except (TypeError, ValueError): attempts = None
+    try:
+        value = float(clean.replace(",", ".")) if "/" not in clean else made
+    except (TypeError, ValueError):
+        value = None
+    return {
+        "raw": text,
+        "value": value,
+        "percent": bool(percent),
+        "made": made,
+        "attempts": attempts,
+    }
+
+
 def _fields(raw: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for token in raw.split("¬"):
@@ -185,6 +284,90 @@ class FlashscoreProvider:
             if not body: continue
             for match in self.parse_master_live(body): merged[match.provider_match_id] = match
         return sorted(merged.values(), key=lambda m: ((m.minute or 0), m.league or "", m.home))
+
+    @staticmethod
+    def parse_stats_detailed(body: str) -> dict[str, Any]:
+        """Parse every Flashscore stats section without sport-specific loss.
+
+        Flashscore encodes section/set in HA, category in SF, stat label in SG,
+        optional numeric id in SD and home/away values in SH/SI. Unknown rows are
+        preserved in raw so new hockey/basketball metrics can be learned later.
+        """
+        sections: dict[str, dict[str, Any]] = {}
+        current_section_label = "Full match"
+        current_category = ""
+
+        def section(label: str) -> dict[str, Any]:
+            key = _stat_section_key(label)
+            return sections.setdefault(key, {
+                "key": key,
+                "label": label or "Full match",
+                "stats": {},
+                "raw": [],
+            })
+
+        for chunk in (body or "").split("~"):
+            if not chunk:
+                continue
+            fields = _fields(chunk)
+            if fields.get("HA"):
+                current_section_label = str(fields.get("HA") or current_section_label).strip()
+            if fields.get("SF"):
+                current_category = str(fields.get("SF") or "").strip()
+
+            home_raw = fields.get("SH")
+            away_raw = fields.get("SI")
+            if home_raw is None or away_raw is None:
+                continue
+
+            stat_id = str(fields.get("SD") or "").strip()
+            label = str(
+                fields.get("SG")
+                or fields.get("SE")
+                or fields.get("SN")
+                or STAT_MAP.get(stat_id)
+                or (f"stat_{stat_id}" if stat_id else "unknown")
+            ).strip()
+            key = _stat_key(label, stat_id)
+            home = _stat_value(home_raw)
+            away = _stat_value(away_raw)
+            item = {
+                "id": stat_id or None,
+                "name": label,
+                "key": key,
+                "category": current_category or None,
+                "home": home,
+                "away": away,
+            }
+            target = section(current_section_label)
+            target["raw"].append(item)
+            target["stats"][key] = {
+                "home": home.get("value"),
+                "away": away.get("value"),
+                "home_raw": home.get("raw"),
+                "away_raw": away.get("raw"),
+                "home_made": home.get("made"),
+                "away_made": away.get("made"),
+                "home_attempts": home.get("attempts"),
+                "away_attempts": away.get("attempts"),
+                "percent": bool(home.get("percent") or away.get("percent")),
+                "name": label,
+                "id": stat_id or None,
+                "category": current_category or None,
+            }
+
+        # Some feeds do not emit an explicit HA row before full-match stats.
+        if not sections and body:
+            sections["FULL_MATCH"] = {"key": "FULL_MATCH", "label": "Full match", "stats": {}, "raw": []}
+        return {
+            "sections": sections,
+            "section_keys": list(sections),
+            "raw_present": bool(body),
+        }
+
+    def fetch_stats_detailed(self, event_id: str) -> dict[str, Any]:
+        body = self._feed(f"df_st_1_{event_id}")
+        return self.parse_stats_detailed(body)
 
     def fetch_stats(self, event_id: str) -> dict[str, tuple[float, float]]:
         body = self._feed(f"df_st_1_{event_id}"); out: dict[str, tuple[float, float]] = {}

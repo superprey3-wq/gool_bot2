@@ -409,6 +409,71 @@ def multisport_in_game_sections() -> list[str]:
     return messages
 
 
+def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
+    """Current hockey/basketball LIVE analysis for the common Analysis button."""
+    state = _load_json(state_path(), {})
+    sports_state = state.get("sports") if isinstance(state, dict) else {}
+    sports_state = sports_state if isinstance(sports_state, dict) else {}
+    messages: list[str] = []
+
+    for sport in ("hockey", "basketball"):
+        icon, title = SPORT_META[sport]
+        current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
+        mapped = [row for row in (current.get("matches") or []) if isinstance(row, dict)]
+        fs_live = int(current.get("flashscore_live") or 0)
+        xbet_live = int(current.get("xbet_live") or 0)
+        mapped_count = int(current.get("mapped") or 0)
+        decoded = int(current.get("decoded") or 0)
+        detected = int(current.get("detected") or 0)
+
+        lines = [
+            f"{icon} <b>АНАЛИЗ · {title}</b>",
+            f"LIVE: Flashscore <b>{fs_live}</b> · 1xBet <b>{xbet_live}</b> · mapped <b>{mapped_count}</b> · decoded <b>{decoded}</b> · SIGNAL <b>{detected}</b>",
+        ]
+
+        if not mapped:
+            lines.append("↳ Сейчас нет синхронизированных LIVE матчей для Brain-оценки.")
+            messages.append("\n".join(lines))
+            continue
+
+        def rank(row: dict[str, Any]) -> float:
+            signal = row.get("signal") or row.get("steam") or {}
+            try:
+                return float(signal.get("strength") or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        for row in sorted(mapped, key=rank, reverse=True)[:max(1, int(limit_per_sport))]:
+            score = list(row.get("match_score") or row.get("score") or [0, 0])
+            period = str(row.get("period") or "LIVE")
+            signal = row.get("signal") or row.get("steam") or {}
+            stats = row.get("live_game_stats") or {}
+            if signal:
+                selection = str(signal.get("selection") or row.get("selection") or "?")
+                strength = float(signal.get("strength") or 0.0)
+                projected = signal.get("projected_total")
+                edge = signal.get("stat_edge")
+                details = [f"🔥 <b>SIGNAL</b> · {selection} · R{strength:.0f}"]
+                if projected is not None:
+                    details.append(f"прогноз {float(projected):.2f}")
+                if edge is not None:
+                    details.append(f"edge {float(edge):+.2f}")
+                decision = " · ".join(details)
+            else:
+                scope = str(stats.get("scope") or "")
+                keys = list((stats.get("segment_stats") or {}).keys())[:3]
+                stat_note = f" · FS stats {scope}: {', '.join(keys)}" if keys else ""
+                decision = f"⏳ <b>WAIT</b>{stat_note}"
+
+            lines.append(
+                f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
+                f"↳ {decision}"
+            )
+        messages.append("\n\n".join(lines))
+
+    return messages
+
+
 def multisport_report_text() -> str:
     lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH и LIVE считаются отдельно."]
     all_rows: list[dict[str, Any]] = []

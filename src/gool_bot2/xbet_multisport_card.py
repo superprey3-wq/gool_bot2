@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw
 
@@ -117,7 +118,11 @@ def render_multisport_prematch_card(row: dict[str, Any], signal: dict[str, Any],
     market_label = ("ТБ" if direction == "over" else "ТМ") + f" {line:g}"
     strength_score = float(signal.get("strength") or 0.0)
     start_ts = float(row.get("start_ts") or 0.0)
-    kickoff = datetime.fromtimestamp(start_ts, timezone.utc).strftime("%d.%m • %H:%M UTC") if start_ts else "ВРЕМЯ УТОЧНЯЕТСЯ"
+    try:
+        tz = ZoneInfo("Europe/Moscow")
+    except Exception:
+        tz = timezone.utc
+    kickoff = datetime.fromtimestamp(start_ts, tz).strftime("%d.%m • %H:%M МСК") if start_ts else "ВРЕМЯ УТОЧНЯЕТСЯ"
 
     draw.rounded_rectangle((24, 20, 1056, 92), 22, fill=PANEL, outline=accent, width=2)
     draw.text((48, 39), f"GOOL MULTI • PREMATCH • {sport_title}", font=sc._font(24, True), fill=TEXT)

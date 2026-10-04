@@ -10,6 +10,7 @@ from gool_bot2.multisport_menu import (
     multisport_status_text,
     _pick_needed_text,
     multisport_in_game_sections,
+    multisport_analysis_sections,
     sport_journal_text,
     sport_overview_text,
     sport_phase_report_text,
@@ -365,3 +366,71 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Ф2 +4.5 @ 1.55" in text
     assert "100/100 · PREMATCH" in text
     assert "может проиграть максимум в 4" in text
+
+
+def test_multisport_analysis_includes_hockey_and_basketball_brain(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [{
+                    "flashscore_event_id": "H1",
+                    "home": "SKA", "away": "CSKA",
+                    "score": [2, 1], "period": "2nd period",
+                    "live_game_stats": {"segment_stats": {"shots_on_goal": [14, 8]}},
+                    "signal": {"selection": "2-й период: ТБ 1.5", "odd": 1.82, "strength": 87},
+                }]
+            },
+            "basketball": {
+                "matches": [{
+                    "flashscore_event_id": "B1",
+                    "home": "Denver", "away": "Utah",
+                    "score": [48, 44], "period": "2nd quarter",
+                    "live_game_stats": {"segment_stats": {"rebounds": [18, 15], "turnovers": [4, 7]}},
+                }]
+            },
+        },
+    })
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{"flashscore_event_id":"H1","home":"SKA","away":"CSKA","score":[2,1],"status_code":"2P"}]
+        if sport == "hockey"
+        else [{"flashscore_event_id":"B1","home":"Denver","away":"Utah","score":[48,44],"status_code":"Q2"}]
+    ))
+
+    text = "\n".join(multisport_analysis_sections())
+    assert "ХОККЕЙ · АНАЛИЗ LIVE" in text
+    assert "БАСКЕТБОЛ · АНАЛИЗ LIVE" in text
+    assert "броски в створ 14:8" in text
+    assert "SIGNAL" in text
+    assert "2-й период: ТБ 1.5" in text
+    assert "подборы 18:15" in text
+    assert "WAIT" in text
+
+
+def test_multisport_in_game_fuzzy_matches_and_deduplicates_legacy_rows(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {"mode":"active","sports":{"hockey":{"matches":[]},"basketball":{"matches":[]}}})
+    duplicate = {
+        "sport":"basketball","phase":"PREMATCH","result":"pending",
+        "home":"Piratas Bogota","away":"Caimanes Llano",
+        "selection":"Ф2 +4.5","market_family":"handicap","selection_side":"away",
+        "line":4.5,"odd":1.55,"strength":100,"scope":"FULL_MATCH",
+    }
+    _write(journal, [{**duplicate,"event_id":"old1"},{**duplicate,"event_id":"old2"}])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{"flashscore_event_id":"LIVEB001","home":"Piratas de Bogota","away":"Caimanes del Llano","score":[22,24],"status_code":"Q2"}]
+        if sport == "basketball" else []
+    ))
+    text = "\n".join(multisport_in_game_sections())
+    assert text.count("Piratas Bogota — Caimanes Llano") == 1
+    assert "22:24" in text

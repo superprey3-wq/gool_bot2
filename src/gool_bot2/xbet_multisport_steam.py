@@ -539,13 +539,30 @@ def map_xbet_to_flashscore(
 
 def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int) -> str:
     family = str(row.get("market_family") or "match_total")
+    side = str(row.get("selection_side") or row.get("direction") or "").lower()
+    line = float(row.get("line") or 0.0)
+
+    if family == "moneyline":
+        if home_score == away_score:
+            return "void"
+        winner = "home" if home_score > away_score else "away"
+        return "won" if side == winner else "lost"
+
+    if family == "handicap":
+        if side == "away":
+            margin = float(away_score - home_score) + line
+        else:
+            margin = float(home_score - away_score) + line
+        if abs(margin) < 1e-9:
+            return "void"
+        return "won" if margin > 0 else "lost"
+
     if family == "home_total":
         total = int(home_score)
     elif family == "away_total":
         total = int(away_score)
     else:
         total = int(home_score) + int(away_score)
-    line = float(row.get("line") or 0.0)
     if abs(total - line) < 1e-9:
         return "void"
     if str(row.get("direction") or "over") == "under":
@@ -1452,7 +1469,11 @@ class MultiSportSteamWorker:
                         **signal,
                         "scope": lane_row.get("scope"),
                         "market_family": lane_row.get("market_family"),
-                        "selection": selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0)),
+                        "selection": str(
+                            signal.get("selection")
+                            or lane_row.get("selection")
+                            or selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0))
+                        ),
                     }
                     recorded, sent = self._record_signal(lane_row, signal, cfg)
                     detected += int(recorded)

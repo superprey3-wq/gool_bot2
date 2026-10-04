@@ -1,3 +1,4 @@
+from gool_bot2.providers.flashscore import FlashscoreProvider
 from __future__ import annotations
 
 import urllib.parse
@@ -806,8 +807,17 @@ def test_live_snapshot_uses_flashscore_stats_not_xbet_stat_subgames(tmp_path, mo
     monkeypatch.setattr(worker, "_game", lambda *args, **kwargs: game)
     monkeypatch.setattr(
         worker._flashscore,
-        "fetch_stats",
-        lambda event_id: {"shots_on_target": (14.0, 11.0), "shots": (20.0, 18.0)},
+        "fetch_stats_detailed",
+        lambda event_id: {
+            "sections": {
+                "PERIOD_2": {
+                    "stats": {
+                        "shots_on_goal": {"home": 14.0, "away": 11.0, "home_attempts": None, "away_attempts": None},
+                        "shots": {"home": 20.0, "away": 18.0, "home_attempts": None, "away_attempts": None},
+                    }
+                }
+            }
+        },
     )
     monkeypatch.setattr(
         worker,
@@ -940,3 +950,40 @@ def test_hockey_live_brain_falls_back_to_score_clock_without_flashscore_stats(mo
     assert signal is not None
     assert signal["brain_mode"] == "segment_stats"
     assert signal["hockey_pressure"] == {}
+
+
+def test_flashscore_detailed_stats_parses_periods_quarters_and_attempts():
+    body = (
+        "HA÷1st period~"
+        "SF÷Match statistics~"
+        "SD÷901¬SG÷Shots on goal¬SH÷12¬SI÷9~"
+        "SD÷902¬SG÷Powerplay goals¬SH÷1¬SI÷0~"
+        "HA÷2nd quarter~"
+        "SF÷Shooting~"
+        "SD÷903¬SG÷Field goals¬SH÷10/24¬SI÷9/22~"
+        "SD÷904¬SG÷3-point field goals¬SH÷4/11¬SI÷3/10~"
+        "SF÷Other~"
+        "SD÷905¬SG÷Turnovers¬SH÷5¬SI÷7~"
+    )
+    parsed = FlashscoreProvider.parse_stats_detailed(body)
+    assert "PERIOD_1" in parsed["sections"]
+    assert "QUARTER_2" in parsed["sections"]
+    hockey = parsed["sections"]["PERIOD_1"]["stats"]
+    assert hockey["shots_on_goal"]["home"] == 12.0
+    assert hockey["powerplay_goals"]["away"] == 0.0
+    basket = parsed["sections"]["QUARTER_2"]["stats"]
+    assert basket["field_goals"]["home_made"] == 10.0
+    assert basket["field_goals"]["home_attempts"] == 24.0
+    assert basket["three_point_field_goals"]["away_attempts"] == 10.0
+    assert basket["turnovers"]["away"] == 7.0
+
+
+def test_flashscore_event_parser_keeps_segment_score_parts():
+    body = (
+        "ZA÷NBA~"
+        "AA÷Ab12Cd34¬AB÷2¬AC÷6¬AE÷Home¬AF÷Away¬AG÷56¬AH÷51"
+        "¬BA÷28¬BB÷25¬BC÷28¬BD÷26~"
+    )
+    rows = parse_flashscore_events(body)
+    assert len(rows) == 1
+    assert rows[0]["score_parts"] == [[28, 25], [28, 26]]

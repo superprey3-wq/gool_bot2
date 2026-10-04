@@ -76,23 +76,28 @@ PREMATCH_ROOTS = (
 )
 
 
-def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
-    """1xBet request profile for hockey/basketball with low-cost header fallback."""
-    base_headers = dict(getattr(market, "HEADERS", {}) or {})
-    base_headers["Referer"] = "https://1xbet.com/live/"
-    attempts = max(1, min(3, _int_env("GOOL_MULTISPORT_HTTP_ATTEMPTS", 2)))
-    profiles = [
-        # Exact profile used by the original working hockey/basketball bot.
-        {"Origin": "https://1xbet.com", "Referer": "https://1xbet.com/live/"},
-        # Some .fi mirrors occasionally prefer a host-matched Origin.
+def _sport_http_json(url: str, timeout: float = 8.0, *, plain: bool = False) -> dict[str, Any] | None:
+    """HTTP profile dedicated to basketball/hockey.
+
+    Team-sport 1xBet scrapers on GitHub successfully call LiveFeed/GetGameZip
+    with ordinary browser/aiohttp requests. Do not inherit football-specific
+    x-app-n/x-svc-source headers here unless we fall back to compatibility mode.
+    """
+    ua = str((getattr(market, "HEADERS", {}) or {}).get("User-Agent") or "Mozilla/5.0")
+    profiles: list[dict[str, str]] = [
         {
-            "Origin": "https://1xbet.fi" if "1xbet.fi/" in url else "https://1xbet.com",
-            "Referer": "https://1xbet.com/live/",
+            "User-Agent": ua,
+            "Accept": "application/json, text/plain, */*",
         },
     ]
+    if not plain:
+        compat = dict(getattr(market, "HEADERS", {}) or {})
+        compat["Referer"] = "https://1xbet.com/live/"
+        profiles.append(compat)
+
+    attempts = max(1, min(3, _int_env("GOOL_MULTISPORT_HTTP_ATTEMPTS", 2)))
     for attempt in range(attempts):
-        headers = dict(base_headers)
-        headers.update(profiles[min(attempt, len(profiles) - 1)])
+        headers = dict(profiles[min(attempt, len(profiles) - 1)])
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -1257,6 +1262,8 @@ class MultiSportSteamWorker:
         profiles = [
             {**base, "country": 71, "gr": 70, "getEmpty": "true"},
             {**base, "country": 71, "gr": 70, "partner": 1, "getEmpty": "true"},
+            # Separate basketball profile found in another 1xBet scraper.
+            *([{**base, "count": 2000, "country": 1, "partner": 51, "getEmpty": "true"}] if cfg.key == "basketball" else []),
             # Existing fallbacks retained for mirror/feed drift.
             {**base, "country": 1, "getEmpty": "true"},
             {**base, "country": 137, "gr": 285, "virtualSports": "true", "noFilterBlockEvent": "true", "getEmpty": "true"},
@@ -1280,7 +1287,7 @@ class MultiSportSteamWorker:
         # basketball index to be queried only after 1xBet started throttling us.
         for root in dict.fromkeys(roots):
             for query_no, query in enumerate(self._xbet_queries(cfg), 1):
-                payload = _sport_http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
+                payload = _sport_http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0, plain=True)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
                 usable = [
@@ -1622,7 +1629,7 @@ class MultiSportSteamWorker:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         unique_roots = list(dict.fromkeys(roots))
         for root in unique_roots:
-            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0, plain=True)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = root
@@ -1676,7 +1683,7 @@ class MultiSportSteamWorker:
         timeout = max(1.0, _float_env("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT", 3.5))
         live_roots = list(dict.fromkeys(roots))[:attempts]
         for root in live_roots:
-            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout)
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout, plain=True)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 if prematch:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gool_bot2.xbet_multisport_steam import (
     SPORTS,
+    MultiSportSteamWorker,
     _balanced_total,
     _metric,
     _score,

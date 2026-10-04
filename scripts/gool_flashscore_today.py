@@ -17,7 +17,7 @@ from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
-from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick
+from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
@@ -104,6 +104,7 @@ def one(r):
  info=None
  odds_payload=None
  value_pick=None
+ value_diag={"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":{}}
 
  # Production priority 1: the tested full-market brain compares the real market
  # catalogue and may choose a supported high-confidence BET instead of being tied
@@ -127,6 +128,7 @@ def one(r):
     if regime.get("tags"):
      hmeta["team_regime"]=regime
     hunter_rows.append((hq,hmeta))
+   value_diag=diagnose_value_rows(hunter_rows)
    value_pick=select_best_value_pick(hunter_rows)
    if value_pick:
     vp,vm=value_pick
@@ -223,12 +225,18 @@ def one(r):
   picks=adjusted
   if info is not None and candidate_meta:
    info={**info,"candidate_meta":candidate_meta}
- return picks,info,r,value_pick
+ return picks,info,r,value_pick,value_diag
 
 priced=[]; meta={}; value_candidates=[]
+value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":Counter()}
 with ThreadPoolExecutor(max_workers=20) as pool:
  for ftr in as_completed([pool.submit(one,r) for r in rows]):
-  picks,x,r,value_pick=ftr.result()
+  picks,x,r,value_pick,value_diag=ftr.result()
+  value_diag_total["scanned_matches"]+=1
+  value_diag_total["modeled_markets"]+=int(value_diag.get("modeled_markets") or 0)
+  value_diag_total["high_odds_markets"]+=int(value_diag.get("high_odds_markets") or 0)
+  value_diag_total["qualified"]+=int(value_diag.get("qualified") or 0)
+  value_diag_total["rejects"].update(value_diag.get("rejects") or {})
   m=r["match"]; fs_meta=dict(m.meta or {})
   home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
@@ -245,6 +253,13 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
+print("VALUE_HUNTER_SCAN",{
+ "scanned_matches":value_diag_total["scanned_matches"],
+ "modeled_markets":value_diag_total["modeled_markets"],
+ "high_odds_markets":value_diag_total["high_odds_markets"],
+ "qualified":value_diag_total["qualified"],
+ "rejects":dict(value_diag_total["rejects"]),
+},flush=True)
 update_prematch_status(stage="delivery", priced=len(priced))
 print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
@@ -295,4 +310,9 @@ update_prematch_status(
  delivered_parlays=int(delivered.get("parlays") or 0),
  value_hunter_candidates=len(value_candidates),
  value_hunter_sent=int(value_delivered.get("entries") or 0),
+ value_hunter_scanned_matches=int(value_diag_total["scanned_matches"]),
+ value_hunter_modeled_markets=int(value_diag_total["modeled_markets"]),
+ value_hunter_high_odds_markets=int(value_diag_total["high_odds_markets"]),
+ value_hunter_qualified=int(value_diag_total["qualified"]),
+ value_hunter_rejects=dict(value_diag_total["rejects"]),
 )

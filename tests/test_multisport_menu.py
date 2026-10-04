@@ -316,3 +316,49 @@ def test_multisport_in_game_recovers_legacy_pick_by_team_names(tmp_path: Path, m
     assert "Krylya Sovetov — Mikhaylov Academy U20" in text
     assert "1:1" in text
     assert "Ф1 +1.5 @ 1.59" in text
+
+
+def test_persisted_prematch_to_live_transition_stays_visible_in_game(tmp_path: Path, monkeypatch):
+    from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS
+    from gool_bot2.multisport_journal import save_journal, load_journal
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path = journal
+    save_journal(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-BASKET-1",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "selection": "Ф2 +4.5",
+        "line": 4.5,
+        "odd": 1.55,
+        "scope": "FULL_MATCH",
+    }])
+
+    changed = worker._mark_prematch_in_game(SPORTS["basketball"], [{
+        "flashscore_event_id": "FS-BASKET-1",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "score": [22, 20],
+        "coarse_status": "2",
+        "status_code": "1st quarter",
+    }])
+    assert changed == 1
+    saved = load_journal(journal)[0]
+    assert saved["in_game"] is True
+    assert saved["live_score"] == [22, 20]
+
+    _write(state, {"mode": "active", "sports": {"basketball": {"matches": [], "flashscore_live_matches": []}, "hockey": {}}})
+    text = "\n".join(multisport_in_game_sections())
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "22:20" in text
+    assert "Ф2 +4.5 @ 1.55" in text

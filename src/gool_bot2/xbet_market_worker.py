@@ -150,6 +150,14 @@ def main() -> None:
     install_score_epoch_guard()
     install_timeline_score_guard()
     install_robust_event_guard()
+    # Production launchers mark the main GOOL runtime active. Keep the embedded
+    # multisport worker in the same mode even if an old env file still contains
+    # GOOL_MULTISPORT_MODE=shadow.
+    if (
+        str(os.getenv("GOOL_LIVE_V4_MODE", "")).strip().casefold() == "active"
+        or str(os.getenv("GOOL_MULTI_TELEGRAM_MODE", "")).strip().casefold() == "active"
+    ):
+        os.environ["GOOL_MULTISPORT_MODE"] = "active"
     os.environ.setdefault("XBET_GAME_WORKERS", "24")
 
     collector = DemandDrivenXBetMarketCollector(Path(args.state), Path(args.history))

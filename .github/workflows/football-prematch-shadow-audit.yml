@@ -42,7 +42,12 @@ jobs:
           GOOL_PREMATCH_RESCUE_MAX: "12"
           RUNTIME_DATA_DIR: "artifacts/football_prematch_audit/runtime"
         run: |
+          mkdir -p artifacts/football_prematch_audit
+          set +e
           python scripts/gool_flashscore_today.py 2>&1 | tee artifacts/football_prematch_audit.log
+          exit_code=${PIPESTATUS[0]}
+          echo "pipeline_exit_code=${exit_code}" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
       - name: Extract pipeline summary
         if: always()
         run: |

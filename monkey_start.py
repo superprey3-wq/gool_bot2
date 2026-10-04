@@ -200,14 +200,6 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
-    if _truthy("GOOL_MULTISPORT_ENABLED", False):
-        commands["multisport"] = [
-            sys.executable,
-            "-m",
-            "gool_bot2.xbet_multisport_steam",
-            "--interval",
-            os.environ.get("GOOL_MULTISPORT_INTERVAL_SECONDS", "20"),
-        ]
     if browser_enabled:
         commands["browser"] = [
             sys.executable,

@@ -366,7 +366,14 @@ class FlashscoreProvider:
         }
 
     def fetch_stats_detailed(self, event_id: str) -> dict[str, Any]:
-        body = self._feed(f"df_st_1_{event_id}")
+        timeout = max(1, int(float(os.getenv("GOOL_FLASHSCORE_STATS_TIMEOUT", "12"))))
+        max_hosts_raw = os.getenv("GOOL_FLASHSCORE_STATS_MAX_HOSTS", "").strip()
+        max_hosts = max(1, int(max_hosts_raw)) if max_hosts_raw else None
+        body = self._feed(
+            f"df_st_1_{event_id}",
+            timeout=timeout,
+            max_hosts=max_hosts,
+        )
         return self.parse_stats_detailed(body)
 
     def fetch_stats(self, event_id: str) -> dict[str, tuple[float, float]]:

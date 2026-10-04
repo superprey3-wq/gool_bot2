@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -208,6 +209,135 @@ def sport_overview_text(sport: str) -> str:
         parts.append("🔴 <b>LIVE</b>\nСейчас нет синхронизированных матчей.")
 
     return "\n\n────────────\n\n".join(parts)
+
+def _pick_needed_text(row: dict[str, Any]) -> str:
+    """Human-readable winning condition matching multisport settlement rules."""
+    sport = str(row.get("sport") or "")
+    family = str(row.get("market_family") or "match_total")
+    side = str(row.get("selection_side") or row.get("direction") or "").casefold()
+    direction = str(row.get("direction") or "over").casefold()
+    scope = str(row.get("scope") or "FULL_MATCH")
+    scope_label = SCOPE_LABEL_RU.get(scope, scope)
+    unit = "шайб" if sport == "hockey" else "очков"
+
+    try:
+        line = float(row.get("line") or 0.0)
+    except (TypeError, ValueError):
+        line = 0.0
+
+    prefix = "" if scope == "FULL_MATCH" else f"{scope_label}: "
+
+    if family == "moneyline":
+        team = "команды 1" if side == "home" else "команды 2"
+        return f"{prefix}для захода нужна победа {team}"
+
+    if family == "handicap":
+        team = "Команда 1" if side != "away" else "Команда 2"
+        abs_line = abs(line)
+        is_integer = abs(line - round(line)) < 1e-9
+        if line > 0:
+            if is_integer:
+                max_loss = max(0, int(round(line)) - 1)
+                return (
+                    f"{prefix}для захода: {team.lower()} может проиграть максимум в {max_loss}; "
+                    f"поражение ровно в {int(round(line))} — возврат"
+                )
+            max_loss = max(0, int(math.floor(line)))
+            return f"{prefix}для захода: {team.lower()} может проиграть максимум в {max_loss}"
+        if line < 0:
+            needed = int(math.floor(abs_line)) + 1 if is_integer else int(math.ceil(abs_line))
+            if is_integer:
+                return (
+                    f"{prefix}для захода: {team.lower()} должна выиграть минимум в {needed}; "
+                    f"победа ровно в {int(round(abs_line))} — возврат"
+                )
+            return f"{prefix}для захода: {team.lower()} должна выиграть минимум в {needed}"
+        return f"{prefix}для захода нужна победа {team.lower()}"
+
+    subject = (
+        "команде 1"
+        if family == "home_total"
+        else "команде 2"
+        if family == "away_total"
+        else "суммарно"
+    )
+    is_integer = abs(line - round(line)) < 1e-9
+    if direction == "under":
+        if is_integer:
+            win_max = int(round(line)) - 1
+            return (
+                f"{prefix}для захода: {subject} максимум {win_max} {unit}; "
+                f"ровно {int(round(line))} — возврат"
+            )
+        win_max = int(math.floor(line))
+        return f"{prefix}для захода: {subject} максимум {win_max} {unit}"
+
+    if is_integer:
+        win_min = int(round(line)) + 1
+        return (
+            f"{prefix}для захода: {subject} нужно {win_min}+ {unit}; "
+            f"ровно {int(round(line))} — возврат"
+        )
+    win_min = int(math.floor(line)) + 1
+    return f"{prefix}для захода: {subject} нужно {win_min}+ {unit}"
+
+
+def multisport_in_game_sections() -> list[str]:
+    """Pending multisport picks whose Flashscore match is currently LIVE."""
+    state = _load_json(state_path(), {})
+    sports_state = state.get("sports") if isinstance(state, dict) else {}
+    sports_state = sports_state if isinstance(sports_state, dict) else {}
+    rows = load_journal(journal_path())
+
+    messages: list[str] = []
+    total = 0
+    sport_blocks: list[str] = []
+
+    for sport in ("hockey", "basketball"):
+        icon, title = SPORT_META[sport]
+        current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
+        live_matches = [row for row in (current.get("matches") or []) if isinstance(row, dict)]
+        live_by_fs = {
+            str(row.get("flashscore_event_id") or ""): row
+            for row in live_matches
+            if str(row.get("flashscore_event_id") or "")
+        }
+        active: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for row in rows:
+            if str(row.get("sport") or "") != sport:
+                continue
+            if str(row.get("result") or "pending").lower() != "pending":
+                continue
+            if _row_phase(row) != "PREMATCH":
+                continue
+            fs_id = str(row.get("flashscore_event_id") or "")
+            live = live_by_fs.get(fs_id)
+            if live is not None:
+                active.append((row, live))
+
+        if not active:
+            continue
+        total += len(active)
+        lines = [f"{icon} <b>{title} · В ИГРЕ</b> · <b>{len(active)}</b>"]
+        for idx, (pick, live) in enumerate(active, 1):
+            score = list(live.get("score") or [0, 0])
+            period = str(live.get("period") or "LIVE")
+            selection = str(pick.get("selection") or "?")
+            needed = _pick_needed_text(pick)
+            lines.append(
+                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}\n"
+                f"⏱ {period}\n"
+                f"↳ PREMATCH: <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
+                f"🎯 <b>{needed}</b>"
+            )
+        sport_blocks.append("\n\n".join(lines))
+
+    if not sport_blocks:
+        return []
+    messages.append(f"🟢 <b>ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ</b>\nАктивных PREMATCH ставок: <b>{total}</b>")
+    messages.extend(sport_blocks)
+    return messages
+
 
 def multisport_report_text() -> str:
     lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH и LIVE считаются отдельно."]

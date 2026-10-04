@@ -8,6 +8,8 @@ from gool_bot2.multisport_menu import (
     hockey_journal_text,
     multisport_report_text,
     multisport_status_text,
+    _pick_needed_text,
+    multisport_in_game_sections,
     sport_journal_text,
     sport_overview_text,
     sport_phase_report_text,
@@ -136,3 +138,77 @@ def test_separate_hockey_and_basketball_journal_views(tmp_path: Path, monkeypatc
     assert "ОТДЕЛЬНЫЙ ОТЧЁТ" in hreport
     assert "Все рынки до матча" in hreport
     assert "Все рынки до матча" in breport
+
+
+def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [{
+                    "flashscore_event_id": "FS-H1",
+                    "home": "SKA",
+                    "away": "CSKA",
+                    "score": [1, 0],
+                    "period": "2nd period",
+                }]
+            },
+            "basketball": {"matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "hockey",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-H1",
+        "home": "SKA",
+        "away": "CSKA",
+        "selection": "ТБ 5.5",
+        "odd": 1.85,
+    }])
+
+    sections = multisport_in_game_sections()
+    text = "\n".join(sections)
+    assert "ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ" in text
+    assert "SKA — CSKA" in text
+    assert "1:0" in text
+    assert "2nd period" in text
+    assert "ТБ 5.5 @ 1.85" in text
+
+    _write(journal, [{
+        "sport": "hockey",
+        "phase": "PREMATCH",
+        "result": "won",
+        "flashscore_event_id": "FS-H1",
+        "home": "SKA",
+        "away": "CSKA",
+        "selection": "ТБ 5.5",
+        "odd": 1.85,
+    }])
+    assert multisport_in_game_sections() == []
+
+
+def test_multisport_in_game_needed_result_text_matches_settlement_rules():
+    assert "6+ шайб" in _pick_needed_text({
+        "sport":"hockey","market_family":"match_total","direction":"over","line":5.5,"scope":"FULL_MATCH",
+    })
+    text = _pick_needed_text({
+        "sport":"basketball","market_family":"home_total","direction":"over","line":93.0,"scope":"FULL_MATCH",
+    })
+    assert "94+ очков" in text
+    assert "ровно 93 — возврат" in text
+
+    plus = _pick_needed_text({
+        "sport":"hockey","market_family":"handicap","selection_side":"home","line":1.5,"scope":"FULL_MATCH",
+    })
+    assert "может проиграть максимум в 1" in plus
+
+    minus = _pick_needed_text({
+        "sport":"hockey","market_family":"handicap","selection_side":"home","line":-1.5,"scope":"FULL_MATCH",
+    })
+    assert "должна выиграть минимум в 2" in minus

@@ -1024,3 +1024,73 @@ def test_prematch_one_match_one_pick_across_market_families(tmp_path, monkeypatc
     prematch = [row for row in rows if row.get("phase") == "PREMATCH" and row.get("flashscore_event_id") == "FS123456"]
     assert len(prematch) == 1
     assert prematch[0]["selection"] == "ИТБ1 76"
+
+
+def test_hockey_primary_prefers_close_total_over_handicap(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
+        ({"market_family": "match_total"}, {"strength": 95, "fair_probability": .57}),
+    ]
+    row, signal = select_prematch_primary(candidates, [], "hockey")
+    assert row["market_family"] == "match_total"
+    assert signal["strength"] == 95
+
+
+def test_hockey_primary_keeps_materially_stronger_handicap(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
+        ({"market_family": "match_total"}, {"strength": 84, "fair_probability": .57}),
+    ]
+    row, signal = select_prematch_primary(candidates, [], "hockey")
+    assert row["market_family"] == "handicap"
+    assert signal["strength"] == 100
+
+
+def test_hockey_settlement_sends_result_card_once(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+    from gool_bot2.multisport_journal import save_journal, load_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_CARDS_ENABLED", "1")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "entry_id": "hockey:prematch:FSHOCKEY",
+        "journal_version": 2,
+        "sport": "hockey",
+        "phase": "PREMATCH",
+        "origin": "multisport_prematch",
+        "event_id": "xbet-h1",
+        "flashscore_event_id": "FSHOCKEY",
+        "home": "SKA",
+        "away": "CSKA",
+        "league": "KHL",
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "selection": "ТБ 5.5",
+        "direction": "over",
+        "line": 5.5,
+        "odd": 1.80,
+        "result": "pending",
+        "profit_units": 0.0,
+    }])
+
+    sent = []
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append((png, caption)) or 1)
+    states = {"FSHOCKEY": {"coarse_status": "3", "score": [4, 2]}}
+
+    assert worker._settle(SPORTS["hockey"], states) == 1
+    assert len(sent) == 1
+    assert sent[0][0].startswith(b"\x89PNG\r\n\x1a\n")
+    assert sent[0][1] == ""
+
+    row = load_journal(worker.journal_path)[0]
+    assert row["result"] == "won"
+    assert row["result_card_sent"] is True
+    assert row.get("result_card_sent_at")
+
+    assert worker._settle(SPORTS["hockey"], states) == 0
+    assert len(sent) == 1

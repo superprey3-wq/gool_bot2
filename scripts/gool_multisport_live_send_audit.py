@@ -28,10 +28,12 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "0")
     os.environ["XBET_MULTISPORT_TELEGRAM_ENABLED"] = "0"
     os.environ["GOOL_MULTISPORT_PREMATCH_ENABLED"] = "0"
-    os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "12")
+    os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "6")
     os.environ.setdefault("XBET_MULTISPORT_GAME_WORKERS", "4")
     os.environ.setdefault("GOOL_MULTISPORT_LIVE_SUBGAME_CACHE_SECONDS", "5")
     os.environ.setdefault("GOOL_MULTISPORT_HTTP_ATTEMPTS", "1")
+    os.environ.setdefault("GOOL_FLASHSCORE_STATS_TIMEOUT", "3")
+    os.environ.setdefault("GOOL_FLASHSCORE_STATS_MAX_HOSTS", "1")
     os.environ.setdefault("GOOL_HOCKEY_LIVE_STAT_SUBGAMES_MAX", "3")
 
     snapshots = max(1, int(os.getenv("AUDIT_SNAPSHOTS", "2")))

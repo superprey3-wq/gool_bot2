@@ -24,8 +24,8 @@ from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
-from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card
-from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card
+from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
+from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -892,6 +892,7 @@ def detect_steam(
 def select_prematch_primary(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
     recent_families: list[str] | None = None,
+    sport: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     """Pick one PREMATCH market without letting one family dominate by accident."""
     if not candidates:
@@ -903,6 +904,18 @@ def select_prematch_primary(
         "moneyline": 0.3,
         "handicap": 0.0,
     }
+    if str(sport or "").casefold() == "hockey":
+        # Choice-market strength grows much faster than total-market strength in
+        # hockey. Normalise that scale so a close total/IT candidate is not
+        # permanently hidden by handicaps, while a materially stronger handicap
+        # can still win.
+        family_bias.update({
+            "match_total": _float_env("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", 4.0),
+            "home_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
+            "away_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
+            "moneyline": _float_env("GOOL_HOCKEY_PREMATCH_MONEYLINE_BIAS", 0.5),
+            "handicap": _float_env("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", -3.0),
+        })
     ranked = sorted(
         candidates,
         key=lambda item: (
@@ -925,7 +938,15 @@ def select_prematch_primary(
     if alternative is None:
         return best_row, best_signal
     alt_row, alt_signal = alternative
-    max_gap = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", 8.0))
+    max_gap = max(
+        0.0,
+        _float_env(
+            "GOOL_HOCKEY_PREMATCH_FAMILY_DIVERSITY_MAX_GAP"
+            if str(sport or "").casefold() == "hockey"
+            else "GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP",
+            10.0 if str(sport or "").casefold() == "hockey" else 8.0,
+        ),
+    )
     if float(alt_signal.get("strength") or 0.0) >= float(best_signal.get("strength") or 0.0) - max_gap:
         return alt_row, alt_signal
     return best_row, best_signal
@@ -2565,6 +2586,38 @@ class MultiSportSteamWorker:
                 "settled_score": [int(score[0]), int(score[1])],
                 "settled_match_score": [int(full_score[0]), int(full_score[1])],
             })
+            if (
+                _mode() == "active"
+                and _truthy("XBET_MULTISPORT_CARDS_ENABLED", True)
+                and not row.get("result_card_sent_at")
+            ):
+                try:
+                    png = (
+                        render_hockey_result_card(row, cfg)
+                        if cfg.key == "hockey"
+                        else render_basketball_result_card(row, cfg)
+                    )
+                    sent = telegram.broadcast_photo(png, caption="")
+                    if sent:
+                        row["result_card_sent_at"] = now
+                        row["result_card_sent"] = True
+                        print(
+                            f"GOOL_{cfg.key.upper()}_RESULT_CARD_SENT "
+                            f"match={row.get('home')}--{row.get('away')} result={result}",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"GOOL_{cfg.key.upper()}_RESULT_CARD_SEND_FAILED "
+                            f"match={row.get('home')}--{row.get('away')} result={result}",
+                            flush=True,
+                        )
+                except Exception as exc:
+                    print(
+                        f"GOOL_{cfg.key.upper()}_RESULT_CARD_ERROR "
+                        f"{type(exc).__name__}:{exc}",
+                        flush=True,
+                    )
             changed += 1
         if changed:
             save_journal(self.journal_path, rows)
@@ -2657,12 +2710,26 @@ class MultiSportSteamWorker:
                     png = render_hockey_prematch_card(row, signal, cfg) if prematch else render_hockey_live_card(row, signal, cfg)
                 else:
                     png = render_basketball_prematch_card(row, signal, cfg) if prematch else render_basketball_live_card(row, signal, cfg)
-                sent = telegram.broadcast_photo(png, caption=message)
+                # Card already contains match, market, odd and diagnostics.
+                # Do not duplicate the same signal as a Telegram caption.
+                sent = telegram.broadcast_photo(png, caption="")
                 if sent:
+                    print(
+                        f"GOOL_{cfg.key.upper()}_CARD_SENT phase={'PREMATCH' if prematch else 'LIVE'} "
+                        f"match={row.get('home')}--{row.get('away')}",
+                        flush=True,
+                    )
                     return int(sent)
+                print(
+                    f"GOOL_{cfg.key.upper()}_CARD_SEND_FAILED phase={'PREMATCH' if prematch else 'LIVE'} "
+                    f"match={row.get('home')}--{row.get('away')}",
+                    flush=True,
+                )
             except Exception as exc:
                 print(f"GOOL_{cfg.key.upper()}_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
-        return int(telegram.broadcast(message) or 0)
+        if _truthy("GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED", False):
+            return int(telegram.broadcast(message) or 0)
+        return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
         event_id = str(row.get("event_id") or "")
@@ -2895,7 +2962,7 @@ class MultiSportSteamWorker:
                     candidates.append((lane_row, signal))
 
                 signals: list[dict[str, Any]] = []
-                primary = select_prematch_primary(candidates, recent_families)
+                primary = select_prematch_primary(candidates, recent_families, cfg.key)
                 if primary is not None:
                     best_row, best_signal = primary
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)

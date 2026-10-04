@@ -197,6 +197,13 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
             "--interval",
             os.environ.get("XBET_MARKET_INTERVAL_SECONDS", "15"),
         ],
+        "multisport": [
+            sys.executable,
+            "-m",
+            "gool_bot2.xbet_multisport_steam",
+            "--interval",
+            os.environ.get("GOOL_MULTISPORT_INTERVAL_SECONDS", "20"),
+        ],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
@@ -253,6 +260,8 @@ def main() -> None:
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("GOOL_MULTISPORT_ENABLED", "1")
+    # Multisport runs as its own process. Never embed it in the football 1xBet worker.
+    os.environ["GOOL_MULTISPORT_EMBEDDED_ENABLED"] = "0"
     # Monkey is the production runtime: multisport signals must be live here.
     os.environ["GOOL_MULTISPORT_MODE"] = "active"
     os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
@@ -358,8 +367,19 @@ def main() -> None:
 
     def start_child(name: str) -> None:
         command = commands[name]
-        children[name] = subprocess.Popen(command, env=env, cwd=str(ROOT))
-        print(f"GOOL_BOOT child={name} pid={children[name].pid} command={' '.join(command)}", flush=True)
+        child_env = env.copy()
+        if name == "multisport":
+            # Hard isolation: hockey/basketball must never install football Brain V3
+            # runtime patches (1H/2H/minute/field-scan/goal-hazard).
+            child_env["GOOL_FOOTBALL_AUTOINSTALL"] = "0"
+            child_env["GOOL_MULTISPORT_MODE"] = "active"
+        children[name] = subprocess.Popen(command, env=child_env, cwd=str(ROOT))
+        print(
+            f"GOOL_BOOT child={name} pid={children[name].pid} "
+            f"football_autoinstall={child_env.get('GOOL_FOOTBALL_AUTOINSTALL', '1')} "
+            f"command={' '.join(command)}",
+            flush=True,
+        )
 
     for name in commands:
         start_child(name)

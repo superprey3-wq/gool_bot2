@@ -1695,7 +1695,7 @@ class MultiSportSteamWorker:
                     host,
                     "/service-api/LineFeed/GetGameZip",
                     query,
-                    timeout=8.0,
+                    timeout=max(1.0, _float_env("GOOL_MULTISPORT_FALLBACK_GAME_TIMEOUT", 8.0)),
                 )
                 value = payload.get("Value") if isinstance(payload, dict) else None
                 if isinstance(value, dict):
@@ -1739,14 +1739,16 @@ class MultiSportSteamWorker:
             }
             payload = _team_sport_exact_json(
                 "https://1xbet.com/LiveFeed/GetGameZip?" + urllib.parse.urlencode(exact_params),
-                timeout=10.0,
+                timeout=max(1.0, _float_env("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", 10.0)),
             )
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = "https://1xbet.com/LiveFeed"
                 return value
-        for root in unique_roots:
-            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
+        game_root_attempts = max(1, min(len(unique_roots), _int_env("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", len(unique_roots))))
+        game_timeout = max(1.0, _float_env("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT", 7.0))
+        for root in unique_roots[:game_root_attempts]:
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=game_timeout)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = root
@@ -1767,7 +1769,12 @@ class MultiSportSteamWorker:
                         ("marketType", "1"),
                         ("ref", "1"),
                     ]
-                    payload = _sport_v3_json(host, "/service-api/main-live-feed/v3/gameEvents", query, timeout=8.0)
+                    payload = _sport_v3_json(
+                        host,
+                        "/service-api/main-live-feed/v3/gameEvents",
+                        query,
+                        timeout=max(1.0, _float_env("GOOL_MULTISPORT_V3_GAME_TIMEOUT", 8.0)),
+                    )
                     if not isinstance(payload, dict):
                         continue
                     converted = _v3_to_legacy_market_game(payload, event_id)

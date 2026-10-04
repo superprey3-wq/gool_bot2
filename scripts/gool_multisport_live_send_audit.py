@@ -5,6 +5,8 @@ import os
 import time
 from pathlib import Path
 
+os.environ.setdefault("GOOL_FOOTBALL_AUTOINSTALL", "0")
+
 from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker
 
 

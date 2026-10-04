@@ -243,12 +243,23 @@ def _score_sync_allowed(
         return False
 
     min_quality = _float_env("GOOL_MULTISPORT_SCORE_DRIFT_MIN_MATCH", 0.80)
-    if float(match_quality) < min_quality:
+    quality = float(match_quality)
+    if quality < min_quality:
         return False
+
     dh = abs(int(fs_score[0]) - int(xbet_score[0]))
     da = abs(int(fs_score[1]) - int(xbet_score[1]))
-    side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
-    total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
+
+    # Basketball can move several possessions while Flashscore and 1xBet are
+    # fetched sequentially. Use a wider sanity window only when team identity
+    # is very strong; weaker fuzzy matches keep the tighter guard.
+    strong_quality = _float_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_MATCH", 0.92)
+    if quality >= strong_quality:
+        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_SIDE_MAX", 16))
+        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_TOTAL_MAX", 24))
+    else:
+        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
+        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
     return dh <= side_max and da <= side_max and (dh + da) <= total_max
 
 

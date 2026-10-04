@@ -564,7 +564,7 @@ class MultiSportSteamWorker:
         self._index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-8:]}
         return []
 
-    def _xbet_prematch_queries    def _xbet_prematch_queries(self, cfg: SportConfig) -> list[str]:
+    def _xbet_prematch_queries(self, cfg: SportConfig) -> list[str]:
         count = max(100, _int_env("GOOL_MULTISPORT_PREMATCH_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "cfview": 2, "mode": 4}
         return [
@@ -631,7 +631,7 @@ class MultiSportSteamWorker:
         self._prematch_index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-10:]}
         return []
 
-    def _prematch_game    def _prematch_game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
+    def _prematch_game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
         params = {
             "id": event_id,
             "lng": "en",

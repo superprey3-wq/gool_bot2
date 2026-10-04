@@ -160,3 +160,29 @@ def test_same_big_money_does_not_get_non_top_shortcut_in_premier_league(monkeypa
     assert info["reason"] == "money_flow_threshold_not_reached"
     assert info["league_tier"] == "top"
     assert info["volume_signal"] == "none"
+
+
+def test_multisport_can_import_without_football_autoinstall():
+    import os
+    import subprocess
+    import sys
+    code = r"""
+import os
+os.environ["GOOL_FOOTBALL_AUTOINSTALL"] = "0"
+import gool_bot2
+import gool_bot2.xbet_multisport_steam
+print("football_autoinstall_off")
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GOOL_FOOTBALL_AUTOINSTALL": "0"},
+        timeout=30,
+        check=True,
+    )
+    out = proc.stdout + proc.stderr
+    assert "football_autoinstall_off" in out
+    assert "GOOL_BRAIN_V3_ACTIVE installed" not in out
+    assert "GOOL_FIELD_SCAN installed" not in out
+    assert "GOOL_BRAIN_V3_SELECTION installed" not in out

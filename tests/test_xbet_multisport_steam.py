@@ -10,6 +10,7 @@ from gool_bot2.xbet_multisport_steam import (
     _score_sync_allowed,
     _segment_clock_seconds,
     _v3_to_legacy_market_game,
+    _v3_hosts_from_roots,
     detect_prematch_steam,
     detect_steam,
     settle_multisport_pick,
@@ -634,3 +635,49 @@ def test_prematch_game_uses_current_getgamezip_when_legacy_is_empty(tmp_path, mo
         game, "basketball"
     )
     assert decoded["match_total"][0]["line"] == 165.5
+
+
+def test_v3_hosts_prefer_regional_mirrors(monkeypatch):
+    monkeypatch.delenv("GOOL_MULTISPORT_V3_HOSTS", raising=False)
+    hosts = _v3_hosts_from_roots([
+        "https://1xbet.com/service-api/LiveFeed",
+        "https://1xbet.fi/service-api/LiveFeed",
+    ])
+    assert hosts[:4] == [
+        "https://1xbet.ng",
+        "https://1xbet.co.ke",
+        "https://1xbet.ci",
+        "https://1xbet.ug",
+    ]
+    assert "https://1xbet.com" in hosts
+    assert "https://1xbet.fi" in hosts
+
+
+def test_v3_index_uses_bounded_count_and_regional_host_first(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: None)
+    monkeypatch.setenv("XBET_MULTISPORT_INDEX_COUNT", "1000")
+    monkeypatch.delenv("GOOL_MULTISPORT_V3_INDEX_COUNT", raising=False)
+
+    calls = []
+    def fake_v3(host, path, ordered_query, timeout=8.0):
+        calls.append((host, path, ordered_query))
+        if host == "https://1xbet.ng" and path.endswith("/games1x2"):
+            return [{
+                "id": 999,
+                "sport": {"id": 3, "name": "Basketball"},
+                "liga": {"id": 1, "name": "League"},
+                "opponent1": {"fullName": "A"},
+                "opponent2": {"fullName": "B"},
+                "scores": {"scoreOpp1": 1, "scoreOpp2": 2},
+            }]
+        return None
+
+    monkeypatch.setattr(steam, "_sport_v3_json", fake_v3)
+    rows = worker._xbet_index(SPORTS["basketball"])
+    assert rows and rows[0]["I"] == "999"
+    assert calls[0][0] == "https://1xbet.ng"
+    query = dict(calls[0][2])
+    assert query["count"] == "250"

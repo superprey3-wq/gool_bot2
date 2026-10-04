@@ -89,7 +89,7 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "PREMATCH журнал" in hockey
     assert "LIVE журнал" in hockey
     assert "РАЗДЕЛЕНИЕ РЫНКОВ" in hockey
-    assert "текущий период" in hockey
+    assert "Только ТБ/ТМ текущего периода" in hockey
 
     report = multisport_report_text()
     assert "P/L +0.80u" in report
@@ -131,5 +131,5 @@ def test_separate_hockey_and_basketball_journal_views(tmp_path: Path, monkeypatc
     hreport = sport_phase_report_text("hockey")
     breport = sport_phase_report_text("basketball")
     assert "ОТДЕЛЬНЫЙ ОТЧЁТ" in hreport
-    assert "1/2/3 периодов" in hreport
-    assert "1/2/3/4 четверти" in breport
+    assert "Все рынки до матча" in hreport
+    assert "Все рынки до матча" in breport

@@ -22,14 +22,14 @@ def main() -> None:
     os.environ["GOOL_MULTISPORT_MODE"] = "shadow"
     os.environ["XBET_MULTISPORT_TELEGRAM_ENABLED"] = "0"
     os.environ["GOOL_MULTISPORT_PREMATCH_ENABLED"] = "0"
-    os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "40")
-    os.environ.setdefault("XBET_MULTISPORT_GAME_WORKERS", "8")
+    os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "12")
+    os.environ.setdefault("XBET_MULTISPORT_GAME_WORKERS", "4")
     os.environ.setdefault("GOOL_MULTISPORT_LIVE_SUBGAME_CACHE_SECONDS", "5")
     os.environ.setdefault("GOOL_MULTISPORT_HTTP_ATTEMPTS", "1")
     os.environ.setdefault("GOOL_HOCKEY_LIVE_STAT_SUBGAMES_MAX", "3")
 
-    snapshots = max(4, int(os.getenv("AUDIT_SNAPSHOTS", "4")))
-    sleep_seconds = max(8.0, float(os.getenv("AUDIT_SLEEP_SECONDS", "20")))
+    snapshots = max(1, int(os.getenv("AUDIT_SNAPSHOTS", "2")))
+    sleep_seconds = max(3.0, float(os.getenv("AUDIT_SLEEP_SECONDS", "10")))
     worker = MultiSportSteamWorker(runtime)
     states = []
     final_picks = []

@@ -182,4 +182,28 @@ def select_best_value_pick(
     return qualified[0]
 
 
-__all__ = ["analysis_value_rows", "qualify_value_pick", "select_best_value_pick"]
+def diagnose_value_rows(
+    rows: Iterable[tuple[PrematchPick, dict[str, Any]]],
+) -> dict[str, Any]:
+    items = list(rows)
+    rejects: dict[str, int] = {}
+    high_odds = 0
+    qualified = 0
+    for pick, meta in items:
+        if _f("GOOL_VALUE_HUNTER_MIN_ODDS", 2.20) <= float(pick.odds) <= _f("GOOL_VALUE_HUNTER_MAX_ODDS", 6.00):
+            high_odds += 1
+        ok, gate = qualify_value_pick(pick, meta)
+        if ok:
+            qualified += 1
+        else:
+            for reason in gate.get("reasons") or []:
+                rejects[str(reason)] = rejects.get(str(reason), 0) + 1
+    return {
+        "modeled_markets": len(items),
+        "high_odds_markets": high_odds,
+        "qualified": qualified,
+        "rejects": rejects,
+    }
+
+
+__all__ = ["analysis_value_rows", "qualify_value_pick", "select_best_value_pick", "diagnose_value_rows"]

@@ -200,7 +200,7 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
-    if _truthy("GOOL_MULTISPORT_ENABLED", True):
+    if _truthy("GOOL_MULTISPORT_ENABLED", False):
         commands["multisport"] = [
             sys.executable,
             "-m",
@@ -342,7 +342,7 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
-        f"GOOL_BOOT systems=FOOTBALL+HOCKEY+BASKETBALL multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
+        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
         "prematch_full_market=active live_consensus=2of3 "
         "matchbook_worker=off betdaq_worker=off sx_board=off",
         flush=True,

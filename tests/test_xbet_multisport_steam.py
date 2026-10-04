@@ -775,3 +775,108 @@ def test_select_prematch_primary_quality_wins_without_streak():
     row, signal = select_prematch_primary(candidates, ["match_total", "handicap"])
     assert row["market_family"] == "handicap"
     assert signal["strength"] == 94
+
+
+def test_live_snapshot_uses_flashscore_stats_not_xbet_stat_subgames(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    game = {
+        "I": "101",
+        "O1": "Boston Bruins",
+        "O2": "New York Rangers",
+        "SC": {"FS": {"S1": 1, "S2": 0}, "CPS": "2nd period", "TS": 360},
+        "GE": [{"G": 4, "E": [[
+            {"T": 9, "P": 2.5, "C": 1.85},
+            {"T": 10, "P": 2.5, "C": 1.95},
+        ]]}],
+        "SG": [{
+            "I": "sg2", "PN": "2nd period",
+            "AE": [{"G": 4, "ME": [
+                {"T": 9, "P": 1.5, "C": 1.82},
+                {"T": 10, "P": 1.5, "C": 1.98},
+            ]}],
+        }],
+    }
+    fs = {
+        "flashscore_event_id": "Ab12Cd34",
+        "home": "Boston Bruins",
+        "away": "New York Rangers",
+        "score": [1, 0],
+        "league": "NHL",
+    }
+    monkeypatch.setattr(worker, "_game", lambda *args, **kwargs: game)
+    monkeypatch.setattr(
+        worker._flashscore,
+        "fetch_stats",
+        lambda event_id: {"shots_on_target": (14.0, 11.0), "shots": (20.0, 18.0)},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_hockey_segment_stats",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("1xBet stat subgames must not be used")),
+    )
+    row, error = worker._snapshot({"I": "101"}, fs, False, 0.99, SPORTS["hockey"])
+    assert error is None
+    assert row is not None
+    assert row["live_game_stats"]["source"] == "flashscore"
+    assert row["live_game_stats"]["shots_on_goal"] == [14, 11]
+
+
+def test_prematch_snapshot_loads_flashscore_form_and_h2h(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    now = __import__("time").time()
+    game = {
+        "I": "201",
+        "O1": "Denver Nuggets",
+        "O2": "Utah Jazz",
+        "GE": [{"G": 4, "E": [[
+            {"T": 9, "P": 220.5, "C": 1.88},
+            {"T": 10, "P": 220.5, "C": 1.92},
+        ]]}],
+    }
+    fs = {
+        "flashscore_event_id": "Cd34Ef56",
+        "home": "Denver Nuggets",
+        "away": "Utah Jazz",
+        "score": [0, 0],
+        "league": "NBA",
+        "start_ts": now + 3600,
+    }
+    monkeypatch.setattr(worker, "_prematch_game", lambda *args, **kwargs: game)
+    monkeypatch.setattr(worker, "_market_tree", lambda *args, **kwargs: ({
+        "FULL_MATCH": {
+            "scope": "FULL_MATCH",
+            "match_total": [{"line": 220.5, "over": 1.88, "under": 1.92}],
+            "home_total": [], "away_total": [], "handicap": [], "moneyline": {}, "raw": [{"G": 4, "T": 9}],
+        }
+    }, {"coverage": {}, "unknown_market_catalog": [], "subgame_fetch": {}}))
+    context = {
+        "source": "flashscore_h2h",
+        "home_recent": [{"event_id": "h1", "home": "Denver Nuggets", "away": "A", "home_score": 120, "away_score": 110}],
+        "away_recent": [{"event_id": "a1", "home": "B", "away": "Utah Jazz", "home_score": 105, "away_score": 112}],
+        "h2h": [{"event_id": "x1", "home": "Denver Nuggets", "away": "Utah Jazz", "home_score": 118, "away_score": 115}],
+    }
+    monkeypatch.setattr(worker._flashscore, "fetch_match_history", lambda *args, **kwargs: context)
+    row, error = worker._prematch_snapshot({"I": "201"}, fs, False, 0.98, SPORTS["basketball"])
+    assert error is None
+    assert row is not None
+    assert row["prematch_context"]["source"] == "flashscore_h2h"
+    assert len(row["prematch_context"]["h2h"]) == 1
+
+
+def test_prematch_history_support_can_raise_total_signal_strength(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    ctx = {
+        "home_recent": [
+            {"event_id": "1", "home_score": 120, "away_score": 115},
+            {"event_id": "2", "home_score": 118, "away_score": 112},
+        ],
+        "away_recent": [
+            {"event_id": "3", "home_score": 116, "away_score": 114},
+        ],
+        "h2h": [],
+    }
+    lane = {"market_family": "match_total", "line": 220.5}
+    signal = {"direction": "over", "line": 220.5}
+    support = worker._prematch_history_support(ctx, lane, signal)
+    assert support > 0
+    assert support <= 3.0

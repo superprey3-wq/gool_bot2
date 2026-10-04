@@ -1123,13 +1123,28 @@ class MultiSportSteamWorker:
                         failed += 1
                     continue
                 decoded += 1
-                history = self._append_prematch_history(row, cfg)
-                signal = detect_prematch_steam(history, cfg, now=float(row["ts"]))
-                if signal is not None:
-                    recorded, sent = self._record_signal(row, signal, cfg)
+                signals: list[dict[str, Any]] = []
+                for lane in row.get("market_lanes") or []:
+                    lane_row = self._lane_row(row, lane)
+                    history = self._append_prematch_history(lane_row, cfg)
+                    signal = detect_prematch_steam(history, cfg, now=float(lane_row["ts"]))
+                    if signal is None:
+                        continue
+                    signal = {
+                        **signal,
+                        "scope": lane_row.get("scope"),
+                        "market_family": lane_row.get("market_family"),
+                        "selection": selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0)),
+                    }
+                    recorded, sent = self._record_signal(lane_row, signal, cfg)
                     detected += int(recorded)
                     delivered += int(bool(sent))
-                    row["signal"] = signal
+                    if recorded:
+                        signals.append(signal)
+                if signals:
+                    signals.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
+                    row["signals"] = signals
+                    row["signal"] = signals[0]
                 latest.append(row)
         return {
             "enabled": True,
@@ -1173,16 +1188,30 @@ class MultiSportSteamWorker:
                         diagnostics.append(str(error or "unknown"))
                     continue
                 decoded += 1
-                history, score_changed_at = self._append_history(row, cfg)
-                signal = detect_steam(history, cfg, now=float(row["ts"]), score_changed_at=score_changed_at)
-                if signal is not None:
-                    recorded, sent = self._record_signal(row, signal, cfg)
+                signals: list[dict[str, Any]] = []
+                for lane in row.get("market_lanes") or []:
+                    lane_row = self._lane_row(row, lane)
+                    history, score_changed_at = self._append_history(lane_row, cfg)
+                    signal = detect_steam(history, cfg, now=float(lane_row["ts"]), score_changed_at=score_changed_at)
+                    if signal is None:
+                        continue
+                    signal = {
+                        **signal,
+                        "scope": lane_row.get("scope"),
+                        "market_family": lane_row.get("market_family"),
+                        "selection": selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0)),
+                    }
+                    recorded, sent = self._record_signal(lane_row, signal, cfg)
                     if recorded:
                         detected += 1
+                        signals.append(signal)
                     if sent:
                         delivered += 1
-                    row["signal"] = signal
-                    row["steam"] = signal
+                if signals:
+                    signals.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
+                    row["signals"] = signals
+                    row["signal"] = signals[0]
+                    row["steam"] = signals[0]
                 latest.append(row)
 
         return {

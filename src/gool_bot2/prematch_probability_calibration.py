@@ -188,10 +188,26 @@ def calibrate_probability(
 
     n = int(history["sample"])
     wins = int(history["wins"])
-    # Prior strength of 24 settled equivalents prevents tiny samples such as
-    # 3/3 or 0/3 from turning into absurd 100% / 0% displayed probabilities.
+    # Bucket calibration may map toward its observed hit rate because those rows
+    # have similar predicted probabilities. A broad market-family fallback must
+    # NOT do that: its absolute hit rate is selection-biased (ordinary published
+    # bets are usually high-probability) and can wildly inflate a new longshot.
+    # For the family fallback, learn only historical residual bias:
+    # observed hit rate - historical average prediction.
     prior_strength = 24.0
-    honest = (wins + prior_strength * prior) / (n + prior_strength) if n > 0 else prior
+    if n > 0 and str(history.get("source") or "") == "scope_market_bucket":
+        honest = (wins + prior_strength * prior) / (n + prior_strength)
+        calibration_mode = "bucket_absolute"
+    elif n > 0:
+        hit_rate = float(history.get("hit_rate") or 0.0)
+        avg_predicted = float(history.get("avg_predicted") or 0.0)
+        residual = hit_rate - avg_predicted
+        evidence_weight = n / (n + prior_strength)
+        honest = prior + evidence_weight * residual
+        calibration_mode = "family_residual"
+    else:
+        honest = prior
+        calibration_mode = "prior_only"
     honest = _clamp(honest)
 
     # Reliability band: not a promise/CI, but a compact uncertainty indicator.
@@ -223,6 +239,8 @@ def calibrate_probability(
         "historical_avg_predicted": None if history["avg_predicted"] is None else round(float(history["avg_predicted"]), 6),
         "confidence": confidence,
         "source": f"{prior_source}+{history['source']}" if n else prior_source,
+        "calibration_mode": calibration_mode,
+        "prior_probability": round(prior, 6),
         "model_weight": round(model_weight, 4),
         "market_edge": None if market is None else round(honest - market, 6),
     }

@@ -918,10 +918,21 @@ class MultiSportSteamWorker:
     def _xbet_queries(self, cfg: SportConfig) -> list[str]:
         count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "mode": 4}
-        return [
-            urllib.parse.urlencode({**base, "country": 1, "getEmpty": "true"}),
-            urllib.parse.urlencode({**base, "country": 137, "gr": 285, "virtualSports": "true", "noFilterBlockEvent": "true", "getEmpty": "true"}),
+        profiles = [
+            {**base, "country": 1, "getEmpty": "true"},
+            {**base, "country": 137, "gr": 285, "virtualSports": "true", "noFilterBlockEvent": "true", "getEmpty": "true"},
+            # BetB2B mirrors do not always agree on the country partition.
+            {**base, "getEmpty": "true"},
         ]
+        if cfg.key == "basketball":
+            profiles.extend([
+                # Long-lived basketball profile used by 1xBet/1xStavka clients.
+                {**base, "country": 1, "antisports": 188, "partner": 51, "getEmpty": "true"},
+                {**base, "country": 153, "mobi": "true", "getEmpty": "true"},
+                {**base, "country": 19, "getEmpty": "true"},
+            ])
+        return list(dict.fromkeys(urllib.parse.urlencode(profile) for profile in profiles))
+
 
     def _xbet_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
@@ -1661,7 +1672,14 @@ class MultiSportSteamWorker:
             "line": float(signal.get("line") or 0.0),
             "odd": float(signal.get("odd") or 0.0),
             "opening_line": float(((signal.get("start") or {}).get("line") or signal.get("line") or 0.0)) if phase == "PREMATCH" else None,
-            "opening_odd": float(((signal.get("start") or {}).get(direction) or signal.get("odd") or 0.0)) if phase == "PREMATCH" else None,
+            "opening_odd": (
+                float(
+                    ((signal.get("start") or {}).get("odd") if row.get("choice_key") else (signal.get("start") or {}).get(direction))
+                    or signal.get("odd")
+                    or 0.0
+                )
+                if phase == "PREMATCH" else None
+            ),
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
@@ -1720,7 +1738,12 @@ class MultiSportSteamWorker:
         self._prematch_cursor[cfg.key] = end % len(rows)
         return batch, len(rows)
 
-    def _scan_prematch(self, cfg: SportConfig, fs_today: list[dict[str, Any]]) -> dict[str, Any]:
+    def _scan_prematch(
+        self,
+        cfg: SportConfig,
+        fs_today: list[dict[str, Any]],
+        xbet_prematch_prefetched: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         if not _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
             return {"enabled": False, "matches": []}
         now = time.time()
@@ -1731,7 +1754,11 @@ class MultiSportSteamWorker:
             and float(row.get("start_ts") or 0.0) > now
             and float(row.get("start_ts") or 0.0) - now <= horizon
         ]
-        xbet_prematch = self._xbet_prematch_index(cfg)
+        xbet_prematch = (
+            [dict(row) for row in xbet_prematch_prefetched]
+            if xbet_prematch_prefetched is not None
+            else self._xbet_prematch_index(cfg)
+        )
         mapped_all = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)
         mapped, mapped_total = self._prematch_batch(cfg, mapped_all)
         decoded = failed = detected = delivered = policy_blocked = 0
@@ -1809,14 +1836,24 @@ class MultiSportSteamWorker:
             "matches": visible,
         }
 
-    def _scan_sport(self, cfg: SportConfig) -> dict[str, Any]:
+    def _scan_sport(
+        self,
+        cfg: SportConfig,
+        *,
+        xbet_live_prefetched: list[dict[str, Any]] | None = None,
+        xbet_prematch_prefetched: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         fs_today = self._flashscore_today(cfg)
         states = {str(row["flashscore_event_id"]): row for row in fs_today}
         settled = self._settle(cfg, states)
-        prematch = self._scan_prematch(cfg, fs_today)
+        prematch = self._scan_prematch(cfg, fs_today, xbet_prematch_prefetched=xbet_prematch_prefetched)
         prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
         fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
-        xbet_live = self._xbet_index(cfg)
+        xbet_live = (
+            [dict(row) for row in xbet_live_prefetched]
+            if xbet_live_prefetched is not None
+            else self._xbet_index(cfg)
+        )
         mapped = map_xbet_to_flashscore(xbet_live, fs_live)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
@@ -1900,11 +1937,49 @@ class MultiSportSteamWorker:
     def collect_once(self) -> dict[str, Any]:
         started = time.time()
         sports: dict[str, Any] = {}
+        enabled = [(key, cfg) for key, cfg in SPORTS.items() if _sport_enabled(key)]
+
+        # IMPORTANT: fetch lightweight indexes for BOTH sports first. Hydrating
+        # hockey games/subgames can trigger 1xBet throttling and previously left
+        # basketball with an empty LiveFeed even while Flashscore had 40-50 games.
+        prefetched_live: dict[str, list[dict[str, Any]]] = {}
+        prefetched_prematch: dict[str, list[dict[str, Any]]] = {}
+        index_workers = max(1, min(4, _int_env("GOOL_MULTISPORT_INDEX_PREFETCH_WORKERS", len(enabled) * 2 or 1)))
+        with ThreadPoolExecutor(max_workers=index_workers) as pool:
+            jobs = {}
+            for key, cfg in enabled:
+                jobs[pool.submit(self._xbet_index, cfg)] = ("live", key)
+                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
+                    jobs[pool.submit(self._xbet_prematch_index, cfg)] = ("prematch", key)
+            for future in as_completed(jobs):
+                phase, key = jobs[future]
+                try:
+                    rows = future.result(timeout=45)
+                except Exception:
+                    rows = []
+                if phase == "live":
+                    prefetched_live[key] = list(rows or [])
+                else:
+                    prefetched_prematch[key] = list(rows or [])
+
+        print(
+            "GOOL_MULTISPORT_PREFETCH "
+            + " ".join(
+                f"{key}:live={len(prefetched_live.get(key) or [])},pre={len(prefetched_prematch.get(key) or [])}"
+                for key, _cfg in enabled
+            ),
+            flush=True,
+        )
+
         for key, cfg in SPORTS.items():
             if not _sport_enabled(key):
                 sports[key] = {"enabled": False}
                 continue
-            stats = self._scan_sport(cfg)
+            stats = self._scan_sport(
+                cfg,
+                xbet_live_prefetched=prefetched_live.get(key),
+                xbet_prematch_prefetched=prefetched_prematch.get(key),
+            )
             sports[key] = stats
             print(
                 f"GOOL_{key.upper()} fs={stats['flashscore_live']} xbet={stats['xbet_live']} mapped={stats['mapped']} "

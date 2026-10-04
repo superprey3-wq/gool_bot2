@@ -93,3 +93,27 @@ def test_history_is_market_family_specific():
     )
     assert result["calibration_sample"] == 0
     assert result["confidence"] == "LOW"
+
+
+def test_family_fallback_uses_residual_not_absolute_hit_rate():
+    # Historical ordinary totals can have a high absolute hit rate because they
+    # are selected at high predicted probabilities. That must not drag a new
+    # longshot toward the family's raw win rate.
+    rows = settled_rows(wins=30, losses=10, probability=0.75)
+    result = calibrate_probability(
+        raw_model_probability=0.90,
+        market_probability=0.27,
+        profile=profile(10),
+        scope="FULL_TIME",
+        market_type="OVER_UNDER",
+        quality=0.70,
+        rows=rows,
+    )
+    assert result["calibration_sample"] == 40
+    assert result["calibration_mode"] == "family_residual"
+    assert result["historical_hit_rate"] == 0.75
+    assert result["historical_avg_predicted"] == 0.75
+    # Zero historical residual means the family history should not inflate the
+    # current prior at all.
+    assert abs(result["honest_probability"] - result["prior_probability"]) < 1e-6
+    assert result["honest_probability"] < 0.50

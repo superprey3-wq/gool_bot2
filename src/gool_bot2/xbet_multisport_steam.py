@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from . import telegram
 from . import xbet_market_pressure as market
@@ -74,6 +75,13 @@ def _int_env(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
         return int(default)
+
+
+def _display_tz():
+    try:
+        return ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+    except Exception:
+        return timezone.utc
 
 
 def _mode() -> str:
@@ -459,7 +467,11 @@ class MultiSportSteamWorker:
 
     def _flashscore_today(self, cfg: SportConfig) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
-        for path in (f"f_{cfg.flashscore_id}_0_3_en_1", f"f_{cfg.flashscore_id}_0_0_en_1"):
+        for path in (
+            f"f_{cfg.flashscore_id}_-1_3_en_1",
+            f"f_{cfg.flashscore_id}_0_3_en_1",
+            f"f_{cfg.flashscore_id}_0_0_en_1",
+        ):
             body = self._flashscore._feed(path)
             if not body:
                 continue
@@ -704,7 +716,7 @@ class MultiSportSteamWorker:
         arrow = "⬆️" if direction == "over" else "⬇️"
         if str(row.get("phase") or "LIVE").upper() == "PREMATCH":
             start_ts = float(row.get("start_ts") or 0.0)
-            start_label = datetime.fromtimestamp(start_ts, timezone.utc).strftime("%d.%m %H:%M UTC") if start_ts else "до старта"
+            start_label = datetime.fromtimestamp(start_ts, _display_tz()).strftime("%d.%m %H:%M МСК") if start_ts else "до старта"
             return (
                 f"{cfg.icon} <b>GOOL MULTI · PREMATCH · {cfg.title}</b>\n"
                 f"<b>{row.get('home','?')} — {row.get('away','?')}</b>\n"

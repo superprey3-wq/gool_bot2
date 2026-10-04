@@ -4,6 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
+from difflib import SequenceMatcher
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -285,6 +286,16 @@ def _pick_needed_text(row: dict[str, Any]) -> str:
     return f"{prefix}для захода: {subject} нужно {win_min}+ {unit}"
 
 
+def _teams_match(left_home: str, left_away: str, right_home: str, right_away: str) -> bool:
+    lh, la = norm_team(left_home), norm_team(left_away)
+    rh, ra = norm_team(right_home), norm_team(right_away)
+    if not lh or not la or not rh or not ra:
+        return False
+    if lh == rh and la == ra:
+        return True
+    return SequenceMatcher(None, lh, rh).ratio() >= 0.78 and SequenceMatcher(None, la, ra).ratio() >= 0.78
+
+
 def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
     """Fresh LIVE identity/score for the menu, independent of saved worker state."""
     sport_id = 4 if sport == "hockey" else 3
@@ -376,13 +387,26 @@ def multisport_in_game_sections() -> list[str]:
                 for candidate in live_by_fs.values():
                     cand_home = norm_team(str(candidate.get("home") or ""))
                     cand_away = norm_team(str(candidate.get("away") or ""))
-                    if wanted_home and wanted_away and cand_home == wanted_home and cand_away == wanted_away:
+                    if wanted_home and wanted_away and _teams_match(
+                        str(row.get("home") or ""),
+                        str(row.get("away") or ""),
+                        str(candidate.get("home") or ""),
+                        str(candidate.get("away") or ""),
+                    ):
                         live = candidate
                         break
 
             if live is not None:
                 active.append((row, live))
 
+        if active:
+            unique_active: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+            for pick, live in active:
+                key = str(pick.get("flashscore_event_id") or live.get("flashscore_event_id") or "")
+                if not key:
+                    key = f"{norm_team(str(pick.get('home') or ''))}:{norm_team(str(pick.get('away') or ''))}"
+                unique_active.setdefault(key, (pick, live))
+            active = list(unique_active.values())
         if not active:
             continue
         total += len(active)
@@ -407,6 +431,116 @@ def multisport_in_game_sections() -> list[str]:
     messages.append(f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>{total}</b>")
     messages.extend(sport_blocks)
     return messages
+
+
+
+def _stats_brief(stats_payload: dict[str, Any], sport: str) -> str:
+    stats = dict(stats_payload.get("segment_stats") or {})
+    if not stats:
+        return "статистика сегмента пока недоступна"
+    preferred = (
+        ("shots_on_goal", "броски в створ"),
+        ("shots", "броски"),
+        ("powerplay_goals", "голы PP"),
+        ("penalties_2m", "2 мин"),
+    ) if sport == "hockey" else (
+        ("field_goals", "FG"),
+        ("three_point_field_goals", "3PT"),
+        ("free_throws", "FT"),
+        ("rebounds", "подборы"),
+        ("turnovers", "потери"),
+    )
+    bits: list[str] = []
+    for key, label in preferred:
+        pair = stats.get(key)
+        if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+            a, b = pair[0], pair[1]
+            bits.append(f"{label} {a:g}:{b:g}")
+        if len(bits) >= 3:
+            break
+    return " · ".join(bits) if bits else "статистика сегмента получена"
+
+
+def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
+    """Current hockey+basketball Brain view for the common Analysis button."""
+    state = _load_json(state_path(), {})
+    sports_state = state.get("sports") if isinstance(state, dict) else {}
+    sports_state = sports_state if isinstance(sports_state, dict) else {}
+    provider = FlashscoreProvider()
+    sections: list[str] = []
+
+    for sport in ("hockey", "basketball"):
+        icon, title = SPORT_META[sport]
+        current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
+        mapped = [dict(row) for row in (current.get("matches") or []) if isinstance(row, dict)]
+        mapped_by_fs = {
+            str(row.get("flashscore_event_id") or ""): row
+            for row in mapped
+            if str(row.get("flashscore_event_id") or "")
+        }
+        live = _direct_flashscore_live(sport)
+        if not live:
+            continue
+        lines = [f"{icon} <b>{title} · АНАЛИЗ LIVE</b> · {len(live)} матч."]
+        for fs in live[:max(1, int(limit_per_sport))]:
+            fs_id = str(fs.get("flashscore_event_id") or "")
+            row = mapped_by_fs.get(fs_id)
+            if row is None:
+                row = next(
+                    (
+                        candidate for candidate in mapped
+                        if _teams_match(
+                            str(fs.get("home") or ""), str(fs.get("away") or ""),
+                            str(candidate.get("home") or ""), str(candidate.get("away") or ""),
+                        )
+                    ),
+                    None,
+                )
+            score = list(fs.get("score") or (row or {}).get("score") or [0, 0])
+            period = str((row or {}).get("period") or fs.get("status_code") or "LIVE")
+            stats_payload = dict((row or {}).get("live_game_stats") or {})
+            if not stats_payload and fs_id:
+                try:
+                    detailed = provider.fetch_stats_detailed(fs_id)
+                    sections_raw = dict(detailed.get("sections") or {})
+                    # For menu analysis, use the richest currently available section.
+                    chosen = next(
+                        (dict(v) for k, v in reversed(list(sections_raw.items())) if isinstance(v, dict) and (v.get("stats") or {})),
+                        {},
+                    )
+                    segment_stats = {}
+                    for key, item in (chosen.get("stats") or {}).items():
+                        if not isinstance(item, dict):
+                            continue
+                        hv, av = item.get("home"), item.get("away")
+                        if hv is not None and av is not None:
+                            try:
+                                segment_stats[str(key)] = [float(hv), float(av)]
+                            except (TypeError, ValueError):
+                                pass
+                    stats_payload = {"segment_stats": segment_stats}
+                except Exception:
+                    stats_payload = {}
+
+            signal = dict((row or {}).get("signal") or (row or {}).get("steam") or {})
+            if signal:
+                decision = (
+                    f"🔥 <b>SIGNAL</b> · {signal.get('selection') or '?'} "
+                    f"@ {float(signal.get('odd') or 0):.2f} · R{float(signal.get('strength') or 0):.0f}"
+                )
+            elif row is None:
+                decision = "⏳ <b>WAIT</b> · Flashscore LIVE есть, рынок 1xBet ещё не синхронизирован"
+            else:
+                decision = "⏳ <b>WAIT</b> · текущий период/четверть не прошёл пороги Brain"
+
+            lines.append(
+                f"<b>{fs.get('home','?')} — {fs.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
+                f"📊 {_stats_brief(stats_payload, sport)}\n"
+                f"{decision}"
+            )
+        sections.append("\n\n".join(lines))
+
+    return sections
 
 
 def multisport_report_text() -> str:

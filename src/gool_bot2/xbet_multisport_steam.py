@@ -245,6 +245,160 @@ def _lane_threshold_scale(rows: list[dict[str, Any]], cfg: SportConfig) -> float
     return max(0.25, min(1.0, scale))
 
 
+def _segment_duration_seconds(row: dict[str, Any], cfg: SportConfig) -> float:
+    if cfg.key == "hockey":
+        return 20.0 * 60.0
+    league = str(row.get("league") or "").casefold()
+    if any(token in league for token in ("nba", "g league")) and "wnba" not in league:
+        return 12.0 * 60.0
+    return 10.0 * 60.0
+
+
+def detect_live_segment_stats(
+    rows: list[dict[str, Any]],
+    cfg: SportConfig,
+    *,
+    now: float,
+    score_changed_at: float | None,
+) -> dict[str, Any] | None:
+    """Stat-first LIVE brain for the current hockey period/basketball quarter.
+
+    The decision is driven by segment score + game-clock pace. 1xBet total/fair
+    price is a confirmation/veto layer, not the source of the projection.
+    """
+    eligible = [row for row in rows if now - float(row.get("ts") or 0.0) <= cfg.window_seconds]
+    if len(eligible) < 4:
+        return None
+    age = float(eligible[-1]["ts"]) - float(eligible[0]["ts"])
+    if age < cfg.min_age_seconds:
+        return None
+    if score_changed_at is not None and now - score_changed_at < cfg.score_guard_seconds:
+        return None
+
+    clock_rows = []
+    for row in eligible:
+        try:
+            clock = float(row.get("clock_seconds"))
+        except (TypeError, ValueError):
+            continue
+        if clock >= 0:
+            clock_rows.append((row, clock))
+    if len(clock_rows) < 2:
+        return None
+
+    first, first_clock = clock_rows[0]
+    end, end_clock = clock_rows[-1]
+    duration = _segment_duration_seconds(end, cfg)
+    observed_max = max(clock for _, clock in clock_rows)
+    if observed_max > duration * 1.05 and observed_max <= 15 * 60:
+        duration = max(duration, observed_max)
+
+    delta_clock = end_clock - first_clock
+    if abs(delta_clock) < _float_env("GOOL_MULTISPORT_LIVE_MIN_CLOCK_DELTA_SECONDS", 35.0):
+        return None
+    if delta_clock > 0:
+        elapsed = min(duration, end_clock)
+    else:
+        elapsed = min(duration, max(0.0, duration - end_clock))
+    if elapsed < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_ELAPSED_SECONDS", 75.0):
+        return None
+    remaining = max(0.0, duration - elapsed)
+    if remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
+        return None
+
+    def total_score(row: dict[str, Any]) -> int:
+        score = list(row.get("score") or [0, 0])
+        return int(score[0] or 0) + int(score[1] or 0)
+
+    current = total_score(end)
+    first_total = total_score(first)
+    score_delta = max(0, current - first_total)
+    game_clock_delta = max(1.0, abs(delta_clock))
+    recent_rate = score_delta * 60.0 / game_clock_delta
+    overall_rate = current * 60.0 / max(1.0, elapsed)
+
+    if cfg.key == "basketball":
+        recent_weight = _float_env("GOOL_BASKETBALL_LIVE_RECENT_PACE_WEIGHT", 0.55)
+        max_rate = _float_env("GOOL_BASKETBALL_LIVE_MAX_POINTS_PER_MINUTE", 8.5)
+    else:
+        recent_weight = _float_env("GOOL_HOCKEY_LIVE_RECENT_PACE_WEIGHT", 0.30)
+        max_rate = _float_env("GOOL_HOCKEY_LIVE_MAX_GOALS_PER_MINUTE", 0.45)
+    recent_rate = min(max_rate, max(0.0, recent_rate))
+    overall_rate = min(max_rate, max(0.0, overall_rate))
+    blended_rate = overall_rate * (1.0 - recent_weight) + recent_rate * recent_weight
+    stat_projection = current + blended_rate * (remaining / 60.0)
+
+    line = float(end.get("line") or 0.0)
+    if line <= 0:
+        return None
+    market_prior_weight = _float_env("GOOL_MULTISPORT_LIVE_MARKET_PRIOR_WEIGHT", 0.20)
+    projection = stat_projection * (1.0 - market_prior_weight) + line * market_prior_weight
+    raw_edge = projection - line
+    direction = "over" if raw_edge > 0 else "under"
+    stat_edge = abs(raw_edge)
+    min_edge = _float_env(
+        f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
+        0.35 if cfg.key == "hockey" else 2.5,
+    )
+    if stat_edge < min_edge:
+        return None
+
+    over_probability = float(end.get("probability") or 0.5)
+    chosen_market_probability = over_probability if direction == "over" else 1.0 - over_probability
+    opposition_floor = _float_env("GOOL_MULTISPORT_LIVE_MARKET_OPPOSITION_FLOOR", 0.42)
+    if chosen_market_probability < opposition_floor:
+        return None
+
+    start_over_probability = float(first.get("probability") or 0.5)
+    raw_prob_delta = (over_probability - start_over_probability) * 100.0
+    probability_delta_pp = raw_prob_delta if direction == "over" else -raw_prob_delta
+    raw_line_delta = float(end.get("line") or 0.0) - float(first.get("line") or 0.0)
+    line_delta = raw_line_delta if direction == "over" else -raw_line_delta
+    market_confirmed = (
+        chosen_market_probability >= 0.50
+        or probability_delta_pp >= 0.75
+        or line_delta >= (0.25 if cfg.key == "hockey" else 1.0)
+    )
+
+    odd = float(end.get(direction) or 0.0)
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+        return None
+
+    edge_ratio = stat_edge / max(1e-6, min_edge)
+    strength = min(
+        100.0,
+        58.0
+        + edge_ratio * 12.0
+        + min(10.0, abs(probability_delta_pp) * 1.2)
+        + (7.0 if market_confirmed else 0.0),
+    )
+    return {
+        "brain_mode": "segment_stats",
+        "direction": direction,
+        "line": line,
+        "odd": odd,
+        "fair_probability": round(chosen_market_probability, 6),
+        "metric_delta": round(stat_edge, 3),
+        "stat_edge": round(stat_edge, 3),
+        "projected_total": round(projection, 2),
+        "raw_stat_projection": round(stat_projection, 2),
+        "current_segment_total": current,
+        "elapsed_seconds": round(elapsed, 1),
+        "remaining_seconds": round(remaining, 1),
+        "overall_rate_per_min": round(overall_rate, 3),
+        "recent_rate_per_min": round(recent_rate, 3),
+        "probability_delta_pp": round(probability_delta_pp, 2),
+        "line_delta": round(line_delta, 2),
+        "moves": max(0, len(eligible) - 1),
+        "age_seconds": round(age, 1),
+        "strength": round(strength, 1),
+        "market_confirmed": bool(market_confirmed),
+        "market_probability": round(chosen_market_probability, 4),
+        "start": first,
+        "end": end,
+    }
+
+
 def detect_steam(
     rows: list[dict[str, Any]],
     cfg: SportConfig,
@@ -1204,8 +1358,6 @@ class MultiSportSteamWorker:
         previous_score = self._last_score.get(key)
         if previous_score is not None and previous_score != score:
             self._score_changed_at[key] = now
-            if cfg.key == "hockey":
-                self._history[key].clear()
         self._last_score[key] = score
         self._history[key].append(dict(row))
         return list(self._history[key]), self._score_changed_at.get(key)
@@ -1347,7 +1499,10 @@ class MultiSportSteamWorker:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "phase": phase,
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
-            "signal_type": f"{phase.lower()}_{family}_movement",
+            "signal_type": (
+                "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
+                else f"{phase.lower()}_{family}_movement"
+            ),
             "market_family": family,
             "phase_policy": str(row.get("phase_policy") or ""),
             "card_profile": f"{cfg.key}_{phase.lower()}",
@@ -1381,6 +1536,15 @@ class MultiSportSteamWorker:
             "moves": int(signal.get("moves") or 0),
             "strength": float(signal.get("strength") or 0.0),
             "extreme": bool(signal.get("extreme")),
+            "brain_mode": str(signal.get("brain_mode") or ""),
+            "projected_total": signal.get("projected_total"),
+            "stat_edge": signal.get("stat_edge"),
+            "current_segment_total": signal.get("current_segment_total"),
+            "elapsed_seconds": signal.get("elapsed_seconds"),
+            "remaining_seconds": signal.get("remaining_seconds"),
+            "overall_rate_per_min": signal.get("overall_rate_per_min"),
+            "recent_rate_per_min": signal.get("recent_rate_per_min"),
+            "market_confirmed": signal.get("market_confirmed"),
             "mapping_score": float(row.get("flashscore_match_score") or 0.0),
             "result": "pending",
             "profit_units": 0.0,
@@ -1548,7 +1712,7 @@ class MultiSportSteamWorker:
                         continue
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history, score_changed_at = self._append_history(lane_row, cfg)
-                    signal = detect_steam(history, cfg, now=float(lane_row["ts"]), score_changed_at=score_changed_at)
+                    signal = detect_live_segment_stats(history, cfg, now=float(lane_row["ts"]), score_changed_at=score_changed_at)
                     if signal is None:
                         continue
                     signal = {

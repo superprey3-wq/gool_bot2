@@ -29,6 +29,7 @@ from .xbet_multisport_markets import (
     decode_core_markets,
     lane_key,
     lane_phase_policy,
+    live_scopes_from_period,
     lane_score,
     market_lanes,
     period_scores,
@@ -728,6 +729,37 @@ class MultiSportSteamWorker:
                 return value
         return None
 
+    def _subgame_game(self, event_id: str, cfg: SportConfig, *, prematch: bool) -> dict[str, Any]:
+        if prematch:
+            params = {
+                "id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true",
+                "GroupEvents": "true", "allEventsGroupSubGames": "true",
+                "countevents": 250, "grMode": 4, "marketType": 1, "isNewBuilder": "true",
+            }
+            roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
+        else:
+            params = {
+                "id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true",
+                "GroupEvents": "true", "allEventsGroupSubGames": "true",
+                "countevents": 250, "grMode": 2,
+            }
+            roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
+
+        # The parent event/index has already selected a healthy mirror. Sub-game
+        # hydration must not retry every 1xBet mirror for every quarter/period.
+        attempts = max(1, min(2, _int_env("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS", 1)))
+        timeout = max(1.0, _float_env("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT", 3.5))
+        for root in list(dict.fromkeys(roots))[:attempts]:
+            payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout)
+            value = payload.get("Value") if isinstance(payload, dict) else None
+            if isinstance(value, dict):
+                if prematch:
+                    self._prematch_roots[cfg.key] = root
+                else:
+                    self._roots[cfg.key] = root
+                return value
+        return {}
+
     def _cached_subgame(self, sub_id: str, cfg: SportConfig, *, prematch: bool) -> dict[str, Any]:
         phase = "PREMATCH" if prematch else "LIVE"
         key = f"{phase}:{cfg.key}:{sub_id}"
@@ -743,7 +775,7 @@ class MultiSportSteamWorker:
         cached_at, cached = self._subgame_cache.get(key, (0.0, {}))
         if cached and now - cached_at <= ttl:
             return dict(cached)
-        game = self._prematch_game(sub_id, cfg) if prematch else self._game(sub_id, cfg)
+        game = self._subgame_game(sub_id, cfg, prematch=prematch)
         if isinstance(game, dict) and game:
             self._subgame_cache[key] = (now, dict(game))
             return game
@@ -770,6 +802,7 @@ class MultiSportSteamWorker:
         cfg: SportConfig,
         *,
         prematch: bool,
+        wanted_scopes: set[str] | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
         decoded: dict[str, dict[str, Any]] = {
             SCOPE_FULL: decode_core_markets(game, cfg.key, scope=SCOPE_FULL)
@@ -787,6 +820,8 @@ class MultiSportSteamWorker:
             scope = scope_from_subgame(sg, cfg.key)
             sub_id = str(sg.get("I") or "").strip()
             if not scope or not sub_id or scope in seen:
+                continue
+            if wanted_scopes is not None and scope not in wanted_scopes:
                 continue
             seen.add(scope)
             wanted.append((scope, sub_id))
@@ -905,7 +940,14 @@ class MultiSportSteamWorker:
         if canonical != fs_score:
             return None, "score_mismatch"
 
-        decoded, market_meta = self._market_tree(game, cfg, prematch=False)
+        current_period = _period(game)
+        wanted_live_scopes = live_scopes_from_period(cfg.key, current_period)
+        decoded, market_meta = self._market_tree(
+            game,
+            cfg,
+            prematch=False,
+            wanted_scopes=wanted_live_scopes,
+        )
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
             return None, "market_decode"
@@ -940,7 +982,7 @@ class MultiSportSteamWorker:
             "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
             "score": [*fs_score],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
-            "period": _period(game),
+            "period": current_period,
             "clock_seconds": _clock_seconds(game),
             "line": float((primary or {}).get("line") or 0.0),
             "over": float((primary or {}).get("over") or 0.0),

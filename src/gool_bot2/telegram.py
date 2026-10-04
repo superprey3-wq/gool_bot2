@@ -316,6 +316,11 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     _MATCH_SEARCH_WAITING.add(str(chat_id));replies=["🔎 <b>Поиск матча GOOL V4</b>\n\nНапиши название одной команды или обеих команд.\nНапример: <code>Арсенал</code> или <code>Арсенал — Манчестер Сити</code>.\n\nИщу только среди сегодняшних матчей."]
    else:
     replies=[analysis_text(_analysis_path(journal_path))]
+    try:
+     from .multisport_menu import multisport_analysis_sections
+     replies.extend(multisport_analysis_sections())
+    except Exception as exc:
+     print(f"GOOL_MULTISPORT_ANALYSIS_MENU_ERROR {type(exc).__name__}:{exc}",flush=True)
    for reply in replies:
     if send_message(chat_id,reply,reply_markup=MENU_KEYBOARD):changed+=1
    continue

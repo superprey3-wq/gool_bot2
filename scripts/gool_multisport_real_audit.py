@@ -99,6 +99,21 @@ def main() -> None:
                 row["moneyline"] += int(bool(value.get("moneyline")))
         return scopes
 
+    def stats_summary(matches):
+        out = {"matches": 0, "available": 0, "scopes": {}, "keys": {}}
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            out["matches"] += 1
+            stats = dict(match.get("live_game_stats") or {})
+            if stats.get("available"):
+                out["available"] += 1
+            scope = str(stats.get("scope") or "none")
+            out["scopes"][scope] = int(out["scopes"].get(scope) or 0) + 1
+            for key in (stats.get("segment_stats") or {}):
+                out["keys"][str(key)] = int(out["keys"].get(str(key)) or 0) + 1
+        return out
+
     lines = ["# GOOL multisport real PREMATCH + LIVE audit", ""]
     for sport in ("hockey", "basketball"):
         row = (latest.get("sports") or {}).get(sport) or {}
@@ -142,7 +157,16 @@ def main() -> None:
                 f"- {scope}: matches={value['matches']} total={value['total']} IT1={value['it1']} "
                 f"IT2={value['it2']} handicap={value['handicap']} moneyline={value['moneyline']}"
             )
-        lines += [""] 
+        stat_cov = stats_summary(row.get("matches") or [])
+        lines += [
+            "",
+            "#### Flashscore stats coverage",
+            f"- Matches inspected: **{stat_cov['matches']}**",
+            f"- Stats available: **{stat_cov['available']}**",
+            f"- Scopes: **{json.dumps(stat_cov['scopes'], ensure_ascii=False)}**",
+            f"- Stat keys: **{json.dumps(dict(sorted(stat_cov['keys'].items(), key=lambda item: (-item[1], item[0]))[:30]), ensure_ascii=False)}**",
+            "",
+        ]
         prematches = [x for x in (row.get("prematch_matches") or []) if isinstance(x, dict)]
         lives = [x for x in (row.get("matches") or []) if isinstance(x, dict)]
         if prematches:
@@ -171,9 +195,12 @@ def main() -> None:
                 if sig:
                     side = "OVER" if str(sig.get("direction") or "over") == "over" else "UNDER"
                     signal = f" | SIGNAL {side} {float(sig.get('line') or 0):g} @{float(sig.get('odd') or 0):.2f} R{float(sig.get('strength') or 0):.0f}"
+                fs_stats = dict(x.get("live_game_stats") or {})
+                stat_keys = list((fs_stats.get("segment_stats") or {}).keys())[:12]
                 lines.append(
                     f"- {x.get('home')} — {x.get('away')} | {score[0]}:{score[1]} {x.get('period')} | "
-                    f"total {float(x.get('line') or 0):g} O {float(x.get('over') or 0):.2f} / U {float(x.get('under') or 0):.2f}{signal}"
+                    f"total {float(x.get('line') or 0):g} O {float(x.get('over') or 0):.2f} / U {float(x.get('under') or 0):.2f}{signal} "
+                    f"| FS_STATS scope={fs_stats.get('scope') or '-'} keys={','.join(stat_keys) or '-'}"
                 )
             lines.append("")
 

@@ -399,12 +399,16 @@ def test_v3_adapter_keeps_zero_parameter_off_moneyline():
 def test_basketball_subgame_uses_v3_only_after_legacy_failure(tmp_path, monkeypatch):
     import gool_bot2.xbet_multisport_steam as steam
 
-    calls = []
+    legacy_calls = []
+    v3_calls = []
+
     def fake_http(url, timeout=8.0):
-        calls.append(url)
-        if "GetGameZip" in url:
-            return None
-        if "/main-live-feed/v3/gameEvents" in url:
+        legacy_calls.append(url)
+        return None
+
+    def fake_v3(host, path, ordered_query, timeout=8.0):
+        v3_calls.append((host, path, ordered_query))
+        if path.endswith("/gameEvents"):
             return {
                 "id": 123,
                 "scores": {"scoreOpp1": 14, "scoreOpp2": 12, "currentPeriodName": "1st quarter"},
@@ -416,14 +420,15 @@ def test_basketball_subgame_uses_v3_only_after_legacy_failure(tmp_path, monkeypa
         return None
 
     monkeypatch.setattr(steam, "_sport_http_json", fake_http)
+    monkeypatch.setattr(steam, "_sport_v3_json", fake_v3)
     monkeypatch.setenv("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS", "1")
     monkeypatch.setenv("GOOL_BASKETBALL_V3_SUBGAME_FALLBACK", "1")
 
     worker = MultiSportSteamWorker(tmp_path)
     game = worker._subgame_game("123", SPORTS["basketball"], prematch=False)
     assert game["_market_source"] == "main-live-feed-v3"
-    assert any("GetGameZip" in url for url in calls)
-    assert any("/main-live-feed/v3/gameEvents" in url for url in calls)
+    assert any("GetGameZip" in url for url in legacy_calls)
+    assert any(path.endswith("/gameEvents") for _, path, _ in v3_calls)
     decoded = __import__("gool_bot2.xbet_multisport_markets", fromlist=["decode_core_markets"]).decode_core_markets(
         game, "basketball", scope="QUARTER_1"
     )

@@ -7,6 +7,7 @@ from PIL import Image
 
 from gool_bot2.xbet_multisport_card import render_multisport_prematch_card, render_multisport_steam_card
 from gool_bot2.hockey_signal_card import render_hockey_prematch_card
+from gool_bot2.basketball_signal_card import render_basketball_prematch_card
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
@@ -231,3 +232,42 @@ def test_multisport_delivery_uses_card_without_duplicate_caption(tmp_path, monke
     assert sent == 1
     assert seen["caption"] == ""
     assert seen["png"].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_flashscore_parser_keeps_multisport_team_logo_metadata():
+    body = (
+        "ZA÷NBA~"
+        "AA÷Ab12Cd34¬AB÷1¬AE÷Denver Nuggets¬AF÷Utah Jazz"
+        "¬JA÷HOMEID¬JB÷AWAYID¬WU÷denver-nuggets¬WV÷utah-jazz"
+        "¬OA÷home-logo.png¬OB÷away-logo.png~"
+    )
+    rows = __import__("gool_bot2.xbet_multisport_steam", fromlist=["parse_flashscore_events"]).parse_flashscore_events(body)
+    assert rows[0]["home_team_id"] == "HOMEID"
+    assert rows[0]["away_team_id"] == "AWAYID"
+    assert rows[0]["home_logo_file"] == "home-logo.png"
+    assert rows[0]["away_logo_file"] == "away-logo.png"
+
+
+def test_hockey_and_basketball_cards_request_team_emblems(monkeypatch):
+    import gool_bot2.signal_cards as sc
+    calls = []
+    def fake_logo(meta, side):
+        calls.append((side, meta.get(f"{side}_logo_file")))
+        return Image.new("RGBA", (32, 32), (255,255,255,255))
+    monkeypatch.setattr(sc, "_logo", fake_logo)
+
+    base = {
+        "phase":"PREMATCH","home":"Home Club","away":"Away Club","league":"League",
+        "start_ts":1893456000,"scope":"FULL_MATCH","market_family":"match_total",
+        "home_logo_file":"home.png","away_logo_file":"away.png",
+    }
+    signal = {
+        "phase":"PREMATCH","direction":"over","selection":"ТБ 5.5","line":5.5,"odd":1.80,
+        "metric_delta":1.0,"probability_delta_pp":3.0,"line_delta":0.5,"moves":3,"strength":85,
+        "start":{"line":5.0,"over":1.90},
+    }
+    assert render_hockey_prematch_card(base, signal, SPORTS["hockey"]).startswith(b"\x89PNG")
+    basket_signal = {**signal, "selection":"ТБ 160.5", "line":160.5}
+    assert render_basketball_prematch_card(base, basket_signal, SPORTS["basketball"]).startswith(b"\x89PNG")
+    assert ("home","home.png") in calls
+    assert ("away","away.png") in calls

@@ -507,22 +507,64 @@ class MultiSportSteamWorker:
     def _xbet_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         attempts: list[dict[str, Any]] = []
+        merged: dict[str, dict[str, Any]] = {}
+        root_counts: dict[str, int] = {}
+        event_roots: dict[str, list[str]] = {}
         for root in dict.fromkeys(roots):
+            root_ids: set[str] = set()
             for query_no, query in enumerate(self._xbet_queries(cfg), 1):
                 payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
                 attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
-                if isinstance(values, list) and values:
-                    rows = [row for row in values if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")]
-                    if rows:
-                        self._roots[cfg.key] = root
-                        self._index_diag[cfg.key] = {"ok": True, "root": root, "query": query_no, "raw": raw_count, "usable": len(rows)}
-                        return rows
-        self._index_diag[cfg.key] = {"ok": False, "attempts": attempts[-8:]}
+                if not isinstance(values, list):
+                    continue
+                for row in values:
+                    if not isinstance(row, dict) or not row.get("I") or not row.get("O1") or not row.get("O2"):
+                        continue
+                    event_id = str(row["I"])
+                    root_ids.add(event_id)
+                    event_roots.setdefault(event_id, []).append(root)
+                    merged.setdefault(event_id, row)
+            root_counts[root] = len(root_ids)
+
+        now = time.monotonic()
+        if merged:
+            rows = list(merged.values())
+            best_root = max(root_counts, key=lambda root: root_counts.get(root, 0), default=self._roots[cfg.key])
+            if root_counts.get(best_root, 0):
+                self._roots[cfg.key] = best_root
+            self._last_index[cfg.key] = (now, [dict(row) for row in rows])
+            self._index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._roots[cfg.key],
+                "raw": len(rows),
+                "usable": len(rows),
+                "root_counts": root_counts,
+                "cache": False,
+                "attempts": attempts[-8:],
+            }
+            return rows
+
+        cached_at, cached_rows = self._last_index.get(cfg.key, (0.0, []))
+        age = now - cached_at if cached_at else 10**9
+        max_age = max(0.0, _float_env("GOOL_MULTISPORT_INDEX_CACHE_SECONDS", 180.0))
+        if cached_rows and age <= max_age:
+            self._index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._roots[cfg.key],
+                "raw": len(cached_rows),
+                "usable": len(cached_rows),
+                "cache": True,
+                "cache_age_seconds": round(age, 1),
+                "attempts": attempts[-8:],
+            }
+            return [dict(row) for row in cached_rows]
+
+        self._index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-8:]}
         return []
 
-    def _xbet_prematch_queries(self, cfg: SportConfig) -> list[str]:
+    def _xbet_prematch_queries    def _xbet_prematch_queries(self, cfg: SportConfig) -> list[str]:
         count = max(100, _int_env("GOOL_MULTISPORT_PREMATCH_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "cfview": 2, "mode": 4}
         return [
@@ -534,31 +576,62 @@ class MultiSportSteamWorker:
     def _xbet_prematch_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
         attempts: list[dict[str, Any]] = []
+        merged: dict[str, dict[str, Any]] = {}
+        root_counts: dict[str, int] = {}
         for root in dict.fromkeys(roots):
-            merged: dict[str, dict[str, Any]] = {}
+            root_ids: set[str] = set()
             for query_no, query in enumerate(self._xbet_prematch_queries(cfg), 1):
                 payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=8.0)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
                 attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
-                if isinstance(values, list):
-                    for row in values:
-                        if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2"):
-                            merged[str(row.get("I"))] = row
-            if merged:
-                self._prematch_roots[cfg.key] = root
-                self._prematch_index_diag[cfg.key] = {
-                    "ok": True,
-                    "root": root,
-                    "raw": len(merged),
-                    "usable": len(merged),
-                    "attempts": attempts[-6:],
-                }
-                return list(merged.values())
-        self._prematch_index_diag[cfg.key] = {"ok": False, "attempts": attempts[-9:]}
+                if not isinstance(values, list):
+                    continue
+                for row in values:
+                    if not isinstance(row, dict) or not row.get("I") or not row.get("O1") or not row.get("O2"):
+                        continue
+                    event_id = str(row["I"])
+                    root_ids.add(event_id)
+                    merged.setdefault(event_id, row)
+            root_counts[root] = len(root_ids)
+
+        now = time.monotonic()
+        if merged:
+            rows = list(merged.values())
+            best_root = max(root_counts, key=lambda root: root_counts.get(root, 0), default=self._prematch_roots[cfg.key])
+            if root_counts.get(best_root, 0):
+                self._prematch_roots[cfg.key] = best_root
+            self._last_prematch_index[cfg.key] = (now, [dict(row) for row in rows])
+            self._prematch_index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._prematch_roots[cfg.key],
+                "raw": len(rows),
+                "usable": len(rows),
+                "root_counts": root_counts,
+                "cache": False,
+                "attempts": attempts[-10:],
+            }
+            return rows
+
+        cached_at, cached_rows = self._last_prematch_index.get(cfg.key, (0.0, []))
+        age = now - cached_at if cached_at else 10**9
+        max_age = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_CACHE_SECONDS", 600.0))
+        if cached_rows and age <= max_age:
+            self._prematch_index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._prematch_roots[cfg.key],
+                "raw": len(cached_rows),
+                "usable": len(cached_rows),
+                "cache": True,
+                "cache_age_seconds": round(age, 1),
+                "attempts": attempts[-10:],
+            }
+            return [dict(row) for row in cached_rows]
+
+        self._prematch_index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-10:]}
         return []
 
-    def _prematch_game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
+    def _prematch_game    def _prematch_game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
         params = {
             "id": event_id,
             "lng": "en",

@@ -45,12 +45,12 @@ def main() -> None:
             print(
                 f"{sport.upper()} "
                 f"PRE fs={_n(row.get('flashscore_prematch'))} xb={_n(row.get('xbet_prematch'))} "
-                f"mapped={_n(row.get('prematch_mapped'))} decoded={_n(row.get('prematch_decoded'))} "
+                f"mapped={_n(row.get('prematch_mapped'))} scanned={_n(row.get('prematch_scanned'))} decoded={_n(row.get('prematch_decoded'))} "
                 f"signals={_n(row.get('prematch_detected'))} decode_fail={_n(row.get('prematch_market_decode_failed'))} | "
                 f"LIVE fs={_n(row.get('flashscore_live'))} xb={_n(row.get('xbet_live'))} "
                 f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))} "
                 f"signals={_n(row.get('detected'))} mismatch={_n(row.get('score_mismatch'))} "
-                f"decode_fail={_n(row.get('market_decode_failed'))}"
+                f"decode_fail={_n(row.get('market_decode_failed'))} policy_skip={_n(row.get('policy_blocked'))}"
             )
         if idx + 1 < snapshots:
             time.sleep(sleep_seconds)
@@ -85,8 +85,10 @@ def main() -> None:
             "### PREMATCH",
             f"- Flashscore upcoming: **{_n(row.get('flashscore_prematch'))}**",
             f"- 1xBet prematch index: **{_n(row.get('xbet_prematch'))}**",
-            f"- Mapped: **{_n(row.get('prematch_mapped'))}**",
-            f"- Decoded main totals: **{_n(row.get('prematch_decoded'))}**",
+            f"- Mapped total: **{_n(row.get('prematch_mapped'))}**",
+            f"- Scanned this cycle: **{_n(row.get('prematch_scanned'))}**",
+            f"- Decoded market trees this cycle: **{_n(row.get('prematch_decoded'))}**",
+            f"- Policy-skipped lanes: **{_n(row.get('prematch_policy_blocked'))}**",
             f"- Signals this snapshot: **{_n(row.get('prematch_detected'))}**",
             f"- Market decode failures: **{_n(row.get('prematch_market_decode_failed'))}**",
             "",
@@ -107,6 +109,7 @@ def main() -> None:
             f"- Signals this snapshot: **{_n(row.get('detected'))}**",
             f"- Score mismatches: **{_n(row.get('score_mismatch'))}**",
             f"- Market decode failures: **{_n(row.get('market_decode_failed'))}**",
+            f"- Policy-skipped LIVE lanes: **{_n(row.get('policy_blocked'))}**",
             "",
             "#### LIVE scope coverage",
         ]

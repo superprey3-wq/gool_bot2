@@ -63,3 +63,28 @@ def test_live_stats_brain_vetoes_market_strongly_against_stat_side(monkeypatch):
         _row(220, 240, 28, 54.5, over=2.60, under=1.45, probability=0.36),
     ]
     assert detect_live_segment_stats(rows, SPORTS["basketball"], now=220, score_changed_at=None) is None
+
+
+
+def test_hockey_shots_and_special_teams_feed_projection(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_ELAPSED_SECONDS", "30")
+    monkeypatch.setenv("GOOL_MULTISPORT_LIVE_MIN_CLOCK_DELTA_SECONDS", "20")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SHOTS_PROJECTION_WEIGHT", "0.60")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", "0.08")
+    rows = [
+        {**_row(100, 300, 0, 2.5, over=1.82, under=1.98, probability=0.52, sport="hockey"),
+         "live_game_stats": {"shots_on_goal": [5, 4], "penalties_2m": [0, 0], "powerplay_goals": [0, 0]}},
+        {**_row(160, 360, 0, 2.5, over=1.82, under=1.98, probability=0.52, sport="hockey"),
+         "live_game_stats": {"shots_on_goal": [8, 7], "penalties_2m": [1, 0], "powerplay_goals": [0, 0]}},
+        {**_row(220, 420, 1, 2.5, over=1.82, under=1.98, probability=0.52, sport="hockey"),
+         "live_game_stats": {"shots_on_goal": [11, 10], "penalties_2m": [1, 1], "powerplay_goals": [1, 0]}},
+        {**_row(280, 480, 1, 2.5, over=1.82, under=1.98, probability=0.52, sport="hockey"),
+         "live_game_stats": {"shots_on_goal": [14, 13], "penalties_2m": [2, 1], "powerplay_goals": [1, 0]}},
+    ]
+    signal = detect_live_segment_stats(rows, SPORTS["hockey"], now=280, score_changed_at=None)
+    assert signal is not None
+    assert signal["direction"] == "over"
+    assert signal["hockey_pressure"]["shots_on_goal"] == [14, 13]
+    assert signal["hockey_pressure"]["recent_shots_per_min"] > 0
+    assert signal["hockey_pressure"]["special_teams_boost"] > 0

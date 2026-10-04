@@ -316,3 +316,52 @@ def test_multisport_in_game_recovers_legacy_pick_by_team_names(tmp_path: Path, m
     assert "Krylya Sovetov — Mikhaylov Academy U20" in text
     assert "1:1" in text
     assert "Ф1 +1.5 @ 1.59" in text
+
+
+def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-B1",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "selection": "Ф2 +4.5",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "line": 4.5,
+        "odd": 1.55,
+        "strength": 100,
+        "scope": "FULL_MATCH",
+    }])
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: [{
+        "flashscore_event_id": "FS-B1",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "score": [21, 24],
+        "status_code": "Q2",
+        "coarse_status": "2",
+    }] if sport == "basketball" else [])
+
+    text = "\n".join(menu.multisport_in_game_sections())
+    assert "GOOL MULTI · В ИГРЕ" in text
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "сейчас Q2 · 21:24" in text
+    assert "Ф2 +4.5 @ 1.55" in text
+    assert "100/100 · PREMATCH" in text
+    assert "может проиграть максимум в 4" in text

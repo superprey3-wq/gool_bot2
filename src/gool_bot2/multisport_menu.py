@@ -7,7 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
-from .xbet_multisport_markets import SCOPE_LABEL_RU
+from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
 
 SPORT_META = {
@@ -113,8 +113,8 @@ def multisport_status_text() -> str:
             continue
         lines.append(
             f"{icon} <b>{title}</b>\n"
-            f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
-            f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · decoded {int(row.get('decoded') or 0)} · signals {int(row.get('detected') or 0)}"
+            f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)} · policy skip {int(row.get('prematch_policy_blocked') or 0)}\n"
+            f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · decoded {int(row.get('decoded') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
     return "\n".join(lines)
 
@@ -130,8 +130,10 @@ def sport_overview_text(sport: str) -> str:
     live_rows = _sport_rows(sport, "LIVE")
     mode = str((state or {}).get("mode") or os.getenv("GOOL_MULTISPORT_MODE", "shadow")).upper()
 
+    prematch_policy, live_policy = policy_text_ru(sport)
     parts = [
         f"{icon} <b>GOOL MULTI · {title}</b> · {mode}",
+        f"🧭 <b>РАЗДЕЛЕНИЕ РЫНКОВ</b>\n🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}",
         f"🟡 <b>PREMATCH журнал</b>\n{_record_text(prematch_rows)}",
         f"🔴 <b>LIVE журнал</b>\n{_record_text(live_rows)}",
     ]
@@ -220,28 +222,39 @@ def multisport_report_text() -> str:
 
 
 
-def sport_journal_text(sport: str | None = None, limit: int = 14) -> str:
+def sport_journal_text(sport: str | None = None, limit: int = 14, phase: str | None = None) -> str:
     rows = load_journal(journal_path())
+    wanted_phase = str(phase or "").upper()
     if sport in SPORT_META:
         rows = [row for row in rows if str(row.get("sport") or "") == sport]
         icon, title = SPORT_META[sport]
         heading = f"📒 <b>{icon} ЖУРНАЛ · {title}</b>"
     else:
         heading = "📒 <b>GOOL MULTI · ЖУРНАЛ СИГНАЛОВ</b>"
+    if wanted_phase in {"PREMATCH", "LIVE"}:
+        rows = [row for row in rows if _row_phase(row) == wanted_phase]
+        heading += f" · {wanted_phase}"
     rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
     if not rows:
         return heading + "\n\nПока сигналов нет."
 
     result_icon = {"won": "✅", "lost": "❌", "void": "↩️", "pending": "⏳"}
-    lines = [heading, "🟡 PREMATCH · 🔴 LIVE"]
+    lines = [heading]
+    if sport in SPORT_META:
+        prematch_policy, live_policy = policy_text_ru(str(sport))
+        lines.append(f"🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}")
+    else:
+        lines.append("🟡 PREMATCH · 🔴 LIVE")
+
     for row in rows[:max(1, int(limit))]:
         item = normalize_entry(row)
-        phase = str(item.get("phase") or "LIVE")
-        picon = "🟡" if phase == "PREMATCH" else "🔴"
+        phase_name = str(item.get("phase") or "LIVE")
+        picon = "🟡" if phase_name == "PREMATCH" else "🔴"
         sicon = SPORT_META.get(str(item.get("sport") or ""), ("🏟", ""))[0]
         ricon = result_icon.get(str(item.get("result") or "pending"), "⏳")
-        context = ""
-        if phase == "PREMATCH":
+        scope = str(item.get("scope") or "FULL_MATCH")
+        scope_label = SCOPE_LABEL_RU.get(scope, scope)
+        if phase_name == "PREMATCH":
             try:
                 import datetime as _dt
                 stamp = float(item.get("scheduled_start_ts") or item.get("start_ts") or 0)
@@ -250,11 +263,35 @@ def sport_journal_text(sport: str | None = None, limit: int = 14) -> str:
             except Exception:
                 context = "до матча"
         else:
-            score = item.get("score") or [0, 0]
+            score = item.get("match_score") or item.get("score") or [0, 0]
             context = f"{score[0]}:{score[1]} · {item.get('period') or 'LIVE'}"
         lines.append(
             f"{ricon} {picon}{sicon} <b>{item.get('home','?')} — {item.get('away','?')}</b>\n"
-            f"↳ {item.get('selection') or '?'} @ {float(item.get('odd') or 0):.2f} · "
-            f"R{float(item.get('strength') or 0):.0f} · {context}"
+            f"↳ <b>{scope_label}</b> · {item.get('selection') or '?'} @ {float(item.get('odd') or 0):.2f}\n"
+            f"↳ R{float(item.get('strength') or 0):.0f} · {context}"
         )
     return "\n\n".join(lines)
+
+
+def hockey_journal_text(limit: int = 16, phase: str | None = None) -> str:
+    return sport_journal_text("hockey", limit=limit, phase=phase)
+
+
+def basketball_journal_text(limit: int = 16, phase: str | None = None) -> str:
+    return sport_journal_text("basketball", limit=limit, phase=phase)
+
+
+def sport_phase_report_text(sport: str) -> str:
+    if sport not in SPORT_META:
+        return multisport_report_text()
+    icon, title = SPORT_META[sport]
+    prematch = _sport_rows(sport, "PREMATCH")
+    live = _sport_rows(sport, "LIVE")
+    prematch_policy, live_policy = policy_text_ru(sport)
+    return (
+        f"📊 <b>{icon} {title} · ОТДЕЛЬНЫЙ ОТЧЁТ</b>\n\n"
+        f"🟡 <b>PREMATCH</b> · {_record_text(prematch)}\n"
+        f"Рынки: {prematch_policy}\n\n"
+        f"🔴 <b>LIVE</b> · {_record_text(live)}\n"
+        f"Рынки: {live_policy}"
+    )

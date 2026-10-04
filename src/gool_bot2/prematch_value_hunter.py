@@ -103,7 +103,7 @@ def qualify_value_pick(pick: PrematchPick, meta: dict[str, Any]) -> tuple[bool, 
     odds = float(pick.odds)
     min_odds = _f("GOOL_VALUE_HUNTER_MIN_ODDS", 2.20)
     max_odds = _f("GOOL_VALUE_HUNTER_MAX_ODDS", 6.00)
-    min_quality = _f("GOOL_VALUE_HUNTER_MIN_QUALITY", .82)
+    min_quality = _f("GOOL_VALUE_HUNTER_MIN_QUALITY", .70)
     min_probability = _f("GOOL_VALUE_HUNTER_MIN_PROBABILITY", .24)
     min_profile_sample = _i("GOOL_VALUE_HUNTER_MIN_PROFILE_SAMPLE", 8)
     edge_gate, ev_gate = _dynamic_gates(odds)

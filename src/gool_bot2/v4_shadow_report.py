@@ -204,7 +204,7 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
 
 def _trend_signals(profile: dict, quality: float) -> list[dict]:
     """High-conviction price-free tendencies. Require agreement, not one model probability."""
-    if quality < 0.75:
+    if quality < 0.70:
         return []
     out: list[dict] = []
     first=profile.get("first_half") or {}; second=profile.get("second_half") or {}; full=profile.get("full_match") or {}

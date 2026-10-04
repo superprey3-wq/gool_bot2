@@ -27,7 +27,11 @@ def _enabled(name: str, default: bool = True) -> bool:
 
 def _inherit_production_multisport_mode() -> None:
     """Keep embedded multisport aligned with the active production GOOL runtime."""
-    _inherit_production_multisport_mode()
+    if (
+        str(os.getenv("GOOL_LIVE_V4_MODE", "")).strip().casefold() == "active"
+        or str(os.getenv("GOOL_MULTI_TELEGRAM_MODE", "")).strip().casefold() == "active"
+    ):
+        os.environ["GOOL_MULTISPORT_MODE"] = "active"
 
 
 class BoundedRobustXBetMarketCollector(RobustXBetMarketCollector):

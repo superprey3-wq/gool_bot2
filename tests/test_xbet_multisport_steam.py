@@ -7,6 +7,7 @@ import urllib.parse
 from gool_bot2.xbet_multisport_steam import (
     SPORTS,
     MultiSportSteamWorker,
+    detect_live_segment_stats,
     select_prematch_primary,
     _balanced_total,
     _metric,

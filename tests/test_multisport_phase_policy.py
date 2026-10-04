@@ -29,3 +29,9 @@ def test_team_totals_follow_same_phase_scope_policy():
     assert lane_phase_policy("hockey", "LIVE", lane("PERIOD_1", "home_total"), "1st period")[0]
     assert not lane_phase_policy("hockey", "LIVE", lane("PERIOD_2", "away_total"), "1st period")[0]
     assert lane_phase_policy("basketball", "PREMATCH", lane("QUARTER_4", "away_total"))[0]
+
+
+
+def test_live_scope_parser_understands_numeric_periods():
+    assert live_scopes_from_period("hockey", "2") == {"FULL_MATCH", "PERIOD_2"}
+    assert live_scopes_from_period("basketball", "4") == {"FULL_MATCH", "QUARTER_4", "SECOND_HALF"}

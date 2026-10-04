@@ -1,4 +1,4 @@
-from gool_bot2.prematch_value_hunter import qualify_value_pick, select_best_value_pick
+from gool_bot2.prematch_value_hunter import qualify_value_pick, select_best_value_pick, diagnose_value_rows
 from gool_bot2.v4_prematch_engine import PrematchPick
 
 
@@ -51,3 +51,16 @@ def test_selects_best_value_not_highest_price():
     assert best is not None
     assert best[0].event_id in {"a", "b"}
     assert best[1]["value_score"] > 0
+
+
+def test_value_hunter_diagnostics_count_high_odds_and_rejections():
+    good = pick(3.20, .40, .30, event="good")
+    low_edge = pick(2.60, .37, .31, event="bad")
+    diag = diagnose_value_rows([
+        (good, meta(.33)),
+        (low_edge, meta(.32)),
+    ])
+    assert diag["modeled_markets"] == 2
+    assert diag["high_odds_markets"] == 2
+    assert diag["qualified"] == 1
+    assert diag["rejects"]["edge"] >= 1

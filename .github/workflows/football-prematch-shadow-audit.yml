@@ -1,0 +1,50 @@
+name: Football PREMATCH shadow audit
+
+on:
+  pull_request:
+    paths:
+      - "src/gool_bot2/prematch_confidence.py"
+      - "src/gool_bot2/v4_prematch_engine.py"
+      - "scripts/gool_flashscore_today.py"
+      - ".github/workflows/football-prematch-shadow-audit.yml"
+  workflow_dispatch:
+
+jobs:
+  prematch-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: Run today's full football PREMATCH without delivery
+        env:
+          GOOL_PREMATCH_DELIVER: "0"
+          GOOL_VALUE_HUNTER_ACTIVE: "0"
+          GOOL_PREMATCH_RESCUE_MIN_QUALITY: "0.55"
+          GOOL_PREMATCH_RESCUE_MIN_SAMPLE: "10"
+          GOOL_PREMATCH_RESCUE_MIN_AGREEMENT: "0.76"
+          GOOL_PREMATCH_RESCUE_MIN_SEPARATION: "0.030"
+          GOOL_PREMATCH_RESCUE_MIN_PROBABILITY: "0.68"
+          GOOL_PREMATCH_RESCUE_MAX: "12"
+          RUNTIME_DATA_DIR: "artifacts/football_prematch_audit/runtime"
+        run: |
+          python scripts/gool_flashscore_today.py 2>&1 | tee artifacts/football_prematch_audit.log
+      - name: Extract pipeline summary
+        if: always()
+        run: |
+          echo '## Football PREMATCH shadow audit' >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'PIPELINE_START|BRAIN_STAGE1|BRAIN_ELIGIBLE_AFTER_FUSION|PREMATCH_SHORTLIST|MULTI_MARKET_PRICED|=== GOOL DELIVERY|DOUBLE |ORDINARS|NO QUALIFIED BETS' artifacts/football_prematch_audit.log | tail -80 >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: football-prematch-shadow-audit
+          path: |
+            artifacts/football_prematch_audit.log
+            artifacts/football_prematch_audit/
+          retention-days: 7

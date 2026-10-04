@@ -6,6 +6,9 @@ from gool_bot2.xbet_multisport_steam import (
     _balanced_total,
     _metric,
     _score,
+    _score_candidates,
+    _score_sync_allowed,
+    _segment_clock_seconds,
     detect_prematch_steam,
     detect_steam,
     settle_multisport_pick,
@@ -290,3 +293,51 @@ def test_basketball_live_queries_have_fallback_profiles(tmp_path):
     assert any("sports=3" in q and "antisports=188" in q and "partner=51" in q for q in queries)
     assert any("sports=3" in q and "country=153" in q and "mobi=true" in q for q in queries)
     assert any("sports=3" in q and "country=" not in q for q in queries)
+
+
+def test_score_reads_current_v3_live_shape():
+    game = {"scores": {"scoreOpp1": 81, "scoreOpp2": 67}}
+    assert _score(game) == (81, 67)
+
+
+def test_basketball_score_candidates_can_rebuild_full_score_from_quarters():
+    game = {
+        "SC": {
+            "FS": {"S1": 50, "S2": 50},
+            "PS": [
+                {"Key": 1, "Value": {"S1": 15, "S2": 16, "NF": "1st quarter"}},
+                {"Key": 2, "Value": {"S1": 16, "S2": 16, "NF": "2nd quarter"}},
+                {"Key": 3, "Value": {"S1": 28, "S2": 22, "NF": "3rd quarter"}},
+                {"Key": 4, "Value": {"S1": 22, "S2": 13, "NF": "4th quarter"}},
+            ],
+        }
+    }
+    assert (81, 67) in _score_candidates(game, SPORTS["basketball"])
+
+
+def test_basketball_score_sync_allows_only_bounded_provider_lag(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_SCORE_DRIFT_MIN_MATCH", "0.80")
+    assert _score_sync_allowed(SPORTS["basketball"], (81, 67), (79, 65), 0.94)
+    assert not _score_sync_allowed(SPORTS["basketball"], (81, 67), (60, 40), 0.94)
+    assert not _score_sync_allowed(SPORTS["basketball"], (81, 67), (79, 65), 0.70)
+
+
+def test_basketball_cumulative_clock_is_converted_to_current_quarter():
+    game = {"SC": {"TS": 2204}}
+    # 36:44 elapsed in a 4x10 game => 6:44 elapsed in Q4.
+    assert _segment_clock_seconds(
+        game,
+        SPORTS["basketball"],
+        period="4th quarter",
+        league="Italy: Serie A",
+    ) == 404
+
+
+def test_basketball_q2_boundary_clock_starts_from_zero():
+    game = {"SC": {"TS": 600}}
+    assert _segment_clock_seconds(
+        game,
+        SPORTS["basketball"],
+        period="2nd quarter",
+        league="Kosovo: Superliga",
+    ) == 0

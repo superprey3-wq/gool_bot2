@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
+os.environ.setdefault("GOOL_FOOTBALL_AUTOINSTALL", "0")
 from typing import Any
 
 from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS, map_xbet_to_flashscore

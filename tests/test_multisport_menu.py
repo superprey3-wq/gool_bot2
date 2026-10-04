@@ -80,6 +80,9 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "ХОККЕЙ" in status
     assert "БАСКЕТБОЛ" in status
     assert "SHADOW" in status
+    assert "1xBet 3" in status
+    assert "mapped 2" in status
+    assert "decoded 2" in status
 
     hockey = sport_overview_text("hockey")
     assert "Boston — Rangers" in hockey

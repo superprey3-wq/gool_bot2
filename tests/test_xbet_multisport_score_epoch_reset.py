@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gool_bot2.xbet_market_worker import ScoreEpochMultiSportSteamWorker
+from gool_bot2.xbet_market_worker import ScoreEpochMultiSportSteamWorker, _inherit_production_multisport_mode
 from gool_bot2.xbet_multisport_steam import SPORTS, _metric, detect_steam
 
 
@@ -112,3 +112,10 @@ def test_production_score_epoch_worker_accepts_base_cfg_argument(tmp_path):
     )
     assert len(history) == 1
     assert changed_at is None
+
+
+def test_production_active_runtime_overrides_stale_multisport_shadow(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    monkeypatch.setenv("GOOL_LIVE_V4_MODE", "active")
+    _inherit_production_multisport_mode()
+    assert __import__("os").environ["GOOL_MULTISPORT_MODE"] == "active"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import http.cookiejar
 import os
 import threading
 import time
@@ -104,8 +105,73 @@ def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
     return None
 
 
+_V3_HTTP_LOCK = threading.Lock()
+_V3_HTTP_OPENERS: dict[str, urllib.request.OpenerDirector] = {}
+_V3_HTTP_BOOTED: set[str] = set()
+
+
+def _sport_v3_json(host: str, path: str, ordered_query: list[tuple[str, str]], timeout: float = 8.0) -> Any:
+    """Current 1xBet frontend v3 request profile with per-host cookies/bootstrap."""
+    host = str(host or "").rstrip("/")
+    if not host:
+        return None
+    with _V3_HTTP_LOCK:
+        opener = _V3_HTTP_OPENERS.get(host)
+        if opener is None:
+            jar = http.cookiejar.CookieJar()
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+            _V3_HTTP_OPENERS[host] = opener
+        booted = host in _V3_HTTP_BOOTED
+
+    headers = dict(getattr(market, "HEADERS", {}) or {})
+    headers.update({
+        "User-Agent": headers.get("User-Agent") or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": host,
+        "Referer": host + "/live/",
+    })
+
+    if not booted:
+        try:
+            req = urllib.request.Request(host + "/", headers={
+                "User-Agent": headers["User-Agent"],
+                "Accept": "text/html,application/xhtml+xml",
+            })
+            with opener.open(req, timeout=min(max(3.0, timeout), 8.0)) as response:
+                response.read(256 * 1024)
+            with _V3_HTTP_LOCK:
+                _V3_HTTP_BOOTED.add(host)
+        except Exception:
+            # Some mirrors serve the API even when homepage bootstrap is blocked.
+            pass
+
+    url = f"{host}{path}?{urllib.parse.urlencode(ordered_query)}"
+    req = urllib.request.Request(url, headers=headers)
+    attempts = max(1, min(3, _int_env("GOOL_MULTISPORT_HTTP_ATTEMPTS", 2)))
+    for attempt in range(attempts):
+        try:
+            with opener.open(req, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                if isinstance(payload, (dict, list)):
+                    return payload
+        except Exception:
+            if attempt + 1 < attempts:
+                time.sleep(max(0.05, _float_env("GOOL_MULTISPORT_HTTP_RETRY_DELAY", 0.25)))
+    return None
+
+
+def _v3_hosts_from_roots(roots: list[str]) -> list[str]:
+    hosts: list[str] = []
+    for root in roots:
+        parsed = urllib.parse.urlsplit(root)
+        if parsed.scheme and parsed.netloc:
+            hosts.append(f"{parsed.scheme}://{parsed.netloc}")
+    return list(dict.fromkeys(hosts))
+
+
 def _v3_to_legacy_market_game(payload: dict[str, Any], event_id: str) -> dict[str, Any]:
-    """Adapt main-live-feed/v3/gameEvents into the decoder's AE market shape."""
+    """Adapt main-live-feed/v3/gameEvents into legacy-like game/market shapes."""
     groups = []
     for group in payload.get("eventGroups") or []:
         if not isinstance(group, dict):
@@ -133,8 +199,6 @@ def _v3_to_legacy_market_game(payload: dict[str, Any], event_id: str) -> dict[st
                     p = float(parameter)
                 except (TypeError, ValueError):
                     p = 0.0
-                # Totals/handicaps need a line. Moneyline's zero parameter must
-                # stay absent so the existing decoder recognises it as 1X2/2way.
                 if gid not in {1, 101, 102} or abs(p) > 1e-12:
                     row["P"] = p
                 selections.append(row)
@@ -142,19 +206,94 @@ def _v3_to_legacy_market_game(payload: dict[str, Any], event_id: str) -> dict[st
             groups.append({"G": gid, "ME": selections})
 
     scores = payload.get("scores") or {}
-    game: dict[str, Any] = {
-        "I": str(payload.get("id") or event_id),
-        "AE": groups,
-        "_market_source": "main-live-feed-v3",
-    }
+    sc: dict[str, Any] = {}
     try:
-        s1, s2 = int(scores.get("scoreOpp1")), int(scores.get("scoreOpp2"))
-        game["SC"] = {
-            "FS": {"S1": s1, "S2": s2},
-            "CPS": str(scores.get("currentPeriodName") or ""),
+        sc["FS"] = {
+            "S1": int(scores.get("scoreOpp1")),
+            "S2": int(scores.get("scoreOpp2")),
         }
     except (TypeError, ValueError):
         pass
+    current_period = str(scores.get("currentPeriodName") or "").strip()
+    if current_period:
+        sc["CPS"] = current_period
+    timer = scores.get("timer") or {}
+    try:
+        if timer.get("timeSec") is not None:
+            sc["TS"] = int(float(timer.get("timeSec")))
+    except (TypeError, ValueError, AttributeError):
+        pass
+    period_rows = []
+    for item in scores.get("periodScores") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            period_rows.append({
+                "Key": int(item.get("period") or 0),
+                "Value": {
+                    "S1": int(item.get("scoreOpp1") or 0),
+                    "S2": int(item.get("scoreOpp2") or 0),
+                    "NF": str(item.get("periodNameFull") or ""),
+                },
+            })
+        except (TypeError, ValueError):
+            continue
+    if period_rows:
+        sc["PS"] = period_rows
+
+    subgames = []
+    for item in payload.get("subGamesForMainGame") or []:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        name = str(item.get("subGameName") or "").strip()
+        embedded_groups = []
+        for group in item.get("eventGroups") or []:
+            if not isinstance(group, dict):
+                continue
+            try:
+                gid = int(group.get("groupId"))
+            except (TypeError, ValueError):
+                continue
+            selections = []
+            for bucket in group.get("events") or []:
+                rows = bucket if isinstance(bucket, list) else [bucket]
+                for outcome in rows:
+                    if not isinstance(outcome, dict) or outcome.get("type") is None:
+                        continue
+                    try:
+                        selection = {
+                            "T": int(outcome.get("type")),
+                            "C": float(outcome.get("cf")),
+                            "B": bool(outcome.get("blocked") or group.get("blocked") or False),
+                        }
+                    except (TypeError, ValueError):
+                        continue
+                    try:
+                        parameter = float(outcome.get("parameter"))
+                    except (TypeError, ValueError):
+                        parameter = 0.0
+                    if gid not in {1, 101, 102} or abs(parameter) > 1e-12:
+                        selection["P"] = parameter
+                    selections.append(selection)
+            if selections:
+                embedded_groups.append({"G": gid, "ME": selections})
+        subgames.append({
+            "I": str(item.get("id")),
+            "PN": name,
+            "TG": name,
+            "P": item.get("period"),
+            "AE": embedded_groups,
+            "_market_source": "main-live-feed-v3-embedded-subgame",
+        })
+
+    game: dict[str, Any] = {
+        "I": str(payload.get("id") or event_id),
+        "AE": groups,
+        "SG": subgames,
+        "_market_source": "main-live-feed-v3",
+    }
+    if sc:
+        game["SC"] = sc
     return game
 
 
@@ -1163,6 +1302,72 @@ class MultiSportSteamWorker:
                 }
                 return rows
 
+
+        # Current frontend fallback: the legacy LiveFeed index may be blocked
+        # while main-live-feed/v3 remains healthy.
+        if _truthy("GOOL_MULTISPORT_V3_INDEX_FALLBACK", True):
+            hosts = _v3_hosts_from_roots(list(dict.fromkeys(roots)))
+            count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
+            fcountry = os.getenv("GOOL_MULTISPORT_V3_FCOUNTRY", "66")
+            for host in hosts:
+                for gr in (1557, 412):
+                    query = [
+                        ("cfView", "3"),
+                        ("count", str(count)),
+                        ("fcountry", str(fcountry)),
+                        ("gr", str(gr)),
+                        ("grMode", "4"),
+                        ("lng", "en"),
+                        ("ref", "1"),
+                    ]
+                    payload = _sport_v3_json(host, "/service-api/main-live-feed/v3/games1x2", query, timeout=8.0)
+                    games = payload if isinstance(payload, list) else []
+                    rows: list[dict[str, Any]] = []
+                    for game in games:
+                        if not isinstance(game, dict):
+                            continue
+                        sport = game.get("sport") or {}
+                        try:
+                            sid = int(sport.get("id") or 0)
+                        except (TypeError, ValueError, AttributeError):
+                            sid = 0
+                        if sid != cfg.sport_id:
+                            continue
+                        event_id = str(game.get("id") or "").strip()
+                        home = str((game.get("opponent1") or {}).get("fullName") or "").strip()
+                        away = str((game.get("opponent2") or {}).get("fullName") or "").strip()
+                        if not event_id or not home or not away:
+                            continue
+                        rows.append({
+                            "I": event_id,
+                            "O1": home,
+                            "O2": away,
+                            "LE": str((game.get("liga") or {}).get("name") or ""),
+                            "SI": sid,
+                            "scores": dict(game.get("scores") or {}),
+                            "_v3_index": True,
+                        })
+                    attempts.append({
+                        "root": host + "/service-api/main-live-feed/v3",
+                        "query": f"v3-gr-{gr}",
+                        "raw": len(games),
+                        "usable": len(rows),
+                        "payload": bool(payload),
+                    })
+                    if rows:
+                        self._last_index[cfg.key] = (now, [dict(row) for row in rows])
+                        self._index_diag[cfg.key] = {
+                            "ok": True,
+                            "root": host + "/service-api/main-live-feed/v3",
+                            "query": f"v3-gr-{gr}",
+                            "raw": len(games),
+                            "usable": len(rows),
+                            "cache": False,
+                            "source": "v3_games1x2",
+                            "attempts": attempts[-10:],
+                        }
+                        return rows
+
         cached_at, cached_rows = self._last_index.get(cfg.key, (0.0, []))
         age = now - cached_at if cached_at else 10**9
         max_age = max(0.0, _float_env("GOOL_MULTISPORT_INDEX_CACHE_SECONDS", 900.0))
@@ -1249,6 +1454,64 @@ class MultiSportSteamWorker:
             }
             return rows
 
+
+        # Current frontend LineFeed fallback. New gateways use Get1x2_Zip with
+        # partner/gr/mode rather than the older Get1x2_VZip profile.
+        if _truthy("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK", True):
+            hosts = _v3_hosts_from_roots(list(dict.fromkeys(roots)))
+            count = max(100, _int_env("GOOL_MULTISPORT_PREMATCH_INDEX_COUNT", 1000))
+            for host in hosts:
+                for gr in (412, 1557):
+                    query = [
+                        ("sports", str(cfg.sport_id)),
+                        ("lng", "en"),
+                        ("partner", os.getenv("GOOL_MULTISPORT_LINEFEED_PARTNER", "159")),
+                        ("getEmpty", "true"),
+                        ("gr", str(gr)),
+                        ("mode", "3"),
+                        ("count", str(count)),
+                    ]
+                    payload = _sport_v3_json(
+                        host,
+                        "/service-api/LineFeed/Get1x2_Zip",
+                        query,
+                        timeout=8.0,
+                    )
+                    values = payload.get("Value") if isinstance(payload, dict) else payload
+                    usable = [
+                        row for row in (values or [])
+                        if isinstance(row, dict) and row.get("I")
+                        and (row.get("O1") or row.get("O1E"))
+                        and (row.get("O2") or row.get("O2E"))
+                    ] if isinstance(values, list) else []
+                    attempts.append({
+                        "root": host + "/service-api/LineFeed",
+                        "query": f"current-gr-{gr}",
+                        "raw": len(values) if isinstance(values, list) else 0,
+                        "usable": len(usable),
+                        "payload": bool(payload),
+                    })
+                    if not usable:
+                        continue
+                    rows = []
+                    for row in usable:
+                        item = dict(row)
+                        item["O1"] = str(item.get("O1E") or item.get("O1") or "")
+                        item["O2"] = str(item.get("O2E") or item.get("O2") or "")
+                        item["_current_linefeed"] = True
+                        rows.append(item)
+                    self._last_prematch_index[cfg.key] = (now, [dict(row) for row in rows])
+                    self._prematch_index_diag[cfg.key] = {
+                        "ok": True,
+                        "root": host + "/service-api/LineFeed",
+                        "raw": len(values),
+                        "usable": len(rows),
+                        "cache": False,
+                        "source": "current_linefeed_get1x2_zip",
+                        "attempts": attempts[-10:],
+                    }
+                    return rows
+
         cached_at, cached_rows = self._last_prematch_index.get(cfg.key, (0.0, []))
         age = now - cached_at if cached_at else 10**9
         max_age = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_CACHE_SECONDS", 21600.0))
@@ -1294,23 +1557,72 @@ class MultiSportSteamWorker:
             "isNewBuilder": "true",
         }
         roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
-        for root in dict.fromkeys(roots):
+        unique_roots = list(dict.fromkeys(roots))
+        for root in unique_roots:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=8.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._prematch_roots[cfg.key] = root
                 return value
+
+        if _truthy("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK", True):
+            query = [
+                ("id", str(event_id)),
+                ("lng", "en"),
+                ("isSubGames", "true"),
+                ("GroupEvents", "true"),
+                ("countevents", "2000"),
+                ("grMode", "4"),
+                ("topGroups", ""),
+                ("country", os.getenv("GOOL_MULTISPORT_V3_FCOUNTRY", "66")),
+                ("marketType", "1"),
+                ("isNewBuilder", "true"),
+            ]
+            for host in _v3_hosts_from_roots(unique_roots):
+                payload = _sport_v3_json(
+                    host,
+                    "/service-api/LineFeed/GetGameZip",
+                    query,
+                    timeout=8.0,
+                )
+                value = payload.get("Value") if isinstance(payload, dict) else None
+                if isinstance(value, dict):
+                    return value
         return None
 
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
         params = {"id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true", "GroupEvents": "true", "allEventsGroupSubGames": "true", "countevents": 250, "grMode": 2}
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
-        for root in dict.fromkeys(roots):
+        unique_roots = list(dict.fromkeys(roots))
+        for root in unique_roots:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = root
                 return value
+
+        if _truthy("GOOL_MULTISPORT_V3_GAME_FALLBACK", True):
+            fcountry = os.getenv("GOOL_MULTISPORT_V3_FCOUNTRY", "66")
+            for host in _v3_hosts_from_roots(unique_roots):
+                for gr in (1557, 412):
+                    query = [
+                        ("cfView", "3"),
+                        ("countEvents", "250"),
+                        ("fcountry", str(fcountry)),
+                        ("gameId", str(event_id)),
+                        ("gr", str(gr)),
+                        ("grMode", "4"),
+                        ("lng", "en"),
+                        ("marketType", "1"),
+                        ("ref", "1"),
+                    ]
+                    payload = _sport_v3_json(host, "/service-api/main-live-feed/v3/gameEvents", query, timeout=8.0)
+                    if not isinstance(payload, dict):
+                        continue
+                    converted = _v3_to_legacy_market_game(payload, event_id)
+                    if converted.get("AE") or converted.get("SG"):
+                        converted["_v3_gr"] = gr
+                        return converted
         return None
 
     def _subgame_game(self, event_id: str, cfg: SportConfig, *, prematch: bool) -> dict[str, Any]:
@@ -1366,8 +1678,21 @@ class MultiSportSteamWorker:
                         ("marketType", "1"),
                         ("ref", "1"),
                     ])
-                    payload = _sport_http_json(
-                        f"{host}/service-api/main-live-feed/v3/gameEvents?{query}",
+                    ordered = [
+                        ("cfView", "3"),
+                        ("countEvents", "250"),
+                        ("fcountry", os.getenv("GOOL_BASKETBALL_V3_FCOUNTRY", "66")),
+                        ("gameId", str(event_id)),
+                        ("gr", str(gr)),
+                        ("grMode", "4"),
+                        ("lng", "en"),
+                        ("marketType", "1"),
+                        ("ref", "1"),
+                    ]
+                    payload = _sport_v3_json(
+                        host,
+                        "/service-api/main-live-feed/v3/gameEvents",
+                        ordered,
                         timeout=max(timeout, 5.0),
                     )
                     if not isinstance(payload, dict):
@@ -1509,6 +1834,12 @@ class MultiSportSteamWorker:
             if wanted_scopes is not None and scope not in wanted_scopes:
                 continue
             seen.add(scope)
+            if sg.get("AE"):
+                scope_decoded = decode_core_markets(sg, cfg.key, scope=scope)
+                decoded[scope] = scope_decoded
+                unknown_catalog[scope] = raw_catalog(scope_decoded)
+                fetch_status[scope] = "embedded_v3"
+                continue
             wanted.append((scope, sub_id))
 
         maximum = max(0, _int_env("GOOL_MULTISPORT_MAX_SUBGAMES_PER_EVENT", 8))

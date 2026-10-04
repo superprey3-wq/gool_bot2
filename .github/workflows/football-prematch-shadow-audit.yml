@@ -1,6 +1,9 @@
 name: Football PREMATCH shadow audit
 
 on:
+  push:
+    branches:
+      - "feature/multisport-market-tree-and-football-rescue"
   pull_request:
     paths:
       - "src/gool_bot2/prematch_confidence.py"
@@ -8,6 +11,11 @@ on:
       - "scripts/gool_flashscore_today.py"
       - ".github/workflows/football-prematch-shadow-audit.yml"
   workflow_dispatch:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   prematch-audit:

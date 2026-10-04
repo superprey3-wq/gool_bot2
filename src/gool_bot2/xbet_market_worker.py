@@ -12,6 +12,7 @@ from .xbet_market_demand import load_active_demands
 from .xbet_market_robust import RobustXBetMarketCollector
 from .xbet_market_memory import purge_finished_ephemeral
 from .xbet_multisport_steam import MultiSportSteamWorker
+from .multisport_prematch import MultiSportPrematchWorker
 from .xbet_prematch_market import XBetPrematchCollector
 from .xbet_robust_event_guard import install as install_robust_event_guard
 from .xbet_score_epoch_guard import install as install_score_epoch_guard
@@ -173,10 +174,32 @@ def main() -> None:
             daemon=True,
         )
 
+    multisport_prematch: MultiSportPrematchWorker | None = None
+    multisport_prematch_thread: threading.Thread | None = None
+    if (
+        _enabled("GOOL_MULTISPORT_ENABLED", _enabled("XBET_MULTISPORT_STEAM_ENABLED", True))
+        and _enabled("GOOL_MULTISPORT_PREMATCH_ENABLED", True)
+    ):
+        multisport_prematch = MultiSportPrematchWorker(runtime)
+        multisport_prematch_interval = max(
+            30.0,
+            float(os.getenv("GOOL_MULTISPORT_PREMATCH_INTERVAL_SECONDS", "60")),
+        )
+        multisport_prematch_thread = threading.Thread(
+            target=multisport_prematch.run,
+            args=(multisport_prematch_interval,),
+            name="xbet-multisport-prematch",
+            daemon=True,
+        )
+    else:
+        multisport_prematch_interval = 0.0
+
     def stop_all(*_: object) -> None:
         prematch.stop()
         if multisport is not None:
             multisport.stop()
+        if multisport_prematch is not None:
+            multisport_prematch.stop()
         collector.stop()
 
     signal.signal(signal.SIGINT, stop_all)
@@ -184,6 +207,8 @@ def main() -> None:
     prematch_thread.start()
     if multisport_thread is not None:
         multisport_thread.start()
+    if multisport_prematch_thread is not None:
+        multisport_prematch_thread.start()
     print(
         f"XBET_MARKET started interval={args.interval}s state={args.state} "
         f"collector=all_live_robust workers={os.getenv('XBET_GAME_WORKERS', '24')} "
@@ -196,6 +221,8 @@ def main() -> None:
         f"prematch_state={prematch_state} prematch_interval={prematch_interval:.0f}s "
         f"multisport_steam={'on' if multisport is not None else 'off'} "
         f"multisport_interval={multisport_interval if multisport is not None else 0:g}s "
+        f"multisport_prematch={'on' if multisport_prematch is not None else 'off'} "
+        f"multisport_prematch_interval={multisport_prematch_interval:g}s "
         "multisport_score_epoch_reset=hockey_only basketball=score_normalized",
         flush=True,
     )
@@ -203,6 +230,8 @@ def main() -> None:
     prematch.stop()
     if multisport is not None:
         multisport.stop()
+    if multisport_prematch is not None:
+        multisport_prematch.stop()
 
 
 if __name__ == "__main__":

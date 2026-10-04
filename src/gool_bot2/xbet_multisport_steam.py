@@ -778,12 +778,8 @@ class MultiSportSteamWorker:
 
     def _prematch_snapshot(self, event: dict[str, Any], fs: dict[str, Any], reversed_order: bool, match_score: float, cfg: SportConfig) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
-        game = event
-        total = _balanced_total(game)
-        if total is None:
-            game = self._prematch_game(event_id, cfg) or {}
-            total = _balanced_total(game)
-        if total is None or not _event_allowed(game):
+        game = self._prematch_game(event_id, cfg) or event
+        if not _event_allowed(game):
             return None, "prematch_market_decode"
         now = time.time()
         start_ts = float(fs.get("start_ts") or 0.0)
@@ -792,6 +788,21 @@ class MultiSportSteamWorker:
         horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 6 * 60 * 60.0))
         if start_ts - now > horizon:
             return None, "prematch_outside_horizon"
+
+        decoded, market_meta = self._market_tree(game, cfg, prematch=True)
+        lanes = market_lanes(decoded)
+        for lane in lanes:
+            lane["lane_key"] = lane_key(lane)
+            lane["metric"] = _metric(lane, (0, 0), cfg)
+            lane["selection"] = selection_label(lane, "over")
+        raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
+        if raw_count <= 0:
+            return None, "prematch_market_decode"
+
+        primary = next(
+            (lane for lane in lanes if lane.get("scope") == SCOPE_FULL and lane.get("market_family") == "match_total"),
+            lanes[0] if lanes else None,
+        )
         return {
             "ts": now,
             "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -805,28 +816,52 @@ class MultiSportSteamWorker:
             "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
             "start_ts": start_ts,
             "scheduled_start": datetime.fromtimestamp(start_ts, timezone.utc).isoformat(),
-            "line": float(total["line"]),
-            "over": float(total["over"]),
-            "under": float(total["under"]),
-            "probability": float(total["probability"]),
-            "metric": _metric(total, (0, 0), cfg),
+            "line": float((primary or {}).get("line") or 0.0),
+            "over": float((primary or {}).get("over") or 0.0),
+            "under": float((primary or {}).get("under") or 0.0),
+            "probability": float((primary or {}).get("probability") or 0.5),
+            "metric": float((primary or {}).get("metric") or 0.0),
+            "market_lanes": lanes,
+            "markets_by_scope": {scope: self._compact_decoded(item) for scope, item in decoded.items()},
+            "market_coverage": market_meta.get("coverage") or {},
+            "unknown_market_catalog": market_meta.get("unknown_market_catalog") or [],
+            "subgame_fetch": market_meta.get("subgame_fetch") or {},
             "flashscore_match_score": round(float(match_score), 4),
         }, None
 
     def _snapshot(self, event: dict[str, Any], fs: dict[str, Any], reversed_order: bool, match_score: float, cfg: SportConfig) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
-        game = event
-        total, xbet_score = _balanced_total(game), _score(game)
-        if total is None or xbet_score is None:
-            game = self._game(event_id, cfg) or {}
-            total, xbet_score = _balanced_total(game), _score(game)
-        if total is None or xbet_score is None or not _event_allowed(game):
+        game = self._game(event_id, cfg) or event
+        xbet_score = _score(game) or _score(event)
+        if xbet_score is None or not _event_allowed(game):
             return None, "market_decode"
         canonical = (xbet_score[1], xbet_score[0]) if reversed_order else xbet_score
         fs_score_raw = list(fs.get("score") or [0, 0])
         fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
         if canonical != fs_score:
             return None, "score_mismatch"
+
+        decoded, market_meta = self._market_tree(game, cfg, prematch=False)
+        raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
+        if raw_count <= 0:
+            return None, "market_decode"
+        scoped_scores = period_scores(game, cfg.key)
+        event_scope_key = f"{cfg.key}:{event_id}"
+        for scope, score in scoped_scores.items():
+            self._scope_scores[event_scope_key][scope] = score
+
+        lanes = market_lanes(decoded)
+        for lane in lanes:
+            score = lane_score(lane, fs_score, scoped_scores)
+            lane["lane_key"] = lane_key(lane)
+            lane["score"] = [int(score[0]), int(score[1])]
+            lane["metric"] = _metric(lane, score, cfg)
+            lane["selection"] = selection_label(lane, "over")
+
+        primary = next(
+            (lane for lane in lanes if lane.get("scope") == SCOPE_FULL and lane.get("market_family") == "match_total"),
+            lanes[0] if lanes else None,
+        )
         now = time.time()
         return {
             "ts": now,
@@ -840,13 +875,19 @@ class MultiSportSteamWorker:
             "away": str(fs.get("away") or "?"),
             "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
             "score": [*fs_score],
+            "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "period": _period(game),
             "clock_seconds": _clock_seconds(game),
-            "line": float(total["line"]),
-            "over": float(total["over"]),
-            "under": float(total["under"]),
-            "probability": float(total["probability"]),
-            "metric": _metric(total, fs_score, cfg),
+            "line": float((primary or {}).get("line") or 0.0),
+            "over": float((primary or {}).get("over") or 0.0),
+            "under": float((primary or {}).get("under") or 0.0),
+            "probability": float((primary or {}).get("probability") or 0.5),
+            "metric": float((primary or {}).get("metric") or 0.0),
+            "market_lanes": lanes,
+            "markets_by_scope": {scope: self._compact_decoded(item) for scope, item in decoded.items()},
+            "market_coverage": market_meta.get("coverage") or {},
+            "unknown_market_catalog": market_meta.get("unknown_market_catalog") or [],
+            "subgame_fetch": market_meta.get("subgame_fetch") or {},
             "flashscore_match_score": round(float(match_score), 4),
             "flashscore_score_verified": True,
         }, None

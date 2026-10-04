@@ -786,6 +786,8 @@ class MultiSportSteamWorker:
             "direction": signal.get("direction"),
             "line": float(signal.get("line") or 0.0),
             "odd": float(signal.get("odd") or 0.0),
+            "opening_line": float(((signal.get("start") or {}).get("line") or signal.get("line") or 0.0)) if phase == "PREMATCH" else None,
+            "opening_odd": float(((signal.get("start") or {}).get(str(signal.get("direction") or "over")) or signal.get("odd") or 0.0)) if phase == "PREMATCH" else None,
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),

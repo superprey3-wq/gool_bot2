@@ -49,7 +49,7 @@ def select_confident_prematch_rows(
     min_agreement = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_AGREEMENT", 0.70)))
     min_separation = max(0.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_SEPARATION", 0.020))
     min_probability = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_PROBABILITY", 0.64)))
-    min_quality = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_QUALITY", 0.72)))
+    min_quality = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_QUALITY", 0.62)))
 
     kept: list[dict[str, Any]] = []
     reject_sample = reject_agreement = reject_separation = reject_probability = reject_quality = 0

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .multisport_journal import load_journal, normalize_entry, stat_line, stats
+
 
 SPORT_META = {
     "hockey": ("🏒", "ХОККЕЙ"),
@@ -43,10 +45,8 @@ def _row_phase(row: dict[str, Any]) -> str:
 
 
 def _sport_rows(sport: str, phase: str | None = None) -> list[dict[str, Any]]:
-    rows = _load_json(journal_path(), [])
-    if not isinstance(rows, list):
-        return []
-    out = [row for row in rows if isinstance(row, dict) and str(row.get("sport") or "") == sport]
+    rows = load_journal(journal_path())
+    out = [row for row in rows if str(row.get("sport") or "") == sport]
     if phase:
         wanted = str(phase).upper()
         out = [row for row in out if _row_phase(row) == wanted]
@@ -54,16 +54,7 @@ def _sport_rows(sport: str, phase: str | None = None) -> list[dict[str, Any]]:
 
 
 def _record_text(rows: list[dict[str, Any]]) -> str:
-    settled = [row for row in rows if str(row.get("result") or "") in {"won", "lost", "void"}]
-    won = sum(1 for row in settled if row.get("result") == "won")
-    lost = sum(1 for row in settled if row.get("result") == "lost")
-    void = sum(1 for row in settled if row.get("result") == "void")
-    pending = sum(1 for row in rows if str(row.get("result") or "pending") == "pending")
-    profit = sum(float(row.get("profit_units") or 0.0) for row in settled)
-    graded = won + lost
-    hit = won / graded * 100.0 if graded else 0.0
-    roi = profit / len(settled) * 100.0 if settled else 0.0
-    return f"✅ {won} · ❌ {lost} · ↩️ {void} · ⏳ {pending} · проход {hit:.1f}% · P/L {profit:+.2f}u · ROI {roi:+.1f}%"
+    return stat_line(stats([normalize_entry(row) for row in rows]))
 
 
 def multisport_status_text() -> str:
@@ -181,4 +172,45 @@ def multisport_report_text() -> str:
         f"🔴 LIVE · {_record_text(all_live)}\n"
         f"📚 ВСЕ · {_record_text(all_rows)}"
     )
+    return "\n\n".join(lines)
+
+
+
+def sport_journal_text(sport: str | None = None, limit: int = 14) -> str:
+    rows = load_journal(journal_path())
+    if sport in SPORT_META:
+        rows = [row for row in rows if str(row.get("sport") or "") == sport]
+        icon, title = SPORT_META[sport]
+        heading = f"📒 <b>{icon} ЖУРНАЛ · {title}</b>"
+    else:
+        heading = "📒 <b>GOOL MULTI · ЖУРНАЛ СИГНАЛОВ</b>"
+    rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    if not rows:
+        return heading + "\n\nПока сигналов нет."
+
+    result_icon = {"won": "✅", "lost": "❌", "void": "↩️", "pending": "⏳"}
+    lines = [heading, "🟡 PREMATCH · 🔴 LIVE"]
+    for row in rows[:max(1, int(limit))]:
+        item = normalize_entry(row)
+        phase = str(item.get("phase") or "LIVE")
+        picon = "🟡" if phase == "PREMATCH" else "🔴"
+        sicon = SPORT_META.get(str(item.get("sport") or ""), ("🏟", ""))[0]
+        ricon = result_icon.get(str(item.get("result") or "pending"), "⏳")
+        context = ""
+        if phase == "PREMATCH":
+            try:
+                import datetime as _dt
+                stamp = float(item.get("scheduled_start_ts") or item.get("start_ts") or 0)
+                tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+                context = _dt.datetime.fromtimestamp(stamp, tz).strftime("%d.%m %H:%M МСК") if stamp else "до матча"
+            except Exception:
+                context = "до матча"
+        else:
+            score = item.get("score") or [0, 0]
+            context = f"{score[0]}:{score[1]} · {item.get('period') or 'LIVE'}"
+        lines.append(
+            f"{ricon} {picon}{sicon} <b>{item.get('home','?')} — {item.get('away','?')}</b>\n"
+            f"↳ {item.get('selection') or '?'} @ {float(item.get('odd') or 0):.2f} · "
+            f"R{float(item.get('strength') or 0):.0f} · {context}"
+        )
     return "\n\n".join(lines)

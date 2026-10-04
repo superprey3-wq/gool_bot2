@@ -117,6 +117,9 @@ def render_multisport_prematch_card(row: dict[str, Any], signal: dict[str, Any],
     odd = float(signal.get("odd") or row.get(direction) or 0.0)
     market_label = ("ТБ" if direction == "over" else "ТМ") + f" {line:g}"
     strength_score = float(signal.get("strength") or 0.0)
+    start_row = dict(signal.get("start") or {})
+    opening_line = float(start_row.get("line") or row.get("opening_line") or line)
+    opening_odd = float(start_row.get(direction) or row.get("opening_odd") or odd)
     start_ts = float(row.get("start_ts") or 0.0)
     try:
         tz = ZoneInfo("Europe/Moscow")
@@ -155,9 +158,11 @@ def render_multisport_prematch_card(row: dict[str, Any], signal: dict[str, Any],
     fs_id = str(row.get("flashscore_event_id") or "—")
     map_score = float(row.get("flashscore_match_score") or 0.0)
     draw.rounded_rectangle((44, 710, 1036, 810), 20, fill=PANEL, outline=LINE, width=2)
-    draw.text((70, 730), "ПРОВЕРКА ИСТОЧНИКОВ", font=sc._font(15, True), fill=MUTED)
-    draw.text((70, 770), "Flashscore расписание ✓  •  1xBet LineFeed ✓  •  матч сопоставлен ✓", font=sc._font(19, True), fill=GREEN)
-    draw.text((70, 798), f"FS match {fs_id}  •  mapping {map_score:.0%}  •  движение {metric_delta:.2f}", font=sc._font(14, False), fill=MUTED)
+    draw.text((70, 726), "ДВИЖЕНИЕ ДО МАТЧА", font=sc._font(15, True), fill=MUTED)
+    move_text = f"линия {opening_line:g} → {line:g}  •  кэф {opening_odd:.2f} → {odd:.2f}"
+    draw.text((70, 758), move_text, font=sc._fit(draw, move_text, 930, 21, True), fill=GOLD)
+    source_text = f"Flashscore ✓  •  1xBet LineFeed ✓  •  mapping {map_score:.0%}  •  FS {fs_id}"
+    draw.text((70, 792), source_text, font=sc._fit(draw, source_text, 930, 14, False), fill=GREEN)
 
     draw.rounded_rectangle((280, 835, 800, 885), 16, fill=accent)
     sc._center(draw, "PREMATCH СИГНАЛ ПОДТВЕРЖДЁН", 846, sc._font(19, True), BG)

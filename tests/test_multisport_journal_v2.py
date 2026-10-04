@@ -61,3 +61,38 @@ def test_same_event_same_phase_can_store_different_period_scopes(tmp_path: Path)
     assert append_unique(path, {**base, "scope": "PERIOD_1", "selection": "1-й период: ТБ 1.5"})
     assert append_unique(path, {**base, "scope": "PERIOD_2", "selection": "2-й период: ТБ 1.5"})
     assert len(load_journal(path)) == 2
+
+
+def test_same_flashscore_match_dedupes_rotating_xbet_event_ids(tmp_path: Path):
+    path = tmp_path / "journal.json"
+    first = {
+        "sport": "basketball", "phase": "PREMATCH",
+        "event_id": "xbet-111", "flashscore_event_id": "fsABC123",
+        "scope": "FULL_MATCH", "market_family": "handicap",
+        "selection": "Ф2 +4.5", "selection_side": "away",
+        "line": 4.5, "odd": 1.55,
+    }
+    second = {
+        **first,
+        "event_id": "xbet-222",
+        "odd": 1.57,
+    }
+    assert append_unique(path, first)
+    assert not append_unique(path, second)
+    rows = load_journal(path)
+    assert len(rows) == 1
+    assert rows[0]["flashscore_event_id"] == "fsABC123"
+
+
+def test_load_journal_collapses_legacy_duplicate_rotating_xbet_ids(tmp_path: Path):
+    path = tmp_path / "journal.json"
+    path.write_text(
+        """[
+          {"sport":"basketball","phase":"PREMATCH","event_id":"a","flashscore_event_id":"fs1","scope":"FULL_MATCH","market_family":"handicap","selection":"Ф2 +4.5","line":4.5,"odd":1.55,"created_at":"2026-10-04T19:00:00+00:00"},
+          {"sport":"basketball","phase":"PREMATCH","event_id":"b","flashscore_event_id":"fs1","scope":"FULL_MATCH","market_family":"handicap","selection":"Ф2 +4.5","line":4.5,"odd":1.55,"created_at":"2026-10-04T19:05:00+00:00"}
+        ]""",
+        encoding="utf-8",
+    )
+    rows = load_journal(path)
+    assert len(rows) == 1
+    assert rows[0]["event_id"] == "b"

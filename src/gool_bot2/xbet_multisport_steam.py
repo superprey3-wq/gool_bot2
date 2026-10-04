@@ -583,8 +583,6 @@ class MultiSportSteamWorker:
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "phase": "PREMATCH",
             "origin": "multisport_prematch",
-            "phase": "LIVE",
-            "origin": "multisport_live",
             "sport": cfg.key,
             "event_id": event_id,
             "flashscore_event_id": str(fs.get("flashscore_event_id") or ""),
@@ -619,6 +617,8 @@ class MultiSportSteamWorker:
         return {
             "ts": now,
             "captured_at": datetime.now(timezone.utc).isoformat(),
+            "phase": "LIVE",
+            "origin": "multisport_live",
             "sport": cfg.key,
             "event_id": event_id,
             "flashscore_event_id": str(fs.get("flashscore_event_id") or ""),

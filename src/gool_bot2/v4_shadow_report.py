@@ -203,9 +203,11 @@ def build_market_report(state: dict, limit: int = 30, fixtures=None, live=None, 
     return "\n".join(lines)
 
 def _trend_signals(profile: dict, quality: float) -> list[dict]:
-    """High-conviction price-free tendencies. Require agreement, not one model probability."""
-    if quality < 0.70:
-        return []
+    """High-conviction price-free tendencies. Require agreement, not one model probability.
+
+    Evidence quality must rank and gate delivery, but it must not erase an
+    otherwise valid football tendency before Fusion/shortlist can evaluate it.
+    """
     out: list[dict] = []
     first=profile.get("first_half") or {}; second=profile.get("second_half") or {}; full=profile.get("full_match") or {}
     n1=int(first.get("pair_sample") or 0); n2=int(second.get("pair_sample") or 0); nf=int(full.get("pair_sample") or 0)

@@ -1024,3 +1024,27 @@ def test_prematch_one_match_one_pick_across_market_families(tmp_path, monkeypatc
     prematch = [row for row in rows if row.get("phase") == "PREMATCH" and row.get("flashscore_event_id") == "FS123456"]
     assert len(prematch) == 1
     assert prematch[0]["selection"] == "ИТБ1 76"
+
+
+def test_hockey_primary_prefers_close_total_over_handicap(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
+        ({"market_family": "match_total"}, {"strength": 95, "fair_probability": .57}),
+    ]
+    row, signal = select_prematch_primary(candidates, [], "hockey")
+    assert row["market_family"] == "match_total"
+    assert signal["strength"] == 95
+
+
+def test_hockey_primary_keeps_materially_stronger_handicap(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
+        ({"market_family": "match_total"}, {"strength": 84, "fair_probability": .57}),
+    ]
+    row, signal = select_prematch_primary(candidates, [], "hockey")
+    assert row["market_family"] == "handicap"
+    assert signal["strength"] == 100

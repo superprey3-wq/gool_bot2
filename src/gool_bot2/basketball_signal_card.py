@@ -14,6 +14,25 @@ TEXT=(250,247,243); MUTED=(191,166,145); LINE=(91,61,39); GOLD=(255,205,93)
 GREEN=(92,222,130); RED=(232,91,86)
 
 
+def _team_badge(img:Image.Image,d:ImageDraw.ImageDraw,x:int,y:int,row:dict[str,Any],side:str,name:str,accent=ORANGE)->None:
+    meta=dict(row.get("flashscore_meta") or {})
+    logo=sc._logo(meta,side)
+    r=34
+    d.ellipse((x-r-4,y-r-4,x+r+4,y+r+4),outline=accent,width=2)
+    d.ellipse((x-r,y-r,x+r,y+r),fill=PANEL,outline=LINE,width=1)
+    if logo:
+        bb=logo.getbbox()
+        logo=logo.crop(bb) if bb else logo
+        scale=min(58/max(1,logo.width),58/max(1,logo.height))
+        logo=logo.resize((max(1,int(logo.width*scale)),max(1,int(logo.height*scale))),Image.Resampling.LANCZOS)
+        img.alpha_composite(logo,(x-logo.width//2,y-logo.height//2))
+        return
+    initials="".join(part[:1] for part in str(name).split()[:2]).upper() or "?"
+    font=sc._font(14,True)
+    box=d.textbbox((0,0),initials,font=font)
+    d.text((x-(box[2]-box[0])/2,y-9),initials,font=font,fill=TEXT)
+
+
 def _label(row:dict[str,Any],signal:dict[str,Any])->str:
     direction=str(signal.get("direction") or row.get("direction") or "over")
     line=float(signal.get("line") or row.get("line") or 0)
@@ -78,8 +97,10 @@ def render_basketball_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:A
     league=str(row.get("league") or "PREMATCH")
     d.text((50,122),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
     d.rounded_rectangle((42,158,1038,344),28,fill=PANEL,outline=COURT,width=2)
-    d.text((72,195),home,font=sc._fit(d,home,590,31,True),fill=TEXT)
-    d.text((72,282),away,font=sc._fit(d,away,590,31,True),fill=TEXT)
+    _team_badge(im,d,108,220,row,"home",home,ORANGE)
+    _team_badge(im,d,108,305,row,"away",away,ORANGE)
+    d.text((165,195),home,font=sc._fit(d,home,500,29,True),fill=TEXT)
+    d.text((165,282),away,font=sc._fit(d,away,500,29,True),fill=TEXT)
     ts=float(row.get("start_ts") or 0)
     try: tz=ZoneInfo("Europe/Moscow")
     except Exception: tz=timezone.utc
@@ -129,8 +150,11 @@ def render_basketball_result_card(row:dict[str,Any],cfg:Any)->bytes:
     d.text((52,128),title,font=sc._font(27,True),fill=accent)
     d.text((52,166),str(row.get("league") or "BASKETBALL"),font=sc._fit(d,str(row.get("league") or "BASKETBALL"),960,18,False),fill=MUTED)
     d.rounded_rectangle((42,205,1038,390),26,fill=PANEL,outline=accent,width=3)
-    d.text((70,232),str(row.get("home") or "?"),font=sc._fit(d,str(row.get("home") or "?"),410,27,True),fill=TEXT)
-    d.text((70,320),str(row.get("away") or "?"),font=sc._fit(d,str(row.get("away") or "?"),410,27,True),fill=TEXT)
+    home=str(row.get("home") or "?"); away=str(row.get("away") or "?")
+    _team_badge(im,d,105,255,row,"home",home,accent)
+    _team_badge(im,d,105,342,row,"away",away,accent)
+    d.text((160,232),home,font=sc._fit(d,home,320,26,True),fill=TEXT)
+    d.text((160,320),away,font=sc._fit(d,away,320,26,True),fill=TEXT)
     score=list(row.get("settled_score") or row.get("score") or [0,0])
     d.rounded_rectangle((570,245,835,350),16,fill=(31,17,10),outline=ORANGE,width=2)
     sc._center(d,f"{int(score[0])} : {int(score[1])}",270,sc._font(38,True),TEXT)

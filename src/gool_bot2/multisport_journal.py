@@ -20,6 +20,9 @@ def normalize_entry(row: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("signal_type", "prematch_total_movement" if phase == "PREMATCH" else "live_total_movement")
     out.setdefault("market_family", "match_total")
     out.setdefault("scope", "FULL_MATCH")
+    sport = str(out.get("sport") or "")
+    out.setdefault("card_profile", f"{sport}_{phase.lower()}" if sport else phase.lower())
+    out.setdefault("phase_policy", "prematch_all_scheduled_scopes" if phase == "PREMATCH" else "live_phase_routed")
     direction = str(out.get("direction") or "over").lower()
     out["direction"] = "under" if direction == "under" else "over"
     if not out.get("selection"):
@@ -113,6 +116,7 @@ def grouped_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
             for sport in ("hockey", "basketball")
         },
         "markets": dict(Counter(str(row.get("market_family") or "unknown") for row in normalized)),
+        "scopes": dict(Counter(str(row.get("scope") or "FULL_MATCH") for row in normalized)),
     }
 
 

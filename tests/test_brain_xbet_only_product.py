@@ -23,7 +23,7 @@ def test_production_supervisor_starts_no_exchange_workers(monkeypatch):
 
     commands = monkey_start._production_commands(False)
 
-    assert set(commands) == {"live", "xbet", "worker", "prematch"}
+    assert set(commands) == {"live", "xbet", "multisport", "worker", "prematch"}
     assert commands["prematch"][-1] == "gool_bot2.v4_prematch_daemon"
     joined = " ".join(" ".join(command) for command in commands.values()).lower()
     assert "matchbook" not in joined
@@ -34,7 +34,7 @@ def test_production_supervisor_starts_no_exchange_workers(monkeypatch):
 def test_browser_is_support_process_not_signal_system():
     monkey_start = _monkey_start_module()
     commands = monkey_start._production_commands(True)
-    assert set(commands) == {"live", "xbet", "worker", "prematch", "browser"}
+    assert set(commands) == {"live", "xbet", "multisport", "worker", "prematch", "browser"}
 
 
 def test_public_menu_has_v4_report_in_game_analysis_and_match_search(tmp_path, monkeypatch):

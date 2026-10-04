@@ -209,6 +209,63 @@ def sport_overview_text(sport: str) -> str:
 
     return "\n\n────────────\n\n".join(parts)
 
+def multisport_in_game_sections() -> list[str]:
+    """Pending multisport picks whose Flashscore match is currently LIVE."""
+    state = _load_json(state_path(), {})
+    sports_state = state.get("sports") if isinstance(state, dict) else {}
+    sports_state = sports_state if isinstance(sports_state, dict) else {}
+    rows = load_journal(journal_path())
+
+    messages: list[str] = []
+    total = 0
+    sport_blocks: list[str] = []
+
+    for sport in ("hockey", "basketball"):
+        icon, title = SPORT_META[sport]
+        current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
+        live_matches = [row for row in (current.get("matches") or []) if isinstance(row, dict)]
+        live_by_fs = {
+            str(row.get("flashscore_event_id") or ""): row
+            for row in live_matches
+            if str(row.get("flashscore_event_id") or "")
+        }
+        active: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for row in rows:
+            if str(row.get("sport") or "") != sport:
+                continue
+            if str(row.get("result") or "pending").lower() != "pending":
+                continue
+            if _row_phase(row) != "PREMATCH":
+                continue
+            fs_id = str(row.get("flashscore_event_id") or "")
+            live = live_by_fs.get(fs_id)
+            if live is not None:
+                active.append((row, live))
+
+        if not active:
+            continue
+        total += len(active)
+        lines = [f"{icon} <b>{title} · В ИГРЕ</b> · <b>{len(active)}</b>"]
+        for idx, (pick, live) in enumerate(active, 1):
+            score = list(live.get("score") or [0, 0])
+            period = str(live.get("period") or "LIVE")
+            selection = str(pick.get("selection") or "?")
+            lines.append(
+                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}
+"
+                f"⏱ {period}
+"
+                f"↳ PREMATCH: <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>"
+            )
+        sport_blocks.append("\n\n".join(lines))
+
+    if not sport_blocks:
+        return []
+    messages.append(f"🟢 <b>ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ</b>\nАктивных PREMATCH ставок: <b>{total}</b>")
+    messages.extend(sport_blocks)
+    return messages
+
+
 def multisport_report_text() -> str:
     lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH и LIVE считаются отдельно."]
     all_rows: list[dict[str, Any]] = []

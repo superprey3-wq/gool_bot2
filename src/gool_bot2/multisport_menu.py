@@ -225,7 +225,11 @@ def _pick_needed_text(row: dict[str, Any]) -> str:
     unit = "шайб" if sport == "hockey" else "очков"
 
     try:
-        line = float(row.get("line") or 0.0)
+        raw_line = row.get("line")
+        if raw_line is None or str(raw_line).strip() == "":
+            match = re.search(r"([-+]?\d+(?:[.,]\d+)?)\s*$", str(row.get("selection") or ""))
+            raw_line = match.group(1).replace(",", ".") if match else 0.0
+        line = float(raw_line)
     except (TypeError, ValueError):
         line = 0.0
 

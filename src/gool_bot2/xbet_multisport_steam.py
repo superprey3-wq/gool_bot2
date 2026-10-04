@@ -410,7 +410,13 @@ def map_xbet_to_flashscore(
 
 
 def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int) -> str:
-    total = int(home_score) + int(away_score)
+    family = str(row.get("market_family") or "match_total")
+    if family == "home_total":
+        total = int(home_score)
+    elif family == "away_total":
+        total = int(away_score)
+    else:
+        total = int(home_score) + int(away_score)
     line = float(row.get("line") or 0.0)
     if abs(total - line) < 1e-9:
         return "void"
@@ -945,10 +951,23 @@ class MultiSportSteamWorker:
             state = states.get(str(row.get("flashscore_event_id") or ""))
             if not state or str(state.get("coarse_status") or "") != "3":
                 continue
-            score = list(state.get("score") or [0, 0])
+            full_score = list(state.get("score") or [0, 0])
+            scope = str(row.get("scope") or SCOPE_FULL)
+            if scope == SCOPE_FULL:
+                score = (int(full_score[0]), int(full_score[1]))
+            else:
+                score = self._scope_scores.get(f"{cfg.key}:{row.get('event_id')}", {}).get(scope)
+                if score is None:
+                    continue
             result = settle_multisport_pick(row, int(score[0]), int(score[1]))
             profit = 0.0 if result == "void" else (float(row.get("odd") or 0.0) - 1.0 if result == "won" else -1.0)
-            row.update({"result": result, "profit_units": round(profit, 4), "settled_at": now, "settled_score": [int(score[0]), int(score[1])]})
+            row.update({
+                "result": result,
+                "profit_units": round(profit, 4),
+                "settled_at": now,
+                "settled_score": [int(score[0]), int(score[1])],
+                "settled_match_score": [int(full_score[0]), int(full_score[1])],
+            })
             changed += 1
         if changed:
             save_journal(self.journal_path, rows)

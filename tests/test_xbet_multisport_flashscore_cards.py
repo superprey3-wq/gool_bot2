@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from gool_bot2.xbet_multisport_card import render_multisport_steam_card
+from gool_bot2.xbet_multisport_card import render_multisport_signal_card, render_multisport_steam_card
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
@@ -125,6 +125,40 @@ def test_multisport_signal_card_is_png():
         "end": {"line": 6.5, "over": 1.80},
     }
     png = render_multisport_steam_card(row, signal, cfg)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    image = Image.open(BytesIO(png))
+    assert image.size == (1080, 920)
+
+
+def test_multisport_prematch_signal_card_is_png():
+    cfg = SPORTS["basketball"]
+    row = {
+        "phase": "PREMATCH",
+        "home": "Boston Celtics",
+        "away": "New York Knicks",
+        "league": "NBA",
+        "scheduled_start_ts": 1791136800,
+        "line": 221.5,
+        "over": 1.80,
+        "under": 2.00,
+        "flashscore_event_id": "Pre12Ab3",
+    }
+    signal = {
+        "phase": "PREMATCH",
+        "direction": "under",
+        "line": 219.5,
+        "odd": 1.82,
+        "opening_line": 221.5,
+        "opening_odd": 2.00,
+        "metric_delta": 3.6,
+        "probability_delta_pp": 3.2,
+        "line_delta": 2.0,
+        "moves": 2,
+        "age_seconds": 120,
+        "strength": 81,
+        "extreme": False,
+    }
+    png = render_multisport_signal_card(row, signal, cfg, phase="PREMATCH")
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
     image = Image.open(BytesIO(png))
     assert image.size == (1080, 920)

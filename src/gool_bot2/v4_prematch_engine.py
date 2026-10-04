@@ -189,12 +189,9 @@ def choose_delivery(
     used = set()
     for acc in doubles:
         legs = acc["legs"]
-        # build_accumulators already applies the calibrated qualified_pick gate
-        # (probability/quality/edge/EV) after market shrinkage. Keep a modest
-        # second safety floor here instead of re-imposing a much stricter
-        # p=.69 / quality=.75 / edge=.06 gate that was starving doubles.
-        if any(p.model_probability < .66 or p.data_quality < .62 or p.edge < .040 for p in legs):
-            continue
+        # build_accumulators has already applied calibrated qualified_pick
+        # (odds, p, edge, EV and quality after market shrinkage) and combined
+        # probability/odds gates. Do not apply a second leg-quality wall here.
         if any(p.event_id in used for p in legs):
             continue
         strong.append(acc)

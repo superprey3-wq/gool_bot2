@@ -679,3 +679,64 @@ def test_multisport_getgamezip_uses_team_sport_profile(tmp_path, monkeypatch):
     assert query["marketType"] == ["1"]
     assert query["isNewBuilder"] == ["true"]
     assert query["countevents"] == ["500"]
+
+
+def test_team_sport_exact_live_index_profile_is_first(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    exact_calls = []
+    generic_calls = []
+
+    def fake_exact(url, timeout=8.0):
+        exact_calls.append(url)
+        return {
+            "Value": [{
+                "I": 4242,
+                "O1": "Alpha",
+                "O2": "Beta",
+                "L": "League",
+            }]
+        }
+
+    monkeypatch.setattr(steam, "_team_sport_exact_json", fake_exact)
+    monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: generic_calls.append(args[0]) or None)
+
+    rows = worker._xbet_index(SPORTS["basketball"])
+    assert len(rows) == 1
+    assert rows[0]["I"] == 4242
+    assert worker._index_diag["basketball"]["source"] == "github_team_sport_exact"
+    assert generic_calls == []
+    assert exact_calls
+    url = exact_calls[0]
+    assert "sports=3" in url
+    assert "count=50" in url
+    assert "gr=70" in url
+    assert "country=71" in url
+    assert "/LiveFeed/Get1x2_VZip?" in url
+
+
+def test_team_sport_exact_game_profile_before_generic(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    exact_calls = []
+    generic_calls = []
+
+    def fake_exact(url, timeout=8.0):
+        exact_calls.append(url)
+        return {"Value": {"I": 4242, "O1": "Alpha", "O2": "Beta", "GE": []}}
+
+    monkeypatch.setattr(steam, "_team_sport_exact_json", fake_exact)
+    monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: generic_calls.append(args[0]) or None)
+
+    game = worker._game("4242", SPORTS["hockey"])
+    assert game is not None
+    assert game["I"] == 4242
+    assert generic_calls == []
+    url = exact_calls[0]
+    assert "/LiveFeed/GetGameZip?" in url
+    assert "country=71" in url
+    assert "fcountry=71" in url
+    assert "gr=70" in url
+    assert "countevents=500" in url

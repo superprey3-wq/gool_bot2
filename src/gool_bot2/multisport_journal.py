@@ -24,7 +24,10 @@ def normalize_entry(row: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("card_profile", f"{sport}_{phase.lower()}" if sport else phase.lower())
     out.setdefault("phase_policy", "prematch_all_scheduled_scopes" if phase == "PREMATCH" else "live_phase_routed")
     direction = str(out.get("direction") or "over").lower()
-    out["direction"] = "under" if direction == "under" else "over"
+    if str(out.get("market_family") or "") in {"handicap", "moneyline"}:
+        out["direction"] = direction if direction in {"home", "away", "draw"} else str(out.get("selection_side") or direction)
+    else:
+        out["direction"] = "under" if direction == "under" else "over"
     if not out.get("selection"):
         prefix = "ТМ" if out["direction"] == "under" else "ТБ"
         try:

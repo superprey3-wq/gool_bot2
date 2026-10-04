@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from gool_bot2.xbet_multisport_card import render_multisport_steam_card
+from gool_bot2.xbet_multisport_card import render_multisport_prematch_card, render_multisport_steam_card
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
@@ -128,3 +128,35 @@ def test_multisport_signal_card_is_png():
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
     image = Image.open(BytesIO(png))
     assert image.size == (1080, 920)
+
+
+def test_multisport_prematch_card_is_distinct_png():
+    cfg = SPORTS["basketball"]
+    row = {
+        "phase": "PREMATCH",
+        "home": "Boston Celtics",
+        "away": "New York Knicks",
+        "league": "NBA",
+        "start_ts": 1893456000,
+        "line": 224.5,
+        "over": 1.82,
+        "under": 1.98,
+        "flashscore_event_id": "Cd34Ef56",
+        "flashscore_match_score": 0.94,
+    }
+    signal = {
+        "phase": "PREMATCH",
+        "direction": "under",
+        "line": 224.5,
+        "odd": 1.98,
+        "metric_delta": 3.2,
+        "probability_delta_pp": 3.8,
+        "line_delta": 2.5,
+        "moves": 3,
+        "strength": 84.0,
+        "extreme": False,
+    }
+    png = render_multisport_prematch_card(row, signal, cfg)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    image = Image.open(BytesIO(png))
+    assert image.size == (1080, 900)

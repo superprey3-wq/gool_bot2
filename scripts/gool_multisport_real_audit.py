@@ -25,6 +25,8 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", str(30 * 3600))
     os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_WINDOW_SECONDS", str(2 * 3600))
     os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_MIN_AGE_SECONDS", "45")
+    os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_SUBGAME_CACHE_SECONDS", "5")
+    os.environ.setdefault("GOOL_MULTISPORT_LIVE_SUBGAME_CACHE_SECONDS", "5")
     os.environ.setdefault("XBET_MULTISPORT_INDEX_COUNT", "1500")
     os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", "150")
     os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "150")
@@ -58,6 +60,22 @@ def main() -> None:
     (out_dir / "states.json").write_text(json.dumps(states, ensure_ascii=False, indent=2), "utf-8")
 
     latest = states[-1] if states else {}
+
+    def coverage_summary(matches):
+        scopes = {}
+        for match in matches:
+            for scope, value in (match.get("market_coverage") or {}).items():
+                if not isinstance(value, dict):
+                    continue
+                row = scopes.setdefault(str(scope), {"matches": 0, "total": 0, "it1": 0, "it2": 0, "handicap": 0, "moneyline": 0})
+                row["matches"] += 1
+                row["total"] += int(int(value.get("match_total_lines") or 0) > 0)
+                row["it1"] += int(int(value.get("home_total_lines") or 0) > 0)
+                row["it2"] += int(int(value.get("away_total_lines") or 0) > 0)
+                row["handicap"] += int(int(value.get("handicap_lines") or 0) > 0)
+                row["moneyline"] += int(bool(value.get("moneyline")))
+        return scopes
+
     lines = ["# GOOL multisport real PREMATCH + LIVE audit", ""]
     for sport in ("hockey", "basketball"):
         row = (latest.get("sports") or {}).get(sport) or {}
@@ -72,6 +90,15 @@ def main() -> None:
             f"- Signals this snapshot: **{_n(row.get('prematch_detected'))}**",
             f"- Market decode failures: **{_n(row.get('prematch_market_decode_failed'))}**",
             "",
+            "#### PREMATCH scope coverage",
+        ]
+        for scope, value in sorted(coverage_summary(row.get("prematch_matches") or []).items()):
+            lines.append(
+                f"- {scope}: matches={value['matches']} total={value['total']} IT1={value['it1']} "
+                f"IT2={value['it2']} handicap={value['handicap']} moneyline={value['moneyline']}"
+            )
+        lines += [
+            "",
             "### LIVE",
             f"- Flashscore live: **{_n(row.get('flashscore_live'))}**",
             f"- 1xBet live index: **{_n(row.get('xbet_live'))}**",
@@ -81,7 +108,14 @@ def main() -> None:
             f"- Score mismatches: **{_n(row.get('score_mismatch'))}**",
             f"- Market decode failures: **{_n(row.get('market_decode_failed'))}**",
             "",
+            "#### LIVE scope coverage",
         ]
+        for scope, value in sorted(coverage_summary(row.get("matches") or []).items()):
+            lines.append(
+                f"- {scope}: matches={value['matches']} total={value['total']} IT1={value['it1']} "
+                f"IT2={value['it2']} handicap={value['handicap']} moneyline={value['moneyline']}"
+            )
+        lines += [""] 
         prematches = [x for x in (row.get("prematch_matches") or []) if isinstance(x, dict)]
         lives = [x for x in (row.get("matches") or []) if isinstance(x, dict)]
         if prematches:

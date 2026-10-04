@@ -449,7 +449,10 @@ class MultiSportSteamWorker:
             "flashscore_score_verified": True,
         }, None
 
-    def _append_history(self, row: dict[str, Any], cfg: SportConfig) -> tuple[list[dict[str, Any]], float | None]:
+    def _append_history(self, row: dict[str, Any], cfg: SportConfig | None = None) -> tuple[list[dict[str, Any]], float | None]:
+        cfg = cfg or SPORTS.get(str(row.get("sport") or "").casefold())
+        if cfg is None:
+            raise ValueError(f"unknown_multisport={row.get('sport')}")
         key = f"{cfg.key}:{row['event_id']}"
         score = (int(row["score"][0]), int(row["score"][1]))
         period = str(row.get("period") or "LIVE")

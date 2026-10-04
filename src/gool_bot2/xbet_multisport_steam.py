@@ -1325,6 +1325,112 @@ class MultiSportSteamWorker:
         return ctx
 
     @staticmethod
+    def _sport_context_features(context: dict[str, Any], fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        """Leakage-safe PREMATCH features from Flashscore history only."""
+        def rows(key: str) -> list[dict[str, Any]]:
+            return [dict(r) for r in (context.get(key) or []) if isinstance(r, dict)]
+
+        home_recent = rows("home_recent")
+        away_recent = rows("away_recent")
+        home_at_home = rows("home_at_home")
+        away_away = rows("away_away")
+        h2h = rows("h2h")
+
+        def scored_allowed(items: list[dict[str, Any]], team: str) -> tuple[list[float], list[float], list[float], list[int]]:
+            gf: list[float] = []
+            ga: list[float] = []
+            totals: list[float] = []
+            wins: list[int] = []
+            target = str(team or "").strip().casefold()
+            for row in items:
+                try:
+                    hs = float(row.get("home_score"))
+                    aws = float(row.get("away_score"))
+                except (TypeError, ValueError):
+                    continue
+                home = str(row.get("home") or "").strip().casefold()
+                away = str(row.get("away") or "").strip().casefold()
+                if target and target in home:
+                    gf.append(hs); ga.append(aws); wins.append(int(hs > aws))
+                elif target and target in away:
+                    gf.append(aws); ga.append(hs); wins.append(int(aws > hs))
+                else:
+                    # Name matching can fail for abbreviations. Totals are still
+                    # useful and do not depend on which side the team occupied.
+                    totals.append(hs + aws)
+                    continue
+                totals.append(hs + aws)
+            return gf, ga, totals, wins
+
+        home = str(fs.get("home") or "")
+        away = str(fs.get("away") or "")
+        hgf, hga, ht, hw = scored_allowed(home_recent, home)
+        agf, aga, at, aw = scored_allowed(away_recent, away)
+        vhgf, vhga, vht, vhw = scored_allowed(home_at_home, home)
+        vagf, vaga, vat, vaw = scored_allowed(away_away, away)
+
+        def avg(values: list[float]) -> float | None:
+            return None if not values else sum(values) / len(values)
+
+        def win_pct(values: list[int]) -> float | None:
+            return None if not values else sum(values) / len(values)
+
+        h2h_totals: list[float] = []
+        for row in h2h:
+            try:
+                h2h_totals.append(float(row.get("home_score")) + float(row.get("away_score")))
+            except (TypeError, ValueError):
+                continue
+
+        def latest_ts(items: list[dict[str, Any]]) -> int:
+            values = []
+            for row in items:
+                try:
+                    values.append(int(float(row.get("timestamp") or 0)))
+                except (TypeError, ValueError):
+                    pass
+            return max(values) if values else 0
+
+        start_ts = int(float(fs.get("start_ts") or 0))
+        home_last = latest_ts(home_recent)
+        away_last = latest_ts(away_recent)
+        home_rest_days = ((start_ts - home_last) / 86400.0) if start_ts > home_last > 0 else None
+        away_rest_days = ((start_ts - away_last) / 86400.0) if start_ts > away_last > 0 else None
+
+        recent_total_values = ht + at
+        recent_total = avg(recent_total_values[-20:])
+        h2h_total = avg(h2h_totals[-10:])
+        venue_total = avg((vht + vat)[-20:])
+
+        return {
+            "source": "flashscore_history",
+            "sport": cfg.key,
+            "home_recent_n": len(home_recent),
+            "away_recent_n": len(away_recent),
+            "h2h_n": len(h2h),
+            "home_gf_avg": avg(hgf),
+            "home_ga_avg": avg(hga),
+            "away_gf_avg": avg(agf),
+            "away_ga_avg": avg(aga),
+            "home_win_pct": win_pct(hw),
+            "away_win_pct": win_pct(aw),
+            "home_venue_win_pct": win_pct(vhw),
+            "away_venue_win_pct": win_pct(vaw),
+            "recent_total_avg": recent_total,
+            "venue_total_avg": venue_total,
+            "h2h_total_avg": h2h_total,
+            "home_rest_days": None if home_rest_days is None else round(home_rest_days, 2),
+            "away_rest_days": None if away_rest_days is None else round(away_rest_days, 2),
+            "home_back_to_back": bool(home_rest_days is not None and home_rest_days < 1.5),
+            "away_back_to_back": bool(away_rest_days is not None and away_rest_days < 1.5),
+            "rest_advantage_days": (
+                None
+                if home_rest_days is None or away_rest_days is None
+                else round(home_rest_days - away_rest_days, 2)
+            ),
+        }
+
+    @staticmethod
     def _prematch_history_support(
         context: dict[str, Any],
         lane_row: dict[str, Any],
@@ -2190,6 +2296,7 @@ class MultiSportSteamWorker:
 
         decoded, market_meta = self._market_tree(game, cfg, prematch=True)
         prematch_context = self._flashscore_prematch_context(fs, cfg)
+        sport_context = self._sport_context_features(prematch_context, fs, cfg)
         lanes = prematch_market_lanes(decoded, cfg.key)
         for lane in lanes:
             lane["lane_key"] = lane_key(lane)
@@ -2230,6 +2337,7 @@ class MultiSportSteamWorker:
             "unknown_market_catalog": market_meta.get("unknown_market_catalog") or [],
             "subgame_fetch": market_meta.get("subgame_fetch") or {},
             "prematch_context": prematch_context,
+            "sport_context": sport_context,
             "flashscore_match_score": round(float(match_score), 4),
         }, None
 
@@ -2680,6 +2788,29 @@ class MultiSportSteamWorker:
                         lane_row,
                         signal,
                     )
+                    sport_context = dict(row.get("sport_context") or {})
+                    family = str(lane_row.get("market_family") or "")
+                    direction = str(signal.get("direction") or "")
+                    if family == "match_total":
+                        try:
+                            line = float(signal.get("line") or lane_row.get("line") or 0.0)
+                            recent_avg = sport_context.get("recent_total_avg")
+                            h2h_avg = sport_context.get("h2h_total_avg")
+                            context_values = [float(v) for v in (recent_avg, h2h_avg) if v is not None]
+                            if line > 0 and context_values:
+                                context_avg = sum(context_values) / len(context_values)
+                                context_edge = context_avg - line
+                                if direction == "under":
+                                    context_edge = -context_edge
+                                history_support += max(-1.5, min(1.5, context_edge * (0.10 if cfg.key == "basketball" else 0.35)))
+                        except (TypeError, ValueError):
+                            pass
+                    elif family in {"moneyline", "handicap"}:
+                        side = str(lane_row.get("selection_side") or "")
+                        form = sport_context.get("home_win_pct" if side == "home" else "away_win_pct")
+                        if form is not None:
+                            history_support += max(-1.0, min(1.0, (float(form) - 0.5) * 2.0))
+                    history_support = max(-3.0, min(3.0, history_support))
                     signal = {
                         **signal,
                         "scope": lane_row.get("scope"),

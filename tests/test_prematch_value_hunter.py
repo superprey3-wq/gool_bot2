@@ -1,4 +1,4 @@
-from gool_bot2.prematch_value_hunter import qualify_value_pick, select_best_value_pick, diagnose_value_rows
+from gool_bot2.prematch_value_hunter import qualify_value_pick, select_best_value_pick, diagnose_value_rows, select_value_scan_rows
 from gool_bot2.v4_prematch_engine import PrematchPick
 
 
@@ -95,3 +95,35 @@ def test_value_hunter_accepts_quality_v2_level():
     ok, info = qualify_value_pick(p, meta(.33))
     assert ok is True
     assert "quality" not in info["reasons"]
+
+
+def test_value_hunter_tiered_quality_gates():
+    p1 = pick(2.60, .47, .36, quality=.63, event="lowtier")
+    ok1, info1 = qualify_value_pick(p1, meta(.38))
+    assert ok1 is True
+    assert info1["quality_gate"] == .62
+
+    p2 = pick(4.50, .34, .22, quality=.66, event="hightier")
+    ok2, info2 = qualify_value_pick(p2, meta(.24))
+    assert ok2 is False
+    assert info2["quality_gate"] == .68
+    assert "quality" in info2["reasons"]
+
+
+def test_value_scan_pool_is_wider_than_normal_shortlist_concept():
+    def row(event_id, quality, sample, rank):
+        return {
+            "match": type("M", (), {"provider_match_id": event_id})(),
+            "sample": sample,
+            "quality": quality,
+            "brain_score": rank,
+            "primary_trend": {"rank_score": rank},
+        }
+    rows = [
+        row("a", .66, 10, .80),
+        row("b", .64, 9, .70),
+        row("c", .61, 12, .90),
+        row("d", .70, 6, .95),
+    ]
+    selected = select_value_scan_rows(rows, max_rows=10)
+    assert [x["match"].provider_match_id for x in selected] == ["a", "b"]

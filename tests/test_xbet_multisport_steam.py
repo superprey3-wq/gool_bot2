@@ -9,6 +9,7 @@ from gool_bot2.xbet_multisport_steam import (
     _score_candidates,
     _score_sync_allowed,
     _segment_clock_seconds,
+    _v3_to_legacy_market_game,
     detect_prematch_steam,
     detect_steam,
     settle_multisport_pick,
@@ -348,3 +349,48 @@ def test_basketball_q2_boundary_clock_starts_from_zero():
         period="2nd quarter",
         league="Kosovo: Superliga",
     ) == 0
+
+
+def test_v3_gameevents_adapter_builds_decoder_compatible_ae():
+    payload = {
+        "id": 123,
+        "scores": {"scoreOpp1": 21, "scoreOpp2": 18, "currentPeriodName": "2nd quarter"},
+        "eventGroups": [
+            {"groupId": 17, "events": [[
+                {"type": 9, "cf": 1.84, "parameter": 41.5},
+                {"type": 10, "cf": 1.90, "parameter": 41.5},
+            ]]},
+            {"groupId": 15, "events": [[
+                {"type": 11, "cf": 1.86, "parameter": 20.5},
+                {"type": 12, "cf": 1.88, "parameter": 20.5},
+            ]]},
+            {"groupId": 62, "events": [[
+                {"type": 13, "cf": 1.91, "parameter": 20.5},
+                {"type": 14, "cf": 1.82, "parameter": 20.5},
+            ]]},
+        ],
+    }
+    game = _v3_to_legacy_market_game(payload, "123")
+    assert game["_market_source"] == "main-live-feed-v3"
+    assert game["SC"]["FS"] == {"S1": 21, "S2": 18}
+    decoded = __import__("gool_bot2.xbet_multisport_markets", fromlist=["decode_core_markets"]).decode_core_markets(
+        game, "basketball", scope="QUARTER_2"
+    )
+    assert decoded["match_total"][0]["line"] == 41.5
+    assert decoded["home_total"][0]["line"] == 20.5
+    assert decoded["away_total"][0]["line"] == 20.5
+
+
+def test_v3_adapter_keeps_zero_parameter_off_moneyline():
+    game = _v3_to_legacy_market_game({
+        "id": 7,
+        "eventGroups": [{"groupId": 102, "events": [[
+            {"type": 501, "cf": 1.70, "parameter": 0},
+            {"type": 502, "cf": 2.10, "parameter": 0},
+        ]]}],
+    }, "7")
+    decoded = __import__("gool_bot2.xbet_multisport_markets", fromlist=["decode_core_markets"]).decode_core_markets(
+        game, "basketball"
+    )
+    assert decoded["moneyline"]["home"] == 1.70
+    assert decoded["moneyline"]["away"] == 2.10

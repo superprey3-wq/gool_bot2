@@ -102,3 +102,13 @@ def test_basketball_normal_scoring_does_not_create_fake_steam(tmp_path):
     assert len(history) == 4
     assert len({round(float(row["metric"]), 6) for row in history}) == 1
     assert detect_steam(history, cfg, now=48.0, score_changed_at=changed_at) is None
+
+
+def test_production_score_epoch_worker_accepts_base_cfg_argument(tmp_path):
+    worker = ScoreEpochMultiSportSteamWorker(tmp_path)
+    history, changed_at = worker._append_history(
+        _row("basketball", (10, 12), 10.0, 80.0),
+        SPORTS["basketball"],
+    )
+    assert len(history) == 1
+    assert changed_at is None

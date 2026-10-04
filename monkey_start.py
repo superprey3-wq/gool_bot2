@@ -253,7 +253,8 @@ def main() -> None:
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
     os.environ.setdefault("GOOL_MULTISPORT_ENABLED", "1")
-    os.environ.setdefault("GOOL_MULTISPORT_MODE", "shadow")
+    # Monkey is the production runtime: multisport signals must be live here.
+    os.environ["GOOL_MULTISPORT_MODE"] = "active"
     os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
     os.environ.setdefault("GOOL_HOCKEY_ENABLED", "1")
     os.environ.setdefault("GOOL_BASKETBALL_ENABLED", "1")

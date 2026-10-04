@@ -122,7 +122,11 @@ class ScoreEpochMultiSportSteamWorker(MultiSportSteamWorker):
     still marks score_changed_at and applies the immediate post-score guard.
     """
 
-    def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
+    def _append_history(
+        self,
+        row: dict[str, Any],
+        cfg: Any | None = None,
+    ) -> tuple[list[dict[str, Any]], float | None]:
         lane = str(row.get("lane_key") or "FULL_MATCH:match_total")
         key = f"{row['sport']}:{row['event_id']}:{lane}"
         score = (int(row["score"][0]), int(row["score"][1]))
@@ -133,7 +137,7 @@ class ScoreEpochMultiSportSteamWorker(MultiSportSteamWorker):
             and previous_score != score
         ):
             self._history[key].clear()
-        return super()._append_history(row)
+        return super()._append_history(row, cfg)
 
 
 def main() -> None:

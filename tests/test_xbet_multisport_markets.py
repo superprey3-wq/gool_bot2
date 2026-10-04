@@ -2,6 +2,7 @@ from gool_bot2.xbet_multisport_markets import (
     decode_core_markets,
     market_lanes,
     scope_from_subgame,
+    period_scores,
 )
 
 
@@ -57,3 +58,22 @@ def test_every_scope_becomes_independent_total_lanes():
         ("FULL_MATCH", "match_total"),
         ("QUARTER_1", "match_total"),
     }
+
+
+
+def test_period_scores_reads_real_sc_ps_shape_and_builds_halves():
+    game = {
+        "SC": {
+            "PS": [
+                {"Key": 1, "Value": {"S1": 19, "S2": 20, "NF": "1st quarter"}},
+                {"Key": 2, "Value": {"S1": 24, "S2": 18, "NF": "2nd quarter"}},
+                {"Key": 3, "Value": {"S1": 21, "S2": 22, "NF": "3rd quarter"}},
+                {"Key": 4, "Value": {"S1": 20, "S2": 25, "NF": "4th quarter"}},
+            ]
+        }
+    }
+    scores = period_scores(game, "basketball")
+    assert scores["QUARTER_1"] == (19, 20)
+    assert scores["QUARTER_4"] == (20, 25)
+    assert scores["FIRST_HALF"] == (43, 38)
+    assert scores["SECOND_HALF"] == (41, 47)

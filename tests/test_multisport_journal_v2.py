@@ -52,15 +52,24 @@ def test_grouped_stats_keep_prematch_and_live_separate(tmp_path: Path):
 
 
 
-def test_same_event_same_phase_can_store_different_period_scopes(tmp_path: Path):
+def test_same_event_prematch_allows_only_one_pick_across_markets(tmp_path: Path):
     path = tmp_path / "journal.json"
     base = {
-        "sport": "hockey", "phase": "PREMATCH", "event_id": "77",
-        "market_family": "match_total", "direction": "over", "line": 1.5, "odd": 1.8,
+        "sport": "basketball", "phase": "PREMATCH", "event_id": "77",
+        "flashscore_event_id": "FS-77",
+        "home": "Home", "away": "Away", "start_ts": 2_000_000_000,
     }
-    assert append_unique(path, {**base, "scope": "PERIOD_1", "selection": "1-й период: ТБ 1.5"})
-    assert append_unique(path, {**base, "scope": "PERIOD_2", "selection": "2-й период: ТБ 1.5"})
-    assert len(load_journal(path)) == 2
+    assert append_unique(path, {
+        **base, "scope": "FULL_MATCH", "market_family": "match_total",
+        "direction": "over", "line": 160.5, "odd": 1.8, "selection": "ТБ 160.5",
+    })
+    assert not append_unique(path, {
+        **base, "scope": "FULL_MATCH", "market_family": "home_total",
+        "direction": "over", "line": 80.5, "odd": 1.9, "selection": "ИТБ1 80.5",
+    })
+    rows = load_journal(path)
+    assert len(rows) == 1
+    assert rows[0]["selection"] == "ТБ 160.5"
 
 
 def test_same_flashscore_match_dedupes_rotating_xbet_event_ids(tmp_path: Path):

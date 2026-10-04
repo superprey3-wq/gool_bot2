@@ -32,7 +32,17 @@ def leg(p,meta):
 fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); day=datetime.now(MSK).date()
 fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and float(m.meta["scheduled_start_ts"])>now and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
 print("PIPELINE_START",len(fixtures),flush=True)
-update_prematch_status(stage="brain", fixtures=len(fixtures), brain_eligible=0, priced=0)
+update_prematch_status(
+ stage="brain", fixtures=len(fixtures), brain_eligible=0, priced=0,
+ value_hunter_stage="waiting_for_full_market",
+ value_hunter_scanned_matches=0,
+ value_hunter_modeled_markets=0,
+ value_hunter_high_odds_markets=0,
+ value_hunter_qualified=0,
+ value_hunter_candidates=0,
+ value_hunter_sent=0,
+ value_hunter_rejects={},
+)
 rows,fail=_analyse_fixtures(fs,fixtures); rows=[r for r in rows if r.get("primary_trend")]
 update_prematch_status(stage="market_lookup", fixtures=len(fixtures), brain_eligible=len(rows), brain_failures=len(fail))
 print("BRAIN_ELIGIBLE",len(rows),"FAIL",len(fail),flush=True)
@@ -260,7 +270,16 @@ print("VALUE_HUNTER_SCAN",{
  "qualified":value_diag_total["qualified"],
  "rejects":dict(value_diag_total["rejects"]),
 },flush=True)
-update_prematch_status(stage="delivery", priced=len(priced))
+update_prematch_status(
+ stage="delivery",
+ priced=len(priced),
+ value_hunter_stage="scanned",
+ value_hunter_scanned_matches=int(value_diag_total["scanned_matches"]),
+ value_hunter_modeled_markets=int(value_diag_total["modeled_markets"]),
+ value_hunter_high_odds_markets=int(value_diag_total["high_odds_markets"]),
+ value_hunter_qualified=int(value_diag_total["qualified"]),
+ value_hunter_rejects=dict(value_diag_total["rejects"]),
+)
 print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
 max_singles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_SINGLES","0")))

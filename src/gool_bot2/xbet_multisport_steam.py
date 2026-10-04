@@ -104,6 +104,60 @@ def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
     return None
 
 
+def _v3_to_legacy_market_game(payload: dict[str, Any], event_id: str) -> dict[str, Any]:
+    """Adapt main-live-feed/v3/gameEvents into the decoder's AE market shape."""
+    groups = []
+    for group in payload.get("eventGroups") or []:
+        if not isinstance(group, dict):
+            continue
+        try:
+            gid = int(group.get("groupId"))
+        except (TypeError, ValueError):
+            continue
+        selections = []
+        for bucket in group.get("events") or []:
+            rows = bucket if isinstance(bucket, list) else [bucket]
+            for item in rows:
+                if not isinstance(item, dict) or item.get("type") is None:
+                    continue
+                try:
+                    row = {
+                        "T": int(item.get("type")),
+                        "C": float(item.get("cf")),
+                        "B": bool(item.get("blocked") or group.get("blocked") or False),
+                    }
+                except (TypeError, ValueError):
+                    continue
+                parameter = item.get("parameter")
+                try:
+                    p = float(parameter)
+                except (TypeError, ValueError):
+                    p = 0.0
+                # Totals/handicaps need a line. Moneyline's zero parameter must
+                # stay absent so the existing decoder recognises it as 1X2/2way.
+                if gid not in {1, 101, 102} or abs(p) > 1e-12:
+                    row["P"] = p
+                selections.append(row)
+        if selections:
+            groups.append({"G": gid, "ME": selections})
+
+    scores = payload.get("scores") or {}
+    game: dict[str, Any] = {
+        "I": str(payload.get("id") or event_id),
+        "AE": groups,
+        "_market_source": "main-live-feed-v3",
+    }
+    try:
+        s1, s2 = int(scores.get("scoreOpp1")), int(scores.get("scoreOpp2"))
+        game["SC"] = {
+            "FS": {"S1": s1, "S2": s2},
+            "CPS": str(scores.get("currentPeriodName") or ""),
+        }
+    except (TypeError, ValueError):
+        pass
+    return game
+
+
 def _truthy(name: str, default: bool = True) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -1279,7 +1333,8 @@ class MultiSportSteamWorker:
         # hydration must not retry every 1xBet mirror for every quarter/period.
         attempts = max(1, min(2, _int_env("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS", 1)))
         timeout = max(1.0, _float_env("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT", 3.5))
-        for root in list(dict.fromkeys(roots))[:attempts]:
+        live_roots = list(dict.fromkeys(roots))[:attempts]
+        for root in live_roots:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
@@ -1288,6 +1343,39 @@ class MultiSportSteamWorker:
                 else:
                     self._roots[cfg.key] = root
                 return value
+
+        # Basketball LIVE only: if legacy GetGameZip failed for this exact
+        # quarter subgame, ask the current frontend v3 endpoint for the same id.
+        # We deliberately do not use this for parent/full-match scope.
+        if not prematch and cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_V3_SUBGAME_FALLBACK", True):
+            hosts = []
+            for root in live_roots:
+                parsed = urllib.parse.urlsplit(root)
+                if parsed.scheme and parsed.netloc:
+                    hosts.append(f"{parsed.scheme}://{parsed.netloc}")
+            for host in dict.fromkeys(hosts):
+                for gr in (1557, 412):
+                    query = urllib.parse.urlencode([
+                        ("cfView", "3"),
+                        ("countEvents", "250"),
+                        ("fcountry", os.getenv("GOOL_BASKETBALL_V3_FCOUNTRY", "66")),
+                        ("gameId", str(event_id)),
+                        ("gr", str(gr)),
+                        ("grMode", "4"),
+                        ("lng", "en"),
+                        ("marketType", "1"),
+                        ("ref", "1"),
+                    ])
+                    payload = _sport_http_json(
+                        f"{host}/service-api/main-live-feed/v3/gameEvents?{query}",
+                        timeout=max(timeout, 5.0),
+                    )
+                    if not isinstance(payload, dict):
+                        continue
+                    converted = _v3_to_legacy_market_game(payload, event_id)
+                    if converted.get("AE"):
+                        converted["_v3_gr"] = gr
+                        return converted
         return {}
 
     def _cached_subgame(self, sub_id: str, cfg: SportConfig, *, prematch: bool) -> dict[str, Any]:

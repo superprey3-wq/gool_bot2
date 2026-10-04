@@ -268,3 +268,51 @@ def test_multisport_in_game_uses_raw_flashscore_live_even_when_xbet_mapping_is_z
     assert "LIVE · Flashscore" in text
     assert "Ф1 +1.5 @ 1.59" in text
     assert "может проиграть максимум в 1" in text
+
+
+def test_multisport_in_game_recovers_legacy_pick_by_team_names(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "LIVE1234",
+                    "home": "Krylya Sovetov",
+                    "away": "Mikhaylov Academy U20",
+                    "league": "MHL",
+                    "score": [1, 1],
+                    "coarse_status": "2",
+                }],
+                "matches": [],
+            },
+            "basketball": {
+                "flashscore_live_matches": [],
+                "matches": [],
+            },
+        },
+    })
+
+    _write(journal, [{
+        "sport": "hockey",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "OLD00000",
+        "home": "Krylya Sovetov",
+        "away": "Mikhaylov Academy U20",
+        "selection": "Ф1 +1.5",
+        "market_family": "handicap",
+        "selection_side": "home",
+        "line": 1.5,
+        "odd": 1.59,
+        "scope": "FULL_MATCH",
+    }])
+
+    text = "\n".join(multisport_in_game_sections())
+    assert "Krylya Sovetov — Mikhaylov Academy U20" in text
+    assert "1:1" in text
+    assert "Ф1 +1.5 @ 1.59" in text

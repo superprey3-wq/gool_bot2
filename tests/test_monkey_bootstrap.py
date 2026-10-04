@@ -72,3 +72,11 @@ def test_production_check_accepts_trained_model_head_names(tmp_path, monkeypatch
     output = capsys.readouterr().out
     assert '"status": "ready"' in output
     assert '"errors": []' in output
+
+
+def test_monkey_launches_multisport_as_separate_process():
+    source = (Path(__file__).resolve().parents[1] / "monkey_start.py").read_text("utf-8")
+    assert '"multisport": [' in source
+    assert '"gool_bot2.xbet_multisport_steam"' in source
+    assert 'GOOL_MULTISPORT_EMBEDDED_ENABLED"] = "0"' in source
+    assert 'child_env["GOOL_FOOTBALL_AUTOINSTALL"] = "0"' in source

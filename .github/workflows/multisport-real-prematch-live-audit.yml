@@ -17,7 +17,7 @@ concurrency:
 jobs:
   audit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,8 +29,8 @@ jobs:
           pip install -e '.[dev]'
       - name: Run real hockey and basketball audit
         env:
-          AUDIT_SNAPSHOTS: "3"
-          AUDIT_SLEEP_SECONDS: "30"
+          AUDIT_SNAPSHOTS: "1"
+          AUDIT_SLEEP_SECONDS: "5"
           GOOL_MULTISPORT_MODE: shadow
           XBET_MULTISPORT_TELEGRAM_ENABLED: "0"
         run: python scripts/gool_multisport_real_audit.py

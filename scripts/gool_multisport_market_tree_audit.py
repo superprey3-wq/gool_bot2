@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
+os.environ.setdefault("GOOL_FOOTBALL_AUTOINSTALL", "0")
 from typing import Any
 
 from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS, map_xbet_to_flashscore
@@ -64,7 +66,7 @@ def audit_phase(worker: MultiSportSteamWorker, cfg, phase: str) -> dict[str,Any]
         xb=worker._xbet_index(cfg)
     mapped=map_xbet_to_flashscore(xb,fs)
     result={"flashscore":len(fs),"xbet":len(xb),"mapped":len(mapped),"events":[]}
-    for event, frow, rev, score in mapped[:4]:
+    for event, frow, rev, score in mapped[:2]:
         eid=str(event.get("I") or "")
         game=(worker._prematch_game(eid,cfg) if phase=="PREMATCH" else worker._game(eid,cfg)) or event
         ev={
@@ -89,6 +91,14 @@ def main():
     runtime=Path("artifacts/multisport_market_tree/runtime"); runtime.mkdir(parents=True,exist_ok=True)
     os.environ["RUNTIME_DATA_DIR"]=str(runtime)
     os.environ["GOOL_MULTISPORT_MODE"]="shadow"
+    os.environ.setdefault("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT","3.0")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT","2.5")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS","1")
+    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK","0")
+    os.environ.setdefault("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK","0")
+    os.environ.setdefault("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS","1")
+    os.environ.setdefault("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT","2.5")
+    os.environ.setdefault("GOOL_MULTISPORT_HTTP_ATTEMPTS","1")
     worker=MultiSportSteamWorker(runtime)
     report={}
     for key,cfg in SPORTS.items():

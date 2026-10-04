@@ -1,5 +1,6 @@
 """gool_bot2 live-football probability engine."""
 
+import os
 from typing import Any
 
 from . import goal_state_policy as _goal_state_policy
@@ -68,29 +69,36 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
 
-# Production has exactly two public signal lanes:
-# 1) ordinary GOOL Brain; 2) autonomous 1xBet STEAM.
-# Exchange money-flow systems are intentionally not installed here.
-install_architecture_isolation()
-install_production_calibration()
-_goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
-install_xbet_trajectory_hardening()
-install_live_goal_hazard()
-install_steam_quality_hardening()
-# Install after quality hardening so a red card wraps the final STEAM candidate
-# builder and cannot be bypassed by an earlier autonomous-market patch.
-install_steam_red_card_guard()
-install_runtime_fastlane()
-install_brain_v3_memory()
-# Browser wrapper must be installed after memory so it attaches fresh Chromium
-# fallback stats before the memory wrapper takes its per-minute snapshot.
-install_browser_context_runtime()
-install_brain_v3_learning_runtime()
-install_brain_v3_activation()
-install_brain_v3_selection_hardening()
-# A candidate that deteriorated on a football pass cannot be resurrected by a
-# market-only price refresh. It needs another genuinely fresh football scan.
-install_brain_v3_candidate_stability()
-# Wrap the already-installed fastlane last: fresh football passes receive scan ids,
-# while market rechecks can only confirm a round after the whole field was visited.
-install_brain_v3_field_scan_runtime()
+def _football_autoinstall_enabled() -> bool:
+    raw = os.getenv("GOOL_FOOTBALL_AUTOINSTALL", "1")
+    return str(raw).strip().casefold() not in {"0", "false", "no", "off"}
+
+
+if _football_autoinstall_enabled():
+    # Production has exactly two public signal lanes:
+    # 1) ordinary GOOL Brain; 2) autonomous 1xBet STEAM.
+    # Exchange money-flow systems are intentionally not installed here.
+    install_architecture_isolation()
+    install_production_calibration()
+    _goal_state_policy.enforce_goal_state_policy = _final_live_brain_policy
+    install_xbet_trajectory_hardening()
+    install_live_goal_hazard()
+    install_steam_quality_hardening()
+    # Install after quality hardening so a red card wraps the final STEAM candidate
+    # builder and cannot be bypassed by an earlier autonomous-market patch.
+    install_steam_red_card_guard()
+    install_runtime_fastlane()
+    install_brain_v3_memory()
+    # Browser wrapper must be installed after memory so it attaches fresh Chromium
+    # fallback stats before the memory wrapper takes its per-minute snapshot.
+    install_browser_context_runtime()
+    install_brain_v3_learning_runtime()
+    install_brain_v3_activation()
+    install_brain_v3_selection_hardening()
+    # A candidate that deteriorated on a football pass cannot be resurrected by a
+    # market-only price refresh. It needs another genuinely fresh football scan.
+    install_brain_v3_candidate_stability()
+    # Wrap the already-installed fastlane last: fresh football passes receive scan ids,
+    # while market rechecks can only confirm a round after the whole field was visited.
+    install_brain_v3_field_scan_runtime()
+

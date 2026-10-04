@@ -182,7 +182,10 @@ def main() -> None:
 
     multisport: MultiSportSteamWorker | None = None
     multisport_thread: threading.Thread | None = None
-    if _enabled("GOOL_MULTISPORT_ENABLED", _enabled("XBET_MULTISPORT_STEAM_ENABLED", True)):
+    if _enabled(
+        "GOOL_MULTISPORT_EMBEDDED_ENABLED",
+        _enabled("GOOL_MULTISPORT_ENABLED", _enabled("XBET_MULTISPORT_STEAM_ENABLED", True)),
+    ):
         multisport = ScoreEpochMultiSportSteamWorker(runtime)
         multisport_interval = max(
             8.0,

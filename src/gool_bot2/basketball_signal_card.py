@@ -101,7 +101,15 @@ def render_basketball_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:A
     open_odd=float(start.get(direction) or row.get("opening_odd") or odd)
     line=float(signal.get("line") or 0)
     d.rounded_rectangle((42,565,1038,690),20,fill=PANEL,outline=LINE,width=2)
-    d.text((68,584),"ДВИЖЕНИЕ ТОТАЛА",font=sc._font(14,True),fill=MUTED)
+    family=str(row.get("market_family") or signal.get("market_family") or "match_total")
+    family_title={
+        "match_total":"ДВИЖЕНИЕ ТОТАЛА МАТЧА",
+        "home_total":"ДВИЖЕНИЕ ИТ1",
+        "away_total":"ДВИЖЕНИЕ ИТ2",
+        "handicap":"ДВИЖЕНИЕ ФОРЫ",
+        "moneyline":"ДВИЖЕНИЕ ИСХОДА",
+    }.get(family,"ДВИЖЕНИЕ РЫНКА")
+    d.text((68,584),family_title,font=sc._font(14,True),fill=MUTED)
     move=f"{open_line:g} → {line:g}   •   {open_odd:.2f} → {odd:.2f}   •   R{float(signal.get('strength') or 0):.0f}"
     d.text((68,628),move,font=sc._fit(d,move,920,28,True),fill=ORANGE)
     d.rounded_rectangle((42,720,1038,810),18,fill=PANEL,outline=LINE,width=2)

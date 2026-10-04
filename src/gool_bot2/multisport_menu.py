@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
+from .xbet_multisport_markets import SCOPE_LABEL_RU
 
 
 SPORT_META = {
@@ -55,6 +56,47 @@ def _sport_rows(sport: str, phase: str | None = None) -> list[dict[str, Any]]:
 
 def _record_text(rows: list[dict[str, Any]]) -> str:
     return stat_line(stats([normalize_entry(row) for row in rows]))
+
+
+def _coverage_summary(matches: list[dict[str, Any]]) -> str:
+    scopes: dict[str, dict[str, int]] = {}
+    unknown: set[tuple[Any, Any, Any]] = set()
+    failed: set[str] = set()
+    for row in matches:
+        coverage = row.get("market_coverage") or {}
+        if isinstance(coverage, dict):
+            for scope, value in coverage.items():
+                if not isinstance(value, dict):
+                    continue
+                target = scopes.setdefault(str(scope), {"T": 0, "IT1": 0, "IT2": 0, "F": 0, "ML": 0})
+                target["T"] += int(int(value.get("match_total_lines") or 0) > 0)
+                target["IT1"] += int(int(value.get("home_total_lines") or 0) > 0)
+                target["IT2"] += int(int(value.get("away_total_lines") or 0) > 0)
+                target["F"] += int(int(value.get("handicap_lines") or 0) > 0)
+                target["ML"] += int(bool(value.get("moneyline")))
+                if str(value.get("fetch") or "") == "failed":
+                    failed.add(str(scope))
+        for item in row.get("unknown_market_catalog") or []:
+            if isinstance(item, dict):
+                unknown.add((item.get("G"), item.get("GS"), item.get("T")))
+    if not scopes:
+        return "Рынки: данных пока нет."
+    lines = ["<b>Покрытие рынков</b>"]
+    for scope in sorted(scopes, key=lambda s: (s != "FULL_MATCH", s)):
+        value = scopes[scope]
+        label = SCOPE_LABEL_RU.get(scope, scope)
+        offered = []
+        if value["T"]: offered.append(f"ТБ/ТМ×{value['T']}")
+        if value["IT1"]: offered.append(f"ИТ1×{value['IT1']}")
+        if value["IT2"]: offered.append(f"ИТ2×{value['IT2']}")
+        if value["F"]: offered.append(f"фора×{value['F']}")
+        if value["ML"]: offered.append(f"исход×{value['ML']}")
+        lines.append(f"• {label}: " + (" · ".join(offered) if offered else "рынки не декодированы"))
+    if unknown:
+        lines.append(f"• raw неизвестных G/GS/T: <b>{len(unknown)}</b> (сохраняются для обучения декодера)")
+    if failed:
+        lines.append("• ⚠️ sub-game fetch failed: " + ", ".join(SCOPE_LABEL_RU.get(x, x) for x in sorted(failed)))
+    return "\n".join(lines)
 
 
 def multisport_status_text() -> str:
@@ -111,14 +153,15 @@ def sport_overview_text(sport: str) -> str:
             signal = row.get("signal") or {}
             signal_text = ""
             if signal:
-                side = "ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ"
-                signal_text = f" · 🔥 {side} {float(signal.get('line') or line):g} R{float(signal.get('strength') or 0):.0f}"
+                label = str(signal.get("selection") or ("ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ") + f" {float(signal.get('line') or line):g}")
+                signal_text = f" · 🔥 {label} R{float(signal.get('strength') or 0):.0f}"
             lines.append(
                 f"<b>{row.get('home','?')} — {row.get('away','?')}</b>\n"
                 f"🏆 {row.get('league') or '?'} · 🕐 {start_label}\n"
                 f"↳ тотал {line:g} · ТБ {over:.2f} / ТМ {under:.2f}{signal_text}"
             )
         parts.append("\n\n".join(lines))
+        parts.append(_coverage_summary(prematch_matches))
     else:
         parts.append("🟡 <b>PREMATCH</b>\nВ ближайшем окне пока нет синхронизированных матчей.")
 
@@ -134,13 +177,14 @@ def sport_overview_text(sport: str) -> str:
             signal = row.get("signal") or row.get("steam") or {}
             signal_text = ""
             if signal:
-                side = "ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ"
-                signal_text = f" · 🔥 {side} {float(signal.get('line') or line):g} R{float(signal.get('strength') or 0):.0f}"
+                label = str(signal.get("selection") or ("ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ") + f" {float(signal.get('line') or line):g}")
+                signal_text = f" · 🔥 {label} R{float(signal.get('strength') or 0):.0f}"
             lines.append(
                 f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
                 f"↳ тотал {line:g} · ТБ {over:.2f} / ТМ {under:.2f}{signal_text}"
             )
         parts.append("\n\n".join(lines))
+        parts.append(_coverage_summary(live_matches))
     else:
         parts.append("🔴 <b>LIVE</b>\nСейчас нет синхронизированных матчей.")
 

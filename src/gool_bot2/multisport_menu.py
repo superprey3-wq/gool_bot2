@@ -188,28 +188,50 @@ def sport_overview_text(sport: str) -> str:
     else:
         parts.append("🟡 <b>PREMATCH</b>\nВ ближайшем окне пока нет синхронизированных матчей.")
 
-    live_matches = [row for row in (current.get("matches") or []) if isinstance(row, dict)]
-    if live_matches:
-        lines = [f"🔴 <b>LIVE · СЕЙЧАС</b> · {len(live_matches)}"]
-        for row in live_matches[:6]:
+    # Football-style online view: Flashscore defines which games are LIVE.
+    # 1xBet mapping only enriches those rows with markets/Brain state.
+    fresh_live = _direct_flashscore_live(sport)
+    saved_live = [
+        row for row in (current.get("flashscore_live_matches") or [])
+        if isinstance(row, dict)
+    ]
+    live_by_fs = {
+        str(row.get("flashscore_event_id") or ""): dict(row)
+        for row in [*saved_live, *fresh_live]
+        if str(row.get("flashscore_event_id") or "")
+    }
+    mapped_by_fs = {
+        str(row.get("flashscore_event_id") or ""): dict(row)
+        for row in (current.get("matches") or [])
+        if isinstance(row, dict) and str(row.get("flashscore_event_id") or "")
+    }
+    if live_by_fs:
+        lines = [f"🔴 <b>LIVE · АНАЛИЗ ОНЛАЙН</b> · {len(live_by_fs)}"]
+        for fs_id, raw in list(live_by_fs.items())[:10]:
+            row = {**raw, **mapped_by_fs.get(fs_id, {})}
             score = list(row.get("score") or [0, 0])
-            period = str(row.get("period") or "LIVE")
-            line = float(row.get("line") or 0.0)
-            over = float(row.get("over") or 0.0)
-            under = float(row.get("under") or 0.0)
+            period = str(row.get("period") or row.get("status_code") or "LIVE")
+            mapped = fs_id in mapped_by_fs
             signal = row.get("signal") or row.get("steam") or {}
-            signal_text = ""
-            if signal:
-                label = str(signal.get("selection") or ("ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ") + f" {float(signal.get('line') or line):g}")
-                signal_text = f" · 🔥 {label} R{float(signal.get('strength') or 0):.0f}"
+            brain = "🔥 SIGNAL" if signal else ("🧠 анализ" if mapped else "⏳ ждём 1xBet")
+            market_text = ""
+            if mapped:
+                line = float(row.get("line") or 0.0)
+                over = float(row.get("over") or 0.0)
+                under = float(row.get("under") or 0.0)
+                market_text = f" · тотал {line:g} · ТБ {over:.2f} / ТМ {under:.2f}"
             lines.append(
                 f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
-                f"↳ тотал {line:g} · ТБ {over:.2f} / ТМ {under:.2f}{signal_text}"
+                f"↳ 1xBet {'✅' if mapped else '⏳'} · {brain}{market_text}"
             )
         parts.append("\n\n".join(lines))
-        parts.append(_coverage_summary(live_matches))
+        mapped_rows = list(mapped_by_fs.values())
+        if mapped_rows:
+            parts.append(_coverage_summary(mapped_rows))
     else:
-        parts.append("🔴 <b>LIVE</b>\nСейчас нет синхронизированных матчей.")
+        parts.append("🔴 <b>LIVE · АНАЛИЗ ОНЛАЙН</b>\nFlashscore сейчас не показывает матчей LIVE.")
+
+    return "\n\n────────────\n\n".join(parts)
 
     return "\n\n────────────\n\n".join(parts)
 
@@ -301,6 +323,47 @@ def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
             if str(row.get("coarse_status") or "") == "2":
                 merged[str(row.get("flashscore_event_id") or "")] = dict(row)
     return list(merged.values())
+
+
+def multisport_live_analysis_sections() -> list[str]:
+    """Football-style view of every Flashscore LIVE hockey/basketball game."""
+    state = _load_json(state_path(), {})
+    sports_state = state.get("sports") if isinstance(state, dict) else {}
+    sports_state = sports_state if isinstance(sports_state, dict) else {}
+    sections = ["🏟 <b>ХОККЕЙ / БАСКЕТБОЛ · АНАЛИЗ ОНЛАЙН</b>"]
+
+    for sport in ("hockey", "basketball"):
+        icon, title = SPORT_META[sport]
+        current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
+        fresh = _direct_flashscore_live(sport)
+        saved = [row for row in (current.get("flashscore_live_matches") or []) if isinstance(row, dict)]
+        live_by_fs = {
+            str(row.get("flashscore_event_id") or ""): dict(row)
+            for row in [*saved, *fresh]
+            if str(row.get("flashscore_event_id") or "")
+        }
+        mapped_by_fs = {
+            str(row.get("flashscore_event_id") or ""): dict(row)
+            for row in (current.get("matches") or [])
+            if isinstance(row, dict) and str(row.get("flashscore_event_id") or "")
+        }
+        if not live_by_fs:
+            sections.append(f"{icon} <b>{title}</b> · онлайн матчей нет")
+            continue
+        lines = [f"{icon} <b>{title}</b> · онлайн <b>{len(live_by_fs)}</b>"]
+        for fs_id, raw in list(live_by_fs.items())[:8]:
+            row = {**raw, **mapped_by_fs.get(fs_id, {})}
+            score = list(row.get("score") or [0, 0])
+            period = str(row.get("period") or row.get("status_code") or "LIVE")
+            mapped = fs_id in mapped_by_fs
+            signal = row.get("signal") or row.get("steam") or {}
+            status = "🔥 SIGNAL" if signal else ("🧠 анализирует" if mapped else "⏳ ждёт линию 1xBet")
+            lines.append(
+                f"• <b>{row.get('home','?')} — {row.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
+                f"  ↳ {status}"
+            )
+        sections.append("\n".join(lines))
+    return sections
 
 
 def multisport_in_game_sections() -> list[str]:

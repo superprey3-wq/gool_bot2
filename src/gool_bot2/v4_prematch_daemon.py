@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import fcntl
 import sys
 import time
 from datetime import datetime, timezone
@@ -30,6 +31,18 @@ def _deliver_results() -> None:
 
 
 def main() -> None:
+    # Only one discovery daemon may own PREMATCH scheduling/status on a server.
+    # A blocking flock is intentional: if a panel restart briefly leaves an old
+    # process alive, the replacement waits instead of launching overlapping
+    # discovery cycles that can overwrite each other's status.
+    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
+    lock_path = Path(os.getenv("GOOL_PREMATCH_DAEMON_LOCK", str(runtime / "live" / "prematch_daemon.lock")))
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_handle = lock_path.open("a+")
+    print(f"GOOL_PREMATCH daemon_lock_wait path={lock_path}", flush=True)
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+    print(f"GOOL_PREMATCH daemon_lock_acquired pid={os.getpid()}", flush=True)
+
     discovery_interval = max(1800, int(os.getenv("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")))
     result_interval = max(30, int(os.getenv("GOOL_PREMATCH_RESULT_INTERVAL_SECONDS", "60")))
     cycle_timeout = max(1800, int(os.getenv("GOOL_PREMATCH_CYCLE_TIMEOUT_SECONDS", "7200")))

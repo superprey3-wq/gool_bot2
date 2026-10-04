@@ -1134,6 +1134,12 @@ def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
             "status_code": str(fields.get("AC") or ""),
             "coarse_status": str(fields.get("AB") or ""),
             "start_ts": _as_int(fields.get("AD") or fields.get("AO"), 0),
+            "home_team_id": str(fields.get("JA") or "").strip(),
+            "away_team_id": str(fields.get("JB") or "").strip(),
+            "home_team_slug": str(fields.get("WU") or "").strip(),
+            "away_team_slug": str(fields.get("WV") or "").strip(),
+            "home_logo_file": str(fields.get("OA") or "").strip(),
+            "away_logo_file": str(fields.get("OB") or "").strip(),
         }
     return list(rows.values())
 

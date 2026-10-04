@@ -43,15 +43,59 @@ update_prematch_status(
  value_hunter_sent=0,
  value_hunter_rejects={},
 )
-rows,fail=_analyse_fixtures(fs,fixtures); rows=[r for r in rows if r.get("primary_trend")]
-update_prematch_status(stage="market_lookup", fixtures=len(fixtures), brain_eligible=len(rows), brain_failures=len(fail))
-print("BRAIN_ELIGIBLE",len(rows),"FAIL",len(fail),flush=True)
+analysed_rows,fail=_analyse_fixtures(fs,fixtures)
+stage1_rows=[r for r in analysed_rows if r.get("primary_trend")]
+sample_ge6=sum(1 for r in analysed_rows if int(r.get("sample") or 0)>=6)
+profile_available=sum(
+ 1 for r in analysed_rows
+ if bool((r.get("profile") or {}).get("full_match",{}).get("available"))
+)
+update_prematch_status(
+ stage="market_lookup",
+ fixtures=len(fixtures),
+ brain_analysed=len(analysed_rows),
+ brain_stage1_eligible=len(stage1_rows),
+ brain_sample_ge6=sample_ge6,
+ brain_profile_available=profile_available,
+ brain_eligible=len(stage1_rows),
+ brain_failures=len(fail),
+)
+print(
+ "BRAIN_STAGE1",
+ {"fixtures":len(fixtures),"analysed":len(analysed_rows),"sample_ge6":sample_ge6,
+  "profile_available":profile_available,"eligible":len(stage1_rows),"failures":len(fail)},
+ flush=True,
+)
 
-# Second-stage football confirmation. Do not fan out secondary providers across the
-# whole slate: only candidates that already passed the cheap Flashscore brain are enriched.
-fusion_limit=max(0,min(80,int(os.getenv("GOOL_PREMATCH_FUSION_LIMIT","40"))))
+# Second-stage football confirmation. Normally enrich the strongest stage-1
+# candidates. If Flashscore H2H is temporarily thin, use a bounded rescue pool
+# so independent FotMob/365Scores evidence can recover the pipeline instead of
+# allowing one source to reduce the whole day to zero bets.
+base_fusion_limit=max(0,min(80,int(os.getenv("GOOL_PREMATCH_FUSION_LIMIT","40"))))
+rescue_trigger=max(0,int(os.getenv("GOOL_PREMATCH_FUSION_RESCUE_TRIGGER","20")))
+fusion_limit=80 if len(stage1_rows)<rescue_trigger else base_fusion_limit
+fusion_limit=max(base_fusion_limit,min(80,fusion_limit))
 fusion_workers=max(2,min(12,int(os.getenv("GOOL_PREMATCH_FUSION_WORKERS","6"))))
-fusion_rows=rows[:fusion_limit]
+
+stage1_ids={str(r["match"].provider_match_id) for r in stage1_rows}
+rescue_pool=[r for r in analysed_rows if str(r["match"].provider_match_id) not in stage1_ids]
+rescue_pool.sort(
+ key=lambda r:(
+  bool((r.get("profile") or {}).get("full_match",{}).get("available")),
+  int(r.get("sample") or 0),
+  -float((r["match"].meta or {}).get("scheduled_start_ts") or 0),
+ ),
+ reverse=True,
+)
+fusion_rows=list(stage1_rows[:fusion_limit])
+if len(fusion_rows)<fusion_limit:
+ fusion_rows.extend(rescue_pool[:fusion_limit-len(fusion_rows)])
+rescue_requested=sum(1 for r in fusion_rows if str(r["match"].provider_match_id) not in stage1_ids)
+print(
+ "PREMATCH_FUSION_PLAN",
+ {"stage1":len(stage1_rows),"limit":fusion_limit,"rescue_requested":rescue_requested},
+ flush=True,
+)
 if fusion_rows:
  def enrich(r):
   try:
@@ -72,10 +116,31 @@ if fusion_rows:
   for fut in as_completed([pool.submit(enrich,r) for r in fusion_rows]):
    row,err=fut.result(); enriched.append(row); fusion_fail+=int(bool(err))
  by_id={str(r["match"].provider_match_id):r for r in enriched}
- rows=[by_id.get(str(r["match"].provider_match_id),r) for r in rows]
+ # Keep every original stage-1 candidate and add any rescue fixture that becomes
+ # evidence-backed after Fusion. Do not discard non-enriched stage-1 rows.
+ rows=[by_id.get(str(r["match"].provider_match_id),r) for r in stage1_rows]
+ existing_ids={str(r["match"].provider_match_id) for r in rows}
+ rescued=[]
+ for r in enriched:
+  event_id=str(r["match"].provider_match_id)
+  if event_id in existing_ids or not r.get("primary_trend"):
+   continue
+  rows.append(r); existing_ids.add(event_id); rescued.append(r)
  rows=[r for r in rows if r.get("primary_trend")]
  rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
- print("PREMATCH_FUSION",{"checked":len(fusion_rows),"kept":len(rows),"fail":fusion_fail},flush=True)
+ print(
+  "PREMATCH_FUSION",
+  {"checked":len(fusion_rows),"kept":len(rows),"rescued":len(rescued),"fail":fusion_fail},
+  flush=True,
+ )
+ update_prematch_status(
+  stage="market_lookup",
+  brain_stage1_eligible=len(stage1_rows),
+  fusion_checked=len(fusion_rows),
+  fusion_rescue_requested=rescue_requested,
+  fusion_rescued=len(rescued),
+  fusion_failures=fusion_fail,
+ )
 
 # Stage 2: once the cheap scan has produced candidates, normalize every
 # surviving row onto the same evidence-quality scale. Enriched rows naturally

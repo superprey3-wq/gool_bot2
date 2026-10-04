@@ -533,3 +533,99 @@ def test_parent_game_uses_v3_gameevents_when_legacy_getgamezip_fails(tmp_path, m
         game, "basketball"
     )
     assert decoded["match_total"][0]["line"] == 81.5
+
+
+def test_v3_embedded_subgame_market_decodes_without_extra_fetch(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    game = _v3_to_legacy_market_game({
+        "id": 123,
+        "scores": {
+            "scoreOpp1": 44,
+            "scoreOpp2": 41,
+            "currentPeriodName": "3rd quarter",
+        },
+        "eventGroups": [],
+        "subGamesForMainGame": [{
+            "id": 901,
+            "period": 3,
+            "subGameName": "3rd quarter",
+            "eventGroups": [{
+                "groupId": 17,
+                "events": [[
+                    {"type": 9, "cf": 1.84, "parameter": 39.5},
+                    {"type": 10, "cf": 1.90, "parameter": 39.5},
+                ]],
+            }],
+        }],
+    }, "123")
+    monkeypatch.setattr(worker, "_cached_subgame", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("network fetch should not happen")))
+    decoded, meta = worker._market_tree(
+        game,
+        SPORTS["basketball"],
+        prematch=False,
+        wanted_scopes={"QUARTER_3"},
+    )
+    assert decoded["QUARTER_3"]["match_total"][0]["line"] == 39.5
+    assert meta["subgame_fetch"]["QUARTER_3"] == "embedded_v3"
+
+
+def test_prematch_index_uses_current_get1x2_zip_when_legacy_is_empty(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: None)
+
+    def fake_v3(host, path, ordered_query, timeout=8.0):
+        if path.endswith("/Get1x2_Zip"):
+            return {
+                "Value": [{
+                    "I": 321,
+                    "O1E": "Alpha",
+                    "O2E": "Beta",
+                    "SI": 3,
+                    "L": "Test League",
+                }]
+            }
+        return None
+
+    monkeypatch.setattr(steam, "_sport_v3_json", fake_v3)
+    rows = worker._xbet_prematch_index(SPORTS["basketball"])
+    assert len(rows) == 1
+    assert rows[0]["I"] == 321
+    assert rows[0]["O1"] == "Alpha"
+    assert rows[0]["O2"] == "Beta"
+    assert rows[0]["_current_linefeed"] is True
+    assert worker._prematch_index_diag["basketball"]["source"] == "current_linefeed_get1x2_zip"
+
+
+def test_prematch_game_uses_current_getgamezip_when_legacy_is_empty(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: None)
+
+    def fake_v3(host, path, ordered_query, timeout=8.0):
+        if path.endswith("/GetGameZip"):
+            return {
+                "Value": {
+                    "I": 321,
+                    "O1": "Alpha",
+                    "O2": "Beta",
+                    "AE": [{
+                        "G": 17,
+                        "ME": [
+                            {"T": 9, "P": 165.5, "C": 1.86},
+                            {"T": 10, "P": 165.5, "C": 1.88},
+                        ],
+                    }],
+                }
+            }
+        return None
+
+    monkeypatch.setattr(steam, "_sport_v3_json", fake_v3)
+    game = worker._prematch_game("321", SPORTS["basketball"])
+    assert game is not None
+    decoded = __import__("gool_bot2.xbet_multisport_markets", fromlist=["decode_core_markets"]).decode_core_markets(
+        game, "basketball"
+    )
+    assert decoded["match_total"][0]["line"] == 165.5

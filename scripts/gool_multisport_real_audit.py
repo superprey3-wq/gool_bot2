@@ -42,6 +42,7 @@ def main() -> None:
         print(f"AUDIT_SNAPSHOT {idx + 1}/{snapshots}")
         for sport in ("hockey", "basketball"):
             row = (state.get("sports") or {}).get(sport) or {}
+            would_live = _n(row.get("detected"))
             print(
                 f"{sport.upper()} "
                 f"PRE fs={_n(row.get('flashscore_prematch'))} xb={_n(row.get('xbet_prematch'))} "
@@ -49,9 +50,21 @@ def main() -> None:
                 f"signals={_n(row.get('prematch_detected'))} decode_fail={_n(row.get('prematch_market_decode_failed'))} | "
                 f"LIVE fs={_n(row.get('flashscore_live'))} xb={_n(row.get('xbet_live'))} "
                 f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))} "
-                f"signals={_n(row.get('detected'))} mismatch={_n(row.get('score_mismatch'))} "
+                f"signals={would_live} mismatch={_n(row.get('score_mismatch'))} "
                 f"decode_fail={_n(row.get('market_decode_failed'))} policy_skip={_n(row.get('policy_blocked'))}"
             )
+            print(f"WOULD_SEND_NOW sport={sport} phase=LIVE bets={would_live}")
+            if would_live:
+                for match in row.get("matches") or []:
+                    for sig in match.get("signals") or []:
+                        print(
+                            "WOULD_SEND_PICK "
+                            f"sport={sport} match={match.get('home')}--{match.get('away')} "
+                            f"scope={sig.get('scope')} selection={sig.get('selection')} "
+                            f"odd={float(sig.get('odd') or 0):.2f} strength={float(sig.get('strength') or 0):.0f} "
+                            f"projection={float(sig.get('projected_total') or 0):.2f} "
+                            f"stat_edge={float(sig.get('stat_edge') or 0):.2f}"
+                        )
         if idx + 1 < snapshots:
             time.sleep(sleep_seconds)
 
@@ -107,6 +120,7 @@ def main() -> None:
             f"- Mapped: **{_n(row.get('mapped'))}**",
             f"- Decoded main totals: **{_n(row.get('decoded'))}**",
             f"- Signals this snapshot: **{_n(row.get('detected'))}**",
+            f"- **WOULD SEND NOW (LIVE): {_n(row.get('detected'))} bets**",
             f"- Score mismatches: **{_n(row.get('score_mismatch'))}**",
             f"- Market decode failures: **{_n(row.get('market_decode_failed'))}**",
             f"- Policy-skipped LIVE lanes: **{_n(row.get('policy_blocked'))}**",
@@ -128,7 +142,11 @@ def main() -> None:
                 signal = ""
                 if sig:
                     side = "OVER" if str(sig.get("direction") or "over") == "over" else "UNDER"
-                    signal = f" | SIGNAL {side} {float(sig.get('line') or 0):g} @{float(sig.get('odd') or 0):.2f} R{float(sig.get('strength') or 0):.0f}"
+                    signal = (
+                        f" | WOULD SEND {side} {float(sig.get('line') or 0):g} @{float(sig.get('odd') or 0):.2f} "
+                        f"R{float(sig.get('strength') or 0):.0f} "
+                        f"proj={float(sig.get('projected_total') or 0):.2f} edge={float(sig.get('stat_edge') or 0):.2f}"
+                    )
                 lines.append(
                     f"- {x.get('home')} — {x.get('away')} | total {float(x.get('line') or 0):g} "
                     f"O {float(x.get('over') or 0):.2f} / U {float(x.get('under') or 0):.2f}{signal}"

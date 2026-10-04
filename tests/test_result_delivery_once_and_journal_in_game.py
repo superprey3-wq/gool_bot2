@@ -151,3 +151,76 @@ def test_in_game_prematch_markets_are_human_readable(tmp_path):
     assert "Обе забьют — Да @ 1.70" in text
     assert "match_total" not in text
     assert "home_total" not in text
+
+
+def test_value_prematch_enters_in_game_only_at_kickoff(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    analysis.write_text("", "utf-8")
+    now = 1_800_000_000.0
+    monkeypatch.setattr(journal_in_game.time, "time", lambda: now)
+
+    future = {
+        "entry_id": "value:future",
+        "entry_key": "value:future",
+        "match_id": "fs-value-future",
+        "home": "Future",
+        "away": "Match",
+        "origin": "prematch_value",
+        "product": "value_hunter",
+        "lifecycle": "scheduled",
+        "kickoff_ts": now + 600,
+        "mode": "active",
+        "result": "pending",
+        "telegram_sent": True,
+        "minute": 0,
+        "score": [0, 0],
+        "market": "match_total",
+        "selection": "over 3.5",
+        "odd": 3.10,
+    }
+    started = {
+        **future,
+        "entry_id": "value:started",
+        "entry_key": "value:started",
+        "match_id": "fs-value-started",
+        "home": "Started",
+        "kickoff_ts": now - 1,
+    }
+    journal.write_text(json.dumps([future, started]), "utf-8")
+
+    text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
+
+    assert "Future" not in text
+    assert "Started" in text
+    assert "ТБ 3.5 @ 3.10" in text
+
+
+def test_regular_prematch_also_enters_in_game_by_kickoff_time(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    analysis.write_text("", "utf-8")
+    now = 1_800_000_000.0
+    monkeypatch.setattr(journal_in_game.time, "time", lambda: now)
+    row = {
+        "entry_id": "prematch:started",
+        "entry_key": "prematch:started",
+        "match_id": "fs-started",
+        "home": "A",
+        "away": "B",
+        "origin": "prematch",
+        "lifecycle": "scheduled",
+        "kickoff_ts": now,
+        "mode": "active",
+        "result": "pending",
+        "telegram_sent": True,
+        "minute": 0,
+        "score": [0, 0],
+        "market": "match_total",
+        "selection": "under 2.5",
+        "odd": 1.90,
+    }
+    journal.write_text(json.dumps([row]), "utf-8")
+    text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
+    assert "A" in text
+    assert "ТМ 2.5 @ 1.90" in text

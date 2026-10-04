@@ -29,9 +29,9 @@ def _stage1_profile():
         "full_match": {
             "available": True,
             "pair_sample": 8,
-            "expected_total": 3.2,
-            "home_expected_goals": 1.7,
-            "away_expected_goals": 1.0,
+            "expected_total": 3.6,
+            "home_expected_goals": 1.8,
+            "away_expected_goals": 1.1,
         },
         "sources": ["flashscore_h2h"],
     }

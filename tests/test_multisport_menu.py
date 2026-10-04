@@ -10,6 +10,7 @@ from gool_bot2.multisport_menu import (
     multisport_status_text,
     _pick_needed_text,
     multisport_in_game_sections,
+    multisport_live_analysis_sections,
     sport_journal_text,
     sport_overview_text,
     sport_phase_report_text,
@@ -365,3 +366,49 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Ф2 +4.5 @ 1.55" in text
     assert "100/100 · PREMATCH" in text
     assert "может проиграть максимум в 4" in text
+
+
+def test_multisport_overview_and_analysis_show_raw_flashscore_live_without_mapping(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {
+                "mapped": 0,
+                "matches": [],
+                "flashscore_live_matches": [],
+                "prematch_matches": [],
+            },
+        },
+    })
+    _write(journal, [])
+
+    live = [{
+        "flashscore_event_id": "FS-BASKET-LIVE",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "league": "Colombia",
+        "score": [21, 24],
+        "status_code": "Q2",
+        "coarse_status": "2",
+    }]
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: live if sport == "basketball" else [])
+
+    overview = menu.sport_overview_text("basketball")
+    assert "LIVE · АНАЛИЗ ОНЛАЙН" in overview
+    assert "Piratas de Bogota — Caimanes del Llano" in overview
+    assert "21:24" in overview
+    assert "1xBet ⏳" in overview
+    assert "ждём 1xBet" in overview
+
+    analysis = "\n".join(menu.multisport_live_analysis_sections())
+    assert "БАСКЕТБОЛ" in analysis
+    assert "Piratas de Bogota — Caimanes del Llano" in analysis
+    assert "ждёт линию 1xBet" in analysis

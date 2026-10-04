@@ -271,3 +271,52 @@ def test_hockey_and_basketball_cards_request_team_emblems(monkeypatch):
     assert render_basketball_prematch_card(base, basket_signal, SPORTS["basketball"]).startswith(b"\x89PNG")
     assert ("home","home.png") in calls
     assert ("away","away.png") in calls
+
+def test_multisport_signal_journal_persists_emblem_metadata(tmp_path: Path, monkeypatch):
+    from gool_bot2.multisport_journal import load_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    row = {
+        "phase": "PREMATCH",
+        "origin": "multisport_prematch",
+        "sport": "hockey",
+        "event_id": "XB101",
+        "flashscore_event_id": "FS101",
+        "home": "Home Club",
+        "away": "Away Club",
+        "league": "League",
+        "start_ts": 1893456000,
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "home_team_id": "HOMEID",
+        "away_team_id": "AWAYID",
+        "home_team_slug": "home-club",
+        "away_team_slug": "away-club",
+        "home_logo_file": "home.png",
+        "away_logo_file": "away.png",
+    }
+    signal = {
+        "direction": "over",
+        "selection": "ТБ 5.5",
+        "line": 5.5,
+        "odd": 1.80,
+        "strength": 85.0,
+        "metric_delta": 1.0,
+        "probability_delta_pp": 3.5,
+        "line_delta": 0.5,
+        "moves": 3,
+        "start": {"line": 5.0, "over": 1.90},
+    }
+
+    recorded, sent = worker._record_signal(row, signal, SPORTS["hockey"])
+
+    assert recorded is True
+    assert sent == 0
+    saved = load_journal(worker.journal_path)
+    assert len(saved) == 1
+    assert saved[0]["home_team_id"] == "HOMEID"
+    assert saved[0]["away_team_id"] == "AWAYID"
+    assert saved[0]["home_logo_file"] == "home.png"
+    assert saved[0]["away_logo_file"] == "away.png"
+

@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "🧠 анализ", "🔎 найти матч"}:
         try:
             if text == "/start":
                 telegram_mod.subscribe(chat_id)
@@ -176,6 +176,9 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text == "/sportreport":
                 from .multisport_menu import multisport_report_text
                 replies = [multisport_report_text()]
+            elif text == "/sportjournal":
+                from .multisport_menu import sport_journal_text
+                replies = [sport_journal_text()]
             elif text == "🏒 хоккей":
                 from .multisport_menu import sport_overview_text
                 replies = [sport_overview_text("hockey")]

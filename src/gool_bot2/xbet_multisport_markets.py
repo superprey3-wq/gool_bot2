@@ -197,24 +197,40 @@ def _handicap_lines(rows: list[dict[str, Any]]) -> list[dict[str, float]]:
     return [dict(v) for _, v in sorted(by_abs.items()) if "home" in v and "away" in v]
 
 
-def _moneyline(rows: list[dict[str, Any]], sport: str) -> dict[str, float | None]:
-    candidates: list[tuple[int, dict[str, float]]] = []
-    for group, types in (
-        (1, {1: "home", 2: "draw", 3: "away"}),
-        (101, {401: "home", 403: "draw", 402: "away"}),
-        (102, {501: "home", 502: "away"}),
-    ):
+def _moneyline(rows: list[dict[str, Any]], sport: str) -> dict[str, Any]:
+    groups = (
+        [
+            (102, {501: "home", 502: "away"}, "moneyline_2way"),
+            (1, {1: "home", 2: "draw", 3: "away"}, "regulation_1x2"),
+            (101, {401: "home", 403: "draw", 402: "away"}, "moneyline_3way"),
+        ]
+        if str(sport).casefold() == "basketball"
+        else [
+            (1, {1: "home", 2: "draw", 3: "away"}, "regulation_1x2"),
+            (101, {401: "home", 403: "draw", 402: "away"}, "moneyline_3way"),
+            (102, {501: "home", 502: "away"}, "moneyline_2way"),
+        ]
+    )
+    candidates: list[dict[str, Any]] = []
+    for group, types, kind in groups:
         odds: dict[str, float] = {}
         for row in rows:
-            if int(row.get("G") or -1) == group and row.get("P") is None:
-                name = types.get(int(row.get("T") or -1))
-                if name and name not in odds:
-                    odds[name] = float(row["C"])
-        need = {"home", "away"} if str(sport).casefold() == "basketball" else {"home", "draw", "away"}
-        if need.issubset(odds):
-            candidates.append((group, odds))
-    odds = candidates[0][1] if candidates else {}
-    return {"home": odds.get("home"), "draw": odds.get("draw"), "away": odds.get("away")}
+            if int(row.get("G") or -1) != group or row.get("P") is not None:
+                continue
+            name = types.get(int(row.get("T") or -1))
+            if name and name not in odds:
+                odds[name] = float(row["C"])
+        if "home" in odds and "away" in odds:
+            candidates.append({"kind": kind, "group": group, **odds})
+    primary = candidates[0] if candidates else {}
+    return {
+        "home": primary.get("home"),
+        "draw": primary.get("draw"),
+        "away": primary.get("away"),
+        "kind": primary.get("kind"),
+        "group": primary.get("group"),
+        "variants": candidates,
+    }
 
 
 def decode_core_markets(game: dict[str, Any], sport: str, *, scope: str = SCOPE_FULL) -> dict[str, Any]:

@@ -175,11 +175,12 @@ def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, mon
 
     sections = multisport_in_game_sections()
     text = "\n".join(sections)
-    assert "ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ" in text
+    assert "GOOL MULTI · В ИГРЕ" in text
     assert "SKA — CSKA" in text
     assert "1:0" in text
     assert "2nd period" in text
     assert "ТБ 5.5 @ 1.85" in text
+    assert "6+ шайб" in text
 
     _write(journal, [{
         "sport": "hockey",
@@ -266,7 +267,7 @@ def test_multisport_in_game_uses_raw_flashscore_live_even_when_xbet_mapping_is_z
     text = "\n".join(multisport_in_game_sections())
     assert "Krylya Sovetov — Mikhaylov Academy U20" in text
     assert "1:0" in text
-    assert "LIVE · Flashscore" in text
+    assert "сейчас LIVE · 1:0" in text
     assert "Ф1 +1.5 @ 1.59" in text
     assert "может проиграть максимум в 1" in text
 

@@ -254,11 +254,19 @@ def detect_steam(
 
     over_probability_delta = (float(end["probability"]) - float(start["probability"])) * 100.0
     probability_delta_pp = over_probability_delta if direction == "over" else -over_probability_delta
-    if abs(over_probability_delta) < _float_env("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", 3.0) and not extreme:
-        return None
-
     raw_line_delta = float(end["line"]) - float(start["line"])
     line_delta = raw_line_delta if direction == "over" else -raw_line_delta
+    base_line_floor = _float_env(
+        f"GOOL_{cfg.key.upper()}_LIVE_MIN_LINE_DELTA",
+        0.5 if cfg.key == "hockey" else 2.5,
+    )
+    line_floor = base_line_floor * threshold_scale
+    if (
+        abs(over_probability_delta) < _float_env("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", 3.0)
+        and line_delta < line_floor
+        and not extreme
+    ):
+        return None
     fair_probability = float(end["probability"]) if direction == "over" else 1.0 - float(end["probability"])
     strength = min(100.0, 58.0 + metric_delta / max(1e-6, min_metric) * 13.0 + moves * 3.0 + (7.0 if extreme else 0.0))
     return {
@@ -274,6 +282,7 @@ def detect_steam(
         "strength": round(strength, 1),
         "extreme": extreme,
         "threshold_scale": round(threshold_scale, 3),
+        "line_floor": round(line_floor, 3),
         "start": start,
         "end": end,
     }

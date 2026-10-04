@@ -183,7 +183,7 @@ def _paired_lines(
 def _handicap_lines(rows: list[dict[str, Any]]) -> list[dict[str, float]]:
     by_abs: dict[float, dict[str, float]] = {}
     for row in rows:
-        if int(row.get("G") or -1) != 2 or row.get("P") is None:
+        if int(row.get("G") or -1) not in {2, 3} or row.get("P") is None:
             continue
         t = int(row.get("T") or -1)
         side = "home" if t in {4, 7} else "away" if t in {5, 8} else None
@@ -219,8 +219,8 @@ def _moneyline(rows: list[dict[str, Any]], sport: str) -> dict[str, float | None
 
 def decode_core_markets(game: dict[str, Any], sport: str, *, scope: str = SCOPE_FULL) -> dict[str, Any]:
     rows = iter_market_selections(game)
-    # Verified BetB2B mappings: G17 total; G15 home IT; G62 away IT; G2 handicap.
-    # Legacy groups remain as fallbacks for older mirrors.
+    # Verified new-builder mappings: G17 total; G15 home IT; G62 away IT; G2 handicap.
+    # Real legacy mirrors also expose G4 total / G5 IT1 / G6 IT2 / G3 handicap.
     decoded = {
         "scope": scope,
         "match_total": _paired_lines(rows, groups=(17, 3, 4), over_types=(9, 11), under_types=(10, 12)),

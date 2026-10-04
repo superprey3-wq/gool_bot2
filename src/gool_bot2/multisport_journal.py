@@ -19,6 +19,7 @@ def normalize_entry(row: dict[str, Any]) -> dict[str, Any]:
     out["phase"] = phase
     out.setdefault("signal_type", "prematch_total_movement" if phase == "PREMATCH" else "live_total_movement")
     out.setdefault("market_family", "match_total")
+    out.setdefault("scope", "FULL_MATCH")
     direction = str(out.get("direction") or "over").lower()
     out["direction"] = "under" if direction == "under" else "over"
     if not out.get("selection"):
@@ -53,12 +54,13 @@ def save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
-def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
     item = normalize_entry(row)
     return (
         str(item.get("sport") or ""),
         str(item.get("phase") or ""),
         str(item.get("event_id") or ""),
+        str(item.get("scope") or "FULL_MATCH"),
         str(item.get("market_family") or ""),
     )
 

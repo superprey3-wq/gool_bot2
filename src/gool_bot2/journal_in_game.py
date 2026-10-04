@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,7 @@ def _display_market(row: dict[str, Any]) -> str:
     origin = str(row.get("origin") or "").strip().casefold()
 
     # LIVE entries already store a public label such as "1Т ТБ 0.5".
-    if origin != "prematch":
+    if origin not in {"prematch", "prematch_value"}:
         return market or selection or "?"
 
     family = market.casefold().replace("-", "_").replace(" ", "_")
@@ -145,10 +146,23 @@ def _is_open(row: dict[str, Any]) -> bool:
     # the corresponding child match is genuinely live.
     if str(row.get("origin") or "").casefold() == "prematch_parlay":
         return False
-    if str(row.get("origin") or "").casefold() == "prematch":
-        lifecycle = str(row.get("lifecycle") or "scheduled").casefold()
-        if lifecycle not in {"in_game", "live"} and not bool(row.get("in_game")):
-            return False
+    origin = str(row.get("origin") or "").casefold()
+    if origin in {"prematch", "prematch_value"}:
+        # PREMATCH products stay out of "В ИГРЕ" until their scheduled kickoff.
+        # VALUE used to bypass this block because it has origin=prematch_value.
+        try:
+            kickoff_ts = float(row.get("kickoff_ts") or 0.0)
+        except (TypeError, ValueError):
+            kickoff_ts = 0.0
+        if kickoff_ts > 0:
+            if time.time() < kickoff_ts:
+                return False
+        else:
+            # Legacy prematch rows without a stored kickoff still need an
+            # explicit lifecycle transition from the settlement/live tracker.
+            lifecycle = str(row.get("lifecycle") or "scheduled").casefold()
+            if lifecycle not in {"in_game", "live"} and not bool(row.get("in_game")):
+                return False
     return True
 
 

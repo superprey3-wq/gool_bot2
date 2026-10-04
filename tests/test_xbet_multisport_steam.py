@@ -5,6 +5,7 @@ import urllib.parse
 from gool_bot2.xbet_multisport_steam import (
     SPORTS,
     MultiSportSteamWorker,
+    select_prematch_primary,
     _balanced_total,
     _metric,
     _score,
@@ -740,3 +741,37 @@ def test_team_sport_exact_game_profile_before_generic(tmp_path, monkeypatch):
     assert "fcountry=71" in url
     assert "gr=70" in url
     assert "countevents=500" in url
+
+
+def test_select_prematch_primary_breaks_repeated_family_when_close(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", "3")
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", "8")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 94, "fair_probability": .55}),
+        ({"market_family": "match_total"}, {"strength": 90, "fair_probability": .54}),
+    ]
+    row, signal = select_prematch_primary(candidates, ["handicap", "handicap", "handicap"])
+    assert row["market_family"] == "match_total"
+    assert signal["strength"] == 90
+
+
+def test_select_prematch_primary_keeps_clearly_stronger_repeated_family(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", "3")
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", "8")
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 98, "fair_probability": .58}),
+        ({"market_family": "match_total"}, {"strength": 84, "fair_probability": .56}),
+    ]
+    row, signal = select_prematch_primary(candidates, ["handicap", "handicap", "handicap"])
+    assert row["market_family"] == "handicap"
+    assert signal["strength"] == 98
+
+
+def test_select_prematch_primary_quality_wins_without_streak():
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 94, "fair_probability": .55}),
+        ({"market_family": "match_total"}, {"strength": 90, "fair_probability": .54}),
+    ]
+    row, signal = select_prematch_primary(candidates, ["match_total", "handicap"])
+    assert row["market_family"] == "handicap"
+    assert signal["strength"] == 94

@@ -25,6 +25,11 @@ def _enabled(name: str, default: bool = True) -> bool:
     return str(raw).strip().casefold() not in {"0", "false", "no", "off"}
 
 
+def _inherit_production_multisport_mode() -> None:
+    """Keep embedded multisport aligned with the active production GOOL runtime."""
+    _inherit_production_multisport_mode()
+
+
 class BoundedRobustXBetMarketCollector(RobustXBetMarketCollector):
     """Robust collector with a hard cap on disposable JSONL market history."""
 

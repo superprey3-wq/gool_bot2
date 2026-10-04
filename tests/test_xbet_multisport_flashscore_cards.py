@@ -320,3 +320,59 @@ def test_multisport_signal_journal_persists_emblem_metadata(tmp_path: Path, monk
     assert saved[0]["home_logo_file"] == "home.png"
     assert saved[0]["away_logo_file"] == "away.png"
 
+def test_settlement_backfills_legacy_result_emblems_from_flashscore(tmp_path: Path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+    from gool_bot2.multisport_journal import save_journal, load_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_CARDS_ENABLED", "1")
+    worker = MultiSportSteamWorker(tmp_path)
+    pending = {
+        "phase": "PREMATCH",
+        "origin": "multisport_prematch",
+        "sport": "hockey",
+        "event_id": "XB101",
+        "flashscore_event_id": "FS101",
+        "home": "Home Club",
+        "away": "Away Club",
+        "league": "League",
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "direction": "over",
+        "line": 5.5,
+        "odd": 1.80,
+        "result": "pending",
+    }
+    save_journal(worker.journal_path, [pending])
+    seen = {}
+    monkeypatch.setattr(
+        steam,
+        "render_hockey_result_card",
+        lambda row, _cfg: seen.update({
+            "home_logo_file": row.get("home_logo_file"),
+            "away_logo_file": row.get("away_logo_file"),
+        }) or b"png",
+    )
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda *_args, **_kwargs: 1)
+
+    changed = worker._settle(SPORTS["hockey"], {
+        "FS101": {
+            "flashscore_event_id": "FS101",
+            "coarse_status": "3",
+            "score": [4, 2],
+            "home_logo_file": "home-finished.png",
+            "away_logo_file": "away-finished.png",
+            "home_team_id": "HOMEID",
+            "away_team_id": "AWAYID",
+        }
+    })
+
+    assert changed == 1
+    assert seen == {
+        "home_logo_file": "home-finished.png",
+        "away_logo_file": "away-finished.png",
+    }
+    saved = load_journal(worker.journal_path)
+    assert saved[0]["home_logo_file"] == "home-finished.png"
+    assert saved[0]["away_logo_file"] == "away-finished.png"
+

@@ -125,17 +125,40 @@ def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
 def render_hockey_result_card(row:dict[str,Any],cfg:Any)->bytes:
     result=str(row.get("result") or "pending").lower()
     accent=GREEN if result=="won" else GOLD if result=="void" else RED
-    im=Image.new("RGBA",(1080,640),BG+(255,)); d=ImageDraw.Draw(im)
-    title="✅ ЗАШЁЛ" if result=="won" else "↩️ ВОЗВРАТ" if result=="void" else "❌ НЕ ЗАШЁЛ"
-    _header(d,title,str(row.get("phase") or "LIVE").upper())
-    d.text((52,130),str(row.get("league") or "HOCKEY"),font=sc._fit(d,str(row.get("league") or "HOCKEY"),960,19,False),fill=MUTED)
-    d.rounded_rectangle((42,172,1038,370),26,fill=PANEL,outline=accent,width=3)
-    d.text((70,205),str(row.get("home") or "?"),font=sc._fit(d,str(row.get("home") or "?"),400,28,True),fill=TEXT)
-    d.text((70,302),str(row.get("away") or "?"),font=sc._fit(d,str(row.get("away") or "?"),400,28,True),fill=TEXT)
-    score=list(row.get("settled_score") or row.get("score") or [0,0])
-    d.text((565,235),f"{int(score[0])}:{int(score[1])}",font=sc._font(62,True),fill=accent)
-    d.rounded_rectangle((42,410,1038,578),22,fill=PANEL,outline=LINE,width=2)
+    status="ЗАШЁЛ" if result=="won" else "ВОЗВРАТ" if result=="void" else "НЕ ЗАШЁЛ"
+    im=Image.new("RGBA",(1080,760),BG+(255,)); d=ImageDraw.Draw(im)
+
+    d.rounded_rectangle((28,24,1052,104),22,fill=PANEL,outline=ICE,width=2)
+    d.text((52,45),"🏒 GOOL HOCKEY • RESULT",font=sc._font(25,True),fill=TEXT)
+    d.rounded_rectangle((805,42,1024,88),14,fill=(8,24,31),outline=accent,width=2)
+    sc._center(d,status,52,sc._fit(d,status,185,18,True),accent)
+
+    league=str(row.get("league") or "HOCKEY")
+    d.text((50,126),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
+
+    home,away=str(row.get("home") or "?"),str(row.get("away") or "?")
+    score=list(row.get("settled_match_score") or row.get("settled_score") or row.get("score") or [0,0])
+    d.rounded_rectangle((42,164,1038,392),28,fill=PANEL,outline=accent,width=3)
+    d.text((72,205),home,font=sc._fit(d,home,470,30,True),fill=TEXT)
+    d.text((72,315),away,font=sc._fit(d,away,470,30,True),fill=TEXT)
+    d.rounded_rectangle((610,218,980,338),20,fill=(8,24,31),outline=ICE,width=2)
+    d.text((640,236),"ФИНАЛЬНЫЙ СЧЁТ",font=sc._font(14,True),fill=MUTED)
+    sc._center(d,f"{int(score[0])} : {int(score[1])}",272,sc._font(46,True),accent)
+
     pick=str(row.get("selection") or "?")
-    d.text((70,444),f"{pick} @ {float(row.get('odd') or 0):.2f}",font=sc._fit(d,f"{pick} @ {float(row.get('odd') or 0):.2f}",900,34,True),fill=GOLD)
-    d.text((70,520),f"P/L {float(row.get('profit_units') or 0):+.2f}u",font=sc._font(27,True),fill=accent)
+    odd=float(row.get("odd") or 0)
+    d.rounded_rectangle((42,428,1038,590),24,fill=(8,24,31),outline=GOLD,width=3)
+    d.text((70,451),"СТАВКА",font=sc._font(14,True),fill=MUTED)
+    d.text((70,492),pick,font=sc._fit(d,pick,620,38,True),fill=GOLD)
+    d.text((790,451),"КЭФ",font=sc._font(14,True),fill=MUTED)
+    d.text((790,492),f"{odd:.2f}",font=sc._font(42,True),fill=TEXT)
+
+    profit=float(row.get("profit_units") or 0)
+    d.rounded_rectangle((42,626,1038,704),18,fill=PANEL,outline=LINE,width=2)
+    d.text((70,649),"РЕЗУЛЬТАТ",font=sc._font(14,True),fill=MUTED)
+    d.text((235,642),status,font=sc._font(25,True),fill=accent)
+    d.text((720,649),"P/L",font=sc._font(14,True),fill=MUTED)
+    d.text((785,642),f"{profit:+.2f}u",font=sc._font(27,True),fill=accent)
+
+    d.rounded_rectangle((335,720,745,748),10,fill=ICE)
     return sc._save(im)

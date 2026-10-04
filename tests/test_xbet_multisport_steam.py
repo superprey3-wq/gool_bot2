@@ -1,5 +1,6 @@
-from gool_bot2.providers.flashscore import FlashscoreProvider
 from __future__ import annotations
+
+from gool_bot2.providers.flashscore import FlashscoreProvider
 
 import urllib.parse
 

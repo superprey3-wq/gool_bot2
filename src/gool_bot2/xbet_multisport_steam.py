@@ -892,11 +892,25 @@ class MultiSportSteamWorker:
             "flashscore_score_verified": True,
         }, None
 
+    @staticmethod
+    def _lane_row(row: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any]:
+        compact = {
+            key: value
+            for key, value in row.items()
+            if key not in {"market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
+        }
+        compact.update(dict(lane))
+        compact["scope"] = str(lane.get("scope") or SCOPE_FULL)
+        compact["market_family"] = str(lane.get("market_family") or "match_total")
+        compact["lane_key"] = str(lane.get("lane_key") or lane_key(lane))
+        return compact
+
     def _append_history(self, row: dict[str, Any], cfg: SportConfig | None = None) -> tuple[list[dict[str, Any]], float | None]:
         cfg = cfg or SPORTS.get(str(row.get("sport") or "").casefold())
         if cfg is None:
             raise ValueError(f"unknown_multisport={row.get('sport')}")
-        key = f"{cfg.key}:{row['event_id']}"
+        lane = str(row.get("lane_key") or f"{SCOPE_FULL}:match_total")
+        key = f"{cfg.key}:{row['event_id']}:{lane}"
         score = (int(row["score"][0]), int(row["score"][1]))
         period = str(row.get("period") or "LIVE")
         now = float(row["ts"])
@@ -914,7 +928,8 @@ class MultiSportSteamWorker:
         return list(self._history[key]), self._score_changed_at.get(key)
 
     def _append_prematch_history(self, row: dict[str, Any], cfg: SportConfig) -> list[dict[str, Any]]:
-        key = f"{cfg.key}:{row['event_id']}"
+        lane = str(row.get("lane_key") or f"{SCOPE_FULL}:match_total")
+        key = f"{cfg.key}:{row['event_id']}:{lane}"
         self._prematch_history[key].append(dict(row))
         return list(self._prematch_history[key])
 

@@ -1,54 +1,54 @@
 {
   "events": [
     {
-      "away": "Belgrano",
-      "event_id": "06NKZ6Tr",
+      "away": "Tigre",
+      "event_id": "GENB2d3n",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 4,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 5,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 5,
           "snapshot": 3
         }
       ],
-      "home": "Talleres Cordoba",
+      "home": "Argentinos Jrs",
       "league": "ARGENTINA: Liga Profesional - Clausura",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "MATCHED_NO_QUOTES"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
           "odds_changed": true,
-          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
+          "verdict": "PROVEN"
         }
       }
     },
@@ -57,24 +57,24 @@
       "event_id": "MJtAqF86",
       "flashscore_states": [
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "away_score": 3,
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 1,
-          "minute": 32,
+          "minute": 89,
           "snapshot": 1
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "away_score": 3,
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 1,
-          "minute": 33,
+          "minute": 90,
           "snapshot": 2
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "away_score": 3,
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 1,
-          "minute": 34,
+          "minute": 90,
           "snapshot": 3
         }
       ],
@@ -105,136 +105,32 @@
       }
     },
     {
-      "away": "Racing Cordoba",
-      "event_id": "faqj1atK",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 73,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 74,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 75,
-          "snapshot": 3
-        }
-      ],
-      "home": "Central Norte",
-      "league": "ARGENTINA: Primera Nacional",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": true,
-          "verdict": "PROVEN"
-        }
-      }
-    },
-    {
       "away": "Def. de Belgrano",
       "event_id": "ncOUgHYg",
       "flashscore_states": [
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 41,
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 1
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 42,
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 2
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 43,
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 2,
+          "minute": 90,
           "snapshot": 3
         }
       ],
       "home": "Chaco For Ever",
-      "league": "ARGENTINA: Primera Nacional",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": true,
-          "verdict": "PROVEN"
-        }
-      }
-    },
-    {
-      "away": "Colegiales",
-      "event_id": "O8WUhJoK",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Club A. Guemes",
       "league": "ARGENTINA: Primera Nacional",
       "sources": {
         "bet365": {
@@ -261,189 +157,33 @@
       }
     },
     {
-      "away": "Almagro",
-      "event_id": "zmjzXyP0",
+      "away": "Los Andes",
+      "event_id": "fq3D4YnC",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 50,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 51,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 51,
           "snapshot": 3
         }
       ],
-      "home": "San Martin S.J.",
+      "home": "Godoy Cruz",
       "league": "ARGENTINA: Primera Nacional",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
-        }
-      }
-    },
-    {
-      "away": "Olimpo Bahia Blanca",
-      "event_id": "0nQzUqIk",
-      "flashscore_states": [
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Chivilcoy",
-      "league": "ARGENTINA: Torneo Federal - Play Offs",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
-        }
-      }
-    },
-    {
-      "away": "Pacific FC",
-      "event_id": "WQ2uJMDb",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Supra du Quebec",
-      "league": "CANADA: Canadian Premier League",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
-        }
-      }
-    },
-    {
-      "away": "U. Espanola",
-      "event_id": "jqYiRvLc",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 33,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 34,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 35,
-          "snapshot": 3
-        }
-      ],
-      "home": "San Luis",
-      "league": "CHILE: Liga de Ascenso",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -469,54 +209,262 @@
       }
     },
     {
-      "away": "Atletico Colina",
-      "event_id": "fDNshpBl",
+      "away": "Gimnasia y Tiro",
+      "event_id": "UqpIsgwJ",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 44,
           "snapshot": 1
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 0,
           "minute": 45,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 0,
           "minute": 45,
           "snapshot": 3
         }
       ],
-      "home": "General Velasquez",
-      "league": "CHILE: Segunda Division - Relegation Group",
+      "home": "San Martin T.",
+      "league": "ARGENTINA: Primera Nacional",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "MATCHED_NO_QUOTES"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Oriente Petrolero",
+      "event_id": "OOkbUdMh",
+      "flashscore_states": [
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 1
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 0,
+          "minute": 45,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 0,
+          "minute": 48,
+          "snapshot": 3
+        }
+      ],
+      "home": "Guabira",
+      "league": "BOLIVIA: Copa Pacena",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
           "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "U. Espanola",
+      "event_id": "jqYiRvLc",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 2,
+          "minute": 87,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 2,
+          "minute": 88,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 2,
+          "minute": 89,
+          "snapshot": 3
+        }
+      ],
+      "home": "San Luis",
+      "league": "CHILE: Liga de Ascenso",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        }
+      }
+    },
+    {
+      "away": "Pereira",
+      "event_id": "lzox28oC",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 3,
+          "minute": 52,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 3,
+          "minute": 53,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 3,
+          "minute": 54,
+          "snapshot": 3
+        }
+      ],
+      "home": "Cucuta",
+      "league": "COLOMBIA: Primera A - Clausura",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Once Caldas",
+      "event_id": "E9rwETdc",
+      "flashscore_states": [
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 54,
+          "snapshot": 1
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 55,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 55,
+          "snapshot": 3
+        }
+      ],
+      "home": "Inter Bogotá",
+      "league": "COLOMBIA: Primera A - Clausura",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
         }
       }
     },
@@ -526,23 +474,23 @@
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 4,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 60,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 5,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 61,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 6,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 61,
           "snapshot": 3
         }
       ],
@@ -573,132 +521,28 @@
       }
     },
     {
-      "away": "Cibao",
-      "event_id": "jLfAiErn",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Delfines Del Este",
-      "league": "DOMINICAN REPUBLIC: LDF",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Moca",
-      "event_id": "KIDpygb5",
-      "flashscore_states": [
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Salcedo",
-      "league": "DOMINICAN REPUBLIC: LDF",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
       "away": "Municipal Limeno",
       "event_id": "QcVL6qJs",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 3,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 57,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 3,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 58,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 4,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 59,
           "snapshot": 3
         }
       ],
@@ -729,28 +573,80 @@
       }
     },
     {
+      "away": "Racing United",
+      "event_id": "Q3Eqn4JH",
+      "flashscore_states": [
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 0,
+          "minute": 17,
+          "snapshot": 1
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 0,
+          "minute": 18,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 0,
+          "minute": 19,
+          "snapshot": 3
+        }
+      ],
+      "home": "Molynes",
+      "league": "JAMAICA: Premier League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "NOT_FOUND"
+        }
+      }
+    },
+    {
       "away": "Dunbeholden",
       "event_id": "pQCTknKh",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 1,
-          "minute": 31,
+          "minute": 86,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 1,
-          "minute": 32,
+          "minute": 87,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 1,
-          "minute": 33,
+          "minute": 88,
           "snapshot": 3
         }
       ],
@@ -786,23 +682,23 @@
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 1,
-          "minute": 32,
+          "minute": 88,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 1,
-          "minute": 33,
+          "minute": 88,
           "snapshot": 2
         },
         {
-          "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 1,
-          "minute": 34,
+          "minute": 89,
           "snapshot": 3
         }
       ],
@@ -837,29 +733,81 @@
       "event_id": "IwBylQl5",
       "flashscore_states": [
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 0,
-          "minute": 34,
+          "minute": 89,
           "snapshot": 1
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 0,
-          "minute": 35,
+          "minute": 90,
           "snapshot": 2
         },
         {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "away_score": 2,
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 0,
-          "minute": 36,
+          "minute": 90,
           "snapshot": 3
         }
       ],
       "home": "Tru-Juice",
       "league": "JAMAICA: Premier League",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "MATCHED_NO_QUOTES"
+        }
+      }
+    },
+    {
+      "away": "Curacao",
+      "event_id": "0lmYIv2e",
+      "flashscore_states": [
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 0,
+          "minute": 17,
+          "snapshot": 1
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 0,
+          "minute": 18,
+          "snapshot": 2
+        },
+        {
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 0,
+          "minute": 19,
+          "snapshot": 3
+        }
+      ],
+      "home": "Trinidad & Tobago",
+      "league": "NORTH & CENTRAL AMERICA: CONCACAF Nations League - League A",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -885,85 +833,33 @@
       }
     },
     {
-      "away": "United States Virgin Islands",
-      "event_id": "n3SHG1jK",
-      "flashscore_states": [
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 1
-        },
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 2
-        },
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 45,
-          "snapshot": 3
-        }
-      ],
-      "home": "Bahamas",
-      "league": "NORTH & CENTRAL AMERICA: CONCACAF Nations League - League C",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 3,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "MATCHED_NO_QUOTES"
-        },
-        "betano": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": false,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 3,
-          "odds_changed": true,
-          "verdict": "ODDS_CHANGED_NO_FS_PROGRESS"
-        }
-      }
-    },
-    {
-      "away": "British Virgin Islands",
-      "event_id": "WICB0k0M",
+      "away": "Cayman Islands",
+      "event_id": "tj9J8XZh",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 1,
-          "minute": 46,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 0,
+          "minute": 17,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 1,
-          "minute": 47,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 0,
+          "minute": 18,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 1,
-          "minute": 48,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 0,
+          "minute": 19,
           "snapshot": 3
         }
       ],
-      "home": "Turks and Caicos Islands",
-      "league": "NORTH & CENTRAL AMERICA: CONCACAF Nations League - League C",
+      "home": "Puerto Rico",
+      "league": "NORTH & CENTRAL AMERICA: CONCACAF Nations League - League B",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -994,23 +890,23 @@
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 4,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 56,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 5,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 57,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 6,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 58,
           "snapshot": 3
         }
       ],
@@ -1041,293 +937,85 @@
       }
     },
     {
-      "away": "Denver Summit W",
-      "event_id": "no6gIVAN",
+      "away": "River Plate",
+      "event_id": "URc52yZb",
       "flashscore_states": [
         {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:03:35+00:00",
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:17:39+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 17,
           "snapshot": 1
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:04:31+00:00",
+          "away_score": 0,
+          "captured_at": "2026-10-04T22:18:33+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 18,
           "snapshot": 2
         },
         {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:05:26+00:00",
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
           "home_score": 0,
-          "minute": 45,
+          "minute": 19,
           "snapshot": 3
         }
       ],
-      "home": "Chicago W",
-      "league": "USA: NWSL Women",
+      "home": "La Luz",
+      "league": "URUGUAY: Segunda Division",
       "sources": {
         "bet365": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "MATCHED_NO_QUOTES"
         },
         "betano": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
           "verdict": "SOURCE_ERROR"
         },
         "kambi_unibet": {
-          "flashscore_progress": false,
+          "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
           "matched_quote_snapshots": 3,
-          "odds_changed": false,
-          "verdict": "FOUND_NO_CHANGE"
+          "odds_changed": true,
+          "verdict": "PROVEN"
         }
       }
     },
     {
-      "away": "Dynamo Puerto",
-      "event_id": "lxd1vfrf",
-      "flashscore_states": [
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 75,
-          "snapshot": 1
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 76,
-          "snapshot": 2
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 76,
-          "snapshot": 3
-        }
-      ],
-      "home": "Avila",
-      "league": "VENEZUELA: Liga FUTVE 2",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Miranda",
-      "event_id": "Mkf9xYC6",
-      "flashscore_states": [
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 3,
-          "minute": 71,
-          "snapshot": 1
-        },
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 3,
-          "minute": 72,
-          "snapshot": 2
-        },
-        {
-          "away_score": 2,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 3,
-          "minute": 73,
-          "snapshot": 3
-        }
-      ],
-      "home": "Mineros",
-      "league": "VENEZUELA: Liga FUTVE 2",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Lara",
-      "event_id": "E5QXcjkL",
-      "flashscore_states": [
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 2,
-          "minute": 76,
-          "snapshot": 1
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 2,
-          "minute": 77,
-          "snapshot": 2
-        },
-        {
-          "away_score": 1,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 2,
-          "minute": 78,
-          "snapshot": 3
-        }
-      ],
-      "home": "Puerto Cabello B",
-      "league": "VENEZUELA: Liga FUTVE 2",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Atletico Barinas",
-      "event_id": "Eozvx9S1",
+      "away": "Phoenix Rising",
+      "event_id": "6sHPVwNP",
       "flashscore_states": [
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 76,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 10,
           "snapshot": 1
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 76,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 11,
           "snapshot": 2
         },
         {
           "away_score": 0,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 77,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 12,
           "snapshot": 3
         }
       ],
-      "home": "Urena",
-      "league": "VENEZUELA: Liga FUTVE 2",
-      "sources": {
-        "bet365": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        },
-        "betano": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "SOURCE_ERROR"
-        },
-        "kambi_unibet": {
-          "flashscore_progress": true,
-          "matched_no_quote_snapshots": 0,
-          "matched_quote_snapshots": 0,
-          "odds_changed": false,
-          "verdict": "NOT_FOUND"
-        }
-      }
-    },
-    {
-      "away": "Yaracuyanos",
-      "event_id": "6uNPaCK8",
-      "flashscore_states": [
-        {
-          "away_score": 3,
-          "captured_at": "2026-10-04T21:03:35+00:00",
-          "home_score": 0,
-          "minute": 74,
-          "snapshot": 1
-        },
-        {
-          "away_score": 3,
-          "captured_at": "2026-10-04T21:04:31+00:00",
-          "home_score": 0,
-          "minute": 75,
-          "snapshot": 2
-        },
-        {
-          "away_score": 3,
-          "captured_at": "2026-10-04T21:05:26+00:00",
-          "home_score": 0,
-          "minute": 76,
-          "snapshot": 3
-        }
-      ],
-      "home": "Zamora 2",
-      "league": "VENEZUELA: Liga FUTVE 2",
+      "home": "New Mexico",
+      "league": "USA: USL Championship",
       "sources": {
         "bet365": {
           "flashscore_progress": true,
@@ -1346,14 +1034,66 @@
         "kambi_unibet": {
           "flashscore_progress": true,
           "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
+        }
+      }
+    },
+    {
+      "away": "Lexington W",
+      "event_id": "bPxMuEJk",
+      "flashscore_states": [
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:17:39+00:00",
+          "home_score": 1,
+          "minute": 49,
+          "snapshot": 1
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:18:33+00:00",
+          "home_score": 1,
+          "minute": 49,
+          "snapshot": 2
+        },
+        {
+          "away_score": 1,
+          "captured_at": "2026-10-04T22:19:24+00:00",
+          "home_score": 1,
+          "minute": 50,
+          "snapshot": 3
+        }
+      ],
+      "home": "Tampa Bay Sun W",
+      "league": "USA: USL Super League Women",
+      "sources": {
+        "bet365": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 3,
           "matched_quote_snapshots": 0,
           "odds_changed": false,
-          "verdict": "NOT_FOUND"
+          "verdict": "MATCHED_NO_QUOTES"
+        },
+        "betano": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 0,
+          "odds_changed": false,
+          "verdict": "SOURCE_ERROR"
+        },
+        "kambi_unibet": {
+          "flashscore_progress": true,
+          "matched_no_quote_snapshots": 0,
+          "matched_quote_snapshots": 3,
+          "odds_changed": true,
+          "verdict": "PROVEN"
         }
       }
     }
   ],
-  "generated_at": "2026-10-04T21:05:38+00:00",
+  "generated_at": "2026-10-04T22:19:30+00:00",
   "snapshot_count": 3,
   "source_diagnostics": {
     "bet365": [
@@ -1361,7 +1101,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 39,
+            "candidate_count": 34,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -1370,7 +1110,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-10-04T21:03:35+00:00",
+        "captured_at": "2026-10-04T22:17:39+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 1,
         "state": "ok"
@@ -1379,7 +1119,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 39,
+            "candidate_count": 34,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -1388,7 +1128,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-10-04T21:04:31+00:00",
+        "captured_at": "2026-10-04T22:18:33+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 2,
         "state": "ok"
@@ -1397,7 +1137,7 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 37,
+            "candidate_count": 34,
             "content_type": "text/html; charset=utf-8",
             "error": null,
             "ok": true,
@@ -1406,7 +1146,7 @@
             "url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en"
           }
         ],
-        "captured_at": "2026-10-04T21:05:26+00:00",
+        "captured_at": "2026-10-04T22:19:24+00:00",
         "chosen_url": "http://124.156.195.77:8365/b365/soccer/test/oneHd2allEv/C1-G15?lang=en",
         "snapshot": 3,
         "state": "ok"
@@ -1456,7 +1196,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-10-04T21:03:35+00:00",
+        "captured_at": "2026-10-04T22:17:39+00:00",
         "chosen_url": null,
         "snapshot": 1,
         "state": "error"
@@ -1504,7 +1244,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-10-04T21:04:31+00:00",
+        "captured_at": "2026-10-04T22:18:33+00:00",
         "chosen_url": null,
         "snapshot": 2,
         "state": "error"
@@ -1552,7 +1292,7 @@
             "url": "https://www.betano.com/api/sport/football?req=la,s,stnf,c,mb"
           }
         ],
-        "captured_at": "2026-10-04T21:05:26+00:00",
+        "captured_at": "2026-10-04T22:19:24+00:00",
         "chosen_url": null,
         "snapshot": 3,
         "state": "error"
@@ -1563,26 +1303,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 145,
+            "candidate_count": 128,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 54,
+            "quoted_candidate_count": 40,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 140,
+            "candidate_count": 119,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 52,
+            "quoted_candidate_count": 36,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-10-04T21:03:35+00:00",
+        "captured_at": "2026-10-04T22:17:39+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 1,
         "state": "ok"
@@ -1591,26 +1331,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 152,
+            "candidate_count": 128,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 56,
+            "quoted_candidate_count": 40,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 145,
+            "candidate_count": 120,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 54,
+            "quoted_candidate_count": 36,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-10-04T21:04:31+00:00",
+        "captured_at": "2026-10-04T22:18:33+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 2,
         "state": "ok"
@@ -1619,26 +1359,26 @@
         "attempts": [
           {
             "blocked": false,
-            "candidate_count": 154,
+            "candidate_count": 129,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 55,
+            "quoted_candidate_count": 40,
             "status": 200,
             "url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true"
           },
           {
             "blocked": false,
-            "candidate_count": 149,
+            "candidate_count": 120,
             "content_type": "application/json",
             "error": null,
             "ok": true,
-            "quoted_candidate_count": 53,
+            "quoted_candidate_count": 36,
             "status": 200,
             "url": "https://ap.offering-api.kambicdn.com/offering/v2018/ubau/listView/all/all/all/all/in-play.json?lang=en_AU&market=AU&channel_id=1&useCombined=true"
           }
         ],
-        "captured_at": "2026-10-04T21:05:26+00:00",
+        "captured_at": "2026-10-04T22:19:24+00:00",
         "chosen_url": "https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView/all/all/all/all/in-play.json?lang=en_GB&market=GB&channel_id=1&useCombined=true",
         "snapshot": 3,
         "state": "ok"
@@ -1664,27 +1404,25 @@
   },
   "source_summary": {
     "bet365": {
-      "MATCHED_NO_QUOTES": 22,
-      "NOT_FOUND": 4
+      "MATCHED_NO_QUOTES": 21
     },
     "betano": {
-      "SOURCE_ERROR": 26
+      "SOURCE_ERROR": 21
     },
     "kambi_unibet": {
-      "FOUND_NO_CHANGE": 5,
-      "NOT_FOUND": 10,
-      "ODDS_CHANGED_NO_FS_PROGRESS": 3,
-      "PROVEN": 8
+      "MATCHED_NO_QUOTES": 2,
+      "NOT_FOUND": 4,
+      "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+      "PROVEN": 14
     }
   },
   "strict_quote_evidence": true,
-  "unique_flashscore_live_matches": 26,
+  "unique_flashscore_live_matches": 21,
   "verdict_counts": {
-    "FOUND_NO_CHANGE": 5,
-    "MATCHED_NO_QUOTES": 22,
-    "NOT_FOUND": 14,
-    "ODDS_CHANGED_NO_FS_PROGRESS": 3,
-    "PROVEN": 8,
-    "SOURCE_ERROR": 26
+    "MATCHED_NO_QUOTES": 23,
+    "NOT_FOUND": 4,
+    "ODDS_CHANGED_NO_FS_PROGRESS": 1,
+    "PROVEN": 14,
+    "SOURCE_ERROR": 21
   }
 }

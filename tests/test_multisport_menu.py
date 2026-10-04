@@ -21,6 +21,18 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
         "mode": "shadow",
         "sports": {
             "hockey": {
+                "flashscore_prematch": 3,
+                "prematch_decoded": 2,
+                "prematch_detected": 1,
+                "prematch_matches": [{
+                    "home": "SKA",
+                    "away": "CSKA",
+                    "league": "KHL",
+                    "start_ts": 1893456000,
+                    "line": 5.5,
+                    "over": 1.85,
+                    "under": 1.95,
+                }],
                 "flashscore_live": 4,
                 "xbet_live": 3,
                 "mapped": 2,
@@ -37,6 +49,10 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
                 }],
             },
             "basketball": {
+                "flashscore_prematch": 6,
+                "prematch_decoded": 3,
+                "prematch_detected": 0,
+                "prematch_matches": [],
                 "flashscore_live": 8,
                 "xbet_live": 7,
                 "mapped": 5,
@@ -47,9 +63,9 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
         },
     })
     _write(journal, [
-        {"sport": "hockey", "result": "won", "profit_units": 0.8},
-        {"sport": "hockey", "result": "lost", "profit_units": -1.0},
-        {"sport": "basketball", "result": "pending", "profit_units": 0.0},
+        {"sport": "hockey", "phase": "PREMATCH", "result": "won", "profit_units": 0.8},
+        {"sport": "hockey", "phase": "LIVE", "result": "lost", "profit_units": -1.0},
+        {"sport": "basketball", "phase": "PREMATCH", "result": "pending", "profit_units": 0.0},
     ])
 
     status = multisport_status_text()
@@ -59,8 +75,13 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
 
     hockey = sport_overview_text("hockey")
     assert "Boston — Rangers" in hockey
+    assert "SKA — CSKA" in hockey
+    assert "Boston — Rangers" in hockey
     assert "ТБ 1.82 / ТМ 1.98" in hockey
+    assert "PREMATCH журнал" in hockey
+    assert "LIVE журнал" in hockey
 
     report = multisport_report_text()
-    assert "P/L -0.20u" in report
-    assert "ХОККЕЙ + БАСКЕТБОЛ" in report
+    assert "P/L +0.80u" in report
+    assert "P/L -1.00u" in report
+    assert "PREMATCH и LIVE считаются отдельно" in report

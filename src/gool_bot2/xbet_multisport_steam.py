@@ -237,17 +237,18 @@ def _score_sync_allowed(
     """
     if fs_score == xbet_score:
         return True
+    # Hockey is low-scoring and an exact score remains a valuable identity
+    # guard. The bounded lag exception is basketball-only.
+    if cfg.key != "basketball":
+        return False
+
     min_quality = _float_env("GOOL_MULTISPORT_SCORE_DRIFT_MIN_MATCH", 0.80)
     if float(match_quality) < min_quality:
         return False
     dh = abs(int(fs_score[0]) - int(xbet_score[0]))
     da = abs(int(fs_score[1]) - int(xbet_score[1]))
-    if cfg.key == "basketball":
-        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
-        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
-    else:
-        side_max = max(0, _int_env("GOOL_HOCKEY_SCORE_DRIFT_SIDE_MAX", 1))
-        total_max = max(0, _int_env("GOOL_HOCKEY_SCORE_DRIFT_TOTAL_MAX", 2))
+    side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
+    total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
     return dh <= side_max and da <= side_max and (dh + da) <= total_max
 
 

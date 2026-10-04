@@ -372,85 +372,64 @@ def selection_label(lane: dict[str, Any], direction: str, line: float | None = N
 
 
 def live_scopes_from_period(sport: str, period: str | None) -> set[str]:
-    """Return scopes that are meaningful for a LIVE signal right now.
+    """Return the one segment scope allowed to generate a LIVE signal.
 
-    FULL_MATCH is always live-eligible. Segment markets are eligible only for the
-    currently played segment; future/already-finished segment prices stay in the
-    market catalog but cannot create an automatic signal.
+    Product policy: hockey LIVE = current period total only; basketball LIVE =
+    current quarter total only. Full-match, team totals, halves, handicaps and
+    moneyline remain visible in telemetry but are PREMATCH-only signal markets.
     """
-    out = {SCOPE_FULL}
     raw = re.sub(r"\s+", " ", str(period or "").strip().casefold())
     if not raw:
-        return out
+        return set()
 
-    # Explicit text first.
     if str(sport).casefold() == "hockey":
         for idx in (1, 2, 3):
-            needles = (
-                f"{idx}st period" if idx == 1 else f"{idx}nd period" if idx == 2 else f"{idx}rd period",
-                f"{idx} period",
-                f"period {idx}",
-                f"p{idx}",
-            )
+            ordinal = {1: "1st", 2: "2nd", 3: "3rd"}[idx]
+            needles = (f"{ordinal} period", f"{idx} period", f"period {idx}", f"p{idx}")
             if any(n in raw for n in needles):
-                out.add(f"PERIOD_{idx}")
-                return out
+                return {f"PERIOD_{idx}"}
         m = re.search(r"\b([1-3])\b", raw)
-        if m:
-            out.add(f"PERIOD_{m.group(1)}")
-        return out
+        return {f"PERIOD_{m.group(1)}"} if m else set()
 
-    quarter = None
     for idx in (1, 2, 3, 4):
-        ord_name = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}[idx]
-        needles = (f"{ord_name} quarter", f"{idx} quarter", f"quarter {idx}", f"q{idx}")
+        ordinal = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}[idx]
+        needles = (f"{ordinal} quarter", f"{idx} quarter", f"quarter {idx}", f"q{idx}")
         if any(n in raw for n in needles):
-            quarter = idx
-            break
-    if quarter is None:
-        m = re.search(r"\b([1-4])\b", raw)
-        if m and ("quarter" in raw or raw.startswith("q") or raw.isdigit()):
-            quarter = int(m.group(1))
-    if quarter is not None:
-        out.add(f"QUARTER_{quarter}")
-        out.add("FIRST_HALF" if quarter <= 2 else "SECOND_HALF")
-        return out
-
-    if any(x in raw for x in ("1st half", "1 half", "first half", "half 1")):
-        out.add("FIRST_HALF")
-    elif any(x in raw for x in ("2nd half", "2 half", "second half", "half 2")):
-        out.add("SECOND_HALF")
-    return out
-
+            return {f"QUARTER_{idx}"}
+    m = re.search(r"\b([1-4])\b", raw)
+    if m and ("quarter" in raw or raw.startswith("q") or raw.isdigit()):
+        return {f"QUARTER_{m.group(1)}"}
+    return set()
 
 def lane_phase_policy(sport: str, phase: str, lane: dict[str, Any], period: str | None = None) -> tuple[bool, str]:
-    """Central PREMATCH/LIVE routing policy for automatic total signals."""
+    """Central PREMATCH/LIVE routing policy.
+
+    PREMATCH may use every decoded total lane. LIVE is deliberately narrow:
+    only the total of the segment currently being played.
+    """
     phase = str(phase or "LIVE").upper()
     scope = str(lane.get("scope") or SCOPE_FULL)
     family = str(lane.get("market_family") or "match_total")
-    if family not in {"match_total", "home_total", "away_total"}:
-        return False, "catalog_only_market"
 
     if phase == "PREMATCH":
-        if scope in sport_scopes(sport):
-            return True, "prematch_all_scheduled_scopes"
-        return False, "scope_not_supported_for_sport"
+        if family in {"match_total", "home_total", "away_total", "handicap", "moneyline"}:
+            return True, "prematch_full_market_tree"
+        return False, "prematch_unknown_market_catalog_only"
 
+    if family != "match_total":
+        return False, "live_segment_total_only"
     allowed = live_scopes_from_period(sport, period)
     if scope not in allowed:
-        return False, "live_future_or_finished_segment"
-    if scope == SCOPE_FULL:
-        return True, "live_full_match"
-    return True, "live_current_segment"
-
+        return False, "live_not_current_segment"
+    return True, "live_current_segment_total_only"
 
 def policy_text_ru(sport: str) -> tuple[str, str]:
     if str(sport).casefold() == "hockey":
         return (
-            "Матч + ИТ команд + ТБ/ТМ 1/2/3 периодов",
-            "Матч + ИТ команд + только текущий период",
+            "Все рынки до матча: матчевые тоталы/ИТ, форы, исходы + рынки периодов",
+            "Только ТБ/ТМ текущего периода",
         )
     return (
-        "Матч + ИТ команд + 1/2 половины + 1/2/3/4 четверти",
-        "Матч + ИТ команд + текущая четверть и её половина",
+        "Все рынки до матча: матчевые тоталы/ИТ, форы, исходы + рынки половин/четвертей",
+        "Только ТБ/ТМ текущей четверти",
     )

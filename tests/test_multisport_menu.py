@@ -88,10 +88,7 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "decoded 2" in status
 
     hockey = sport_overview_text("hockey")
-    assert "Boston — Rangers" in hockey
     assert "SKA — CSKA" in hockey
-    assert "Boston — Rangers" in hockey
-    assert "ТБ 1.82 / ТМ 1.98" in hockey
     assert "PREMATCH журнал" in hockey
     assert "LIVE журнал" in hockey
     assert "РАЗДЕЛЕНИЕ РЫНКОВ" in hockey
@@ -175,7 +172,7 @@ def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, mon
 
     sections = multisport_in_game_sections()
     text = "\n".join(sections)
-    assert "ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ" in text
+    assert "GOOL MULTI · В ИГРЕ" in text
     assert "SKA — CSKA" in text
     assert "1:0" in text
     assert "2nd period" in text
@@ -266,7 +263,7 @@ def test_multisport_in_game_uses_raw_flashscore_live_even_when_xbet_mapping_is_z
     text = "\n".join(multisport_in_game_sections())
     assert "Krylya Sovetov — Mikhaylov Academy U20" in text
     assert "1:0" in text
-    assert "LIVE · Flashscore" in text
+    assert "сейчас LIVE · 1:0" in text
     assert "Ф1 +1.5 @ 1.59" in text
     assert "может проиграть максимум в 1" in text
 
@@ -402,13 +399,52 @@ def test_multisport_overview_and_analysis_show_raw_flashscore_live_without_mappi
     monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: live if sport == "basketball" else [])
 
     overview = menu.sport_overview_text("basketball")
-    assert "LIVE · АНАЛИЗ ОНЛАЙН" in overview
-    assert "Piratas de Bogota — Caimanes del Llano" in overview
-    assert "21:24" in overview
-    assert "1xBet ⏳" in overview
-    assert "ждём 1xBet" in overview
+    assert "LIVE матчи" in overview
+    assert "Смотри общую кнопку «Анализ»" in overview
+    assert "Piratas de Bogota — Caimanes del Llano" not in overview
 
     analysis = "\n".join(menu.multisport_live_analysis_sections())
     assert "БАСКЕТБОЛ" in analysis
     assert "Piratas de Bogota — Caimanes del Llano" in analysis
     assert "ждёт линию 1xBet" in analysis
+
+
+def test_started_pending_multisport_pick_stays_in_game_when_flashscore_lookup_is_empty(tmp_path: Path, monkeypatch):
+    import time as _time
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: [])
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-PIRATAS",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "selection": "Ф2 +4.5",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "line": 4.5,
+        "odd": 1.55,
+        "strength": 100,
+        "scope": "FULL_MATCH",
+        "scheduled_start_ts": _time.time() - 3600,
+    }])
+
+    text = "\n".join(menu.multisport_in_game_sections())
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "матч после времени старта" in text
+    assert "Ф2 +4.5 @ 1.55" in text
+    assert "может проиграть максимум в 4" in text

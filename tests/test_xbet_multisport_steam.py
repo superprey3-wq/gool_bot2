@@ -6,6 +6,7 @@ from gool_bot2.xbet_multisport_steam import (
     _metric,
     _score,
     detect_steam,
+    settle_multisport_pick,
 )
 
 
@@ -50,6 +51,7 @@ def _rows(metrics, *, step=10.0, line=5.5, probability=0.52, over=1.82):
             "probability": probability + idx * 0.01,
             "line": line + idx * 0.1,
             "over": over - idx * 0.03,
+            "under": 2.05 + idx * 0.04,
         }
         for idx, metric in enumerate(metrics)
     ]
@@ -78,3 +80,24 @@ def test_basketball_requires_material_remaining_total_shift():
     signal = detect_steam(strong, cfg, now=30.0, score_changed_at=None)
     assert signal is not None
     assert signal["metric_delta"] >= cfg.min_metric_delta
+
+
+def test_basketball_under_steam_is_supported():
+    cfg = SPORTS["basketball"]
+    rows = [
+        {"ts": 0, "metric": 100.0, "probability": .54, "line": 220.5, "over": 1.78, "under": 2.02},
+        {"ts": 10, "metric": 98.7, "probability": .52, "line": 219.5, "over": 1.88, "under": 1.90},
+        {"ts": 20, "metric": 97.3, "probability": .49, "line": 218.5, "over": 2.02, "under": 1.78},
+        {"ts": 30, "metric": 95.5, "probability": .46, "line": 216.5, "over": 2.20, "under": 1.66},
+    ]
+    signal = detect_steam(rows, cfg, now=30.0, score_changed_at=None)
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["odd"] == 1.66
+    assert signal["probability_delta_pp"] > 0
+
+
+def test_multisport_settlement_handles_over_under_and_void():
+    assert settle_multisport_pick({"direction": "over", "line": 5.5}, 3, 3) == "won"
+    assert settle_multisport_pick({"direction": "under", "line": 6.5}, 3, 2) == "won"
+    assert settle_multisport_pick({"direction": "over", "line": 6.0}, 3, 3) == "void"

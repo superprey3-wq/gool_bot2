@@ -1250,15 +1250,20 @@ class MultiSportSteamWorker:
     def _xbet_queries(self, cfg: SportConfig) -> list[str]:
         count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "mode": 4}
+
+        # GitHub-verified 1xBet team-sport profile used for Basketball (SI=3)
+        # and Ice Hockey (SI=2). Keep this FIRST; football uses its own worker
+        # and is intentionally untouched here.
         profiles = [
+            {**base, "country": 71, "gr": 70, "getEmpty": "true"},
+            {**base, "country": 71, "gr": 70, "partner": 1, "getEmpty": "true"},
+            # Existing fallbacks retained for mirror/feed drift.
             {**base, "country": 1, "getEmpty": "true"},
             {**base, "country": 137, "gr": 285, "virtualSports": "true", "noFilterBlockEvent": "true", "getEmpty": "true"},
-            # BetB2B mirrors do not always agree on the country partition.
             {**base, "getEmpty": "true"},
         ]
         if cfg.key == "basketball":
             profiles.extend([
-                # Long-lived basketball profile used by 1xBet/1xStavka clients.
                 {**base, "country": 1, "antisports": 188, "partner": 51, "getEmpty": "true"},
                 {**base, "country": 153, "mobi": "true", "getEmpty": "true"},
                 {**base, "country": 19, "getEmpty": "true"},
@@ -1409,6 +1414,10 @@ class MultiSportSteamWorker:
         count = max(100, _int_env("GOOL_MULTISPORT_PREMATCH_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "cfview": 2, "mode": 4}
         return [
+            # GitHub-verified 1xBet Basketball/Hockey prematch discovery.
+            urllib.parse.urlencode({**base, "country": 71, "gr": 70, "tf": 2200000, "tz": 5, "getEmpty": "true"}),
+            urllib.parse.urlencode({**base, "country": 71, "gr": 70, "getEmpty": "true"}),
+            # Existing fallbacks.
             urllib.parse.urlencode({**base, "country": 1, "getEmpty": "true"}),
             urllib.parse.urlencode({**base, "country": 19, "getEmpty": "true"}),
             urllib.parse.urlencode({**base, "country": 1, "tf": 2200000, "tz": 0, "getEmpty": "true"}),
@@ -1551,7 +1560,10 @@ class MultiSportSteamWorker:
             "isSubGames": "true",
             "GroupEvents": "true",
             "allEventsGroupSubGames": "true",
-            "countevents": 250,
+            "countevents": 500,
+            "country": 71,
+            "fcountry": 71,
+            "gr": 70,
             "grMode": 4,
             "marketType": 1,
             "isNewBuilder": "true",
@@ -1591,7 +1603,22 @@ class MultiSportSteamWorker:
         return None
 
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
-        params = {"id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true", "GroupEvents": "true", "allEventsGroupSubGames": "true", "countevents": 250, "grMode": 2}
+        params = {
+            "id": event_id,
+            "lng": "en",
+            "cfview": 0,
+            "isSubGames": "true",
+            "GroupEvents": "true",
+            "allEventsGroupSubGames": "true",
+            # GitHub-verified Basketball/Hockey GetGameZip profile.
+            "countevents": 500,
+            "country": 71,
+            "fcountry": 71,
+            "marketType": 1,
+            "gr": 70,
+            "isNewBuilder": "true",
+            "grMode": 2,
+        }
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         unique_roots = list(dict.fromkeys(roots))
         for root in unique_roots:
@@ -1630,14 +1657,16 @@ class MultiSportSteamWorker:
             params = {
                 "id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true",
                 "GroupEvents": "true", "allEventsGroupSubGames": "true",
-                "countevents": 250, "grMode": 4, "marketType": 1, "isNewBuilder": "true",
+                "countevents": 500, "country": 71, "fcountry": 71,
+                "gr": 70, "grMode": 4, "marketType": 1, "isNewBuilder": "true",
             }
             roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
         else:
             params = {
                 "id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true",
                 "GroupEvents": "true", "allEventsGroupSubGames": "true",
-                "countevents": 250, "grMode": 2,
+                "countevents": 500, "country": 71, "fcountry": 71,
+                "marketType": 1, "gr": 70, "isNewBuilder": "true", "grMode": 2,
             }
             roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
 

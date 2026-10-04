@@ -1,0 +1,70 @@
+name: 1xBet multisport profile smoke
+
+on:
+  push:
+    branches:
+      - "hotfix/multisport-xbet-sport-profiles"
+    paths:
+      - "src/gool_bot2/xbet_multisport_steam.py"
+      - ".github/workflows/xbet-multisport-profile-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Probe GitHub-researched hockey/basketball profiles
+        run: |
+          python - <<'PY'
+          import json, urllib.parse, urllib.request
+
+          headers = {
+              "User-Agent": "Mozilla/5.0",
+              "Accept": "application/json,*/*",
+              "X-Requested-With": "XMLHttpRequest",
+          }
+
+          cases = [
+              ("HOCKEY_LIVE", "LiveFeed", 2, {"count":50,"lng":"en","gr":70,"mode":4,"country":71,"getEmpty":"true"}),
+              ("BASKET_LIVE", "LiveFeed", 3, {"count":50,"lng":"en","gr":70,"mode":4,"country":71,"getEmpty":"true"}),
+              ("HOCKEY_PRE", "LineFeed", 2, {"count":50,"lng":"en","tf":2200000,"tz":5,"mode":4,"country":71,"getEmpty":"true","gr":70}),
+              ("BASKET_PRE", "LineFeed", 3, {"count":50,"lng":"en","tf":2200000,"tz":5,"mode":4,"country":71,"getEmpty":"true","gr":70}),
+          ]
+          roots = ["https://1xbet.com", "https://1xbet.fi"]
+
+          for label, feed, sport, extra in cases:
+              params = {"sports": sport, **extra}
+              ok = False
+              for root in roots:
+                  url = f"{root}/{feed}/Get1x2_VZip?" + urllib.parse.urlencode(params)
+                  try:
+                      req = urllib.request.Request(url, headers=headers)
+                      with urllib.request.urlopen(req, timeout=8) as resp:
+                          raw = resp.read().decode("utf-8")
+                      data = json.loads(raw)
+                      value = data.get("Value") if isinstance(data, dict) else None
+                      count = len(value) if isinstance(value, list) else 0
+                      sample = []
+                      if isinstance(value, list):
+                          for row in value[:3]:
+                              sample.append({
+                                  "I": row.get("I"),
+                                  "SI": row.get("SI"),
+                                  "L": row.get("L"),
+                                  "O1": row.get("O1"),
+                                  "O2": row.get("O2"),
+                              })
+                      print(f"{label} root={root} status=200 count={count} success={data.get('Success') if isinstance(data,dict) else None}")
+                      print(json.dumps(sample, ensure_ascii=False))
+                      if count:
+                          ok = True
+                          break
+                  except Exception as exc:
+                      print(f"{label} root={root} error={type(exc).__name__}:{exc}")
+              print(f"{label}_RESULT={'OK' if ok else 'ZERO'}")
+          PY

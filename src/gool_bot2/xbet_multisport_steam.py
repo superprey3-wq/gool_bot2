@@ -664,6 +664,118 @@ class MultiSportSteamWorker:
                 return value
         return None
 
+    def _cached_subgame(self, sub_id: str, cfg: SportConfig, *, prematch: bool) -> dict[str, Any]:
+        phase = "PREMATCH" if prematch else "LIVE"
+        key = f"{phase}:{cfg.key}:{sub_id}"
+        now = time.monotonic()
+        ttl = max(
+            5.0,
+            _float_env(
+                "GOOL_MULTISPORT_PREMATCH_SUBGAME_CACHE_SECONDS" if prematch else "GOOL_MULTISPORT_LIVE_SUBGAME_CACHE_SECONDS",
+                180.0 if prematch else 28.0,
+            ),
+        )
+        stale_ttl = max(ttl, _float_env("GOOL_MULTISPORT_SUBGAME_STALE_SECONDS", 600.0))
+        cached_at, cached = self._subgame_cache.get(key, (0.0, {}))
+        if cached and now - cached_at <= ttl:
+            return dict(cached)
+        game = self._prematch_game(sub_id, cfg) if prematch else self._game(sub_id, cfg)
+        if isinstance(game, dict) and game:
+            self._subgame_cache[key] = (now, dict(game))
+            return game
+        if cached and now - cached_at <= stale_ttl:
+            return dict(cached)
+        return {}
+
+    @staticmethod
+    def _compact_decoded(decoded: dict[str, Any]) -> dict[str, Any]:
+        moneyline = dict(decoded.get("moneyline") or {})
+        return {
+            "scope": decoded.get("scope"),
+            "match_total": list(decoded.get("match_total") or []),
+            "home_total": list(decoded.get("home_total") or []),
+            "away_total": list(decoded.get("away_total") or []),
+            "handicap": list(decoded.get("handicap") or []),
+            "moneyline": moneyline,
+            "raw_market_count": len(decoded.get("raw") or []),
+        }
+
+    def _market_tree(
+        self,
+        game: dict[str, Any],
+        cfg: SportConfig,
+        *,
+        prematch: bool,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+        decoded: dict[str, dict[str, Any]] = {
+            SCOPE_FULL: decode_core_markets(game, cfg.key, scope=SCOPE_FULL)
+        }
+        fetch_status: dict[str, str] = {SCOPE_FULL: "fetched"}
+        unknown_catalog: dict[str, list[dict[str, Any]]] = {
+            SCOPE_FULL: raw_catalog(decoded[SCOPE_FULL])
+        }
+
+        wanted: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for sg in game.get("SG") or []:
+            if not isinstance(sg, dict):
+                continue
+            scope = scope_from_subgame(sg, cfg.key)
+            sub_id = str(sg.get("I") or "").strip()
+            if not scope or not sub_id or scope in seen:
+                continue
+            seen.add(scope)
+            wanted.append((scope, sub_id))
+
+        maximum = max(0, _int_env("GOOL_MULTISPORT_MAX_SUBGAMES_PER_EVENT", 8))
+        wanted = wanted[:maximum]
+        workers = max(1, min(4, _int_env("GOOL_MULTISPORT_SUBGAME_WORKERS", 3)))
+        if wanted:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(self._cached_subgame, sub_id, cfg, prematch=prematch): (scope, sub_id)
+                    for scope, sub_id in wanted
+                }
+                for future in as_completed(futures):
+                    scope, _sub_id = futures[future]
+                    try:
+                        sub = future.result(timeout=10)
+                    except Exception:
+                        sub = {}
+                    if not sub:
+                        fetch_status[scope] = "failed"
+                        continue
+                    scope_decoded = decode_core_markets(sub, cfg.key, scope=scope)
+                    decoded[scope] = scope_decoded
+                    unknown_catalog[scope] = raw_catalog(scope_decoded)
+                    fetch_status[scope] = "fetched"
+
+        core_groups = {1, 2, 3, 4, 5, 6, 15, 16, 17, 62, 101, 102}
+        unknown: list[dict[str, Any]] = []
+        for scope, rows in unknown_catalog.items():
+            for item in rows:
+                if int(item.get("G") or -1) in core_groups:
+                    continue
+                unknown.append({"scope": scope, **item})
+        unknown.sort(key=lambda row: (str(row.get("scope") or ""), int(row.get("G") or -1), int(row.get("T") or -1)))
+
+        coverage: dict[str, Any] = {}
+        for scope, item in decoded.items():
+            coverage[scope] = {
+                "match_total_lines": len(item.get("match_total") or []),
+                "home_total_lines": len(item.get("home_total") or []),
+                "away_total_lines": len(item.get("away_total") or []),
+                "handicap_lines": len(item.get("handicap") or []),
+                "moneyline": any((item.get("moneyline") or {}).values()),
+                "raw_market_count": len(item.get("raw") or []),
+                "fetch": fetch_status.get(scope, "fetched"),
+            }
+        return decoded, {
+            "coverage": coverage,
+            "unknown_market_catalog": unknown[:max(20, _int_env("GOOL_MULTISPORT_UNKNOWN_MARKET_CATALOG_MAX", 160))],
+            "subgame_fetch": fetch_status,
+        }
+
     def _prematch_snapshot(self, event: dict[str, Any], fs: dict[str, Any], reversed_order: bool, match_score: float, cfg: SportConfig) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
         game = event

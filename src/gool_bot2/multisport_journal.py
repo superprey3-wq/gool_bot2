@@ -79,10 +79,33 @@ def save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
     item = normalize_entry(row)
+    phase = str(item.get("phase") or "")
     stable_event_id = str(item.get("flashscore_event_id") or item.get("event_id") or "")
+
+    if phase == "PREMATCH":
+        # Product contract: one match = one PREMATCH pick, regardless of
+        # total/team-total/handicap/moneyline or segment scope.
+        # Prefer Flashscore identity; when it is absent, include teams + start
+        # so rotating bookmaker ids still collapse to the same fixture.
+        if not item.get("flashscore_event_id"):
+            home = " ".join(str(item.get("home") or "").casefold().split())
+            away = " ".join(str(item.get("away") or "").casefold().split())
+            try:
+                start_bucket = int(float(item.get("scheduled_start_ts") or item.get("start_ts") or 0) // 60)
+            except (TypeError, ValueError):
+                start_bucket = 0
+            stable_event_id = f"fixture:{home}:{away}:{start_bucket}"
+        return (
+            str(item.get("sport") or ""),
+            phase,
+            stable_event_id,
+            "MATCH",
+            "PRIMARY",
+        )
+
     return (
         str(item.get("sport") or ""),
-        str(item.get("phase") or ""),
+        phase,
         stable_event_id,
         str(item.get("scope") or "FULL_MATCH"),
         str(item.get("market_family") or ""),

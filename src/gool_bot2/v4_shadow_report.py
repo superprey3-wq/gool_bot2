@@ -301,7 +301,11 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0])
-            quality = prematch_evidence_quality(profile, source_coverage=history.get("source_coverage") or {})
+            # Stage-1 Flashscore scan intentionally uses a permissive sample
+            # quality. Rich evidence quality belongs to the later Fusion stage;
+            # applying it here starves the pipeline because venue/source/H2H
+            # coverage has not been enriched yet.
+            quality = min(1.0, sample / 8.0)
             score = _brain_score(profile, quality)
             trends = _trend_signals(profile, quality)
             primary_trend = _primary_trend(trends)

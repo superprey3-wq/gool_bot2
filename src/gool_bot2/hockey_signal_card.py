@@ -14,6 +14,25 @@ TEXT=(246,250,252); MUTED=(148,177,187); LINE=(39,78,91); GOLD=(255,190,65)
 GREEN=(80,221,126); RED=(231,92,92)
 
 
+def _team_badge(img:Image.Image,d:ImageDraw.ImageDraw,x:int,y:int,row:dict[str,Any],side:str,name:str,accent=ICE)->None:
+    meta=dict(row.get("flashscore_meta") or {})
+    logo=sc._logo(meta,side)
+    r=34
+    d.ellipse((x-r-4,y-r-4,x+r+4,y+r+4),outline=accent,width=2)
+    d.ellipse((x-r,y-r,x+r,y+r),fill=PANEL,outline=LINE,width=1)
+    if logo:
+        bb=logo.getbbox()
+        logo=logo.crop(bb) if bb else logo
+        scale=min(58/max(1,logo.width),58/max(1,logo.height))
+        logo=logo.resize((max(1,int(logo.width*scale)),max(1,int(logo.height*scale))),Image.Resampling.LANCZOS)
+        img.alpha_composite(logo,(x-logo.width//2,y-logo.height//2))
+        return
+    initials="".join(part[:1] for part in str(name).split()[:2]).upper() or "?"
+    font=sc._font(14,True)
+    box=d.textbbox((0,0),initials,font=font)
+    d.text((x-(box[2]-box[0])/2,y-9),initials,font=font,fill=TEXT)
+
+
 def _label(row:dict[str,Any],signal:dict[str,Any])->str:
     direction=str(signal.get("direction") or row.get("direction") or "over")
     line=float(signal.get("line") or row.get("line") or 0)
@@ -38,8 +57,10 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
         sec=max(0,int(clock)); period=f"{period} • {sec//60:02d}:{sec%60:02d}"
     d.text((50,122),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
     d.rounded_rectangle((42,158,1038,350),28,fill=PANEL,outline=BLUE,width=2)
-    d.text((72,194),home,font=sc._fit(d,home,380,29,True),fill=TEXT)
-    d.text((72,288),away,font=sc._fit(d,away,380,29,True),fill=TEXT)
+    _team_badge(im,d,105,220,row,"home",home,ICE)
+    _team_badge(im,d,105,310,row,"away",away,ICE)
+    d.text((160,194),home,font=sc._fit(d,home,300,27,True),fill=TEXT)
+    d.text((160,288),away,font=sc._fit(d,away,300,27,True),fill=TEXT)
     d.ellipse((480,190,610,320),outline=ICE,width=4)
     sc._center(d,f"{int(score[0])}:{int(score[1])}",216,sc._font(42,True),TEXT)
     d.text((690,215),period,font=sc._fit(d,period,300,23,True),fill=ICE)
@@ -79,8 +100,10 @@ def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
     league=str(row.get("league") or "PREMATCH")
     d.text((50,122),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
     d.rounded_rectangle((42,158,1038,344),28,fill=PANEL,outline=BLUE,width=2)
-    d.text((72,195),home,font=sc._fit(d,home,590,31,True),fill=TEXT)
-    d.text((72,282),away,font=sc._fit(d,away,590,31,True),fill=TEXT)
+    _team_badge(im,d,108,220,row,"home",home,ICE)
+    _team_badge(im,d,108,305,row,"away",away,ICE)
+    d.text((165,195),home,font=sc._fit(d,home,500,29,True),fill=TEXT)
+    d.text((165,282),away,font=sc._fit(d,away,500,29,True),fill=TEXT)
     ts=float(row.get("start_ts") or 0)
     try: tz=ZoneInfo("Europe/Moscow")
     except Exception: tz=timezone.utc
@@ -130,8 +153,11 @@ def render_hockey_result_card(row:dict[str,Any],cfg:Any)->bytes:
     _header(d,title,str(row.get("phase") or "LIVE").upper())
     d.text((52,130),str(row.get("league") or "HOCKEY"),font=sc._fit(d,str(row.get("league") or "HOCKEY"),960,19,False),fill=MUTED)
     d.rounded_rectangle((42,172,1038,370),26,fill=PANEL,outline=accent,width=3)
-    d.text((70,205),str(row.get("home") or "?"),font=sc._fit(d,str(row.get("home") or "?"),400,28,True),fill=TEXT)
-    d.text((70,302),str(row.get("away") or "?"),font=sc._fit(d,str(row.get("away") or "?"),400,28,True),fill=TEXT)
+    home=str(row.get("home") or "?"); away=str(row.get("away") or "?")
+    _team_badge(im,d,105,230,row,"home",home,accent)
+    _team_badge(im,d,105,325,row,"away",away,accent)
+    d.text((160,205),home,font=sc._fit(d,home,310,27,True),fill=TEXT)
+    d.text((160,302),away,font=sc._fit(d,away,310,27,True),fill=TEXT)
     score=list(row.get("settled_score") or row.get("score") or [0,0])
     d.text((565,235),f"{int(score[0])}:{int(score[1])}",font=sc._font(62,True),fill=accent)
     d.rounded_rectangle((42,410,1038,578),22,fill=PANEL,outline=LINE,width=2)

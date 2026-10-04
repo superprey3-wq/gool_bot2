@@ -222,3 +222,27 @@ def test_persisted_state_index_fallback_keeps_identity_not_odds(tmp_path):
     assert pre == [{"I": "hp1", "O1": "Dynamo", "O2": "Spartak", "_state_cache": True}]
     assert "line" not in live[0]
     assert "over" not in live[0]
+
+
+
+def test_hockey_segment_stats_reads_actual_subgame_scores(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    game = {
+        "SG": [
+            {"I": 101, "PN": "2nd period", "P": 2, "TG": "Shots On Goal"},
+            {"I": 102, "PN": "2nd period", "P": 2, "TG": "2-Minute Penalties"},
+            {"I": 103, "PN": "2nd period", "P": 2, "TG": "Powerplay goals"},
+            {"I": 104, "PN": "1st period", "P": 1, "TG": "Shots On Goal"},
+        ]
+    }
+    payloads = {
+        "101": {"SC": {"FS": {"S1": 14, "S2": 11}}},
+        "102": {"SC": {"FS": {"S1": 2, "S2": 1}}},
+        "103": {"SC": {"FS": {"S1": 1, "S2": 0}}},
+    }
+    monkeypatch.setattr(worker, "_cached_subgame", lambda sub_id, cfg, prematch=False: payloads.get(str(sub_id), {}))
+    stats = worker._hockey_segment_stats(game, SPORTS["hockey"], current_period="2nd period")
+    assert stats["scope"] == "PERIOD_2"
+    assert stats["shots_on_goal"] == [14, 11]
+    assert stats["penalties_2m"] == [2, 1]
+    assert stats["powerplay_goals"] == [1, 0]

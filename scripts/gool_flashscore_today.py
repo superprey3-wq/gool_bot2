@@ -17,7 +17,7 @@ from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
-from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows
+from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows,select_value_scan_rows
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
@@ -206,8 +206,10 @@ print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in rows)),flush=True)
 
 brain_eligible_total=len(rows)
+value_scan_rows=select_value_scan_rows(rows)
 rows,shortlist_stats=select_confident_prematch_rows(rows)
 print("PREMATCH_SHORTLIST",shortlist_stats,flush=True)
+print("VALUE_HUNTER_POOL",{"selected":len(value_scan_rows),"normal_shortlist":len(rows)},flush=True)
 update_prematch_status(
  stage="market_lookup",
  brain_eligible=brain_eligible_total,
@@ -219,6 +221,7 @@ update_prematch_status(
  shortlist_rejected_separation=int(shortlist_stats.get("rejected_separation") or 0),
  shortlist_rejected_probability=int(shortlist_stats.get("rejected_probability") or 0),
  shortlist_rejected_quality=int(shortlist_stats.get("rejected_quality") or 0),
+ value_hunter_scan_pool=len(value_scan_rows),
 )
 
 # Market-choice stage: the football brain selects interesting matches, then the
@@ -363,6 +366,42 @@ def one(r):
    info={**info,"candidate_meta":candidate_meta}
  return picks,info,r,value_pick,value_diag
 
+def value_only(r):
+ m=r["match"]; kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
+ value_pick=None
+ value_diag={"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":{}}
+ try:
+  odds_payload=fetch_event_odds(m.provider_match_id)
+  full_analysis=analyze_full_market(odds_payload,r["profile"],quality=float(r["quality"]))
+  hunter_rows=[]
+  for hp,hm in analysis_value_rows(
+   full_analysis,
+   event_id=str(m.provider_match_id),home=m.home,away=m.away,
+   league=m.league or "",kickoff_ts=kick,
+  ):
+   before=float(hp.model_probability)
+   hq,regime=apply_team_regime(hp,r["profile"])
+   hmeta={**hm,"probability_before_regime":before}
+   if regime.get("tags"):
+    hmeta["team_regime"]=regime
+   hunter_rows.append((hq,hmeta))
+  value_diag=diagnose_value_rows(hunter_rows)
+  value_pick=select_best_value_pick(hunter_rows)
+  if value_pick:
+   vp,vm=value_pick
+   print(
+    "VALUE_HUNTER_CANDIDATE_WIDE",m.home,"-",m.away,
+    vp.market,vp.selection,f"@{vp.odds:.2f}",
+    f"p={vp.model_probability:.3f}",
+    f"edge={vp.edge*100:+.1f}pp",
+    f"ev={vp.expected_value*100:+.1f}%",
+    f"score={float(vm.get('value_score') or 0):.1f}",
+    flush=True,
+   )
+ except Exception as exc:
+  print("VALUE_HUNTER_WIDE_ERROR",m.home,"-",m.away,type(exc).__name__,str(exc),flush=True)
+ return r,value_pick,value_diag
+
 priced=[]; meta={}; value_candidates=[]
 value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":Counter()}
 with ThreadPoolExecutor(max_workers=20) as pool:
@@ -388,6 +427,28 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    priced.append(p)
    kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
+
+# VALUE scans a wider post-Fusion pool without widening ordinary PREMATCH.
+normal_ids={str(r["match"].provider_match_id) for r in rows}
+value_extra_rows=[r for r in value_scan_rows if str(r["match"].provider_match_id) not in normal_ids]
+if value_extra_rows:
+ with ThreadPoolExecutor(max_workers=min(12,len(value_extra_rows))) as value_pool:
+  for ftr in as_completed([value_pool.submit(value_only,r) for r in value_extra_rows]):
+   r,value_pick,value_diag=ftr.result()
+   value_diag_total["scanned_matches"]+=1
+   value_diag_total["modeled_markets"]+=int(value_diag.get("modeled_markets") or 0)
+   value_diag_total["high_odds_markets"]+=int(value_diag.get("high_odds_markets") or 0)
+   value_diag_total["qualified"]+=int(value_diag.get("qualified") or 0)
+   value_diag_total["rejects"].update(value_diag.get("rejects") or {})
+   if value_pick:
+    m=r["match"]; fs_meta=dict(m.meta or {})
+    home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
+    away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
+    if home_logo: fs_meta["home_logo_url"]=home_logo
+    if away_logo: fs_meta["away_logo_url"]=away_logo
+    vp,vm=value_pick
+    value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
+
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
 print("VALUE_HUNTER_SCAN",{
  "scanned_matches":value_diag_total["scanned_matches"],
@@ -400,6 +461,7 @@ update_prematch_status(
  stage="delivery",
  priced=len(priced),
  value_hunter_stage="scanned",
+ value_hunter_scan_pool=len(value_scan_rows),
  value_hunter_scanned_matches=int(value_diag_total["scanned_matches"]),
  value_hunter_modeled_markets=int(value_diag_total["modeled_markets"]),
  value_hunter_high_odds_markets=int(value_diag_total["high_odds_markets"]),
@@ -454,6 +516,7 @@ update_prematch_status(
  delivered_cards=int(delivered.get("cards") or 0),
  delivered_entries=int(delivered.get("entries") or 0),
  delivered_parlays=int(delivered.get("parlays") or 0),
+ value_hunter_scan_pool=len(value_scan_rows),
  value_hunter_candidates=len(value_candidates),
  value_hunter_sent=int(value_delivered.get("entries") or 0),
  value_hunter_scanned_matches=int(value_diag_total["scanned_matches"]),

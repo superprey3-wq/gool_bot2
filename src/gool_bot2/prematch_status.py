@@ -71,6 +71,7 @@ def prematch_status_text() -> str:
         f"brain eligible: <b>{_fmt(data.get('brain_eligible'))}</b>",
         f"confident shortlist: <b>{_fmt(data.get('shortlist'))}</b> / cap <b>{_fmt(data.get('shortlist_cap'))}</b>",
         f"qualified before cap: <b>{_fmt(data.get('shortlist_qualified'))}</b>",
+        f"отсев quality: <b>{_fmt(data.get('shortlist_rejected_quality'))}</b>",
         f"priced candidates: <b>{_fmt(data.get('priced'))}</b>",
         f"режим: <b>{mode}</b>",
         f"ординары: <b>{_fmt(data.get('singles'))}</b>",

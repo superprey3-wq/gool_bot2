@@ -899,6 +899,8 @@ class MultiSportSteamWorker:
             for key, value in row.items()
             if key not in {"market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
         }
+        if row.get("score") is not None:
+            compact["match_score"] = list(row.get("score") or [0, 0])
         compact.update(dict(lane))
         compact["scope"] = str(lane.get("scope") or SCOPE_FULL)
         compact["market_family"] = str(lane.get("market_family") or "match_total")
@@ -952,11 +954,28 @@ class MultiSportSteamWorker:
             save_journal(self.journal_path, rows)
         return changed
 
-    def _already_seen(self, sport: str, event_id: str, phase: str) -> bool:
+    def _already_seen(
+        self,
+        sport: str,
+        event_id: str,
+        phase: str,
+        scope: str = SCOPE_FULL,
+        market_family: str = "match_total",
+    ) -> bool:
         wanted_phase = str(phase or "LIVE").upper()
+        wanted_scope = str(scope or SCOPE_FULL)
+        wanted_family = str(market_family or "match_total")
         for row in load_journal(self.journal_path):
             row_phase = str(row.get("phase") or ("PREMATCH" if row.get("origin") == "multisport_prematch" else "LIVE")).upper()
-            if str(row.get("sport") or "") == sport and str(row.get("event_id") or "") == event_id and row_phase == wanted_phase:
+            row_scope = str(row.get("scope") or SCOPE_FULL)
+            row_family = str(row.get("market_family") or "match_total")
+            if (
+                str(row.get("sport") or "") == sport
+                and str(row.get("event_id") or "") == event_id
+                and row_phase == wanted_phase
+                and row_scope == wanted_scope
+                and row_family == wanted_family
+            ):
                 return True
         return False
 
@@ -1015,19 +1034,26 @@ class MultiSportSteamWorker:
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
         event_id = str(row.get("event_id") or "")
         phase = str(row.get("phase") or "LIVE").upper()
-        if self._already_seen(cfg.key, event_id, phase):
+        scope = str(row.get("scope") or SCOPE_FULL)
+        family = str(row.get("market_family") or "match_total")
+        if self._already_seen(cfg.key, event_id, phase, scope, family):
             return False, 0
         mode = _mode()
-        sent = self._deliver(row, signal, cfg) if mode == "active" else 0
+        direction = str(signal.get("direction") or "over")
+        pick_label = selection_label(row, direction, float(signal.get("line") or row.get("line") or 0.0))
+        row_for_delivery = {**row, "selection": pick_label, "scope": scope, "market_family": family}
+        sent = self._deliver(row_for_delivery, signal, cfg) if mode == "active" else 0
         entry = {
-            "entry_id": f"{cfg.key}:{phase.lower()}:{event_id}:match_total",
+            "entry_id": f"{cfg.key}:{phase.lower()}:{event_id}:{scope}:{family}",
             "journal_version": 2,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "phase": phase,
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
-            "signal_type": "prematch_total_movement" if phase == "PREMATCH" else "live_total_movement",
-            "market_family": "match_total",
-            "selection": ("ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ") + f" {float(signal.get('line') or 0):g}",
+            "signal_type": f"{phase.lower()}_{family}_movement",
+            "market_family": family,
+            "scope": scope,
+            "lane_key": str(row.get("lane_key") or f"{scope}:{family}"),
+            "selection": pick_label,
             "sport": cfg.key,
             "event_id": event_id,
             "flashscore_event_id": row.get("flashscore_event_id"),
@@ -1035,16 +1061,17 @@ class MultiSportSteamWorker:
             "away": row.get("away"),
             "league": row.get("league"),
             "score": list(row.get("score") or [0, 0]) if phase == "LIVE" else None,
+            "match_score": list(row.get("match_score") or row.get("score") or [0, 0]) if phase == "LIVE" else None,
             "period": row.get("period") if phase == "LIVE" else None,
             "start_ts": float(row.get("start_ts") or 0.0),
             "scheduled_start_ts": float(row.get("start_ts") or 0.0),
             "scheduled_start": row.get("scheduled_start"),
             "clock_seconds": row.get("clock_seconds"),
-            "direction": signal.get("direction"),
+            "direction": direction,
             "line": float(signal.get("line") or 0.0),
             "odd": float(signal.get("odd") or 0.0),
             "opening_line": float(((signal.get("start") or {}).get("line") or signal.get("line") or 0.0)) if phase == "PREMATCH" else None,
-            "opening_odd": float(((signal.get("start") or {}).get(str(signal.get("direction") or "over")) or signal.get("odd") or 0.0)) if phase == "PREMATCH" else None,
+            "opening_odd": float(((signal.get("start") or {}).get(direction) or signal.get("odd") or 0.0)) if phase == "PREMATCH" else None,
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
@@ -1061,8 +1088,8 @@ class MultiSportSteamWorker:
         if not append_unique(self.journal_path, entry):
             return False, 0
         print(
-            f"GOOL_MULTISPORT_SIGNAL phase={phase} sport={cfg.key} match={row.get('home')}--{row.get('away')} "
-            f"selection={entry['direction']}:{entry['line']:g} odd={entry['odd']:.2f} "
+            f"GOOL_MULTISPORT_SIGNAL phase={phase} sport={cfg.key} scope={scope} family={family} "
+            f"match={row.get('home')}--{row.get('away')} selection={pick_label} odd={entry['odd']:.2f} "
             f"strength={entry['strength']:.0f} mode={mode}",
             flush=True,
         )

@@ -857,6 +857,56 @@ def detect_steam(
     }
 
 
+def select_prematch_primary(
+    candidates: list[tuple[dict[str, Any], dict[str, Any]]],
+    recent_families: list[str] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Pick one PREMATCH market without letting one family dominate by accident.
+
+    Quality stays primary. If the same family was already sent repeatedly, a
+    different family may win only when it is close enough in signal strength.
+    """
+    if not candidates:
+        return None
+    family_bias = {
+        "match_total": 0.8,
+        "home_total": 0.6,
+        "away_total": 0.6,
+        "moneyline": 0.3,
+        "handicap": 0.0,
+    }
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            float(item[1].get("strength") or 0.0)
+            + family_bias.get(str(item[0].get("market_family") or ""), 0.0),
+            float(item[1].get("fair_probability") or 0.0),
+        ),
+        reverse=True,
+    )
+    best_row, best_signal = ranked[0]
+    best_family = str(best_row.get("market_family") or "")
+    recent = [str(x or "") for x in (recent_families or []) if str(x or "")]
+    streak = max(2, _int_env("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", 3))
+    if len(recent) < streak or any(family != best_family for family in recent[-streak:]):
+        return best_row, best_signal
+
+    alternative = next(
+        ((row, signal) for row, signal in ranked if str(row.get("market_family") or "") != best_family),
+        None,
+    )
+    if alternative is None:
+        return best_row, best_signal
+
+    alt_row, alt_signal = alternative
+    max_gap = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", 8.0))
+    best_strength = float(best_signal.get("strength") or 0.0)
+    alt_strength = float(alt_signal.get("strength") or 0.0)
+    if alt_strength >= best_strength - max_gap:
+        return alt_row, alt_signal
+    return best_row, best_signal
+
+
 def detect_prematch_choice(
     rows: list[dict[str, Any]],
     cfg: SportConfig,
@@ -2373,6 +2423,13 @@ class MultiSportSteamWorker:
         mapped, mapped_total = self._prematch_batch(cfg, mapped_all)
         decoded = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
+        recent_families = [
+            str(item.get("market_family") or "")
+            for item in load_journal(self.journal_path)
+            if str(item.get("sport") or "") == cfg.key
+            and str(item.get("phase") or "").upper() == "PREMATCH"
+            and str(item.get("market_family") or "")
+        ][-8:]
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_GAME_WORKERS", 6)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(self._prematch_snapshot, event, fs, reversed_order, score, cfg) for event, fs, reversed_order, score in mapped]
@@ -2417,28 +2474,15 @@ class MultiSportSteamWorker:
                     candidates.append((lane_row, signal))
 
                 signals: list[dict[str, Any]] = []
-                if candidates:
-                    family_bias = {
-                        "match_total": 0.8,
-                        "home_total": 0.6,
-                        "away_total": 0.6,
-                        "moneyline": 0.3,
-                        "handicap": 0.0,
-                    }
-                    candidates.sort(
-                        key=lambda item: (
-                            float(item[1].get("strength") or 0.0)
-                            + family_bias.get(str(item[0].get("market_family") or ""), 0.0),
-                            float(item[1].get("fair_probability") or 0.0),
-                        ),
-                        reverse=True,
-                    )
-                    best_row, best_signal = candidates[0]
+                primary = select_prematch_primary(candidates, recent_families)
+                if primary is not None:
+                    best_row, best_signal = primary
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     detected += int(recorded)
                     delivered += int(bool(sent))
                     if recorded:
                         signals.append(best_signal)
+                        recent_families.append(str(best_row.get("market_family") or ""))
                 if signals:
                     row["signals"] = signals
                     row["signal"] = signals[0]

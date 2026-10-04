@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import urllib.parse
+
 from gool_bot2.xbet_multisport_steam import (
     SPORTS,
     MultiSportSteamWorker,
@@ -634,3 +636,46 @@ def test_prematch_game_uses_current_getgamezip_when_legacy_is_empty(tmp_path, mo
         game, "basketball"
     )
     assert decoded["match_total"][0]["line"] == 165.5
+
+
+def test_hockey_basketball_live_index_profile_uses_gr70_country71_first(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    for key in ("hockey", "basketball"):
+        query = urllib.parse.parse_qs(worker._xbet_queries(SPORTS[key])[0])
+        assert query["sports"] == [str(SPORTS[key].sport_id)]
+        assert query["country"] == ["71"]
+        assert query["gr"] == ["70"]
+        assert query["mode"] == ["4"]
+
+
+def test_hockey_basketball_prematch_profile_uses_gr70_country71_first(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    for key in ("hockey", "basketball"):
+        query = urllib.parse.parse_qs(worker._xbet_prematch_queries(SPORTS[key])[0])
+        assert query["sports"] == [str(SPORTS[key].sport_id)]
+        assert query["country"] == ["71"]
+        assert query["gr"] == ["70"]
+        assert query["tf"] == ["2200000"]
+        assert query["tz"] == ["5"]
+
+
+def test_multisport_getgamezip_uses_team_sport_profile(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    worker = MultiSportSteamWorker(tmp_path)
+    urls = []
+    def fake_http(url, timeout=8.0):
+        urls.append(url)
+        return {"Value": {"I": 123, "O1": "A", "O2": "B", "AE": []}}
+
+    monkeypatch.setattr(steam, "_sport_http_json", fake_http)
+    game = worker._game("123", SPORTS["basketball"])
+    assert game is not None
+    parsed = urllib.parse.urlsplit(urls[0])
+    query = urllib.parse.parse_qs(parsed.query)
+    assert query["country"] == ["71"]
+    assert query["fcountry"] == ["71"]
+    assert query["gr"] == ["70"]
+    assert query["marketType"] == ["1"]
+    assert query["isNewBuilder"] == ["true"]
+    assert query["countevents"] == ["500"]

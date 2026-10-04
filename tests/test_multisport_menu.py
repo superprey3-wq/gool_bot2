@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gool_bot2.multisport_menu import multisport_report_text, multisport_status_text, sport_overview_text
+from gool_bot2.multisport_menu import multisport_report_text, multisport_status_text, sport_journal_text, sport_overview_text
 
 
 def _write(path: Path, payload) -> None:
@@ -85,3 +85,8 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "P/L +0.80u" in report
     assert "P/L -1.00u" in report
     assert "PREMATCH и LIVE считаются отдельно" in report
+
+    journal_text = sport_journal_text()
+    assert "ЖУРНАЛ СИГНАЛОВ" in journal_text
+    assert "PREMATCH" in journal_text
+    assert "LIVE" in journal_text

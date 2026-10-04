@@ -53,6 +53,7 @@ update_prematch_status(
  shortlist_rejected_separation=0,
  shortlist_rejected_probability=0,
  shortlist_rejected_quality=0,
+ shortlist_rescued_quality=0,
  priced=0,
  mode="PENDING",
  singles=0,
@@ -221,6 +222,7 @@ update_prematch_status(
  shortlist_rejected_separation=int(shortlist_stats.get("rejected_separation") or 0),
  shortlist_rejected_probability=int(shortlist_stats.get("rejected_probability") or 0),
  shortlist_rejected_quality=int(shortlist_stats.get("rejected_quality") or 0),
+ shortlist_rescued_quality=int(shortlist_stats.get("rescued_quality") or 0),
  value_hunter_scan_pool=len(value_scan_rows),
 )
 

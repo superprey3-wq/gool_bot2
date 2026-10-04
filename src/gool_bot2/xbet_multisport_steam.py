@@ -430,6 +430,24 @@ def _score_candidates(game: dict[str, Any], cfg: SportConfig) -> list[tuple[int,
     return out
 
 
+def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str, tuple[int, int]]:
+    out: dict[str, tuple[int, int]] = {}
+    parts = [p for p in (fs.get("score_parts") or []) if isinstance(p, (list, tuple)) and len(p) >= 2]
+    if cfg.key == "hockey":
+        for idx, score in enumerate(parts[:3], 1):
+            out[f"PERIOD_{idx}"] = (int(score[0]), int(score[1]))
+    else:
+        for idx, score in enumerate(parts[:4], 1):
+            out[f"QUARTER_{idx}"] = (int(score[0]), int(score[1]))
+        q1, q2 = out.get("QUARTER_1"), out.get("QUARTER_2")
+        q3, q4 = out.get("QUARTER_3"), out.get("QUARTER_4")
+        if q1 and q2:
+            out["FIRST_HALF"] = (q1[0] + q2[0], q1[1] + q2[1])
+        if q3 and q4:
+            out["SECOND_HALF"] = (q3[0] + q4[0], q3[1] + q4[1])
+    return out
+
+
 def _score_sync_allowed(
     cfg: SportConfig,
     fs_score: tuple[int, int],
@@ -1079,11 +1097,18 @@ def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
         away = str(fields.get("AF") or "").strip()
         if not home or not away:
             continue
+        score_parts: list[list[int]] = []
+        for home_key, away_key in (("BA","BB"),("BC","BD"),("BE","BF"),("BG","BH"),("BI","BJ")):
+            hv, av = fields.get(home_key), fields.get(away_key)
+            if hv is None and av is None:
+                continue
+            score_parts.append([_as_int(hv), _as_int(av)])
         rows[event_id] = {
             "flashscore_event_id": event_id,
             "home": home,
             "away": away,
             "score": [_as_int(fields.get("AG"), _as_int(fields.get("AT"))), _as_int(fields.get("AH"), _as_int(fields.get("AU")))],
+            "score_parts": score_parts,
             "league": league,
             "status_code": str(fields.get("AC") or ""),
             "coarse_status": str(fields.get("AB") or ""),
@@ -1266,40 +1291,73 @@ class MultiSportSteamWorker:
                 merged[str(row["flashscore_event_id"])] = row
         return list(merged.values())
 
-    def _flashscore_live_stats(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
-        """Cheap Flashscore-first LIVE stats layer.
-
-        1xBet is intentionally not used for game statistics here. Missing
-        Flashscore stats are acceptable: the segment brain can still use score
-        and clock pace.
-        """
+    def _flashscore_live_stats(
+        self,
+        fs: dict[str, Any],
+        cfg: SportConfig,
+        *,
+        current_period: str = "",
+    ) -> dict[str, Any]:
+        """Flashscore-first LIVE stats, selecting the current period/quarter."""
         event_id = str(fs.get("flashscore_event_id") or "").strip()
         if not event_id:
             return {}
         now = time.monotonic()
         ttl = max(5.0, _float_env("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", 20.0))
-        cached_at, cached = self._fs_live_stats_cache.get(event_id, (0.0, {}))
+        cache_key = f"{event_id}:{current_period}"
+        cached_at, cached = self._fs_live_stats_cache.get(cache_key, (0.0, {}))
         if cached and now - cached_at <= ttl:
             return dict(cached)
         try:
-            raw = dict(self._flashscore.fetch_stats(event_id) or {})
+            detailed = dict(self._flashscore.fetch_stats_detailed(event_id) or {})
         except Exception as exc:
             print(f"GOOL_{cfg.key.upper()}_FS_STATS_ERROR event={event_id} {type(exc).__name__}:{exc}", flush=True)
-            raw = {}
-        stats: dict[str, Any] = {
+            detailed = {}
+
+        sections = dict(detailed.get("sections") or {})
+        wanted = live_scopes_from_period(cfg.key, current_period)
+        scope = next(iter(wanted), "")
+        selected = dict(sections.get(scope) or {})
+        if not selected:
+            selected = dict(sections.get("FULL_MATCH") or {})
+            scope = "FULL_MATCH" if selected else scope
+        stats = dict(selected.get("stats") or {})
+        segment_stats: dict[str, list[float]] = {}
+        segment_attempts: dict[str, list[float]] = {}
+        for key, item in stats.items():
+            if not isinstance(item, dict):
+                continue
+            hv, av = item.get("home"), item.get("away")
+            if hv is not None and av is not None:
+                try:
+                    segment_stats[str(key)] = [float(hv), float(av)]
+                except (TypeError, ValueError):
+                    pass
+            ha, aa = item.get("home_attempts"), item.get("away_attempts")
+            if ha is not None and aa is not None:
+                try:
+                    segment_attempts[str(key)] = [float(ha), float(aa)]
+                except (TypeError, ValueError):
+                    pass
+
+        out: dict[str, Any] = {
             "source": "flashscore",
-            "raw": raw,
+            "scope": scope or None,
+            "segment_stats": segment_stats,
+            "segment_attempts": segment_attempts,
+            "available": bool(segment_stats),
+            "section_keys": list(sections),
         }
         if cfg.key == "hockey":
-            shots = raw.get("shots_on_target") or raw.get("shots")
-            if isinstance(shots, (list, tuple)) and len(shots) >= 2:
-                stats["shots_on_goal"] = [int(float(shots[0])), int(float(shots[1]))]
-        elif cfg.key == "basketball":
-            # Keep every parsed Flashscore stat available to future basketball
-            # features; score/clock remains the primary quarter pace input.
-            stats["basketball_stats"] = raw
-        self._fs_live_stats_cache[event_id] = (now, dict(stats))
-        return stats
+            for key in ("shots_on_goal","shots","blocked_shots","saves","penalties_2m","penalties","penalty_minutes","powerplay_goals","powerplay_opportunities","faceoffs_won"):
+                if key in segment_stats:
+                    out[key] = [int(x) if float(x).is_integer() else float(x) for x in segment_stats[key]]
+        else:
+            out["basketball_stats"] = segment_stats
+            out["basketball_attempts"] = segment_attempts
+
+        self._fs_live_stats_cache[cache_key] = (now, dict(out))
+        return out
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
         """Recent form + H2H from Flashscore, analogous to the football collector."""
@@ -2375,8 +2433,10 @@ class MultiSportSteamWorker:
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
             return None, "market_decode"
-        scoped_scores = period_scores(game, cfg.key)
-        live_game_stats = self._flashscore_live_stats(fs, cfg)
+        xbet_scoped_scores = period_scores(game, cfg.key)
+        fs_scoped_scores = _flashscore_scoped_scores(fs, cfg)
+        scoped_scores = {**xbet_scoped_scores, **fs_scoped_scores}
+        live_game_stats = self._flashscore_live_stats(fs, cfg, current_period=current_period)
         event_scope_key = f"{cfg.key}:{event_id}"
         for scope, score in scoped_scores.items():
             self._scope_scores[event_scope_key][scope] = score
@@ -2407,6 +2467,7 @@ class MultiSportSteamWorker:
             "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
             "score": [*fs_score],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
+            "scoped_score_source": "flashscore" if fs_scoped_scores else "1xbet_fallback",
             "period": current_period,
             "clock_seconds": _segment_clock_seconds(
                 game,

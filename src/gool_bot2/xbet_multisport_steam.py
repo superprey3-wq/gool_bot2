@@ -165,13 +165,90 @@ def _save_rows(path: Path, rows: list[dict[str, Any]]) -> None:
 def _score(game: dict[str, Any]) -> tuple[int, int] | None:
     sc = game.get("SC") or {}
     fs = sc.get("FS") or {}
+    # Legacy LiveFeed/GetGameZip shape.
     for root in (fs, game):
         try:
             if root.get("S1") is not None and root.get("S2") is not None:
                 return int(float(root.get("S1"))), int(float(root.get("S2")))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             pass
+
+    # Current main-live-feed/v3 shape used by the 1xBet frontend.
+    scores = game.get("scores") or game.get("Scores") or {}
+    try:
+        if scores.get("scoreOpp1") is not None and scores.get("scoreOpp2") is not None:
+            return int(float(scores.get("scoreOpp1"))), int(float(scores.get("scoreOpp2")))
+    except (TypeError, ValueError, AttributeError):
+        pass
     return None
+
+
+def _score_candidates(game: dict[str, Any], cfg: SportConfig) -> list[tuple[int, int]]:
+    """Return every credible full-score representation carried by 1xBet.
+
+    Basketball feeds can update SC.FS and SC.PS a few seconds apart. Summing
+    quarter scores gives us a second, independent full-score candidate instead
+    of throwing away a correctly matched game on a transient feed lag.
+    """
+    out: list[tuple[int, int]] = []
+    direct = _score(game)
+    if direct is not None:
+        out.append(direct)
+
+    scoped = period_scores(game, cfg.key)
+    if cfg.key == "basketball":
+        quarter_scores = [
+            scoped.get(f"QUARTER_{idx}") for idx in (1, 2, 3, 4)
+            if scoped.get(f"QUARTER_{idx}") is not None
+        ]
+        if quarter_scores:
+            summed = (
+                sum(int(score[0]) for score in quarter_scores),
+                sum(int(score[1]) for score in quarter_scores),
+            )
+            if summed not in out:
+                out.append(summed)
+    else:
+        period_rows = [
+            scoped.get(f"PERIOD_{idx}") for idx in (1, 2, 3)
+            if scoped.get(f"PERIOD_{idx}") is not None
+        ]
+        if period_rows:
+            summed = (
+                sum(int(score[0]) for score in period_rows),
+                sum(int(score[1]) for score in period_rows),
+            )
+            if summed not in out:
+                out.append(summed)
+    return out
+
+
+def _score_sync_allowed(
+    cfg: SportConfig,
+    fs_score: tuple[int, int],
+    xbet_score: tuple[int, int],
+    match_quality: float,
+) -> bool:
+    """Allow only a bounded provider-lag drift after a strong identity match.
+
+    Flashscore remains authoritative for the score used by the LIVE brain.
+    The tolerance only prevents 1xBet's slightly older scoreboard snapshot from
+    deleting an otherwise correctly matched basketball/hockey event.
+    """
+    if fs_score == xbet_score:
+        return True
+    min_quality = _float_env("GOOL_MULTISPORT_SCORE_DRIFT_MIN_MATCH", 0.80)
+    if float(match_quality) < min_quality:
+        return False
+    dh = abs(int(fs_score[0]) - int(xbet_score[0]))
+    da = abs(int(fs_score[1]) - int(xbet_score[1]))
+    if cfg.key == "basketball":
+        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
+        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
+    else:
+        side_max = max(0, _int_env("GOOL_HOCKEY_SCORE_DRIFT_SIDE_MAX", 1))
+        total_max = max(0, _int_env("GOOL_HOCKEY_SCORE_DRIFT_TOTAL_MAX", 2))
+    return dh <= side_max and da <= side_max and (dh + da) <= total_max
 
 
 def _period(game: dict[str, Any]) -> str:
@@ -258,6 +335,50 @@ def _segment_duration_seconds(row: dict[str, Any], cfg: SportConfig) -> float:
     if any(token in league for token in ("nba", "g league")) and "wnba" not in league:
         return 12.0 * 60.0
     return 10.0 * 60.0
+
+
+def _segment_clock_seconds(
+    game: dict[str, Any],
+    cfg: SportConfig,
+    *,
+    period: str,
+    league: str,
+) -> int | None:
+    """Convert 1xBet's cumulative match clock to current-period elapsed time.
+
+    Real basketball GetGameZip snapshots expose SC.TS as 600 at the start of
+    Q2, 1200 at half-time and ~2200 during Q4. The segment brain must see
+    0..600 (or 0..720 in NBA), not the cumulative match value.
+    """
+    raw = _clock_seconds(game)
+    if raw is None:
+        return None
+
+    allowed = live_scopes_from_period(cfg.key, period)
+    if cfg.key == "basketball":
+        scope = next((value for value in allowed if value.startswith("QUARTER_")), "")
+        if not scope:
+            return raw
+        try:
+            idx = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return raw
+        duration = int(_segment_duration_seconds({"league": league}, cfg))
+    else:
+        scope = next((value for value in allowed if value.startswith("PERIOD_")), "")
+        if not scope:
+            return raw
+        try:
+            idx = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return raw
+        duration = int(20 * 60)
+
+    offset = max(0, idx - 1) * duration
+    # For cumulative elapsed clocks this yields the local segment clock.
+    # If a mirror already returns a segment-local value, keep it unchanged.
+    local = raw - offset if raw >= offset else raw
+    return max(0, min(duration, int(local)))
 
 
 def detect_live_segment_stats(
@@ -1398,13 +1519,24 @@ class MultiSportSteamWorker:
     def _snapshot(self, event: dict[str, Any], fs: dict[str, Any], reversed_order: bool, match_score: float, cfg: SportConfig) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
         game = self._game(event_id, cfg) or event
-        xbet_score = _score(game) or _score(event)
-        if xbet_score is None or not _event_allowed(game):
+        if not _event_allowed(game):
             return None, "market_decode"
-        canonical = (xbet_score[1], xbet_score[0]) if reversed_order else xbet_score
+
         fs_score_raw = list(fs.get("score") or [0, 0])
         fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
-        if canonical != fs_score:
+        candidates = _score_candidates(game, cfg) or _score_candidates(event, cfg)
+        if not candidates:
+            return None, "market_decode"
+        canonical_candidates = [
+            (score[1], score[0]) if reversed_order else score
+            for score in candidates
+        ]
+        canonical = min(
+            canonical_candidates,
+            key=lambda score: abs(score[0] - fs_score[0]) + abs(score[1] - fs_score[1]),
+        )
+        exact_score_sync = canonical == fs_score
+        if not _score_sync_allowed(cfg, fs_score, canonical, match_score):
             return None, "score_mismatch"
 
         current_period = _period(game)
@@ -1451,7 +1583,19 @@ class MultiSportSteamWorker:
             "score": [*fs_score],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "period": current_period,
-            "clock_seconds": _clock_seconds(game),
+            "clock_seconds": _segment_clock_seconds(
+                game,
+                cfg,
+                period=current_period,
+                league=str(fs.get("league") or game.get("LE") or game.get("L") or ""),
+            ),
+            "match_clock_seconds": _clock_seconds(game),
+            "xbet_score": [int(canonical[0]), int(canonical[1])],
+            "score_sync_mode": "exact" if exact_score_sync else "bounded_provider_lag",
+            "score_sync_delta": [
+                int(fs_score[0] - canonical[0]),
+                int(fs_score[1] - canonical[1]),
+            ],
             "live_game_stats": live_game_stats,
             "line": float((primary or {}).get("line") or 0.0),
             "over": float((primary or {}).get("over") or 0.0),

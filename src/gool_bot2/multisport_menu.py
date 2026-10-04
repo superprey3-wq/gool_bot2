@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
+from .multisport_parlay import parlay_text
 from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
 
@@ -295,3 +296,13 @@ def sport_phase_report_text(sport: str) -> str:
         f"🔴 <b>LIVE</b> · {_record_text(live)}\n"
         f"Рынки: {live_policy}"
     )
+
+
+
+def sport_parlay_text(sport: str) -> str:
+    if sport not in SPORT_META:
+        return "🔗 <b>GOOL MULTI · ЭКСПРЕССЫ</b>\n\nНеизвестный вид спорта."
+    state = _load_json(state_path(), {})
+    sports = state.get("sports") if isinstance(state, dict) else {}
+    current = ((sports or {}).get(sport) or {}) if isinstance(sports, dict) else {}
+    return parlay_text(list(current.get("prematch_parlays") or []), sport)

@@ -100,14 +100,15 @@ def iter_market_selections(game: dict[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(group, dict):
                 continue
             try:
-                g = int(group.get("G"))
+                g = int(group.get("G")) if group.get("G") is not None else None
             except (TypeError, ValueError):
-                continue
+                g = None
             try:
                 gs = int(group.get("GS")) if group.get("GS") is not None else None
             except (TypeError, ValueError):
                 gs = None
-            grouped_keys.add((g, gs))
+            if g is not None:
+                grouped_keys.add((g, gs))
             for sel in group.get("ME") or []:
                 if isinstance(sel, dict):
                     add(sel, "AE", g, gs)
@@ -118,14 +119,15 @@ def iter_market_selections(game: dict[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(group, dict):
                 continue
             try:
-                g = int(group.get("G"))
+                g = int(group.get("G")) if group.get("G") is not None else None
             except (TypeError, ValueError):
-                continue
+                g = None
             try:
                 gs = int(group.get("GS")) if group.get("GS") is not None else None
             except (TypeError, ValueError):
                 gs = None
-            grouped_keys.add((g, gs))
+            if g is not None:
+                grouped_keys.add((g, gs))
             for row in group.get("E") or []:
                 if isinstance(row, dict):
                     add(row, "GE", g, gs)

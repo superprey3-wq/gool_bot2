@@ -200,6 +200,14 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
+    if _truthy("GOOL_MULTISPORT_ENABLED", True):
+        commands["multisport"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.xbet_multisport_steam",
+            "--interval",
+            os.environ.get("GOOL_MULTISPORT_INTERVAL_SECONDS", "20"),
+        ]
     if browser_enabled:
         commands["browser"] = [
             sys.executable,
@@ -252,7 +260,15 @@ def main() -> None:
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
-    os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "0")
+    os.environ.setdefault("GOOL_MULTISPORT_ENABLED", "1")
+    os.environ.setdefault("GOOL_MULTISPORT_MODE", "shadow")
+    os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
+    os.environ.setdefault("GOOL_HOCKEY_ENABLED", "1")
+    os.environ.setdefault("GOOL_BASKETBALL_ENABLED", "1")
+    os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.45")
+    os.environ.setdefault("GOOL_MULTISPORT_MAX_ODD", "3.25")
+    os.environ.setdefault("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", "3.0")
+    os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "1")
     os.environ.setdefault("XBET_PREMATCH_INTERVAL_SECONDS", "60")
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")
     os.environ.setdefault("XBET_PREMATCH_TRACK_MAX_EVENTS", "2000")
@@ -326,7 +342,7 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
-        "GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM exchange_money=off "
+        f"GOOL_BOOT systems=FOOTBALL+HOCKEY+BASKETBALL multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
         "prematch_full_market=active live_consensus=2of3 "
         "matchbook_worker=off betdaq_worker=off sx_board=off",
         flush=True,

@@ -20,6 +20,10 @@ def main() -> None:
     runtime.mkdir(parents=True, exist_ok=True)
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
     os.environ["GOOL_MULTISPORT_MODE"] = "shadow"
+    os.environ.setdefault("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", "3.0")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT", "2.5")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", "1")
+    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "0")
     os.environ["XBET_MULTISPORT_TELEGRAM_ENABLED"] = "0"
     os.environ["GOOL_MULTISPORT_PREMATCH_ENABLED"] = "0"
     os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "12")

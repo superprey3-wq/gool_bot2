@@ -261,6 +261,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.45")
     os.environ.setdefault("GOOL_MULTISPORT_MAX_ODD", "3.25")
     os.environ.setdefault("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", "3.0")
+    os.environ["XBET_MULTISPORT_CARDS_ENABLED"] = "1"
     os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "1")
     os.environ.setdefault("XBET_PREMATCH_INTERVAL_SECONDS", "60")
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")

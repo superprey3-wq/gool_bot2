@@ -123,19 +123,41 @@ def render_basketball_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:A
 def render_basketball_result_card(row:dict[str,Any],cfg:Any)->bytes:
     result=str(row.get("result") or "pending").lower()
     accent=GREEN if result=="won" else GOLD if result=="void" else RED
-    im=Image.new("RGBA",(1080,640),BG+(255,)); d=ImageDraw.Draw(im)
-    _header(d,str(row.get("phase") or "LIVE").upper())
-    title="✅ ЗАШЁЛ" if result=="won" else "↩️ ВОЗВРАТ" if result=="void" else "❌ НЕ ЗАШЁЛ"
-    d.text((52,128),title,font=sc._font(27,True),fill=accent)
-    d.text((52,166),str(row.get("league") or "BASKETBALL"),font=sc._fit(d,str(row.get("league") or "BASKETBALL"),960,18,False),fill=MUTED)
-    d.rounded_rectangle((42,205,1038,390),26,fill=PANEL,outline=accent,width=3)
-    d.text((70,232),str(row.get("home") or "?"),font=sc._fit(d,str(row.get("home") or "?"),410,27,True),fill=TEXT)
-    d.text((70,320),str(row.get("away") or "?"),font=sc._fit(d,str(row.get("away") or "?"),410,27,True),fill=TEXT)
-    score=list(row.get("settled_score") or row.get("score") or [0,0])
-    d.rounded_rectangle((570,245,835,350),16,fill=(31,17,10),outline=ORANGE,width=2)
-    sc._center(d,f"{int(score[0])} : {int(score[1])}",270,sc._font(38,True),TEXT)
-    d.rounded_rectangle((42,420,1038,578),22,fill=PANEL,outline=LINE,width=2)
+    status="ЗАШЁЛ" if result=="won" else "ВОЗВРАТ" if result=="void" else "НЕ ЗАШЁЛ"
+    im=Image.new("RGBA",(1080,760),BG+(255,)); d=ImageDraw.Draw(im)
+
+    # Header matches the PREMATCH/LIVE visual language, but RESULT is explicit.
+    d.rounded_rectangle((28,24,1052,104),22,fill=PANEL,outline=COURT,width=2)
+    d.text((52,45),"🏀 GOOL BASKETBALL • RESULT",font=sc._font(25,True),fill=TEXT)
+    d.rounded_rectangle((805,42,1024,88),14,fill=(31,17,10),outline=accent,width=2)
+    sc._center(d,status,52,sc._fit(d,status,185,18,True),accent)
+
+    league=str(row.get("league") or "BASKETBALL")
+    d.text((50,126),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
+
+    home,away=str(row.get("home") or "?"),str(row.get("away") or "?")
+    score=list(row.get("settled_match_score") or row.get("settled_score") or row.get("score") or [0,0])
+    d.rounded_rectangle((42,164,1038,392),28,fill=PANEL,outline=accent,width=3)
+    d.text((72,205),home,font=sc._fit(d,home,470,30,True),fill=TEXT)
+    d.text((72,315),away,font=sc._fit(d,away,470,30,True),fill=TEXT)
+    d.rounded_rectangle((610,218,980,338),20,fill=(31,17,10),outline=ORANGE,width=2)
+    d.text((640,236),"ФИНАЛЬНЫЙ СЧЁТ",font=sc._font(14,True),fill=MUTED)
+    sc._center(d,f"{int(score[0])} : {int(score[1])}",272,sc._font(46,True),accent)
+
     pick=str(row.get("selection") or "?")
-    d.text((70,448),f"{pick} @ {float(row.get('odd') or 0):.2f}",font=sc._fit(d,f"{pick} @ {float(row.get('odd') or 0):.2f}",900,33,True),fill=GOLD)
-    d.text((70,518),f"P/L {float(row.get('profit_units') or 0):+.2f}u",font=sc._font(27,True),fill=accent)
+    odd=float(row.get("odd") or 0)
+    d.rounded_rectangle((42,428,1038,590),24,fill=(31,17,10),outline=GOLD,width=3)
+    d.text((70,451),"СТАВКА",font=sc._font(14,True),fill=MUTED)
+    d.text((70,492),pick,font=sc._fit(d,pick,620,38,True),fill=GOLD)
+    d.text((790,451),"КЭФ",font=sc._font(14,True),fill=MUTED)
+    d.text((790,492),f"{odd:.2f}",font=sc._font(42,True),fill=TEXT)
+
+    profit=float(row.get("profit_units") or 0)
+    d.rounded_rectangle((42,626,1038,704),18,fill=PANEL,outline=LINE,width=2)
+    d.text((70,649),"РЕЗУЛЬТАТ",font=sc._font(14,True),fill=MUTED)
+    d.text((235,642),status,font=sc._font(25,True),fill=accent)
+    d.text((720,649),"P/L",font=sc._font(14,True),fill=MUTED)
+    d.text((785,642),f"{profit:+.2f}u",font=sc._font(27,True),fill=accent)
+
+    d.rounded_rectangle((335,720,745,748),10,fill=COURT)
     return sc._save(im)

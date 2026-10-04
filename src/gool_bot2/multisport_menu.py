@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
 from .multisport_parlay import parlay_text
+from .providers.flashscore import FlashscoreProvider
+from .xbet_multisport_steam import parse_flashscore_events
 from .providers.common import norm_team
 from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
@@ -283,6 +285,24 @@ def _pick_needed_text(row: dict[str, Any]) -> str:
     return f"{prefix}для захода: {subject} нужно {win_min}+ {unit}"
 
 
+def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
+    """Fresh LIVE identity/score for the menu, independent of saved worker state."""
+    sport_id = 4 if sport == "hockey" else 3
+    provider = FlashscoreProvider()
+    merged: dict[str, dict[str, Any]] = {}
+    for path in (f"f_{sport_id}_0_3_en_1", f"f_{sport_id}_0_0_en_1"):
+        try:
+            body = provider._feed(path, timeout=3, max_hosts=1)
+        except Exception:
+            body = ""
+        if not body:
+            continue
+        for row in parse_flashscore_events(body):
+            if str(row.get("coarse_status") or "") == "2":
+                merged[str(row.get("flashscore_event_id") or "")] = dict(row)
+    return list(merged.values())
+
+
 def multisport_in_game_sections() -> list[str]:
     """Pending multisport picks whose Flashscore match is currently LIVE."""
     state = _load_json(state_path(), {})
@@ -304,6 +324,19 @@ def multisport_in_game_sections() -> list[str]:
             row for row in (current.get("flashscore_live_matches") or [])
             if isinstance(row, dict)
         ]
+        # The Telegram menu must not depend on the worker state refresh cadence.
+        # Fetch fresh Flashscore LIVE rows on demand and merge them in.
+        fresh_live = _direct_flashscore_live(sport)
+        fresh_by_id = {
+            str(row.get("flashscore_event_id") or ""): dict(row)
+            for row in fresh_live
+            if str(row.get("flashscore_event_id") or "")
+        }
+        for row in fs_live_matches:
+            fs_id = str(row.get("flashscore_event_id") or "")
+            if fs_id and fs_id not in fresh_by_id:
+                fresh_by_id[fs_id] = dict(row)
+        fs_live_matches = list(fresh_by_id.values())
         mapped_matches = [
             row for row in (current.get("matches") or [])
             if isinstance(row, dict)
@@ -353,23 +386,25 @@ def multisport_in_game_sections() -> list[str]:
         if not active:
             continue
         total += len(active)
-        lines = [f"{icon} <b>{title} · В ИГРЕ</b> · <b>{len(active)}</b>"]
+        lines = []
         for idx, (pick, live) in enumerate(active, 1):
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or "LIVE · Flashscore")
+            period = str(live.get("period") or live.get("status_code") or "LIVE")
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
+            strength = float(pick.get("strength") or 0)
             lines.append(
-                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}\n"
-                f"⏱ {period}\n"
-                f"↳ PREMATCH: <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
-                f"🎯 <b>{needed}</b>"
+                f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
+                f"сейчас {period} · {score[0]}:{score[1]}\n"
+                f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
+                f"🧠 {strength:.0f}/100 · PREMATCH\n"
+                f"↳ {needed}"
             )
         sport_blocks.append("\n\n".join(lines))
 
     if not sport_blocks:
         return []
-    messages.append(f"🟢 <b>ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ</b>\nАктивных PREMATCH ставок: <b>{total}</b>")
+    messages.append(f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>{total}</b>")
     messages.extend(sport_blocks)
     return messages
 

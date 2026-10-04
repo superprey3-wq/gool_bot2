@@ -76,16 +76,22 @@ PREMATCH_ROOTS = (
 
 
 def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
-    """1xBet request profile for hockey/basketball.
-
-    The football collector uses a football-specific Referer. Multisport feeds are
-    more reliable with the generic /live/ Referer used by the original sport bot.
-    """
-    headers = dict(getattr(market, "HEADERS", {}) or {})
-    headers["Referer"] = "https://1xbet.com/live/"
-    headers["Origin"] = "https://1xbet.fi" if "1xbet.fi/" in url else "https://1xbet.com"
+    """1xBet request profile for hockey/basketball with low-cost header fallback."""
+    base_headers = dict(getattr(market, "HEADERS", {}) or {})
+    base_headers["Referer"] = "https://1xbet.com/live/"
     attempts = max(1, min(3, _int_env("GOOL_MULTISPORT_HTTP_ATTEMPTS", 2)))
+    profiles = [
+        # Exact profile used by the original working hockey/basketball bot.
+        {"Origin": "https://1xbet.com", "Referer": "https://1xbet.com/live/"},
+        # Some .fi mirrors occasionally prefer a host-matched Origin.
+        {
+            "Origin": "https://1xbet.fi" if "1xbet.fi/" in url else "https://1xbet.com",
+            "Referer": "https://1xbet.com/live/",
+        },
+    ]
     for attempt in range(attempts):
+        headers = dict(base_headers)
+        headers.update(profiles[min(attempt, len(profiles) - 1)])
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -937,44 +943,38 @@ class MultiSportSteamWorker:
     def _xbet_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         attempts: list[dict[str, Any]] = []
-        merged: dict[str, dict[str, Any]] = {}
-        root_counts: dict[str, int] = {}
-        event_roots: dict[str, list[str]] = {}
+        now = time.monotonic()
+
+        # Do not merge every mirror: that multiplied requests and caused the
+        # basketball index to be queried only after 1xBet started throttling us.
         for root in dict.fromkeys(roots):
-            root_ids: set[str] = set()
             for query_no, query in enumerate(self._xbet_queries(cfg), 1):
                 payload = _sport_http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
-                attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
-                if not isinstance(values, list):
+                usable = [
+                    row for row in (values or [])
+                    if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")
+                ] if isinstance(values, list) else []
+                attempts.append({
+                    "root": root, "query": query_no, "raw": raw_count,
+                    "usable": len(usable), "payload": bool(payload),
+                })
+                if not usable:
                     continue
-                for row in values:
-                    if not isinstance(row, dict) or not row.get("I") or not row.get("O1") or not row.get("O2"):
-                        continue
-                    event_id = str(row["I"])
-                    root_ids.add(event_id)
-                    event_roots.setdefault(event_id, []).append(root)
-                    merged.setdefault(event_id, row)
-            root_counts[root] = len(root_ids)
-
-        now = time.monotonic()
-        if merged:
-            rows = list(merged.values())
-            best_root = max(root_counts, key=lambda root: root_counts.get(root, 0), default=self._roots[cfg.key])
-            if root_counts.get(best_root, 0):
-                self._roots[cfg.key] = best_root
-            self._last_index[cfg.key] = (now, [dict(row) for row in rows])
-            self._index_diag[cfg.key] = {
-                "ok": True,
-                "root": self._roots[cfg.key],
-                "raw": len(rows),
-                "usable": len(rows),
-                "root_counts": root_counts,
-                "cache": False,
-                "attempts": attempts[-8:],
-            }
-            return rows
+                rows = [dict(row) for row in usable]
+                self._roots[cfg.key] = root
+                self._last_index[cfg.key] = (now, rows)
+                self._index_diag[cfg.key] = {
+                    "ok": True,
+                    "root": root,
+                    "query": query_no,
+                    "raw": raw_count,
+                    "usable": len(rows),
+                    "cache": False,
+                    "attempts": attempts[-10:],
+                }
+                return rows
 
         cached_at, cached_rows = self._last_index.get(cfg.key, (0.0, []))
         age = now - cached_at if cached_at else 10**9
@@ -987,7 +987,7 @@ class MultiSportSteamWorker:
                 "usable": len(cached_rows),
                 "cache": True,
                 "cache_age_seconds": round(age, 1),
-                "attempts": attempts[-8:],
+                "attempts": attempts[-10:],
             }
             return [dict(row) for row in cached_rows]
 
@@ -1000,11 +1000,17 @@ class MultiSportSteamWorker:
                 "usable": len(state_rows),
                 "cache": True,
                 "cache_source": "persisted_state_identity_only",
-                "attempts": attempts[-8:],
+                "attempts": attempts[-10:],
             }
             return state_rows
 
-        self._index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-8:]}
+        self._index_diag[cfg.key] = {
+            "ok": False,
+            "root": None,
+            "raw": 0,
+            "usable": 0,
+            "attempts": attempts[-12:],
+        }
         return []
 
     def _xbet_prematch_queries(self, cfg: SportConfig) -> list[str]:

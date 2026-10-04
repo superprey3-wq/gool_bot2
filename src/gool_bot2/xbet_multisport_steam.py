@@ -326,7 +326,60 @@ def detect_live_segment_stats(
     recent_rate = min(max_rate, max(0.0, recent_rate))
     overall_rate = min(max_rate, max(0.0, overall_rate))
     blended_rate = overall_rate * (1.0 - recent_weight) + recent_rate * recent_weight
-    stat_projection = current + blended_rate * (remaining / 60.0)
+    goal_pace_remaining = blended_rate * (remaining / 60.0)
+    stat_projection = current + goal_pace_remaining
+
+    hockey_stats = dict(end.get("live_game_stats") or {}) if cfg.key == "hockey" else {}
+    hockey_pressure: dict[str, Any] = {}
+    if cfg.key == "hockey" and hockey_stats:
+        end_shots = list(hockey_stats.get("shots_on_goal") or [])
+        first_stats = dict(first.get("live_game_stats") or {})
+        first_shots = list(first_stats.get("shots_on_goal") or [])
+        if len(end_shots) >= 2:
+            shot_total = max(0, int(end_shots[0])) + max(0, int(end_shots[1]))
+            overall_shot_rate = shot_total * 60.0 / max(1.0, elapsed)
+            recent_shot_rate = overall_shot_rate
+            if len(first_shots) >= 2:
+                first_shot_total = max(0, int(first_shots[0])) + max(0, int(first_shots[1]))
+                recent_shot_rate = max(0, shot_total - first_shot_total) * 60.0 / game_clock_delta
+            shot_recent_weight = _float_env("GOOL_HOCKEY_LIVE_RECENT_SHOTS_WEIGHT", 0.60)
+            blended_shot_rate = (
+                overall_shot_rate * (1.0 - shot_recent_weight)
+                + recent_shot_rate * shot_recent_weight
+            )
+            projected_remaining_shots = max(0.0, blended_shot_rate * (remaining / 60.0))
+            goal_per_shot = _float_env("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08)
+            shot_goal_remaining = projected_remaining_shots * goal_per_shot
+            shot_weight = max(0.0, min(0.80, _float_env("GOOL_HOCKEY_LIVE_SHOTS_PROJECTION_WEIGHT", 0.55)))
+            fused_remaining = goal_pace_remaining * (1.0 - shot_weight) + shot_goal_remaining * shot_weight
+
+            penalties = list(hockey_stats.get("penalties_2m") or [])
+            first_penalties = list(first_stats.get("penalties_2m") or [])
+            penalty_delta = 0
+            if len(penalties) >= 2:
+                penalty_total = max(0, int(penalties[0])) + max(0, int(penalties[1]))
+                first_penalty_total = (
+                    max(0, int(first_penalties[0])) + max(0, int(first_penalties[1]))
+                    if len(first_penalties) >= 2 else penalty_total
+                )
+                penalty_delta = max(0, penalty_total - first_penalty_total)
+            pp_goals = list(hockey_stats.get("powerplay_goals") or [])
+            pp_total = sum(max(0, int(value)) for value in pp_goals[:2]) if len(pp_goals) >= 2 else 0
+            volatility_boost = min(
+                _float_env("GOOL_HOCKEY_LIVE_SPECIAL_TEAMS_MAX_BOOST", 0.18),
+                penalty_delta * _float_env("GOOL_HOCKEY_LIVE_PENALTY_GOAL_BOOST", 0.05)
+                + pp_total * _float_env("GOOL_HOCKEY_LIVE_PP_GOAL_BOOST", 0.02),
+            )
+            stat_projection = current + fused_remaining + volatility_boost
+            hockey_pressure = {
+                "shots_on_goal": [int(end_shots[0]), int(end_shots[1])],
+                "overall_shots_per_min": round(overall_shot_rate, 3),
+                "recent_shots_per_min": round(recent_shot_rate, 3),
+                "projected_remaining_shots": round(projected_remaining_shots, 2),
+                "penalties_2m": [int(x) for x in penalties[:2]] if len(penalties) >= 2 else None,
+                "powerplay_goals": [int(x) for x in pp_goals[:2]] if len(pp_goals) >= 2 else None,
+                "special_teams_boost": round(volatility_boost, 3),
+            }
 
     line = float(end.get("line") or 0.0)
     if line <= 0:
@@ -394,6 +447,7 @@ def detect_live_segment_stats(
         "strength": round(strength, 1),
         "market_confirmed": bool(market_confirmed),
         "market_probability": round(chosen_market_probability, 4),
+        "hockey_pressure": hockey_pressure,
         "start": first,
         "end": end,
     }
@@ -1109,6 +1163,73 @@ class MultiSportSteamWorker:
             return dict(cached)
         return {}
 
+    def _hockey_segment_stats(
+        self,
+        game: dict[str, Any],
+        cfg: SportConfig,
+        *,
+        current_period: str,
+    ) -> dict[str, Any]:
+        """Fetch actual current-period hockey stats from 1xBet stat subgames.
+
+        These are scoreboard values from SC/FS (shots, penalties, PP goals), not
+        prices from those betting markets. Missing stat subgames simply produce
+        an empty dict and the LIVE brain falls back to score/time pace.
+        """
+        if cfg.key != "hockey":
+            return {}
+        wanted_scopes = live_scopes_from_period(cfg.key, current_period)
+        current_scope = next((scope for scope in wanted_scopes if scope.startswith("PERIOD_")), "")
+        if not current_scope:
+            return {}
+
+        aliases = {
+            "shots_on_goal": ("shots on goal", "shots on target"),
+            "penalties_2m": ("2-minute penalties", "2 minute penalties"),
+            "powerplay_goals": ("powerplay goals", "power play goals"),
+        }
+        wanted: list[tuple[str, str]] = []
+        seen_metrics: set[str] = set()
+        for sg in game.get("SG") or []:
+            if not isinstance(sg, dict):
+                continue
+            if scope_from_subgame(sg, cfg.key) != current_scope:
+                continue
+            tg = str(sg.get("TG") or "").strip().casefold()
+            if not tg:
+                continue
+            metric = next(
+                (name for name, names in aliases.items() if any(alias in tg for alias in names)),
+                "",
+            )
+            sub_id = str(sg.get("I") or "").strip()
+            if metric and sub_id and metric not in seen_metrics:
+                seen_metrics.add(metric)
+                wanted.append((metric, sub_id))
+
+        maximum = max(0, min(3, _int_env("GOOL_HOCKEY_LIVE_STAT_SUBGAMES_MAX", 3)))
+        wanted = wanted[:maximum]
+        if not wanted:
+            return {}
+
+        values: dict[str, Any] = {"scope": current_scope, "source": "1xbet_stat_subgame"}
+        workers = max(1, min(3, len(wanted)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(self._cached_subgame, sub_id, cfg, prematch=False): metric
+                for metric, sub_id in wanted
+            }
+            for future in as_completed(futures):
+                metric = futures[future]
+                try:
+                    sub = future.result(timeout=10)
+                except Exception:
+                    sub = {}
+                score = _score(sub) if sub else None
+                if score is not None:
+                    values[metric] = [int(score[0]), int(score[1])]
+        return values
+
     @staticmethod
     def _compact_decoded(decoded: dict[str, Any]) -> dict[str, Any]:
         moneyline = dict(decoded.get("moneyline") or {})
@@ -1281,6 +1402,7 @@ class MultiSportSteamWorker:
         if raw_count <= 0:
             return None, "market_decode"
         scoped_scores = period_scores(game, cfg.key)
+        live_game_stats = self._hockey_segment_stats(game, cfg, current_period=current_period) if cfg.key == "hockey" else {}
         event_scope_key = f"{cfg.key}:{event_id}"
         for scope, score in scoped_scores.items():
             self._scope_scores[event_scope_key][scope] = score
@@ -1313,6 +1435,7 @@ class MultiSportSteamWorker:
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "period": current_period,
             "clock_seconds": _clock_seconds(game),
+            "live_game_stats": live_game_stats,
             "line": float((primary or {}).get("line") or 0.0),
             "over": float((primary or {}).get("over") or 0.0),
             "under": float((primary or {}).get("under") or 0.0),
@@ -1555,6 +1678,8 @@ class MultiSportSteamWorker:
             "overall_rate_per_min": signal.get("overall_rate_per_min"),
             "recent_rate_per_min": signal.get("recent_rate_per_min"),
             "market_confirmed": signal.get("market_confirmed"),
+            "live_game_stats": row.get("live_game_stats") or {},
+            "hockey_pressure": signal.get("hockey_pressure") or {},
             "mapping_score": float(row.get("flashscore_match_score") or 0.0),
             "result": "pending",
             "profit_units": 0.0,

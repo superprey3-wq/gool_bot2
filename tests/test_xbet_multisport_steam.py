@@ -168,3 +168,19 @@ def test_hockey_period_prematch_uses_period_scale():
 def test_team_total_settlement_uses_only_selected_team():
     assert settle_multisport_pick({"market_family": "home_total", "direction": "over", "line": 2.5}, 3, 8) == "won"
     assert settle_multisport_pick({"market_family": "away_total", "direction": "under", "line": 4.5}, 9, 4) == "won"
+
+
+
+def test_live_line_move_can_confirm_signal_when_devig_probability_stays_flat():
+    cfg = SPORTS["basketball"]
+    rows = [
+        {"ts": 0, "scope": "FULL_MATCH", "market_family": "match_total", "metric": 160.5, "probability": .50, "line": 160.5, "over": 1.90, "under": 1.90},
+        {"ts": 10, "scope": "FULL_MATCH", "market_family": "match_total", "metric": 162.0, "probability": .50, "line": 162.0, "over": 1.90, "under": 1.90},
+        {"ts": 20, "scope": "FULL_MATCH", "market_family": "match_total", "metric": 163.0, "probability": .50, "line": 163.0, "over": 1.90, "under": 1.90},
+        {"ts": 30, "scope": "FULL_MATCH", "market_family": "match_total", "metric": 164.5, "probability": .50, "line": 164.5, "over": 1.90, "under": 1.90},
+    ]
+    signal = detect_steam(rows, cfg, now=30.0, score_changed_at=None)
+    assert signal is not None
+    assert signal["direction"] == "over"
+    assert signal["line_delta"] == 4.0
+    assert signal["probability_delta_pp"] == 0.0

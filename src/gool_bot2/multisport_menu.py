@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import time
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -188,52 +189,12 @@ def sport_overview_text(sport: str) -> str:
     else:
         parts.append("🟡 <b>PREMATCH</b>\nВ ближайшем окне пока нет синхронизированных матчей.")
 
-    # Football-style online view: Flashscore defines which games are LIVE.
-    # 1xBet mapping only enriches those rows with markets/Brain state.
-    fresh_live = _direct_flashscore_live(sport)
-    saved_live = [
-        row for row in (current.get("flashscore_live_matches") or [])
-        if isinstance(row, dict)
-    ]
-    live_by_fs = {
-        str(row.get("flashscore_event_id") or ""): dict(row)
-        for row in [*saved_live, *fresh_live]
-        if str(row.get("flashscore_event_id") or "")
-    }
-    mapped_by_fs = {
-        str(row.get("flashscore_event_id") or ""): dict(row)
-        for row in (current.get("matches") or [])
-        if isinstance(row, dict) and str(row.get("flashscore_event_id") or "")
-    }
-    if live_by_fs:
-        lines = [f"🔴 <b>LIVE · АНАЛИЗ ОНЛАЙН</b> · {len(live_by_fs)}"]
-        for fs_id, raw in list(live_by_fs.items())[:10]:
-            row = {**raw, **mapped_by_fs.get(fs_id, {})}
-            score = list(row.get("score") or [0, 0])
-            period = str(row.get("period") or row.get("status_code") or "LIVE")
-            mapped = fs_id in mapped_by_fs
-            signal = row.get("signal") or row.get("steam") or {}
-            brain = "🔥 SIGNAL" if signal else ("🧠 анализ" if mapped else "⏳ ждём 1xBet")
-            market_text = ""
-            if mapped:
-                line = float(row.get("line") or 0.0)
-                over = float(row.get("over") or 0.0)
-                under = float(row.get("under") or 0.0)
-                market_text = f" · тотал {line:g} · ТБ {over:.2f} / ТМ {under:.2f}"
-            lines.append(
-                f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {score[0]}:{score[1]} · {period}\n"
-                f"↳ 1xBet {'✅' if mapped else '⏳'} · {brain}{market_text}"
-            )
-        parts.append("\n\n".join(lines))
-        mapped_rows = list(mapped_by_fs.values())
-        if mapped_rows:
-            parts.append(_coverage_summary(mapped_rows))
-    else:
-        parts.append("🔴 <b>LIVE · АНАЛИЗ ОНЛАЙН</b>\nFlashscore сейчас не показывает матчей LIVE.")
+    # Current LIVE games belong to the common Analysis view, not to the
+    # sport overview. This screen stays focused on PREMATCH/journal/coverage.
+    parts.append("🧠 <b>LIVE матчи</b>\nСмотри общую кнопку «Анализ».")
 
     return "\n\n────────────\n\n".join(parts)
 
-    return "\n\n────────────\n\n".join(parts)
 
 def _pick_needed_text(row: dict[str, Any]) -> str:
     """Human-readable winning condition matching multisport settlement rules."""
@@ -443,6 +404,25 @@ def multisport_in_game_sections() -> list[str]:
                         live = candidate
                         break
 
+            # Continuity fallback for already-sent PREMATCH picks. If kickoff
+            # passed but Flashscore temporarily omitted the row, keep the bet in
+            # "In Game" for a realistic sport window instead of dropping it.
+            if live is None:
+                try:
+                    start_ts = float(row.get("scheduled_start_ts") or row.get("start_ts") or 0.0)
+                except (TypeError, ValueError):
+                    start_ts = 0.0
+                now_ts = time.time()
+                max_live_age = 5.0 * 3600.0 if sport == "basketball" else 4.0 * 3600.0
+                if start_ts > 0 and start_ts <= now_ts <= start_ts + max_live_age:
+                    live = {
+                        "flashscore_event_id": fs_id,
+                        "home": row.get("home"),
+                        "away": row.get("away"),
+                        "league": row.get("league"),
+                        "_scheduled_live_fallback": True,
+                    }
+
             if live is not None:
                 active.append((row, live))
 
@@ -451,14 +431,20 @@ def multisport_in_game_sections() -> list[str]:
         total += len(active)
         lines = []
         for idx, (pick, live) in enumerate(active, 1):
+            scheduled_fallback = bool(live.get("_scheduled_live_fallback"))
             score = list(live.get("score") or [0, 0])
             period = str(live.get("period") or live.get("status_code") or "LIVE")
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
             strength = float(pick.get("strength") or 0)
+            live_line = (
+                "сейчас матч после времени старта · счёт обновляется"
+                if scheduled_fallback
+                else f"сейчас {period} · {score[0]}:{score[1]}"
+            )
             lines.append(
                 f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
-                f"сейчас {period} · {score[0]}:{score[1]}\n"
+                f"{live_line}\n"
                 f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
                 f"🧠 {strength:.0f}/100 · PREMATCH\n"
                 f"↳ {needed}"

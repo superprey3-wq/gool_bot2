@@ -77,6 +77,30 @@ if fusion_rows:
  rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
  print("PREMATCH_FUSION",{"checked":len(fusion_rows),"kept":len(rows),"fail":fusion_fail},flush=True)
 
+# Stage 2: once the cheap scan has produced candidates, normalize every
+# surviving row onto the same evidence-quality scale. Enriched rows naturally
+# score higher when Fusion supplied venue/H2H/multiple sources, while rows that
+# did not need expensive enrichment are no longer left at artificial quality=1.
+normalized_rows=[]
+for r in rows:
+ evidence_quality=prematch_evidence_quality(
+  r["profile"],
+  source_coverage=r.get("source_coverage") or {},
+ )
+ trends=_trend_signals(r["profile"],evidence_quality)
+ primary=_primary_trend(trends)
+ if primary is None:
+  continue
+ normalized_rows.append({
+  **r,
+  "quality":evidence_quality,
+  "brain_score":_brain_score(r["profile"],evidence_quality),
+  "trends":trends,
+  "primary_trend":primary,
+ })
+rows=normalized_rows
+rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
+
 print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter(r["primary_trend"]["name"] for r in rows)),flush=True)
 

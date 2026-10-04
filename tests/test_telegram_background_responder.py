@@ -49,7 +49,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "📒 Хоккей", "📒 Баскет", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "📒 Хоккей", "📒 Баскет", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -219,3 +219,26 @@ def test_production_separate_sport_journal_buttons_are_handled(tmp_path: Path, m
     )
     assert (a, b) == (1, 1)
     assert sent == ["H_JOURNAL", "B_JOURNAL"]
+
+
+
+def test_production_sport_parlay_buttons_are_handled(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    import gool_bot2.multisport_menu as multisport_menu
+    monkeypatch.setattr(multisport_menu, "sport_parlay_text", lambda sport: f"PARLAY:{sport}")
+    journal = tmp_path / "signal_journal.json"
+    a = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 30, "message": {"chat": {"id": 123}, "text": "🔗 Хоккей экспресс"}},
+    )
+    b = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 31, "message": {"chat": {"id": 123}, "text": "🔗 Баскет экспресс"}},
+    )
+    assert (a, b) == (1, 1)
+    assert sent == ["PARLAY:hockey", "PARLAY:basketball"]

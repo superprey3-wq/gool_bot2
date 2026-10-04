@@ -113,7 +113,7 @@ def multisport_status_text() -> str:
             continue
         lines.append(
             f"{icon} <b>{title}</b>\n"
-            f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)} · policy skip {int(row.get('prematch_policy_blocked') or 0)}\n"
+            f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · mapped {int(row.get('prematch_mapped') or 0)} · scan {int(row.get('prematch_scanned') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
             f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · decoded {int(row.get('decoded') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
     return "\n".join(lines)

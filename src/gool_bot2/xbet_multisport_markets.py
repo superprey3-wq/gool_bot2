@@ -317,3 +317,36 @@ def lane_score(
     if family == "away_total":
         return 0, score[1]
     return score
+
+
+SCOPE_LABEL_RU = {
+    "FULL_MATCH": "Матч",
+    "FIRST_HALF": "1-я половина",
+    "SECOND_HALF": "2-я половина",
+    "QUARTER_1": "1-я четверть",
+    "QUARTER_2": "2-я четверть",
+    "QUARTER_3": "3-я четверть",
+    "QUARTER_4": "4-я четверть",
+    "PERIOD_1": "1-й период",
+    "PERIOD_2": "2-й период",
+    "PERIOD_3": "3-й период",
+}
+
+
+def lane_key(lane: dict[str, Any]) -> str:
+    return f"{str(lane.get('scope') or SCOPE_FULL)}:{str(lane.get('market_family') or 'match_total')}"
+
+
+def selection_label(lane: dict[str, Any], direction: str, line: float | None = None) -> str:
+    family = str(lane.get("market_family") or "match_total")
+    scope = str(lane.get("scope") or SCOPE_FULL)
+    value = float(lane.get("line") if line is None else line)
+    over = str(direction or "over").casefold() != "under"
+    if family == "home_total":
+        base = ("ИТБ1" if over else "ИТМ1") + f" {value:g}"
+    elif family == "away_total":
+        base = ("ИТБ2" if over else "ИТМ2") + f" {value:g}"
+    else:
+        base = ("ТБ" if over else "ТМ") + f" {value:g}"
+    prefix = SCOPE_LABEL_RU.get(scope, scope)
+    return base if scope == SCOPE_FULL else f"{prefix}: {base}"

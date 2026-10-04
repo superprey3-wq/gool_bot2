@@ -3,7 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gool_bot2.multisport_menu import multisport_report_text, multisport_status_text, sport_journal_text, sport_overview_text
+from gool_bot2.multisport_menu import (
+    basketball_journal_text,
+    hockey_journal_text,
+    multisport_report_text,
+    multisport_status_text,
+    sport_journal_text,
+    sport_overview_text,
+    sport_phase_report_text,
+)
 
 
 def _write(path: Path, payload) -> None:
@@ -80,6 +88,8 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "ТБ 1.82 / ТМ 1.98" in hockey
     assert "PREMATCH журнал" in hockey
     assert "LIVE журнал" in hockey
+    assert "РАЗДЕЛЕНИЕ РЫНКОВ" in hockey
+    assert "текущий период" in hockey
 
     report = multisport_report_text()
     assert "P/L +0.80u" in report
@@ -90,3 +100,36 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "ЖУРНАЛ СИГНАЛОВ" in journal_text
     assert "PREMATCH" in journal_text
     assert "LIVE" in journal_text
+
+
+
+def test_separate_hockey_and_basketball_journal_views(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(journal, [
+        {
+            "sport": "hockey", "phase": "PREMATCH", "event_id": "h1",
+            "home": "SKA", "away": "CSKA", "scope": "PERIOD_2",
+            "selection": "2-й период: ТБ 1.5", "odd": 1.85, "strength": 80,
+        },
+        {
+            "sport": "basketball", "phase": "LIVE", "event_id": "b1",
+            "home": "Denver", "away": "Utah", "scope": "QUARTER_3",
+            "selection": "3-я четверть: ТБ 52.5", "odd": 1.90, "strength": 84,
+            "score": [72, 70], "match_score": [72, 70], "period": "3rd quarter",
+        },
+    ])
+    hockey = hockey_journal_text()
+    basket = basketball_journal_text()
+    assert "SKA — CSKA" in hockey
+    assert "Denver — Utah" not in hockey
+    assert "2-й период" in hockey
+    assert "Denver — Utah" in basket
+    assert "SKA — CSKA" not in basket
+    assert "3-я четверть" in basket
+
+    hreport = sport_phase_report_text("hockey")
+    breport = sport_phase_report_text("basketball")
+    assert "ОТДЕЛЬНЫЙ ОТЧЁТ" in hreport
+    assert "1/2/3 периодов" in hreport
+    assert "1/2/3/4 четверти" in breport

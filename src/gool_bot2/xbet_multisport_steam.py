@@ -588,6 +588,45 @@ class MultiSportSteamWorker:
                 merged[str(row["flashscore_event_id"])] = row
         return list(merged.values())
 
+    def _state_index_fallback(self, cfg: SportConfig, *, prematch: bool) -> list[dict[str, Any]]:
+        """Recover candidate ids from the last persisted state during index blackouts.
+
+        Only identity is reused. Every selected event is still re-opened through
+        GetGameZip, so stale odds are never reused as a betting signal.
+        """
+        try:
+            state = json.loads(self.state_path.read_text("utf-8"))
+        except Exception:
+            return []
+        try:
+            captured = datetime.fromisoformat(str(state.get("captured_at") or "").replace("Z", "+00:00"))
+            if captured.tzinfo is None:
+                captured = captured.replace(tzinfo=timezone.utc)
+            age = max(0.0, (datetime.now(timezone.utc) - captured.astimezone(timezone.utc)).total_seconds())
+        except Exception:
+            return []
+        max_age = _float_env(
+            "GOOL_MULTISPORT_PREMATCH_STATE_INDEX_CACHE_SECONDS" if prematch else "GOOL_MULTISPORT_STATE_INDEX_CACHE_SECONDS",
+            6 * 60 * 60.0 if prematch else 15 * 60.0,
+        )
+        if age > max_age:
+            return []
+        sport_state = ((state.get("sports") or {}).get(cfg.key) or {})
+        source = sport_state.get("prematch_matches" if prematch else "matches") or []
+        rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            event_id = str(item.get("event_id") or "").strip()
+            home = str(item.get("home") or "").strip()
+            away = str(item.get("away") or "").strip()
+            if not event_id or not home or not away or event_id in seen:
+                continue
+            seen.add(event_id)
+            rows.append({"I": event_id, "O1": home, "O2": away, "_state_cache": True})
+        return rows
+
     def _xbet_queries(self, cfg: SportConfig) -> list[str]:
         count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "mode": 4}
@@ -640,7 +679,7 @@ class MultiSportSteamWorker:
 
         cached_at, cached_rows = self._last_index.get(cfg.key, (0.0, []))
         age = now - cached_at if cached_at else 10**9
-        max_age = max(0.0, _float_env("GOOL_MULTISPORT_INDEX_CACHE_SECONDS", 180.0))
+        max_age = max(0.0, _float_env("GOOL_MULTISPORT_INDEX_CACHE_SECONDS", 900.0))
         if cached_rows and age <= max_age:
             self._index_diag[cfg.key] = {
                 "ok": True,
@@ -652,6 +691,19 @@ class MultiSportSteamWorker:
                 "attempts": attempts[-8:],
             }
             return [dict(row) for row in cached_rows]
+
+        state_rows = self._state_index_fallback(cfg, prematch=False)
+        if state_rows:
+            self._index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._roots[cfg.key],
+                "raw": len(state_rows),
+                "usable": len(state_rows),
+                "cache": True,
+                "cache_source": "persisted_state_identity_only",
+                "attempts": attempts[-8:],
+            }
+            return state_rows
 
         self._index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-8:]}
         return []
@@ -707,7 +759,7 @@ class MultiSportSteamWorker:
 
         cached_at, cached_rows = self._last_prematch_index.get(cfg.key, (0.0, []))
         age = now - cached_at if cached_at else 10**9
-        max_age = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_CACHE_SECONDS", 600.0))
+        max_age = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_CACHE_SECONDS", 21600.0))
         if cached_rows and age <= max_age:
             self._prematch_index_diag[cfg.key] = {
                 "ok": True,
@@ -719,6 +771,19 @@ class MultiSportSteamWorker:
                 "attempts": attempts[-10:],
             }
             return [dict(row) for row in cached_rows]
+
+        state_rows = self._state_index_fallback(cfg, prematch=True)
+        if state_rows:
+            self._prematch_index_diag[cfg.key] = {
+                "ok": True,
+                "root": self._prematch_roots[cfg.key],
+                "raw": len(state_rows),
+                "usable": len(state_rows),
+                "cache": True,
+                "cache_source": "persisted_state_identity_only",
+                "attempts": attempts[-10:],
+            }
+            return state_rows
 
         self._prematch_index_diag[cfg.key] = {"ok": False, "root_counts": root_counts, "attempts": attempts[-10:]}
         return []

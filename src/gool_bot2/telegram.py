@@ -21,8 +21,8 @@ CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
     "🟢 <b>GOOL MULTI BOT · работает</b>\n\n"
     "⚽ Футбол — V4 PREMATCH + LIVE\n"
-    "🏒 Хоккей — LIVE market movement\n"
-    "🏀 Баскетбол — LIVE market movement\n\n"
+    "🏒 Хоккей — PREMATCH + LIVE\n"
+    "🏀 Баскетбол — PREMATCH + LIVE\n\n"
     "Хоккей и баскетбол сначала работают в shadow-режиме: собирают статистику без сырых автосигналов.\n"
     "Чтобы отключить автоматические сигналы: /stop"
 )
@@ -247,7 +247,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -273,6 +273,9 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text=="/sportreport":
     from .multisport_menu import multisport_report_text
     replies=[multisport_report_text()]
+   elif text=="/sportjournal":
+    from .multisport_menu import sport_journal_text
+    replies=[sport_journal_text()]
    elif text=="🏒 хоккей":
     from .multisport_menu import sport_overview_text
     replies=[sport_overview_text("hockey")]

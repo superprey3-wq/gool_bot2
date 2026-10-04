@@ -365,3 +365,52 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Ф2 +4.5 @ 1.55" in text
     assert "100/100 · PREMATCH" in text
     assert "может проиграть максимум в 4" in text
+
+
+def test_multisport_in_game_fuzzy_matches_legacy_stale_flashscore_id(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "basketball": {
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "LIVE1234",
+                    "home": "Piratas Bogota",
+                    "away": "Caimanes del Llano",
+                    "score": [41, 38],
+                    "status_code": "2nd quarter",
+                    "coarse_status": "2",
+                }],
+                "matches": [],
+            },
+            "hockey": {"flashscore_live_matches": [], "matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "STALE999",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "selection": "Ф2 +4.5",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "line": 4.5,
+        "odd": 1.55,
+        "scope": "FULL_MATCH",
+        "strength": 100,
+    }])
+
+    monkeypatch.setattr(
+        "gool_bot2.multisport_menu._direct_flashscore_live",
+        lambda sport: [],
+    )
+    text = "\n".join(multisport_in_game_sections())
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "41:38" in text
+    assert "Ф2 +4.5 @ 1.55" in text

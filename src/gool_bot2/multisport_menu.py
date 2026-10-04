@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
 from .multisport_parlay import parlay_text
+from .providers.common import norm_team
 from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
 
@@ -332,6 +333,20 @@ def multisport_in_game_sections() -> list[str]:
                 continue
             fs_id = str(row.get("flashscore_event_id") or "")
             live = live_by_fs.get(fs_id)
+
+            # Legacy/already-sent PREMATCH rows can carry an empty/stale FS id.
+            # Do not lose the pick after kickoff: recover by normalized teams
+            # inside the same sport, using Flashscore as the LIVE authority.
+            if live is None:
+                wanted_home = norm_team(str(row.get("home") or ""))
+                wanted_away = norm_team(str(row.get("away") or ""))
+                for candidate in live_by_fs.values():
+                    cand_home = norm_team(str(candidate.get("home") or ""))
+                    cand_away = norm_team(str(candidate.get("away") or ""))
+                    if wanted_home and wanted_away and cand_home == wanted_home and cand_away == wanted_away:
+                        live = candidate
+                        break
+
             if live is not None:
                 active.append((row, live))
 

@@ -49,7 +49,24 @@ def load_journal(path: Path) -> list[dict[str, Any]]:
         return []
     if not isinstance(value, list):
         return []
-    return [normalize_entry(row) for row in value if isinstance(row, dict)]
+    normalized = [normalize_entry(row) for row in value if isinstance(row, dict)]
+    # Collapse legacy duplicates. 1xBet may rotate its internal event id while
+    # Flashscore keeps a stable match id, so journal identity must prefer FS.
+    deduped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    for row in normalized:
+        key = entry_key(row)
+        previous = deduped.get(key)
+        if previous is None:
+            deduped[key] = row
+            continue
+        # Prefer a settled copy over a pending duplicate, otherwise keep latest.
+        prev_final = str(previous.get("result") or "pending") in FINAL_RESULTS
+        row_final = str(row.get("result") or "pending") in FINAL_RESULTS
+        if row_final and not prev_final:
+            deduped[key] = row
+        elif row_final == prev_final and str(row.get("created_at") or "") >= str(previous.get("created_at") or ""):
+            deduped[key] = row
+    return list(deduped.values())
 
 
 def save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -62,10 +79,11 @@ def save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
     item = normalize_entry(row)
+    stable_event_id = str(item.get("flashscore_event_id") or item.get("event_id") or "")
     return (
         str(item.get("sport") or ""),
         str(item.get("phase") or ""),
-        str(item.get("event_id") or ""),
+        stable_event_id,
         str(item.get("scope") or "FULL_MATCH"),
         str(item.get("market_family") or ""),
     )

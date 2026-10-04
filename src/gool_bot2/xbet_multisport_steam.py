@@ -2657,12 +2657,26 @@ class MultiSportSteamWorker:
                     png = render_hockey_prematch_card(row, signal, cfg) if prematch else render_hockey_live_card(row, signal, cfg)
                 else:
                     png = render_basketball_prematch_card(row, signal, cfg) if prematch else render_basketball_live_card(row, signal, cfg)
-                sent = telegram.broadcast_photo(png, caption=message)
+                # Card already contains match, market, odd and diagnostics.
+                # Do not duplicate the same signal as a Telegram caption.
+                sent = telegram.broadcast_photo(png, caption="")
                 if sent:
+                    print(
+                        f"GOOL_{cfg.key.upper()}_CARD_SENT phase={'PREMATCH' if prematch else 'LIVE'} "
+                        f"match={row.get('home')}--{row.get('away')}",
+                        flush=True,
+                    )
                     return int(sent)
+                print(
+                    f"GOOL_{cfg.key.upper()}_CARD_SEND_FAILED phase={'PREMATCH' if prematch else 'LIVE'} "
+                    f"match={row.get('home')}--{row.get('away')}",
+                    flush=True,
+                )
             except Exception as exc:
                 print(f"GOOL_{cfg.key.upper()}_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
-        return int(telegram.broadcast(message) or 0)
+        if _truthy("GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED", False):
+            return int(telegram.broadcast(message) or 0)
+        return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
         event_id = str(row.get("event_id") or "")

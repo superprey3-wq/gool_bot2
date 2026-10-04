@@ -892,6 +892,7 @@ def detect_steam(
 def select_prematch_primary(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
     recent_families: list[str] | None = None,
+    sport: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     """Pick one PREMATCH market without letting one family dominate by accident."""
     if not candidates:
@@ -903,6 +904,18 @@ def select_prematch_primary(
         "moneyline": 0.3,
         "handicap": 0.0,
     }
+    if str(sport or "").casefold() == "hockey":
+        # Choice-market strength grows much faster than total-market strength in
+        # hockey. Normalise that scale so a close total/IT candidate is not
+        # permanently hidden by handicaps, while a materially stronger handicap
+        # can still win.
+        family_bias.update({
+            "match_total": _float_env("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", 4.0),
+            "home_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
+            "away_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
+            "moneyline": _float_env("GOOL_HOCKEY_PREMATCH_MONEYLINE_BIAS", 0.5),
+            "handicap": _float_env("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", -3.0),
+        })
     ranked = sorted(
         candidates,
         key=lambda item: (
@@ -925,7 +938,15 @@ def select_prematch_primary(
     if alternative is None:
         return best_row, best_signal
     alt_row, alt_signal = alternative
-    max_gap = max(0.0, _float_env("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", 8.0))
+    max_gap = max(
+        0.0,
+        _float_env(
+            "GOOL_HOCKEY_PREMATCH_FAMILY_DIVERSITY_MAX_GAP"
+            if str(sport or "").casefold() == "hockey"
+            else "GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP",
+            10.0 if str(sport or "").casefold() == "hockey" else 8.0,
+        ),
+    )
     if float(alt_signal.get("strength") or 0.0) >= float(best_signal.get("strength") or 0.0) - max_gap:
         return alt_row, alt_signal
     return best_row, best_signal
@@ -2909,7 +2930,7 @@ class MultiSportSteamWorker:
                     candidates.append((lane_row, signal))
 
                 signals: list[dict[str, Any]] = []
-                primary = select_prematch_primary(candidates, recent_families)
+                primary = select_prematch_primary(candidates, recent_families, cfg.key)
                 if primary is not None:
                     best_row, best_signal = primary
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)

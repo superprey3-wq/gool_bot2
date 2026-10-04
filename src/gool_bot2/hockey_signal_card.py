@@ -28,7 +28,7 @@ def _header(draw,title:str,phase:str)->None:
 
 def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->bytes:
     im=Image.new("RGBA",(1080,920),BG+(255,)); d=ImageDraw.Draw(im)
-    _header(d,"ICE PRESSURE","LIVE")
+    _header(d,"PERIOD BRAIN","LIVE")
     home,away=str(row.get("home") or "?"),str(row.get("away") or "?")
     score=list(row.get("match_score") or row.get("score") or [0,0])
     league=str(row.get("league") or "LIVE")
@@ -55,9 +55,9 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
 
     vals=[
         ("СИЛА",f"{float(signal.get('strength') or 0):.0f}/100"),
-        ("ЛИНИЯ",f"{float(signal.get('line_delta') or 0):+.1f}"),
-        ("ΔP",f"{float(signal.get('probability_delta_pp') or 0):+.1f} п.п."),
-        ("ИМПУЛЬСЫ",f"{int(signal.get('moves') or 0)}x"),
+        ("ПРОГНОЗ",f"{float(signal.get('projected_total') or signal.get('line') or 0):.2f}"),
+        ("STAT EDGE",f"{float(signal.get('stat_edge') or 0):+.2f}"),
+        ("ТЕМП/МИН",f"{float(signal.get('recent_rate_per_min') or 0):.2f}"),
     ]
     for i,(t,v) in enumerate(vals):
         x=42+i*249
@@ -66,7 +66,7 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
         d.text((x+16,630),v,font=sc._fit(d,v,195,25,True),fill=ICE if i!=1 else GOLD)
     d.rounded_rectangle((42,720,1038,826),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,742),"LIVE POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,777),"Общий матч + ИТ команд + только текущий период",font=sc._fit(d,"Общий матч + ИТ команд + только текущий период",900,22,True),fill=GREEN)
+    d.text((68,777),"Только ТБ/ТМ текущего периода • Brain = статистика сегмента",font=sc._fit(d,"Общий матч + ИТ команд + только текущий период",900,22,True),fill=GREEN)
     d.rounded_rectangle((300,850,780,900),15,fill=ICE)
     sc._center(d,"HOCKEY LIVE • СИГНАЛ",860,sc._font(20,True),BG)
     return sc._save(im)
@@ -108,7 +108,7 @@ def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
     d.text((68,628),move,font=sc._fit(d,move,920,28,True),fill=ICE)
     d.rounded_rectangle((42,720,1038,810),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,740),"PREMATCH POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,773),"Матч + ИТ команд + тоталы всех 1/2/3 периодов",font=sc._fit(d,"Матч + ИТ команд + тоталы всех 1/2/3 периодов",900,22,True),fill=GREEN)
+    d.text((68,773),"Все PREMATCH рынки: тоталы/ИТ/форы/исходы + периоды",font=sc._fit(d,"Матч + ИТ команд + тоталы всех 1/2/3 периодов",900,22,True),fill=GREEN)
     d.rounded_rectangle((280,830,800,880),15,fill=ICE)
     sc._center(d,"HOCKEY PREMATCH • СИГНАЛ",840,sc._font(20,True),BG)
     return sc._save(im)

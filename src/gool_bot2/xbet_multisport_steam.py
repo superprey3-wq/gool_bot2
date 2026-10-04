@@ -2275,6 +2275,7 @@ class MultiSportSteamWorker:
         phase: str,
         scope: str = SCOPE_FULL,
         market_family: str = "match_total",
+        flashscore_event_id: str = "",
     ) -> bool:
         wanted_phase = str(phase or "LIVE").upper()
         wanted_scope = str(scope or SCOPE_FULL)
@@ -2283,9 +2284,11 @@ class MultiSportSteamWorker:
             row_phase = str(row.get("phase") or ("PREMATCH" if row.get("origin") == "multisport_prematch" else "LIVE")).upper()
             row_scope = str(row.get("scope") or SCOPE_FULL)
             row_family = str(row.get("market_family") or "match_total")
+            wanted_identity = str(flashscore_event_id or event_id or "")
+            row_identity = str(row.get("flashscore_event_id") or row.get("event_id") or "")
             if (
                 str(row.get("sport") or "") == sport
-                and str(row.get("event_id") or "") == event_id
+                and row_identity == wanted_identity
                 and row_phase == wanted_phase
                 and row_scope == wanted_scope
                 and row_family == wanted_family
@@ -2360,7 +2363,14 @@ class MultiSportSteamWorker:
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)
         family = str(row.get("market_family") or "match_total")
-        if self._already_seen(cfg.key, event_id, phase, scope, family):
+        if self._already_seen(
+            cfg.key,
+            event_id,
+            phase,
+            scope,
+            family,
+            str(row.get("flashscore_event_id") or ""),
+        ):
             return False, 0
         mode = _mode()
         direction = str(signal.get("direction") or "over")

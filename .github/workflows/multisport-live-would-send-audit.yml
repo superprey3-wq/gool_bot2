@@ -1,0 +1,47 @@
+name: Multisport LIVE would-send audit
+
+on:
+  pull_request:
+    paths:
+      - "scripts/gool_multisport_live_send_audit.py"
+      - "src/gool_bot2/xbet_multisport_steam.py"
+      - "src/gool_bot2/xbet_multisport_markets.py"
+      - ".github/workflows/multisport-live-would-send-audit.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-would-send:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: Run 4-snapshot real LIVE shadow audit
+        env:
+          AUDIT_SNAPSHOTS: "4"
+          AUDIT_SLEEP_SECONDS: "20"
+          GOOL_MULTISPORT_MODE: shadow
+          XBET_MULTISPORT_TELEGRAM_ENABLED: "0"
+        run: python scripts/gool_multisport_live_send_audit.py
+      - name: Publish would-send summary
+        if: always()
+        run: |
+          if [ -f artifacts/multisport_live_send_audit/report.md ]; then
+            cat artifacts/multisport_live_send_audit/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multisport-live-would-send-audit
+          path: artifacts/multisport_live_send_audit/
+          retention-days: 7

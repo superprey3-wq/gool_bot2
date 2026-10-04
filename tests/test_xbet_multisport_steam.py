@@ -5,6 +5,7 @@ from gool_bot2.xbet_multisport_steam import (
     _balanced_total,
     _metric,
     _score,
+    detect_prematch_steam,
     detect_steam,
     settle_multisport_pick,
 )
@@ -101,3 +102,37 @@ def test_multisport_settlement_handles_over_under_and_void():
     assert settle_multisport_pick({"direction": "over", "line": 5.5}, 3, 3) == "won"
     assert settle_multisport_pick({"direction": "under", "line": 6.5}, 3, 2) == "won"
     assert settle_multisport_pick({"direction": "over", "line": 6.0}, 3, 3) == "void"
+
+
+def test_hockey_prematch_line_move_emits_signal():
+    cfg = SPORTS["hockey"]
+    rows = [
+        {"ts": 0, "metric": 6.00, "probability": .50, "line": 6.0, "over": 1.90, "under": 1.90},
+        {"ts": 35, "metric": 6.22, "probability": .52, "line": 6.0, "over": 1.82, "under": 2.00},
+        {"ts": 70, "metric": 6.55, "probability": .54, "line": 6.5, "over": 1.72, "under": 2.12},
+    ]
+    signal = detect_prematch_steam(rows, cfg, now=70.0)
+    assert signal is not None
+    assert signal["phase"] == "PREMATCH"
+    assert signal["direction"] == "over"
+
+
+def test_same_match_can_have_prematch_and_live_journal_entries(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = __import__("gool_bot2.xbet_multisport_steam", fromlist=["MultiSportSteamWorker"]).MultiSportSteamWorker(tmp_path)
+    cfg = SPORTS["hockey"]
+    signal = {
+        "direction": "over", "line": 6.5, "odd": 1.8, "fair_probability": .55,
+        "metric_delta": .6, "probability_delta_pp": 4.0, "line_delta": .5,
+        "moves": 3, "strength": 82.0, "extreme": False,
+    }
+    base = {
+        "event_id": "101", "flashscore_event_id": "ABCDEFGH", "home": "A", "away": "B",
+        "league": "L", "flashscore_match_score": .95,
+    }
+    prematch = {**base, "phase": "PREMATCH", "origin": "multisport_prematch", "start_ts": 9999999999}
+    live = {**base, "phase": "LIVE", "origin": "multisport_live", "score": [1, 0], "period": "2nd", "clock_seconds": 100}
+    assert worker._record_signal(prematch, signal, cfg)[0] is True
+    assert worker._record_signal(live, signal, cfg)[0] is True
+    rows = __import__("json").loads(worker.journal_path.read_text("utf-8"))
+    assert {row["phase"] for row in rows} == {"PREMATCH", "LIVE"}

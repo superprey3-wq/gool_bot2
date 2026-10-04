@@ -10,6 +10,7 @@ from gool_bot2.multisport_menu import (
     multisport_status_text,
     _pick_needed_text,
     multisport_in_game_sections,
+    multisport_analysis_sections,
     sport_journal_text,
     sport_overview_text,
     sport_phase_report_text,
@@ -365,3 +366,33 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Ф2 +4.5 @ 1.55" in text
     assert "100/100 · PREMATCH" in text
     assert "может проиграть максимум в 4" in text
+
+
+def test_multisport_analysis_sections_include_hockey_and_basketball(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    _write(state, {
+        "sports": {
+            "hockey": {
+                "flashscore_live":1,"xbet_live":1,"mapped":1,"decoded":1,"detected":1,
+                "matches":[{
+                    "home":"SKA","away":"CSKA","score":[2,1],"period":"3rd period",
+                    "signal":{"selection":"3-й период: ТБ 1.5","strength":91,"projected_total":2.1,"stat_edge":0.6},
+                }],
+            },
+            "basketball": {
+                "flashscore_live":1,"xbet_live":1,"mapped":1,"decoded":1,"detected":0,
+                "matches":[{
+                    "home":"Denver","away":"Utah","score":[44,41],"period":"Q2",
+                    "live_game_stats":{"scope":"QUARTER_2","segment_stats":{"turnovers":[3,5]}},
+                }],
+            },
+        }
+    })
+    text = "\n".join(multisport_analysis_sections())
+    assert "АНАЛИЗ · ХОККЕЙ" in text
+    assert "SKA — CSKA" in text
+    assert "SIGNAL" in text
+    assert "АНАЛИЗ · БАСКЕТБОЛ" in text
+    assert "Denver — Utah" in text
+    assert "WAIT" in text

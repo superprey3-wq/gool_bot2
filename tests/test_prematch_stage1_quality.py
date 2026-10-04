@@ -67,3 +67,8 @@ def test_stage_one_uses_sample_quality_before_fusion(monkeypatch):
     assert rows[0]["quality"] == 1.0
     assert rows[0]["primary_trend"] is not None
     assert rows[0]["primary_trend"]["name"] == "FT_OVER_2.5"
+
+
+def test_low_evidence_quality_does_not_erase_valid_trend():
+    trends = report._trend_signals(_stage1_profile(), .61)
+    assert any(t["name"] == "FT_OVER_2.5" for t in trends)

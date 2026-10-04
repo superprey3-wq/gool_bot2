@@ -59,11 +59,15 @@ def test_shortlist_caps_and_ranks_by_confidence():
     assert stats["cap"] == 2
 
 
-def test_shortlist_quality_v2_gate_is_realistic():
+def test_shortlist_quality_v2_gate_is_realistic_with_bounded_rescue():
     selected, stats = select_confident_prematch_rows([
         row("good", quality=.64),
-        row("thin", quality=.60),
+        row("thin-strong", quality=.60),
+        row("thin-weak", quality=.60, p=.65),
     ], max_rows=120)
-    assert [x["match"].provider_match_id for x in selected] == ["good"]
-    assert stats["rejected_quality"] == 1
+    assert [x["match"].provider_match_id for x in selected] == ["good", "thin-strong"]
+    assert selected[1]["confidence_tier"] == "QUALITY_RESCUE"
+    assert stats["rejected_quality"] == 2
+    assert stats["rescued_quality"] == 1
     assert stats["min_quality"] == .62
+    assert stats["rescue_min_quality"] == .55

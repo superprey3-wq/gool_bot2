@@ -24,8 +24,8 @@ from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
-from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card
-from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card
+from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
+from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -2586,6 +2586,38 @@ class MultiSportSteamWorker:
                 "settled_score": [int(score[0]), int(score[1])],
                 "settled_match_score": [int(full_score[0]), int(full_score[1])],
             })
+            if (
+                _mode() == "active"
+                and _truthy("XBET_MULTISPORT_CARDS_ENABLED", True)
+                and not row.get("result_card_sent_at")
+            ):
+                try:
+                    png = (
+                        render_hockey_result_card(row, cfg)
+                        if cfg.key == "hockey"
+                        else render_basketball_result_card(row, cfg)
+                    )
+                    sent = telegram.broadcast_photo(png, caption="")
+                    if sent:
+                        row["result_card_sent_at"] = now
+                        row["result_card_sent"] = True
+                        print(
+                            f"GOOL_{cfg.key.upper()}_RESULT_CARD_SENT "
+                            f"match={row.get('home')}--{row.get('away')} result={result}",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"GOOL_{cfg.key.upper()}_RESULT_CARD_SEND_FAILED "
+                            f"match={row.get('home')}--{row.get('away')} result={result}",
+                            flush=True,
+                        )
+                except Exception as exc:
+                    print(
+                        f"GOOL_{cfg.key.upper()}_RESULT_CARD_ERROR "
+                        f"{type(exc).__name__}:{exc}",
+                        flush=True,
+                    )
             changed += 1
         if changed:
             save_journal(self.journal_path, rows)

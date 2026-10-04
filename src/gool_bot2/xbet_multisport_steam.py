@@ -1062,9 +1062,9 @@ class MultiSportSteamWorker:
         return f"{row.get('period') or 'LIVE'} · {seconds // 60:02d}:{seconds % 60:02d}"
 
     def _message(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> str:
-        score = list(row.get("score") or [0, 0])
+        score = list(row.get("match_score") or row.get("score") or [0, 0])
         direction = str(signal.get("direction") or "over")
-        market_label = ("ТБ" if direction == "over" else "ТМ") + f" {float(signal.get('line') or 0):g}"
+        market_label = str(signal.get("selection") or row.get("selection") or selection_label(row, direction, float(signal.get("line") or 0)))
         arrow = "⬆️" if direction == "over" else "⬇️"
         if str(row.get("phase") or "LIVE").upper() == "PREMATCH":
             start_ts = float(row.get("start_ts") or 0.0)

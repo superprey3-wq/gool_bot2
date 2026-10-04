@@ -105,6 +105,20 @@ def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
     return None
 
 
+def _team_sport_exact_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
+    """Minimal request profile for 1xBet Basketball/Hockey only."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Python/3 aiohttp-compatible",
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
 _V3_HTTP_LOCK = threading.Lock()
 _V3_HTTP_OPENERS: dict[str, urllib.request.OpenerDirector] = {}
 _V3_HTTP_BOOTED: set[str] = set()
@@ -1276,6 +1290,50 @@ class MultiSportSteamWorker:
         attempts: list[dict[str, Any]] = []
         now = time.monotonic()
 
+        # Exact profile verified in an open-source 1xBet Basketball/Hockey scraper.
+        if cfg.key in {"hockey", "basketball"}:
+            exact_query = urllib.parse.urlencode({
+                "sports": cfg.sport_id,
+                "count": 50,
+                "lng": "en",
+                "gr": 70,
+                "mode": 4,
+                "country": 71,
+                "getEmpty": "true",
+            })
+            exact_root = "https://1xbet.com/LiveFeed"
+            payload = _team_sport_exact_json(
+                f"{exact_root}/Get1x2_VZip?{exact_query}",
+                timeout=8.0,
+            )
+            values = payload.get("Value") if isinstance(payload, dict) else None
+            usable = [
+                row for row in (values or [])
+                if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")
+            ] if isinstance(values, list) else []
+            attempts.append({
+                "root": exact_root,
+                "query": "github-team-sport-exact",
+                "raw": len(values) if isinstance(values, list) else 0,
+                "usable": len(usable),
+                "payload": bool(payload),
+            })
+            if usable:
+                rows = [dict(row) for row in usable]
+                self._roots[cfg.key] = exact_root
+                self._last_index[cfg.key] = (now, rows)
+                self._index_diag[cfg.key] = {
+                    "ok": True,
+                    "root": exact_root,
+                    "query": "github-team-sport-exact",
+                    "raw": len(values),
+                    "usable": len(rows),
+                    "cache": False,
+                    "source": "github_team_sport_exact",
+                    "attempts": attempts[-10:],
+                }
+                return rows
+
         # Do not merge every mirror: that multiplied requests and caused the
         # basketball index to be queried only after 1xBet started throttling us.
         for root in dict.fromkeys(roots):
@@ -1621,6 +1679,30 @@ class MultiSportSteamWorker:
         }
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         unique_roots = list(dict.fromkeys(roots))
+
+        # github-team-sport-game-exact
+        if cfg.key in {"hockey", "basketball"}:
+            exact_params = {
+                "id": event_id,
+                "lng": "en",
+                "isSubGames": "true",
+                "GroupEvents": "true",
+                "allEventsGroupSubGames": "true",
+                "countevents": 500,
+                "country": 71,
+                "fcountry": 71,
+                "marketType": 1,
+                "gr": 70,
+                "isNewBuilder": "true",
+            }
+            payload = _team_sport_exact_json(
+                "https://1xbet.com/LiveFeed/GetGameZip?" + urllib.parse.urlencode(exact_params),
+                timeout=10.0,
+            )
+            value = payload.get("Value") if isinstance(payload, dict) else None
+            if isinstance(value, dict):
+                self._roots[cfg.key] = "https://1xbet.com/LiveFeed"
+                return value
         for root in unique_roots:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None

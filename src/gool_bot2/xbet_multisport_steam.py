@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import urllib.parse
+import urllib.request
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -70,6 +71,29 @@ PREMATCH_ROOTS = (
     "https://1xbet.fi/service-api/LineFeed",
     "https://1xbet.fi/LineFeed",
 )
+
+
+def _sport_http_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
+    """1xBet request profile for hockey/basketball.
+
+    The football collector uses a football-specific Referer. Multisport feeds are
+    more reliable with the generic /live/ Referer used by the original sport bot.
+    """
+    headers = dict(getattr(market, "HEADERS", {}) or {})
+    headers["Referer"] = "https://1xbet.com/live/"
+    headers["Origin"] = "https://1xbet.fi" if "1xbet.fi/" in url else "https://1xbet.com"
+    attempts = max(1, min(3, _int_env("GOOL_MULTISPORT_HTTP_ATTEMPTS", 2)))
+    for attempt in range(attempts):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+        except Exception:
+            if attempt + 1 < attempts:
+                time.sleep(max(0.05, _float_env("GOOL_MULTISPORT_HTTP_RETRY_DELAY", 0.25)))
+    return None
 
 
 def _truthy(name: str, default: bool = True) -> bool:
@@ -581,7 +605,7 @@ class MultiSportSteamWorker:
         for root in dict.fromkeys(roots):
             root_ids: set[str] = set()
             for query_no, query in enumerate(self._xbet_queries(cfg), 1):
-                payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
+                payload = _sport_http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
                 attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
@@ -649,7 +673,7 @@ class MultiSportSteamWorker:
         for root in dict.fromkeys(roots):
             root_ids: set[str] = set()
             for query_no, query in enumerate(self._xbet_prematch_queries(cfg), 1):
-                payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=8.0)
+                payload = _sport_http_json(f"{root}/Get1x2_VZip?{query}", timeout=8.0)
                 values = payload.get("Value") if isinstance(payload, dict) else None
                 raw_count = len(values) if isinstance(values, list) else 0
                 attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
@@ -714,7 +738,7 @@ class MultiSportSteamWorker:
         }
         roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
         for root in dict.fromkeys(roots):
-            payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=8.0)
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=8.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._prematch_roots[cfg.key] = root
@@ -725,7 +749,7 @@ class MultiSportSteamWorker:
         params = {"id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true", "GroupEvents": "true", "allEventsGroupSubGames": "true", "countevents": 250, "grMode": 2}
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
         for root in dict.fromkeys(roots):
-            payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 self._roots[cfg.key] = root
@@ -753,7 +777,7 @@ class MultiSportSteamWorker:
         attempts = max(1, min(2, _int_env("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS", 1)))
         timeout = max(1.0, _float_env("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT", 3.5))
         for root in list(dict.fromkeys(roots))[:attempts]:
-            payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout)
+            payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=timeout)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
                 if prematch:

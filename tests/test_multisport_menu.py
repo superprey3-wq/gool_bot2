@@ -8,6 +8,7 @@ from gool_bot2.multisport_menu import (
     hockey_journal_text,
     multisport_report_text,
     multisport_status_text,
+    _pick_needed_text,
     multisport_in_game_sections,
     sport_journal_text,
     sport_overview_text,
@@ -190,3 +191,24 @@ def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, mon
         "odd": 1.85,
     }])
     assert multisport_in_game_sections() == []
+
+
+def test_multisport_in_game_needed_result_text_matches_settlement_rules():
+    assert "6+ шайб" in _pick_needed_text({
+        "sport":"hockey","market_family":"match_total","direction":"over","line":5.5,"scope":"FULL_MATCH",
+    })
+    text = _pick_needed_text({
+        "sport":"basketball","market_family":"home_total","direction":"over","line":93.0,"scope":"FULL_MATCH",
+    })
+    assert "94+ очков" in text
+    assert "ровно 93 — возврат" in text
+
+    plus = _pick_needed_text({
+        "sport":"hockey","market_family":"handicap","selection_side":"home","line":1.5,"scope":"FULL_MATCH",
+    })
+    assert "может проиграть максимум в 1" in plus
+
+    minus = _pick_needed_text({
+        "sport":"hockey","market_family":"handicap","selection_side":"home","line":-1.5,"scope":"FULL_MATCH",
+    })
+    assert "должна выиграть минимум в 2" in minus

@@ -194,6 +194,28 @@ def _one_way_moves(rows: list[dict[str, Any]], direction: str, epsilon: float) -
     return count
 
 
+def _lane_threshold_scale(rows: list[dict[str, Any]], cfg: SportConfig) -> float:
+    if not rows:
+        return 1.0
+    row = rows[-1]
+    scope = str(row.get("scope") or SCOPE_FULL)
+    family = str(row.get("market_family") or "match_total")
+    scale = 1.0
+    if cfg.key == "basketball":
+        if scope.startswith("QUARTER_"):
+            scale *= _float_env("GOOL_BASKETBALL_QUARTER_THRESHOLD_SCALE", 0.45)
+        elif scope in {"FIRST_HALF", "SECOND_HALF"}:
+            scale *= _float_env("GOOL_BASKETBALL_HALF_THRESHOLD_SCALE", 0.68)
+        if family in {"home_total", "away_total"}:
+            scale *= _float_env("GOOL_BASKETBALL_TEAM_TOTAL_THRESHOLD_SCALE", 0.72)
+    else:
+        if scope.startswith("PERIOD_"):
+            scale *= _float_env("GOOL_HOCKEY_PERIOD_THRESHOLD_SCALE", 0.65)
+        if family in {"home_total", "away_total"}:
+            scale *= _float_env("GOOL_HOCKEY_TEAM_TOTAL_THRESHOLD_SCALE", 0.75)
+    return max(0.25, min(1.0, scale))
+
+
 def detect_steam(
     rows: list[dict[str, Any]],
     cfg: SportConfig,
@@ -214,9 +236,13 @@ def detect_steam(
     raw_delta = float(end["metric"]) - float(start["metric"])
     direction = "over" if raw_delta > 0 else "under"
     metric_delta = abs(raw_delta)
-    moves = _one_way_moves(eligible, direction, cfg.move_epsilon)
-    extreme = metric_delta >= cfg.extreme_metric_delta
-    if metric_delta < cfg.min_metric_delta or (moves < cfg.min_moves and not extreme):
+    threshold_scale = _lane_threshold_scale(eligible, cfg)
+    min_metric = cfg.min_metric_delta * threshold_scale
+    extreme_metric = cfg.extreme_metric_delta * threshold_scale
+    move_epsilon = max(0.001, cfg.move_epsilon * threshold_scale)
+    moves = _one_way_moves(eligible, direction, move_epsilon)
+    extreme = metric_delta >= extreme_metric
+    if metric_delta < min_metric or (moves < cfg.min_moves and not extreme):
         return None
 
     try:
@@ -234,7 +260,7 @@ def detect_steam(
     raw_line_delta = float(end["line"]) - float(start["line"])
     line_delta = raw_line_delta if direction == "over" else -raw_line_delta
     fair_probability = float(end["probability"]) if direction == "over" else 1.0 - float(end["probability"])
-    strength = min(100.0, 58.0 + metric_delta / max(1e-6, cfg.min_metric_delta) * 13.0 + moves * 3.0 + (7.0 if extreme else 0.0))
+    strength = min(100.0, 58.0 + metric_delta / max(1e-6, min_metric) * 13.0 + moves * 3.0 + (7.0 if extreme else 0.0))
     return {
         "direction": direction,
         "line": float(end["line"]),
@@ -247,6 +273,7 @@ def detect_steam(
         "age_seconds": round(age, 1),
         "strength": round(strength, 1),
         "extreme": extreme,
+        "threshold_scale": round(threshold_scale, 3),
         "start": start,
         "end": end,
     }
@@ -270,14 +297,15 @@ def detect_prematch_steam(
     raw_delta = float(end["metric"]) - float(start["metric"])
     direction = "over" if raw_delta > 0 else "under"
     metric_delta = abs(raw_delta)
+    threshold_scale = _lane_threshold_scale(eligible, cfg)
     min_metric = _float_env(
         f"GOOL_{cfg.key.upper()}_PREMATCH_MIN_METRIC_DELTA",
         0.35 if cfg.key == "hockey" else 2.0,
-    )
+    ) * threshold_scale
     line_floor = _float_env(
         f"GOOL_{cfg.key.upper()}_PREMATCH_MIN_LINE_DELTA",
         0.5 if cfg.key == "hockey" else 2.5,
-    )
+    ) * threshold_scale
     moves = _one_way_moves(eligible, direction, max(cfg.move_epsilon, min_metric / 6.0))
     raw_probability_delta = (float(end["probability"]) - float(start["probability"])) * 100.0
     probability_delta_pp = raw_probability_delta if direction == "over" else -raw_probability_delta
@@ -322,6 +350,7 @@ def detect_prematch_steam(
         "age_seconds": round(age, 1),
         "strength": round(strength, 1),
         "extreme": extreme,
+        "threshold_scale": round(threshold_scale, 3),
         "start": start,
         "end": end,
     }

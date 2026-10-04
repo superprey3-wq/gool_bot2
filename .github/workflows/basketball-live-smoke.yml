@@ -1,0 +1,87 @@
+name: Basketball LIVE smoke
+
+on:
+  push:
+    branches:
+      - "feature/multisport-market-tree-and-football-rescue"
+    paths:
+      - "src/gool_bot2/xbet_multisport_steam.py"
+      - "src/gool_bot2/xbet_multisport_markets.py"
+      - ".github/workflows/basketball-live-smoke.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: One real basketball LIVE collection
+        env:
+          GOOL_MULTISPORT_MODE: shadow
+          GOOL_HOCKEY_ENABLED: "0"
+          GOOL_BASKETBALL_ENABLED: "1"
+          GOOL_MULTISPORT_PREMATCH_ENABLED: "0"
+          XBET_MULTISPORT_TELEGRAM_ENABLED: "0"
+          XBET_MULTISPORT_MAX_MAPPED_PER_SPORT: "50"
+          XBET_MULTISPORT_GAME_WORKERS: "10"
+          GOOL_MULTISPORT_HTTP_ATTEMPTS: "1"
+          GOOL_MULTISPORT_LIVE_SUBGAME_CACHE_SECONDS: "5"
+          RUNTIME_DATA_DIR: "artifacts/basketball_live_smoke/runtime"
+        run: |
+          mkdir -p artifacts/basketball_live_smoke
+          python - <<'PY' | tee artifacts/basketball_live_smoke/smoke.log
+          import json
+          from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker
+
+          worker = MultiSportSteamWorker()
+          state = worker.collect_once()
+          b = (state.get("sports") or {}).get("basketball") or {}
+          print(
+              "BASKET_SMOKE "
+              f"fs={b.get('flashscore_live', 0)} "
+              f"xbet={b.get('xbet_live', 0)} "
+              f"mapped={b.get('mapped', 0)} "
+              f"decoded={b.get('decoded', 0)} "
+              f"mismatch={b.get('score_mismatch', 0)} "
+              f"decode_fail={b.get('market_decode_failed', 0)} "
+              f"would_send={b.get('detected', 0)}"
+          )
+          modes = {}
+          for row in b.get("matches") or []:
+              mode = str(row.get("score_sync_mode") or "unknown")
+              modes[mode] = modes.get(mode, 0) + 1
+              print(
+                  "BASKET_MATCH "
+                  + json.dumps({
+                      "home": row.get("home"),
+                      "away": row.get("away"),
+                      "score": row.get("score"),
+                      "xbet_score": row.get("xbet_score"),
+                      "sync": mode,
+                      "delta": row.get("score_sync_delta"),
+                      "period": row.get("period"),
+                      "match_clock": row.get("match_clock_seconds"),
+                      "quarter_clock": row.get("clock_seconds"),
+                      "lanes": len(row.get("market_lanes") or []),
+                  }, ensure_ascii=False, separators=(",", ":"))
+              )
+          print("BASKET_SYNC_MODES " + json.dumps(modes, ensure_ascii=False, separators=(",", ":")))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basketball-live-smoke
+          path: artifacts/basketball_live_smoke/
+          retention-days: 7

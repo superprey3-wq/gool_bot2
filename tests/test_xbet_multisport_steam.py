@@ -136,3 +136,35 @@ def test_same_match_can_have_prematch_and_live_journal_entries(tmp_path, monkeyp
     assert worker._record_signal(live, signal, cfg)[0] is True
     rows = __import__("json").loads(worker.journal_path.read_text("utf-8"))
     assert {row["phase"] for row in rows} == {"PREMATCH", "LIVE"}
+
+
+
+def test_basketball_quarter_uses_short_scope_threshold_scale():
+    cfg = SPORTS["basketball"]
+    rows = [
+        {"ts": 0, "scope": "QUARTER_2", "market_family": "match_total", "metric": 40.0, "probability": .50, "line": 40.5, "over": 1.90, "under": 1.90},
+        {"ts": 10, "scope": "QUARTER_2", "market_family": "match_total", "metric": 40.7, "probability": .515, "line": 41.0, "over": 1.84, "under": 1.96},
+        {"ts": 20, "scope": "QUARTER_2", "market_family": "match_total", "metric": 41.4, "probability": .53, "line": 41.5, "over": 1.78, "under": 2.04},
+        {"ts": 30, "scope": "QUARTER_2", "market_family": "match_total", "metric": 42.0, "probability": .545, "line": 42.0, "over": 1.70, "under": 2.12},
+    ]
+    signal = detect_steam(rows, cfg, now=30.0, score_changed_at=None)
+    assert signal is not None
+    assert signal["threshold_scale"] < 1.0
+    assert signal["direction"] == "over"
+
+
+def test_hockey_period_prematch_uses_period_scale():
+    cfg = SPORTS["hockey"]
+    rows = [
+        {"ts": 0, "scope": "PERIOD_2", "market_family": "match_total", "metric": 1.50, "probability": .50, "line": 1.5, "over": 1.90, "under": 1.90},
+        {"ts": 35, "scope": "PERIOD_2", "market_family": "match_total", "metric": 1.64, "probability": .52, "line": 1.5, "over": 1.82, "under": 2.00},
+        {"ts": 70, "scope": "PERIOD_2", "market_family": "match_total", "metric": 1.82, "probability": .54, "line": 2.0, "over": 1.72, "under": 2.12},
+    ]
+    signal = detect_prematch_steam(rows, cfg, now=70.0)
+    assert signal is not None
+    assert signal["threshold_scale"] < 1.0
+
+
+def test_team_total_settlement_uses_only_selected_team():
+    assert settle_multisport_pick({"market_family": "home_total", "direction": "over", "line": 2.5}, 3, 8) == "won"
+    assert settle_multisport_pick({"market_family": "away_total", "direction": "under", "line": 4.5}, 9, 4) == "won"

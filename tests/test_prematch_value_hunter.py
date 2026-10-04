@@ -64,3 +64,27 @@ def test_value_hunter_diagnostics_count_high_odds_and_rejections():
     assert diag["high_odds_markets"] == 2
     assert diag["qualified"] == 1
     assert diag["rejects"]["edge"] >= 1
+
+
+def test_valuehunter_report_shows_prematch_progress(tmp_path, monkeypatch):
+    from gool_bot2 import v4_value_hunter_delivery as delivery
+    monkeypatch.setattr(delivery, "prematch_status_data", lambda: {
+        "running": True,
+        "stage": "pricing",
+        "value_hunter_stage": "waiting_for_full_market",
+        "last_cycle_started_at": "2026-10-04T07:30:00+00:00",
+        "last_cycle_finished_at": None,
+        "value_hunter_scanned_matches": 0,
+        "value_hunter_modeled_markets": 0,
+        "value_hunter_high_odds_markets": 0,
+        "value_hunter_qualified": 0,
+        "value_hunter_candidates": 0,
+        "value_hunter_sent": 0,
+        "value_hunter_rejects": {},
+    })
+    journal = tmp_path / "journal.json"
+    journal.write_text("[]", encoding="utf-8")
+    text = delivery.value_hunter_report_text(journal)
+    assert "RUNNING" in text
+    assert "pricing" in text
+    assert "waiting_for_full_market" in text

@@ -12,6 +12,7 @@ from gool_bot2.xbet_multisport_steam import (
     SPORTS,
     map_xbet_to_flashscore,
     parse_flashscore_live,
+    parse_flashscore_events,
 )
 
 
@@ -231,3 +232,35 @@ def test_multisport_delivery_uses_card_without_duplicate_caption(tmp_path, monke
     assert sent == 1
     assert seen["caption"] == ""
     assert seen["png"].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_multisport_flashscore_emblem_meta_reaches_hockey_card(monkeypatch):
+    body = (
+        "ZA÷MHL~"
+        "AA÷Ab12Cd34¬AB÷1¬AE÷Krylya Sovetov¬AF÷Mikhaylov Academy U20"
+        "¬JA÷home123¬JB÷away456¬WU÷krylya-sovetov¬WV÷mikhaylov-academy"
+        "¬OA÷home-logo.png¬OB÷away-logo.png~"
+    )
+    row = parse_flashscore_events(body)[0]
+    assert row["home_logo_file"] == "home-logo.png"
+    assert row["away_logo_file"] == "away-logo.png"
+    assert row["home_team_id"] == "home123"
+    assert row["away_team_id"] == "away456"
+
+    seen = []
+    import gool_bot2.hockey_signal_card as card
+    monkeypatch.setattr(card.sc, "_logo", lambda meta, side: seen.append((dict(meta), side)) or None)
+    signal = {
+        "phase":"PREMATCH","direction":"home","selection_side":"home",
+        "selection":"Ф1 +1.5","line":1.5,"odd":1.59,
+        "metric_delta":5.9,"probability_delta_pp":5.9,"line_delta":0.5,
+        "moves":3,"strength":100.0,"start":{"line":1.0,"home":1.66},
+    }
+    png = render_hockey_prematch_card({
+        **row,
+        "phase":"PREMATCH","start_ts":1893456000,
+        "scope":"FULL_MATCH","market_family":"handicap","selection":"Ф1 +1.5",
+    }, signal, SPORTS["hockey"])
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    assert any(meta.get("home_logo_file") == "home-logo.png" and side == "home" for meta, side in seen)
+    assert any(meta.get("away_logo_file") == "away-logo.png" and side == "away" for meta, side in seen)

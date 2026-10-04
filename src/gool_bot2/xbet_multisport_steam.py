@@ -19,6 +19,7 @@ from . import xbet_market_pressure as market
 from .providers.common import norm_team
 from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
+from .multisport_journal import append_unique, load_journal, save_journal
 from .xbet_multisport_card import render_multisport_steam_card
 
 
@@ -261,6 +262,7 @@ def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
             "league": league,
             "status_code": str(fields.get("AC") or ""),
             "coarse_status": str(fields.get("AB") or ""),
+            "scheduled_start_ts": _as_int(fields.get("AD"), _as_int(fields.get("AO"), 0)),
         }
     return list(rows.values())
 
@@ -471,7 +473,7 @@ class MultiSportSteamWorker:
         return list(self._history[key]), self._score_changed_at.get(key)
 
     def _settle(self, cfg: SportConfig, states: dict[str, dict[str, Any]]) -> int:
-        rows = _load_rows(self.journal_path)
+        rows = load_journal(self.journal_path)
         changed = 0
         now = datetime.now(timezone.utc).isoformat()
         for row in rows:
@@ -486,11 +488,16 @@ class MultiSportSteamWorker:
             row.update({"result": result, "profit_units": round(profit, 4), "settled_at": now, "settled_score": [int(score[0]), int(score[1])]})
             changed += 1
         if changed:
-            _save_rows(self.journal_path, rows)
+            save_journal(self.journal_path, rows)
         return changed
 
-    def _already_seen(self, sport: str, event_id: str) -> bool:
-        return any(str(row.get("sport") or "") == sport and str(row.get("event_id") or "") == event_id for row in _load_rows(self.journal_path))
+    def _already_seen(self, sport: str, event_id: str, phase: str = "LIVE") -> bool:
+        return any(
+            str(row.get("sport") or "") == sport
+            and str(row.get("event_id") or "") == event_id
+            and str(row.get("phase") or "LIVE").upper() == phase.upper()
+            for row in load_journal(self.journal_path)
+        )
 
     def _format_clock(self, row: dict[str, Any]) -> str:
         raw = row.get("clock_seconds")
@@ -530,12 +537,17 @@ class MultiSportSteamWorker:
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
         event_id = str(row.get("event_id") or "")
-        if self._already_seen(cfg.key, event_id):
+        if self._already_seen(cfg.key, event_id, "LIVE"):
             return False, 0
         mode = _mode()
         sent = self._deliver(row, signal, cfg) if mode == "active" else 0
         entry = {
-            "entry_id": f"{cfg.key}:{event_id}",
+            "entry_id": f"{cfg.key}:LIVE:{event_id}:match_total",
+            "journal_version": 2,
+            "phase": "LIVE",
+            "signal_type": "live_total_movement",
+            "market_family": "match_total",
+            "selection": ("ТБ" if str(signal.get("direction") or "over") == "over" else "ТМ") + f" {float(signal.get('line') or 0):g}",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "sport": cfg.key,
             "event_id": event_id,
@@ -562,9 +574,8 @@ class MultiSportSteamWorker:
             "mode": mode,
             "telegram_sent": sent > 0,
         }
-        rows = _load_rows(self.journal_path)
-        rows.append(entry)
-        _save_rows(self.journal_path, rows)
+        if not append_unique(self.journal_path, entry):
+            return False, 0
         print(
             f"GOOL_MULTISPORT_SIGNAL sport={cfg.key} match={row.get('home')}--{row.get('away')} "
             f"selection={entry['direction']}:{entry['line']:g} odd={entry['odd']:.2f} "

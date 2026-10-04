@@ -19,11 +19,12 @@ from .providers.flashscore import FlashscoreProvider
 HEAD_TO_CODE={"another_goal":"AG","goal_before_ht":"FH","over_2_5":"O25","both_teams_to_score":"BTTS","two_more_goals":"PLUS2"}
 CODE_TO_HEAD={value:key for key,value in HEAD_TO_CODE.items()}
 START_TEXT=(
-    "🟢 <b>GOOL Bot 4 · V4 работает</b>\n\nАктивные стратегии:\n"
-    "⚽ Ещё гол — обученная модель до 75'\n"
-    "🔥 Ещё +2 гола — GOOL LIVE до 75'\n\n"
-    "LIVE-сигналы приходят автоматически.\n"
-    "Чтобы отключить сигналы: /stop"
+    "🟢 <b>GOOL MULTI BOT · работает</b>\n\n"
+    "⚽ Футбол — V4 PREMATCH + LIVE\n"
+    "🏒 Хоккей — LIVE market movement\n"
+    "🏀 Баскетбол — LIVE market movement\n\n"
+    "Хоккей и баскетбол сначала работают в shadow-режиме: собирают статистику без сырых автосигналов.\n"
+    "Чтобы отключить автоматические сигналы: /stop"
 )
 STOP_TEXT="🔕 <b>Сигналы отключены</b>\n\nЭтот чат больше не получает автоматические сигналы GOOL Bot 4.\nЧтобы включить их снова: /start"
 
@@ -246,7 +247,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -266,6 +267,18 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text=="/valuehunter":
     from .v4_value_hunter_delivery import value_hunter_report_text
     replies=[value_hunter_report_text(journal_path)]
+   elif text=="/multisport":
+    from .multisport_menu import multisport_status_text
+    replies=[multisport_status_text()]
+   elif text=="/sportreport":
+    from .multisport_menu import multisport_report_text
+    replies=[multisport_report_text()]
+   elif text=="🏒 хоккей":
+    from .multisport_menu import sport_overview_text
+    replies=[sport_overview_text("hockey")]
+   elif text=="🏀 баскетбол":
+    from .multisport_menu import sport_overview_text
+    replies=[sport_overview_text("basketball")]
    elif text=="🎟 ординары":
     replies=prematch_singles_sections(journal_path)
    elif text=="🔗 экспрессы":

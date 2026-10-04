@@ -22,7 +22,12 @@ EXPERIMENT_HEADS = ("both_teams_to_score", "team_to_score")
 ALL_HEADS = MAIN_HEADS + EXPERIMENT_HEADS
 ACTIVE_HEADS = ALL_HEADS
 MENU_KEYBOARD = {
-    "keyboard": [[{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}], [{"text": "🎟 Ординары"}, {"text": "🔗 Экспрессы"}], [{"text": "🧠 Анализ"}, {"text": "🔎 Найти матч"}]],
+    "keyboard": [
+        [{"text": "📊 Отчёт"}, {"text": "🟢 В игре"}],
+        [{"text": "🎟 Ординары"}, {"text": "🔗 Экспрессы"}],
+        [{"text": "🏒 Хоккей"}, {"text": "🏀 Баскетбол"}],
+        [{"text": "🧠 Анализ"}, {"text": "🔎 Найти матч"}],
+    ],
     "resize_keyboard": True,
     "is_persistent": True,
 }

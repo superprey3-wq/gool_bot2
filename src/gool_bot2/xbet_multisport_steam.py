@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import threading
@@ -18,14 +19,14 @@ from . import xbet_market_pressure as market
 from .providers.common import norm_team
 from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
-from .xbet_multisport_card import render_multisport_steam_card, render_multisport_result_card
-from .journal import load_signal_journal, save_signal_journal
+from .xbet_multisport_card import render_multisport_steam_card
 
 
 @dataclass(frozen=True)
 class SportConfig:
     key: str
     sport_id: int
+    flashscore_id: int
     icon: str
     title: str
     probability_scale: float
@@ -34,55 +35,18 @@ class SportConfig:
     min_moves: int
     min_age_seconds: float
     score_guard_seconds: float
-    cooldown_seconds: float
     window_seconds: float
+    move_epsilon: float
 
 
 SPORTS: dict[str, SportConfig] = {
-    "hockey": SportConfig(
-        key="hockey",
-        sport_id=2,
-        icon="🏒",
-        title="HOCKEY STEAM",
-        probability_scale=4.0,
-        min_metric_delta=0.45,
-        extreme_metric_delta=0.75,
-        min_moves=3,
-        min_age_seconds=28.0,
-        score_guard_seconds=16.0,
-        cooldown_seconds=12 * 60.0,
-        window_seconds=4 * 60.0,
-    ),
-    "basketball": SportConfig(
-        key="basketball",
-        sport_id=3,
-        icon="🏀",
-        title="BASKETBALL STEAM",
-        probability_scale=40.0,
-        min_metric_delta=3.5,
-        extreme_metric_delta=6.0,
-        min_moves=3,
-        min_age_seconds=24.0,
-        score_guard_seconds=6.0,
-        cooldown_seconds=8 * 60.0,
-        window_seconds=3 * 60.0,
-    ),
+    "hockey": SportConfig("hockey", 2, 4, "🏒", "HOCKEY", 4.0, 0.45, 0.75, 3, 28.0, 16.0, 4 * 60.0, 0.035),
+    "basketball": SportConfig("basketball", 3, 3, "🏀", "BASKETBALL", 40.0, 3.5, 6.0, 3, 24.0, 6.0, 3 * 60.0, 0.30),
 }
 
-# Flashscore: basketball=3, ice hockey=4. 1xBet uses hockey=2, basketball=3.
-FLASHSCORE_SPORT_IDS = {"basketball": 3, "hockey": 4}
-
-_EXCLUDED_MARKERS = (
-    "esports",
-    "e-sports",
-    "cyber",
-    "virtual",
-    "ebasketball",
-    "ehockey",
-    "nba2k",
-    "2x2",
-    "3x3",
-)
+FLASHSCORE_SPORT_IDS = {key: cfg.flashscore_id for key, cfg in SPORTS.items()}
+_EXCLUDED_MARKERS = ("esports", "e-sports", "cyber", "virtual", "ebasketball", "ehockey", "nba2k", "2x2", "3x3")
+_FINAL_RESULTS = {"won", "lost", "void"}
 
 
 def _truthy(name: str, default: bool = True) -> bool:
@@ -106,40 +70,63 @@ def _int_env(name: str, default: int) -> int:
         return int(default)
 
 
+def _mode() -> str:
+    raw = os.getenv("GOOL_MULTISPORT_MODE", os.getenv("GOOL_SPORT_MODE", "shadow"))
+    return "active" if str(raw).strip().casefold() == "active" else "shadow"
+
+
+def _sport_enabled(key: str) -> bool:
+    legacy = _truthy(f"XBET_{key.upper()}_STEAM_ENABLED", True)
+    return _truthy(f"GOOL_{key.upper()}_ENABLED", legacy)
+
+
+def _runtime_path(env_name: str, legacy_name: str, runtime: Path, filename: str) -> Path:
+    raw = os.getenv(env_name, "").strip() or os.getenv(legacy_name, "").strip()
+    return Path(raw) if raw else runtime / "live" / filename
+
+
+def _load_rows(path: Path) -> list[dict[str, Any]]:
+    try:
+        value = json.loads(path.read_text("utf-8"))
+        return value if isinstance(value, list) else []
+    except Exception:
+        return []
+
+
+def _save_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    tmp.replace(path)
+
+
 def _score(game: dict[str, Any]) -> tuple[int, int] | None:
     sc = game.get("SC") or {}
     fs = sc.get("FS") or {}
-    try:
-        if fs.get("S1") is not None and fs.get("S2") is not None:
-            return int(float(fs.get("S1"))), int(float(fs.get("S2")))
-    except (TypeError, ValueError):
-        pass
-    try:
-        if game.get("S1") is not None and game.get("S2") is not None:
-            return int(float(game.get("S1"))), int(float(game.get("S2")))
-    except (TypeError, ValueError):
-        pass
+    for root in (fs, game):
+        try:
+            if root.get("S1") is not None and root.get("S2") is not None:
+                return int(float(root.get("S1"))), int(float(root.get("S2")))
+        except (TypeError, ValueError):
+            pass
     return None
 
 
 def _period(game: dict[str, Any]) -> str:
     sc = game.get("SC") or {}
-    value = sc.get("CPS") or sc.get("CP") or sc.get("I") or "LIVE"
-    return str(value).strip() or "LIVE"
+    return str(sc.get("CPS") or sc.get("CP") or sc.get("I") or "LIVE").strip() or "LIVE"
 
 
 def _clock_seconds(game: dict[str, Any]) -> int | None:
-    sc = game.get("SC") or {}
     try:
-        raw = sc.get("TS")
+        raw = (game.get("SC") or {}).get("TS")
         return None if raw is None else max(0, int(float(raw)))
     except (TypeError, ValueError):
         return None
 
 
 def _fair(over: float, under: float) -> float:
-    a = 1.0 / float(over)
-    b = 1.0 / float(under)
+    a, b = 1.0 / float(over), 1.0 / float(under)
     return a / (a + b)
 
 
@@ -153,20 +140,15 @@ def _balanced_total(game: dict[str, Any]) -> dict[str, float] | None:
             under = float(row.get("under"))
         except (TypeError, ValueError):
             continue
-        if not (1.08 <= over <= 8.0 and 1.08 <= under <= 8.0):
-            continue
-        probability = _fair(over, under)
-        candidates.append({"line": line, "over": over, "under": under, "probability": probability})
-    if not candidates:
-        return None
-    return min(candidates, key=lambda row: abs(float(row["probability"]) - 0.5))
+        if 1.08 <= over <= 8.0 and 1.08 <= under <= 8.0:
+            candidates.append({"line": line, "over": over, "under": under, "probability": _fair(over, under)})
+    return min(candidates, key=lambda row: abs(float(row["probability"]) - 0.5)) if candidates else None
 
 
 def _metric(total: dict[str, float], score: tuple[int, int], cfg: SportConfig) -> float:
-    current_points = int(score[0]) + int(score[1])
-    remaining_line = float(total["line"]) - float(current_points)
-    probability_bias = (float(total["probability"]) - 0.5) * float(cfg.probability_scale)
-    return remaining_line + probability_bias
+    current = int(score[0]) + int(score[1])
+    remaining = float(total["line"]) - current
+    return remaining + (float(total["probability"]) - 0.5) * cfg.probability_scale
 
 
 def _event_allowed(game: dict[str, Any]) -> bool:
@@ -174,12 +156,15 @@ def _event_allowed(game: dict[str, Any]) -> bool:
     return not any(marker in text for marker in _EXCLUDED_MARKERS)
 
 
-def _one_way_moves(rows: list[dict[str, Any]], epsilon: float) -> int:
-    moves = 0
+def _one_way_moves(rows: list[dict[str, Any]], direction: str, epsilon: float) -> int:
+    count = 0
     for left, right in zip(rows, rows[1:]):
-        if float(right.get("metric") or 0.0) >= float(left.get("metric") or 0.0) + epsilon:
-            moves += 1
-    return moves
+        delta = float(right.get("metric") or 0.0) - float(left.get("metric") or 0.0)
+        if direction == "over" and delta >= epsilon:
+            count += 1
+        elif direction == "under" and delta <= -epsilon:
+            count += 1
+    return count
 
 
 def detect_steam(
@@ -189,8 +174,6 @@ def detect_steam(
     now: float,
     score_changed_at: float | None,
 ) -> dict[str, Any] | None:
-    if len(rows) < max(4, cfg.min_moves + 1):
-        return None
     eligible = [row for row in rows if now - float(row.get("ts") or 0.0) <= cfg.window_seconds]
     if len(eligible) < max(4, cfg.min_moves + 1):
         return None
@@ -200,30 +183,42 @@ def detect_steam(
     if score_changed_at is not None and now - score_changed_at < cfg.score_guard_seconds:
         return None
 
-    start = eligible[0]
-    end = eligible[-1]
-    delta = float(end["metric"]) - float(start["metric"])
-    probability_delta_pp = (float(end["probability"]) - float(start["probability"])) * 100.0
-    line_delta = float(end["line"]) - float(start["line"])
-    epsilon = 0.035 if cfg.key == "hockey" else 0.30
-    moves = _one_way_moves(eligible, epsilon)
-    extreme = delta >= cfg.extreme_metric_delta
-
-    if delta < cfg.min_metric_delta or (moves < cfg.min_moves and not extreme):
+    start, end = eligible[0], eligible[-1]
+    raw_delta = float(end["metric"]) - float(start["metric"])
+    direction = "over" if raw_delta > 0 else "under"
+    metric_delta = abs(raw_delta)
+    moves = _one_way_moves(eligible, direction, cfg.move_epsilon)
+    extreme = metric_delta >= cfg.extreme_metric_delta
+    if metric_delta < cfg.min_metric_delta or (moves < cfg.min_moves and not extreme):
         return None
+
     try:
-        odd = float(end["over"])
-    except (TypeError, ValueError):
+        odd = float(end[direction])
+    except (TypeError, ValueError, KeyError):
         return None
-    if not (1.20 <= odd <= 3.50):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
 
+    over_probability_delta = (float(end["probability"]) - float(start["probability"])) * 100.0
+    probability_delta_pp = over_probability_delta if direction == "over" else -over_probability_delta
+    if abs(over_probability_delta) < _float_env("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", 3.0) and not extreme:
+        return None
+
+    raw_line_delta = float(end["line"]) - float(start["line"])
+    line_delta = raw_line_delta if direction == "over" else -raw_line_delta
+    fair_probability = float(end["probability"]) if direction == "over" else 1.0 - float(end["probability"])
+    strength = min(100.0, 58.0 + metric_delta / max(1e-6, cfg.min_metric_delta) * 13.0 + moves * 3.0 + (7.0 if extreme else 0.0))
     return {
-        "metric_delta": round(delta, 3),
+        "direction": direction,
+        "line": float(end["line"]),
+        "odd": odd,
+        "fair_probability": round(fair_probability, 6),
+        "metric_delta": round(metric_delta, 3),
         "probability_delta_pp": round(probability_delta_pp, 2),
         "line_delta": round(line_delta, 2),
         "moves": moves,
         "age_seconds": round(age, 1),
+        "strength": round(strength, 1),
         "extreme": extreme,
         "start": start,
         "end": end,
@@ -239,8 +234,7 @@ def _team_similarity(left: str, right: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def parse_flashscore_live(body: str) -> list[dict[str, Any]]:
-    """Parse a generic Flashscore sport master feed and keep LIVE events only."""
+def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
     league = ""
     rows: dict[str, dict[str, Any]] = {}
     for chunk in (body or "").split("~"):
@@ -255,8 +249,6 @@ def parse_flashscore_live(body: str) -> list[dict[str, Any]]:
         if not sep or len(event_id) != 8 or not event_id.isalnum():
             continue
         fields = _fields(rest)
-        if str(fields.get("AB") or "") != "2":
-            continue
         home = str(fields.get("AE") or fields.get("CX") or "").strip()
         away = str(fields.get("AF") or "").strip()
         if not home or not away:
@@ -265,29 +257,25 @@ def parse_flashscore_live(body: str) -> list[dict[str, Any]]:
             "flashscore_event_id": event_id,
             "home": home,
             "away": away,
-            "score": [
-                _as_int(fields.get("AG"), _as_int(fields.get("AT"))),
-                _as_int(fields.get("AH"), _as_int(fields.get("AU"))),
-            ],
+            "score": [_as_int(fields.get("AG"), _as_int(fields.get("AT"))), _as_int(fields.get("AH"), _as_int(fields.get("AU")))],
             "league": league,
             "status_code": str(fields.get("AC") or ""),
-            "coarse_status": "2",
+            "coarse_status": str(fields.get("AB") or ""),
         }
     return list(rows.values())
 
 
+def parse_flashscore_live(body: str) -> list[dict[str, Any]]:
+    return [row for row in parse_flashscore_events(body) if str(row.get("coarse_status") or "") == "2"]
+
+
 def _match_quality(xbet: dict[str, Any], fs: dict[str, Any]) -> tuple[float, bool, float]:
-    xh = str(xbet.get("O1") or "")
-    xa = str(xbet.get("O2") or "")
-    fh = str(fs.get("home") or "")
-    fa = str(fs.get("away") or "")
+    xh, xa = str(xbet.get("O1") or ""), str(xbet.get("O2") or "")
+    fh, fa = str(fs.get("home") or ""), str(fs.get("away") or "")
     direct_sides = (_team_similarity(xh, fh), _team_similarity(xa, fa))
     reverse_sides = (_team_similarity(xh, fa), _team_similarity(xa, fh))
-    direct = sum(direct_sides) / 2.0
-    reverse = sum(reverse_sides) / 2.0
-    if reverse > direct:
-        return reverse, True, min(reverse_sides)
-    return direct, False, min(direct_sides)
+    direct, reverse = sum(direct_sides) / 2.0, sum(reverse_sides) / 2.0
+    return (reverse, True, min(reverse_sides)) if reverse > direct else (direct, False, min(direct_sides))
 
 
 def map_xbet_to_flashscore(
@@ -297,7 +285,6 @@ def map_xbet_to_flashscore(
     min_score: float | None = None,
     min_side: float | None = None,
 ) -> list[tuple[dict[str, Any], dict[str, Any], bool, float]]:
-    """One-to-one whitelist mapping. Unmatched 1xBet events are never scanned."""
     threshold = _float_env("XBET_MULTISPORT_FS_MATCH_MIN", 0.70) if min_score is None else float(min_score)
     side_floor = _float_env("XBET_MULTISPORT_FS_SIDE_MIN", 0.52) if min_side is None else float(min_side)
     candidates: list[tuple[float, int, int, bool]] = []
@@ -308,11 +295,8 @@ def map_xbet_to_flashscore(
             quality, reversed_order, weakest = _match_quality(xbet, fs)
             if quality >= threshold and weakest >= side_floor:
                 candidates.append((quality, xi, fi, reversed_order))
-
     candidates.sort(key=lambda item: item[0], reverse=True)
-    used_xbet: set[int] = set()
-    used_fs: set[int] = set()
-    out: list[tuple[dict[str, Any], dict[str, Any], bool, float]] = []
+    used_xbet, used_fs, out = set(), set(), []
     for quality, xi, fi, reversed_order in candidates:
         if xi in used_xbet or fi in used_fs:
             continue
@@ -322,75 +306,106 @@ def map_xbet_to_flashscore(
     return out
 
 
-class MultiSportSteamWorker:
-    """Flashscore-whitelisted hockey/basketball 1xBet STEAM scanner.
+def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int) -> str:
+    total = int(home_score) + int(away_score)
+    line = float(row.get("line") or 0.0)
+    if abs(total - line) < 1e-9:
+        return "void"
+    if str(row.get("direction") or "over") == "under":
+        return "won" if total < line else "lost"
+    return "won" if total > line else "lost"
 
-    Flashscore is the canonical LIVE universe and score source. 1xBet contributes
-    market movement only. No Flashscore match -> no scan -> no signal.
+
+class MultiSportSteamWorker:
+    """Basketball + hockey market-movement worker ported from basket_hokkey.
+
+    Flashscore owns identity/status/score. 1xBet contributes the live total and
+    its movement. In shadow mode signals are journaled but not pushed.
     """
 
     def __init__(self, runtime: Path | None = None) -> None:
         runtime = runtime or Path(os.getenv("RUNTIME_DATA_DIR", "data"))
-        self.state_path = Path(os.getenv("XBET_MULTISPORT_STATE", str(runtime / "live" / "xbet_multisport_steam_state.json")))
-        self.history_path = Path(os.getenv("XBET_MULTISPORT_HISTORY", str(runtime / "live" / "xbet_multisport_steam_history.jsonl")))
+        self.state_path = _runtime_path("GOOL_MULTISPORT_STATE", "XBET_MULTISPORT_STATE", runtime, "gool_multisport_state.json")
+        self.history_path = _runtime_path("GOOL_MULTISPORT_HISTORY", "XBET_MULTISPORT_HISTORY", runtime, "gool_multisport_history.jsonl")
+        self.journal_path = _runtime_path("GOOL_MULTISPORT_JOURNAL", "XBET_MULTISPORT_JOURNAL", runtime, "gool_multisport_signals.json")
         self._stop = threading.Event()
-        self._history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=40))
+        self._history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=50))
         self._last_score: dict[str, tuple[int, int]] = {}
         self._score_changed_at: dict[str, float] = {}
         self._last_period: dict[str, str] = {}
-        self._last_alert_at: dict[str, float] = {}
         self._roots: dict[str, str] = {key: market.ROOTS[0] for key in SPORTS}
+        self._index_diag: dict[str, dict[str, Any]] = {}
         self._flashscore = FlashscoreProvider()
+        self._restore_history()
 
     def stop(self) -> None:
         self._stop.set()
 
-    @staticmethod
-    def _query(sport_id: int) -> str:
-        return urllib.parse.urlencode({
-            "sports": int(sport_id),
-            "count": max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000)),
-            "lng": "en",
-            "mode": 4,
-            "country": 1,
-            "getEmpty": "true",
-        })
+    def _restore_history(self) -> None:
+        try:
+            size = self.history_path.stat().st_size
+            with self.history_path.open("rb") as fh:
+                fh.seek(max(0, size - 4 * 1024 * 1024))
+                data = fh.read()
+            if size > 4 * 1024 * 1024 and b"\n" in data:
+                data = data.split(b"\n", 1)[1]
+        except FileNotFoundError:
+            return
+        restored = 0
+        for raw in data.splitlines():
+            try:
+                state = json.loads(raw.decode("utf-8"))
+            except Exception:
+                continue
+            for key, cfg in SPORTS.items():
+                for row in (((state.get("sports") or {}).get(key) or {}).get("matches") or []):
+                    if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
+                        continue
+                    self._append_history(row, cfg)
+                    restored += 1
+        if restored:
+            print(f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored}", flush=True)
 
-    def _flashscore_live(self, cfg: SportConfig) -> list[dict[str, Any]]:
-        sport_id = FLASHSCORE_SPORT_IDS[cfg.key]
+    def _flashscore_today(self, cfg: SportConfig) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
-        for path in (f"f_{sport_id}_0_3_en_1", f"f_{sport_id}_0_0_en_1"):
+        for path in (f"f_{cfg.flashscore_id}_0_3_en_1", f"f_{cfg.flashscore_id}_0_0_en_1"):
             body = self._flashscore._feed(path)
             if not body:
                 continue
-            for row in parse_flashscore_live(body):
+            for row in parse_flashscore_events(body):
                 merged[str(row["flashscore_event_id"])] = row
         return list(merged.values())
 
+    def _xbet_queries(self, cfg: SportConfig) -> list[str]:
+        count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
+        base = {"sports": cfg.sport_id, "count": count, "lng": "en", "mode": 4}
+        return [
+            urllib.parse.urlencode({**base, "country": 1, "getEmpty": "true"}),
+            urllib.parse.urlencode({**base, "country": 137, "gr": 285, "virtualSports": "true", "noFilterBlockEvent": "true", "getEmpty": "true"}),
+        ]
+
     def _xbet_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
-        query = self._query(cfg.sport_id)
-        for root in roots:
-            payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
-            values = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(values, list) and values:
-                self._roots[cfg.key] = root
-                return [row for row in values if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")]
+        attempts: list[dict[str, Any]] = []
+        for root in dict.fromkeys(roots):
+            for query_no, query in enumerate(self._xbet_queries(cfg), 1):
+                payload = market._http_json(f"{root}/Get1x2_VZip?{query}", timeout=7.0)
+                values = payload.get("Value") if isinstance(payload, dict) else None
+                raw_count = len(values) if isinstance(values, list) else 0
+                attempts.append({"root": root, "query": query_no, "raw": raw_count, "payload": bool(payload)})
+                if isinstance(values, list) and values:
+                    rows = [row for row in values if isinstance(row, dict) and row.get("I") and row.get("O1") and row.get("O2")]
+                    if rows:
+                        self._roots[cfg.key] = root
+                        self._index_diag[cfg.key] = {"ok": True, "root": root, "query": query_no, "raw": raw_count, "usable": len(rows)}
+                        return rows
+        self._index_diag[cfg.key] = {"ok": False, "attempts": attempts[-8:]}
         return []
 
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
-        params = {
-            "id": event_id,
-            "lng": "en",
-            "cfview": 0,
-            "isSubGames": "true",
-            "GroupEvents": "true",
-            "allEventsGroupSubGames": "true",
-            "countevents": 250,
-            "grMode": 2,
-        }
+        params = {"id": event_id, "lng": "en", "cfview": 0, "isSubGames": "true", "GroupEvents": "true", "allEventsGroupSubGames": "true", "countevents": 250, "grMode": 2}
         roots = [self._roots[cfg.key], *[root for root in market.ROOTS if root != self._roots[cfg.key]]]
-        for root in roots:
+        for root in dict.fromkeys(roots):
             payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
             if isinstance(value, dict):
@@ -398,40 +413,31 @@ class MultiSportSteamWorker:
                 return value
         return None
 
-    def _snapshot(
-        self,
-        event: dict[str, Any],
-        fs: dict[str, Any],
-        reversed_order: bool,
-        match_score: float,
-        cfg: SportConfig,
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    def _snapshot(self, event: dict[str, Any], fs: dict[str, Any], reversed_order: bool, match_score: float, cfg: SportConfig) -> tuple[dict[str, Any] | None, str | None]:
         event_id = str(event.get("I") or "").strip()
-        if not event_id:
-            return None, "missing_event_id"
         game = event
-        total = _balanced_total(game)
-        xbet_score = _score(game)
+        total, xbet_score = _balanced_total(game), _score(game)
         if total is None or xbet_score is None:
             game = self._game(event_id, cfg) or {}
-            total = _balanced_total(game)
-            xbet_score = _score(game)
+            total, xbet_score = _balanced_total(game), _score(game)
         if total is None or xbet_score is None or not _event_allowed(game):
             return None, "market_decode"
-
-        canonical_xbet = (xbet_score[1], xbet_score[0]) if reversed_order else xbet_score
+        canonical = (xbet_score[1], xbet_score[0]) if reversed_order else xbet_score
         fs_score_raw = list(fs.get("score") or [0, 0])
         fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
-        if canonical_xbet != fs_score:
+        if canonical != fs_score:
             return None, "score_mismatch"
-
+        now = time.time()
         return {
-            "event_id": event_id,
+            "ts": now,
+            "captured_at": datetime.now(timezone.utc).isoformat(),
             "sport": cfg.key,
+            "event_id": event_id,
+            "flashscore_event_id": str(fs.get("flashscore_event_id") or ""),
             "home": str(fs.get("home") or "?"),
             "away": str(fs.get("away") or "?"),
             "league": str(fs.get("league") or game.get("LE") or game.get("L") or ""),
-            "score": [fs_score[0], fs_score[1]],
+            "score": [*fs_score],
             "period": _period(game),
             "clock_seconds": _clock_seconds(game),
             "line": float(total["line"]),
@@ -439,56 +445,73 @@ class MultiSportSteamWorker:
             "under": float(total["under"]),
             "probability": float(total["probability"]),
             "metric": _metric(total, fs_score, cfg),
-            "flashscore_event_id": str(fs.get("flashscore_event_id") or ""),
             "flashscore_match_score": round(float(match_score), 4),
             "flashscore_score_verified": True,
-            "captured_at": datetime.now(timezone.utc).isoformat(),
-            "ts": time.time(),
         }, None
 
-    def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
-        key = f"{row['sport']}:{row['event_id']}"
+    def _append_history(self, row: dict[str, Any], cfg: SportConfig | None = None) -> tuple[list[dict[str, Any]], float | None]:
+        cfg = cfg or SPORTS.get(str(row.get("sport") or "").casefold())
+        if cfg is None:
+            raise ValueError(f"unknown_multisport={row.get('sport')}")
+        key = f"{cfg.key}:{row['event_id']}"
         score = (int(row["score"][0]), int(row["score"][1]))
         period = str(row.get("period") or "LIVE")
         now = float(row["ts"])
-
         previous_period = self._last_period.get(key)
         if previous_period is not None and previous_period != period:
             self._history[key].clear()
         self._last_period[key] = period
-
         previous_score = self._last_score.get(key)
         if previous_score is not None and previous_score != score:
             self._score_changed_at[key] = now
+            if cfg.key == "hockey":
+                self._history[key].clear()
         self._last_score[key] = score
         self._history[key].append(dict(row))
         return list(self._history[key]), self._score_changed_at.get(key)
 
-    def _cooldown_ok(self, row: dict[str, Any], cfg: SportConfig, now: float) -> bool:
-        key = f"{row['sport']}:{row['event_id']}"
-        return now - float(self._last_alert_at.get(key, 0.0)) >= cfg.cooldown_seconds
+    def _settle(self, cfg: SportConfig, states: dict[str, dict[str, Any]]) -> int:
+        rows = _load_rows(self.journal_path)
+        changed = 0
+        now = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            if row.get("sport") != cfg.key or str(row.get("result") or "pending") in _FINAL_RESULTS:
+                continue
+            state = states.get(str(row.get("flashscore_event_id") or ""))
+            if not state or str(state.get("coarse_status") or "") != "3":
+                continue
+            score = list(state.get("score") or [0, 0])
+            result = settle_multisport_pick(row, int(score[0]), int(score[1]))
+            profit = 0.0 if result == "void" else (float(row.get("odd") or 0.0) - 1.0 if result == "won" else -1.0)
+            row.update({"result": result, "profit_units": round(profit, 4), "settled_at": now, "settled_score": [int(score[0]), int(score[1])]})
+            changed += 1
+        if changed:
+            _save_rows(self.journal_path, rows)
+        return changed
 
-    def _mark_alert(self, row: dict[str, Any], now: float) -> None:
-        self._last_alert_at[f"{row['sport']}:{row['event_id']}"] = now
+    def _already_seen(self, sport: str, event_id: str) -> bool:
+        return any(str(row.get("sport") or "") == sport and str(row.get("event_id") or "") == event_id for row in _load_rows(self.journal_path))
 
-    @staticmethod
-    def _format_clock(row: dict[str, Any]) -> str:
+    def _format_clock(self, row: dict[str, Any]) -> str:
         raw = row.get("clock_seconds")
         if raw is None:
             return str(row.get("period") or "LIVE")
-        seconds = int(raw)
+        seconds = max(0, int(raw))
         return f"{row.get('period') or 'LIVE'} · {seconds // 60:02d}:{seconds % 60:02d}"
 
     def _message(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> str:
-        end = dict(signal.get("end") or {})
         score = list(row.get("score") or [0, 0])
-        strength = "EXTREME" if signal.get("extreme") else "STRONG"
+        direction = str(signal.get("direction") or "over")
+        market_label = ("ТБ" if direction == "over" else "ТМ") + f" {float(signal.get('line') or 0):g}"
+        arrow = "⬆️" if direction == "over" else "⬇️"
         return (
-            f"{cfg.icon} <b>1xBet {cfg.title} · {strength}</b>\n"
+            f"{cfg.icon} <b>GOOL MULTI · {cfg.title}</b>\n"
             f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}\n"
-            f"⏱ {self._format_clock(row)} · ✅ Flashscore LIVE\n"
-            f"📈 ТБ {float(end.get('line') or row.get('line') or 0):g} @ {float(end.get('over') or row.get('over') or 0):.2f}\n"
-            f"🔥 движение +{float(signal.get('metric_delta') or 0):.2f} · импульсов {int(signal.get('moves') or 0)}"
+            f"🏆 {row.get('league') or 'LIVE'}\n"
+            f"⏱ {self._format_clock(row)} · ✅ Flashscore\n"
+            f"{arrow} <b>{market_label} @ {float(signal.get('odd') or 0):.2f}</b>\n"
+            f"🧠 сила {float(signal.get('strength') or 0):.0f}/100 · движение {float(signal.get('metric_delta') or 0):.2f}\n"
+            f"📈 Δp {float(signal.get('probability_delta_pp') or 0):+.1f} п.п. · импульсов {int(signal.get('moves') or 0)}"
         )
 
     def _deliver(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> int:
@@ -500,30 +523,70 @@ class MultiSportSteamWorker:
                 png = render_multisport_steam_card(row, signal, cfg)
                 sent = telegram.broadcast_photo(png, caption=message)
                 if sent:
-                    return sent
+                    return int(sent)
             except Exception as exc:
-                print(f"XBET_{cfg.key.upper()}_CARD_ERROR error={type(exc).__name__}:{exc}", flush=True)
-        return telegram.broadcast(message)
+                print(f"GOOL_{cfg.key.upper()}_CARD_ERROR {type(exc).__name__}:{exc}", flush=True)
+        return int(telegram.broadcast(message) or 0)
+
+    def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
+        event_id = str(row.get("event_id") or "")
+        if self._already_seen(cfg.key, event_id):
+            return False, 0
+        mode = _mode()
+        sent = self._deliver(row, signal, cfg) if mode == "active" else 0
+        entry = {
+            "entry_id": f"{cfg.key}:{event_id}",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "sport": cfg.key,
+            "event_id": event_id,
+            "flashscore_event_id": row.get("flashscore_event_id"),
+            "home": row.get("home"),
+            "away": row.get("away"),
+            "league": row.get("league"),
+            "score": list(row.get("score") or [0, 0]),
+            "period": row.get("period"),
+            "clock_seconds": row.get("clock_seconds"),
+            "direction": signal.get("direction"),
+            "line": float(signal.get("line") or 0.0),
+            "odd": float(signal.get("odd") or 0.0),
+            "fair_probability": float(signal.get("fair_probability") or 0.0),
+            "metric_delta": float(signal.get("metric_delta") or 0.0),
+            "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
+            "line_delta": float(signal.get("line_delta") or 0.0),
+            "moves": int(signal.get("moves") or 0),
+            "strength": float(signal.get("strength") or 0.0),
+            "extreme": bool(signal.get("extreme")),
+            "mapping_score": float(row.get("flashscore_match_score") or 0.0),
+            "result": "pending",
+            "profit_units": 0.0,
+            "mode": mode,
+            "telegram_sent": sent > 0,
+        }
+        rows = _load_rows(self.journal_path)
+        rows.append(entry)
+        _save_rows(self.journal_path, rows)
+        print(
+            f"GOOL_MULTISPORT_SIGNAL sport={cfg.key} match={row.get('home')}--{row.get('away')} "
+            f"selection={entry['direction']}:{entry['line']:g} odd={entry['odd']:.2f} "
+            f"strength={entry['strength']:.0f} mode={mode}",
+            flush=True,
+        )
+        return True, sent
 
     def _scan_sport(self, cfg: SportConfig) -> dict[str, Any]:
-        fs_live = self._flashscore_live(cfg)
+        fs_today = self._flashscore_today(cfg)
+        states = {str(row["flashscore_event_id"]): row for row in fs_today}
+        settled = self._settle(cfg, states)
+        fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
         xbet_live = self._xbet_index(cfg)
-        mapped = map_xbet_to_flashscore(xbet_live, fs_live)
-        max_events = max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))
-        mapped = mapped[:max_events]
+        mapped = map_xbet_to_flashscore(xbet_live, fs_live)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
 
-        decoded = 0
-        score_mismatch = 0
-        detected = 0
-        delivered = 0
-        market_decode = 0
-        alerts = 0
+        decoded = mismatch = failed = detected = delivered = 0
         latest: list[dict[str, Any]] = []
+        diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
-        futures = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for event, fs, reversed_order, match_score in mapped:
-                futures.append(pool.submit(self._snapshot, event, fs, reversed_order, match_score, cfg))
+            futures = [pool.submit(self._snapshot, event, fs, reversed_order, score, cfg) for event, fs, reversed_order, score in mapped]
             for future in as_completed(futures):
                 try:
                     row, error = future.result(timeout=18)
@@ -531,76 +594,82 @@ class MultiSportSteamWorker:
                     row, error = None, "market_decode"
                 if row is None:
                     if error == "score_mismatch":
-                        score_mismatch += 1
+                        mismatch += 1
                     else:
-                        market_decode += 1
+                        failed += 1
+                    if len(diagnostics) < 6:
+                        diagnostics.append(str(error or "unknown"))
                     continue
                 decoded += 1
-                history, score_changed_at = self._append_history(row)
+                history, score_changed_at = self._append_history(row, cfg)
                 signal = detect_steam(history, cfg, now=float(row["ts"]), score_changed_at=score_changed_at)
-                if signal is not None and self._cooldown_ok(row, cfg, float(row["ts"])):
-                    detected += 1
-                    sent = self._deliver(row, signal, cfg)
-                    if sent > 0 or not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
-                        self._mark_alert(row, float(row["ts"]))
-                    if sent > 0:
+                if signal is not None:
+                    recorded, sent = self._record_signal(row, signal, cfg)
+                    if recorded:
+                        detected += 1
+                    if sent:
                         delivered += 1
-                        self._record_public_signal(row, signal, cfg, sent)
-                    alerts += 1
+                    row["signal"] = signal
                     row["steam"] = signal
                 latest.append(row)
 
         return {
+            "enabled": True,
+            "settled": settled,
             "flashscore_live": len(fs_live),
             "xbet_live": len(xbet_live),
             "mapped": len(mapped),
             "decoded": decoded,
-            "score_mismatch": score_mismatch,
+            "score_mismatch": mismatch,
+            "market_decode_failed": failed,
             "detected": detected,
             "delivered": delivered,
-            "market_decode_failed": market_decode,
-            "alerts": alerts,
-            "matches": latest,
+            "diagnostics": diagnostics,
+            "xbet_diag": self._index_diag.get(cfg.key) or {},
+            "matches": latest[:80],
         }
 
     def collect_once(self) -> dict[str, Any]:
         started = time.time()
         sports: dict[str, Any] = {}
         for key, cfg in SPORTS.items():
-            if not _truthy(f"XBET_{key.upper()}_STEAM_ENABLED", True):
+            if not _sport_enabled(key):
                 sports[key] = {"enabled": False}
                 continue
-            settled = self._settle_public_signals(cfg)
             stats = self._scan_sport(cfg)
-            sports[key] = {"enabled": True, "settled": settled, **stats}
+            sports[key] = stats
             print(
-                f"XBET_{key.upper()}_STEAM flashscore={stats['flashscore_live']} xbet={stats['xbet_live']} "
-                f"mapped={stats['mapped']} decoded={stats['decoded']} score_mismatch={stats['score_mismatch']} detected={stats['detected']} delivered={stats['delivered']} "
-                f"alerts={stats['alerts']} cards={'on' if _truthy('XBET_MULTISPORT_CARDS_ENABLED', True) else 'off'}",
+                f"GOOL_{key.upper()} fs={stats['flashscore_live']} xbet={stats['xbet_live']} mapped={stats['mapped']} "
+                f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
+                f"signals={stats['detected']} delivered={stats['delivered']} settled={stats['settled']}",
                 flush=True,
             )
+            if not (stats.get("xbet_diag") or {}).get("ok"):
+                print(f"GOOL_{key.upper()}_XBET_DIAG " + json.dumps(stats.get("xbet_diag") or {}, ensure_ascii=False, separators=(",", ":")), flush=True)
 
         state = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "latency_ms": int((time.time() - started) * 1000),
+            "mode": _mode(),
             "flashscore_whitelist_required": True,
+            "score_sync_required": True,
             "sports": sports,
         }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.state_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")), "utf-8")
         tmp.replace(self.state_path)
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         with self.history_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(state, ensure_ascii=False, separators=(",", ":")) + "\n")
-        trim_file_tail(self.history_path, max(1024 * 1024, _int_env("XBET_MULTISPORT_HISTORY_KEEP_BYTES", 4 * 1024 * 1024)))
+        trim_file_tail(self.history_path, max(1024 * 1024, _int_env("XBET_MULTISPORT_HISTORY_KEEP_BYTES", 8 * 1024 * 1024)))
         return state
 
     def run(self, interval: float = 20.0) -> None:
         interval = max(8.0, float(interval))
         print(
-            f"XBET_MULTISPORT_STEAM started sports=hockey,basketball interval={interval:g}s "
-            "flashscore_whitelist=required score_sync=required cards=on",
+            f"GOOL_MULTISPORT started mode={_mode()} sports=hockey,basketball interval={interval:g}s "
+            "flashscore_whitelist=required score_sync=required",
             flush=True,
         )
         while not self._stop.is_set():
@@ -608,5 +677,20 @@ class MultiSportSteamWorker:
             try:
                 self.collect_once()
             except Exception as exc:
-                print(f"XBET_MULTISPORT_STEAM_ERROR error={type(exc).__name__}:{exc}", flush=True)
+                print(f"GOOL_MULTISPORT_ERROR {type(exc).__name__}:{exc}", flush=True)
             self._stop.wait(max(1.0, interval - (time.monotonic() - started)))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="GOOL multisport hockey+basketball worker")
+    parser.add_argument("--interval", type=float, default=_float_env("GOOL_MULTISPORT_INTERVAL_SECONDS", 20.0))
+    args = parser.parse_args()
+    worker = MultiSportSteamWorker()
+    try:
+        worker.run(args.interval)
+    except KeyboardInterrupt:
+        worker.stop()
+
+
+if __name__ == "__main__":
+    main()

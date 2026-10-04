@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "🧠 анализ", "🔎 найти матч"}:
         try:
             if text == "/start":
                 telegram_mod.subscribe(chat_id)
@@ -170,6 +170,18 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 from .v4_value_hunter_delivery import value_hunter_report_text
                 prematch_journal = Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)
                 replies = [value_hunter_report_text(prematch_journal)]
+            elif text == "/multisport":
+                from .multisport_menu import multisport_status_text
+                replies = [multisport_status_text()]
+            elif text == "/sportreport":
+                from .multisport_menu import multisport_report_text
+                replies = [multisport_report_text()]
+            elif text == "🏒 хоккей":
+                from .multisport_menu import sport_overview_text
+                replies = [sport_overview_text("hockey")]
+            elif text == "🏀 баскетбол":
+                from .multisport_menu import sport_overview_text
+                replies = [sport_overview_text("basketball")]
             elif text == "🟢 в игре":
                 telegram_mod._force_reconcile_pending(journal_path)
                 replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))

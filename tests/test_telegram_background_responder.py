@@ -34,7 +34,7 @@ def test_main_poll_does_not_compete_with_background_responder(tmp_path: Path, mo
     assert actions == 0
 
 
-def test_production_start_uses_expanded_six_button_keyboard(tmp_path: Path, monkeypatch):
+def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monkeypatch):
     sent = []
     monkeypatch.setattr(worker.telegram_mod, "subscribe", lambda _chat_id: True)
     monkeypatch.setattr(
@@ -49,7 +49,7 @@ def test_production_start_uses_expanded_six_button_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -73,6 +73,30 @@ def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatc
     assert (a, b) == (1, 1)
     assert sent == ["SINGLES", "PARLAYS"]
 
+
+
+
+def test_production_multisport_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    import gool_bot2.multisport_menu as multisport_menu
+    monkeypatch.setattr(multisport_menu, "sport_overview_text", lambda sport: f"SPORT:{sport}")
+
+    journal = tmp_path / "signal_journal.json"
+    a = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 14, "message": {"chat": {"id": 123}, "text": "🏒 Хоккей"}},
+    )
+    b = worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 15, "message": {"chat": {"id": 123}, "text": "🏀 Баскетбол"}},
+    )
+    assert (a, b) == (1, 1)
+    assert sent == ["SPORT:hockey", "SPORT:basketball"]
 
 def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
     import json, time

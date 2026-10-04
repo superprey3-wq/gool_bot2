@@ -160,9 +160,12 @@ def main() -> None:
 
     multisport: MultiSportSteamWorker | None = None
     multisport_thread: threading.Thread | None = None
-    if _enabled("XBET_MULTISPORT_STEAM_ENABLED", True):
+    if _enabled("GOOL_MULTISPORT_ENABLED", _enabled("XBET_MULTISPORT_STEAM_ENABLED", True)):
         multisport = ScoreEpochMultiSportSteamWorker(runtime)
-        multisport_interval = max(8.0, float(os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "12")))
+        multisport_interval = max(
+            8.0,
+            float(os.getenv("GOOL_MULTISPORT_INTERVAL_SECONDS", os.getenv("XBET_MULTISPORT_INTERVAL_SECONDS", "20"))),
+        )
         multisport_thread = threading.Thread(
             target=multisport.run,
             args=(multisport_interval,),

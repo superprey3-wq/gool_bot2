@@ -2559,6 +2559,66 @@ class MultiSportSteamWorker:
         self._prematch_history[key].append(dict(row))
         return list(self._prematch_history[key])
 
+    def _mark_prematch_in_game(self, cfg: SportConfig, fs_live: list[dict[str, Any]]) -> int:
+        """Persist PREMATCH -> LIVE transition in the multisport journal.
+
+        Flashscore owns match status. This makes the In Game menu independent of
+        transient state/mapping: once a pending PREMATCH pick is seen LIVE, the
+        journal itself records that transition.
+        """
+        if not fs_live:
+            return 0
+        rows = load_journal(self.journal_path)
+        by_id = {
+            str(item.get("flashscore_event_id") or ""): item
+            for item in fs_live
+            if str(item.get("flashscore_event_id") or "")
+        }
+        changed = 0
+        seen_at = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            if str(row.get("sport") or "") != cfg.key:
+                continue
+            if str(row.get("result") or "pending").lower() != "pending":
+                continue
+            phase = str(row.get("phase") or ("PREMATCH" if row.get("origin") == "multisport_prematch" else "LIVE")).upper()
+            if phase != "PREMATCH":
+                continue
+
+            fs = by_id.get(str(row.get("flashscore_event_id") or ""))
+            if fs is None:
+                wanted_home = norm_team(str(row.get("home") or ""))
+                wanted_away = norm_team(str(row.get("away") or ""))
+                for candidate in fs_live:
+                    if (
+                        wanted_home
+                        and wanted_away
+                        and norm_team(str(candidate.get("home") or "")) == wanted_home
+                        and norm_team(str(candidate.get("away") or "")) == wanted_away
+                    ):
+                        fs = candidate
+                        break
+            if fs is None:
+                continue
+
+            score = list(fs.get("score") or [0, 0])
+            new_values = {
+                "in_game": True,
+                "live_seen_at": seen_at,
+                "live_score": [int(score[0]), int(score[1])],
+                "live_status_code": str(fs.get("status_code") or ""),
+                "live_flashscore_event_id": str(fs.get("flashscore_event_id") or ""),
+            }
+            dirty = any(row.get(key) != value for key, value in new_values.items())
+            if dirty:
+                row.update(new_values)
+                changed += 1
+
+        if changed:
+            save_journal(self.journal_path, rows)
+            print(f"GOOL_{cfg.key.upper()}_PREMATCH_TO_LIVE persisted={changed}", flush=True)
+        return changed
+
     def _settle(self, cfg: SportConfig, states: dict[str, dict[str, Any]]) -> int:
         rows = load_journal(self.journal_path)
         changed = 0
@@ -3013,6 +3073,7 @@ class MultiSportSteamWorker:
         prematch = self._scan_prematch(cfg, fs_today, xbet_prematch_prefetched=xbet_prematch_prefetched)
         prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
         fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
+        self._mark_prematch_in_game(cfg, fs_live)
         xbet_live = (
             [dict(row) for row in xbet_live_prefetched]
             if xbet_live_prefetched is not None

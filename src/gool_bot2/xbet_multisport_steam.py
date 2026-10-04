@@ -1195,6 +1195,8 @@ class MultiSportSteamWorker:
         self._prematch_cursor: dict[str, int] = defaultdict(int)
         self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
+        self._fs_live_stats_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._fs_history_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._restore_history()
 
     def stop(self) -> None:
@@ -1263,6 +1265,128 @@ class MultiSportSteamWorker:
             for row in parse_flashscore_events(body):
                 merged[str(row["flashscore_event_id"])] = row
         return list(merged.values())
+
+    def _flashscore_live_stats(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        """Cheap Flashscore-first LIVE stats layer.
+
+        1xBet is intentionally not used for game statistics here. Missing
+        Flashscore stats are acceptable: the segment brain can still use score
+        and clock pace.
+        """
+        event_id = str(fs.get("flashscore_event_id") or "").strip()
+        if not event_id:
+            return {}
+        now = time.monotonic()
+        ttl = max(5.0, _float_env("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", 20.0))
+        cached_at, cached = self._fs_live_stats_cache.get(event_id, (0.0, {}))
+        if cached and now - cached_at <= ttl:
+            return dict(cached)
+        try:
+            raw = dict(self._flashscore.fetch_stats(event_id) or {})
+        except Exception as exc:
+            print(f"GOOL_{cfg.key.upper()}_FS_STATS_ERROR event={event_id} {type(exc).__name__}:{exc}", flush=True)
+            raw = {}
+        stats: dict[str, Any] = {
+            "source": "flashscore",
+            "raw": raw,
+        }
+        if cfg.key == "hockey":
+            shots = raw.get("shots_on_target") or raw.get("shots")
+            if isinstance(shots, (list, tuple)) and len(shots) >= 2:
+                stats["shots_on_goal"] = [int(float(shots[0])), int(float(shots[1]))]
+        elif cfg.key == "basketball":
+            # Keep every parsed Flashscore stat available to future basketball
+            # features; score/clock remains the primary quarter pace input.
+            stats["basketball_stats"] = raw
+        self._fs_live_stats_cache[event_id] = (now, dict(stats))
+        return stats
+
+    def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        """Recent form + H2H from Flashscore, analogous to the football collector."""
+        event_id = str(fs.get("flashscore_event_id") or "").strip()
+        if not event_id:
+            return {}
+        now = time.monotonic()
+        ttl = max(60.0, _float_env("GOOL_MULTISPORT_FS_HISTORY_CACHE_SECONDS", 30 * 60.0))
+        cached_at, cached = self._fs_history_cache.get(event_id, (0.0, {}))
+        if cached and now - cached_at <= ttl:
+            return dict(cached)
+        try:
+            ctx = dict(self._flashscore.fetch_match_history(
+                event_id,
+                str(fs.get("home") or ""),
+                str(fs.get("away") or ""),
+                limit=max(5, _int_env("GOOL_MULTISPORT_HISTORY_MATCHES", 10)),
+            ) or {})
+        except Exception as exc:
+            print(f"GOOL_{cfg.key.upper()}_FS_HISTORY_ERROR event={event_id} {type(exc).__name__}:{exc}", flush=True)
+            ctx = {}
+        self._fs_history_cache[event_id] = (now, dict(ctx))
+        return ctx
+
+    @staticmethod
+    def _prematch_history_support(
+        context: dict[str, Any],
+        lane_row: dict[str, Any],
+        signal: dict[str, Any],
+    ) -> float:
+        """Small bounded context score; market evidence remains dominant."""
+        rows: list[dict[str, Any]] = []
+        for key in ("home_recent", "away_recent", "h2h"):
+            rows.extend([r for r in (context.get(key) or []) if isinstance(r, dict)])
+        if not rows:
+            return 0.0
+        # Deduplicate the same fixture appearing in multiple Flashscore sections.
+        unique: dict[str, dict[str, Any]] = {}
+        for idx, row in enumerate(rows):
+            key = str(row.get("event_id") or f"row:{idx}")
+            unique.setdefault(key, row)
+        rows = list(unique.values())[:24]
+        family = str(lane_row.get("market_family") or "")
+        try:
+            line = float(signal.get("line") if signal.get("line") is not None else lane_row.get("line") or 0.0)
+        except (TypeError, ValueError):
+            line = 0.0
+        support = 0.0
+        if family in {"match_total", "home_total", "away_total"} and line > 0:
+            values: list[float] = []
+            for row in rows:
+                try:
+                    hs, aws = float(row.get("home_score")), float(row.get("away_score"))
+                except (TypeError, ValueError):
+                    continue
+                if family == "match_total":
+                    values.append(hs + aws)
+                else:
+                    # Venue-neutral approximation: team-total history is weaker
+                    # context than match-total history, hence capped below.
+                    values.append(max(hs, aws))
+            if values:
+                avg = sum(values) / len(values)
+                direction = str(signal.get("direction") or "over")
+                delta = avg - line
+                support = delta if direction == "over" else -delta
+                scale = 0.8 if family == "match_total" else 0.45
+                support *= scale
+        elif family in {"moneyline", "handicap"}:
+            side = str(signal.get("selection_side") or lane_row.get("selection_side") or "")
+            wins = losses = 0
+            target = str(lane_row.get("home") if side == "home" else lane_row.get("away") or "").casefold()
+            for row in rows:
+                home = str(row.get("home") or "").casefold()
+                away = str(row.get("away") or "").casefold()
+                try:
+                    hs, aws = float(row.get("home_score")), float(row.get("away_score"))
+                except (TypeError, ValueError):
+                    continue
+                if target and target in home:
+                    wins += int(hs > aws); losses += int(hs < aws)
+                elif target and target in away:
+                    wins += int(aws > hs); losses += int(aws < hs)
+            total = wins + losses
+            if total:
+                support = ((wins / total) - 0.5) * 4.0
+        return max(-3.0, min(3.0, float(support)))
 
     def _state_index_fallback(self, cfg: SportConfig, *, prematch: bool) -> list[dict[str, Any]]:
         """Recover candidate ids from the last persisted state during index blackouts.
@@ -2065,6 +2189,7 @@ class MultiSportSteamWorker:
             return None, "prematch_outside_horizon"
 
         decoded, market_meta = self._market_tree(game, cfg, prematch=True)
+        prematch_context = self._flashscore_prematch_context(fs, cfg)
         lanes = prematch_market_lanes(decoded, cfg.key)
         for lane in lanes:
             lane["lane_key"] = lane_key(lane)
@@ -2104,6 +2229,7 @@ class MultiSportSteamWorker:
             "market_coverage": market_meta.get("coverage") or {},
             "unknown_market_catalog": market_meta.get("unknown_market_catalog") or [],
             "subgame_fetch": market_meta.get("subgame_fetch") or {},
+            "prematch_context": prematch_context,
             "flashscore_match_score": round(float(match_score), 4),
         }, None
 
@@ -2142,7 +2268,7 @@ class MultiSportSteamWorker:
         if raw_count <= 0:
             return None, "market_decode"
         scoped_scores = period_scores(game, cfg.key)
-        live_game_stats = self._hockey_segment_stats(game, cfg, current_period=current_period) if cfg.key == "hockey" else {}
+        live_game_stats = self._flashscore_live_stats(fs, cfg)
         event_scope_key = f"{cfg.key}:{event_id}"
         for scope, score in scoped_scores.items():
             self._scope_scores[event_scope_key][scope] = score
@@ -2549,10 +2675,17 @@ class MultiSportSteamWorker:
                     )
                     if signal is None:
                         continue
+                    history_support = self._prematch_history_support(
+                        dict(row.get("prematch_context") or {}),
+                        lane_row,
+                        signal,
+                    )
                     signal = {
                         **signal,
                         "scope": lane_row.get("scope"),
                         "market_family": lane_row.get("market_family"),
+                        "history_support": round(history_support, 2),
+                        "strength": round(max(0.0, min(100.0, float(signal.get("strength") or 0.0) + history_support * 2.0)), 1),
                         "selection": str(
                             signal.get("selection")
                             or lane_row.get("selection")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -368,17 +369,39 @@ def multisport_in_game_sections() -> list[str]:
             live = live_by_fs.get(fs_id)
 
             # Legacy/already-sent PREMATCH rows can carry an empty/stale FS id.
-            # Do not lose the pick after kickoff: recover by normalized teams
-            # inside the same sport, using Flashscore as the LIVE authority.
+            # Do not lose the pick after kickoff: recover by team names inside
+            # the same sport. Exact normalized match comes first, then a strict
+            # fuzzy pair match for provider naming drift (U20 suffixes, sponsor
+            # names, punctuation/transliteration changes).
             if live is None:
                 wanted_home = norm_team(str(row.get("home") or ""))
                 wanted_away = norm_team(str(row.get("away") or ""))
+                best: tuple[float, dict[str, Any]] | None = None
                 for candidate in live_by_fs.values():
                     cand_home = norm_team(str(candidate.get("home") or ""))
                     cand_away = norm_team(str(candidate.get("away") or ""))
-                    if wanted_home and wanted_away and cand_home == wanted_home and cand_away == wanted_away:
+                    if not (wanted_home and wanted_away and cand_home and cand_away):
+                        continue
+                    if cand_home == wanted_home and cand_away == wanted_away:
                         live = candidate
                         break
+
+                    direct_h = SequenceMatcher(None, wanted_home, cand_home).ratio()
+                    direct_a = SequenceMatcher(None, wanted_away, cand_away).ratio()
+                    reverse_h = SequenceMatcher(None, wanted_home, cand_away).ratio()
+                    reverse_a = SequenceMatcher(None, wanted_away, cand_home).ratio()
+                    direct = (direct_h + direct_a) / 2.0
+                    reverse = (reverse_h + reverse_a) / 2.0
+                    score = max(direct, reverse)
+                    weakest = min(
+                        (direct_h, direct_a) if direct >= reverse
+                        else (reverse_h, reverse_a)
+                    )
+                    if score >= 0.84 and weakest >= 0.72:
+                        if best is None or score > best[0]:
+                            best = (score, candidate)
+                if live is None and best is not None:
+                    live = best[1]
 
             if live is not None:
                 active.append((row, live))

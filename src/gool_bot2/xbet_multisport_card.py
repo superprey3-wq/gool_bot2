@@ -29,6 +29,12 @@ def _phase_accent(phase: str, sport_accent: tuple[int, int, int]) -> tuple[int, 
     return PURPLE if phase == "PREMATCH" else sport_accent
 
 
+def _center_range(draw: ImageDraw.ImageDraw, text: str, y: int, font: Any, fill: tuple[int, int, int], x1: int, x2: int) -> None:
+    box = draw.textbbox((0, 0), str(text), font=font)
+    width = box[2] - box[0]
+    draw.text((x1 + ((x2 - x1) - width) / 2, y), str(text), font=font, fill=fill)
+
+
 def _value_box(
     draw: ImageDraw.ImageDraw,
     xy: tuple[int, int, int, int],
@@ -87,7 +93,7 @@ def render_multisport_signal_card(
     draw.rounded_rectangle((24, 20, 1056, 96), 22, fill=PANEL, outline=accent, width=2)
     draw.text((48, 40), f"GOOL MULTI • {sport_title}", font=sc._font(24, True), fill=TEXT)
     draw.rounded_rectangle((820, 32, 1028, 82), 15, fill=(12, 17, 31), outline=accent, width=2)
-    sc._center(draw, phase, 47, sc._font(18, True), accent, x1=820, x2=1028)
+    _center_range(draw, phase, 47, sc._font(18, True), accent, 820, 1028)
 
     draw.text((48, 118), league, font=sc._fit(draw, league, 984, 20, False), fill=MUTED)
 
@@ -160,14 +166,14 @@ def render_multisport_signal_card(
         )
 
     draw.rounded_rectangle((280, 850, 800, 902), 16, fill=accent)
-    sc._center(
+    _center_range(
         draw,
         "PREMATCH СИГНАЛ" if phase == "PREMATCH" else "LIVE СИГНАЛ",
         861,
         sc._font(20, True),
         BG,
-        x1=280,
-        x2=800,
+        280,
+        800,
     )
     return sc._save(image)
 
@@ -191,7 +197,7 @@ def render_multisport_result_card(row: dict[str, Any], cfg: Any) -> bytes:
     draw.rounded_rectangle((24, 20, 1056, 104), 22, fill=PANEL, outline=accent, width=3)
     sc._center(draw, title, 44, sc._font(28, True), accent)
     draw.rounded_rectangle((830, 30, 1024, 78), 14, fill=(12, 17, 31), outline=_phase_accent(phase, _accent(cfg)), width=2)
-    sc._center(draw, phase, 43, sc._font(16, True), _phase_accent(phase, _accent(cfg)), x1=830, x2=1024)
+    _center_range(draw, phase, 43, sc._font(16, True), _phase_accent(phase, _accent(cfg)), 830, 1024)
 
     league = str(row.get("league") or getattr(cfg, "title", "SPORT"))
     draw.text((48, 132), league, font=sc._fit(draw, league, 984, 20, False), fill=MUTED)

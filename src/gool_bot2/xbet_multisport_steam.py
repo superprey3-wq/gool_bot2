@@ -162,7 +162,16 @@ def _sport_v3_json(host: str, path: str, ordered_query: list[tuple[str, str]], t
 
 
 def _v3_hosts_from_roots(roots: list[str]) -> list[str]:
-    hosts: list[str] = []
+    """Prefer regional v3 mirrors that currently avoid common CDN challenges."""
+    configured = [
+        item.strip().rstrip("/")
+        for item in os.getenv(
+            "GOOL_MULTISPORT_V3_HOSTS",
+            "https://1xbet.ng,https://1xbet.co.ke,https://1xbet.ci,https://1xbet.ug",
+        ).split(",")
+        if item.strip()
+    ]
+    hosts: list[str] = list(configured)
     for root in roots:
         parsed = urllib.parse.urlsplit(root)
         if parsed.scheme and parsed.netloc:
@@ -1307,7 +1316,10 @@ class MultiSportSteamWorker:
         # while main-live-feed/v3 remains healthy.
         if _truthy("GOOL_MULTISPORT_V3_INDEX_FALLBACK", True):
             hosts = _v3_hosts_from_roots(list(dict.fromkeys(roots)))
-            count = max(50, _int_env("XBET_MULTISPORT_INDEX_COUNT", 1000))
+            # v3 is aggressively rate-limited; do not reuse the legacy 1000-row
+            # index size. 250 is enough to cover the currently in-play slate while
+            # staying close to the frontend request profile.
+            count = max(40, min(300, _int_env("GOOL_MULTISPORT_V3_INDEX_COUNT", 250)))
             fcountry = os.getenv("GOOL_MULTISPORT_V3_FCOUNTRY", "66")
             for host in hosts:
                 for gr in (1557, 412):

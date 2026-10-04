@@ -22,6 +22,7 @@ from .providers.common import norm_team
 from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
+from .multisport_parlay import build_sport_parlays
 from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card
 from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card
 from .xbet_multisport_markets import (
@@ -1418,6 +1419,7 @@ class MultiSportSteamWorker:
         states = {str(row["flashscore_event_id"]): row for row in fs_today}
         settled = self._settle(cfg, states)
         prematch = self._scan_prematch(cfg, fs_today)
+        prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
         fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
         xbet_live = self._xbet_index(cfg)
         mapped = map_xbet_to_flashscore(xbet_live, fs_live)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
@@ -1485,6 +1487,7 @@ class MultiSportSteamWorker:
             "prematch_delivered": int(prematch.get("prematch_delivered") or 0),
             "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),
             "prematch_matches": list(prematch.get("matches") or []),
+            "prematch_parlays": prematch_parlays,
             "flashscore_live": len(fs_live),
             "xbet_live": len(xbet_live),
             "mapped": len(mapped),

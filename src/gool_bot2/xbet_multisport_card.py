@@ -37,6 +37,8 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
     away = str(row.get("away") or "?")
     league = str(row.get("league") or "LIVE")
     strength = "EXTREME" if bool(signal.get("extreme")) else "STRONG"
+    strength_score = float(signal.get("strength") or 0.0)
+    direction = str(signal.get("direction") or "over")
     sport_title = str(getattr(cfg, "title", "STEAM"))
     end = dict(signal.get("end") or {})
 
@@ -62,13 +64,15 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
 
     draw.rounded_rectangle((780, 188, 1004, 322), 20, fill=(9, 19, 31), outline=GOLD, width=2)
     draw.text((811, 208), "СИЛА ПРОГРУЗА", font=sc._font(14, True), fill=MUTED)
-    draw.text((819, 248), strength, font=sc._fit(draw, strength, 160, 30, True), fill=GOLD)
+    draw.text((819, 242), strength, font=sc._fit(draw, strength, 160, 28, True), fill=GOLD)
+    draw.text((846, 282), f"{strength_score:.0f}/100", font=sc._font(18, True), fill=TEXT)
 
-    line = float(end.get("line") or row.get("line") or 0.0)
-    odd = float(end.get("over") or row.get("over") or 0.0)
+    line = float(signal.get("line") or end.get("line") or row.get("line") or 0.0)
+    odd = float(signal.get("odd") or end.get(direction) or row.get(direction) or 0.0)
+    market_label = ("ТБ" if direction == "over" else "ТМ") + f" {line:g}"
     draw.rounded_rectangle((44, 385, 1036, 525), 24, fill=PANEL2, outline=GOLD, width=3)
     draw.text((72, 410), "1xBET LIVE TOTAL", font=sc._font(16, True), fill=MUTED)
-    draw.text((72, 454), f"ТБ {line:g}", font=sc._font(40, True), fill=GOLD)
+    draw.text((72, 454), market_label, font=sc._font(40, True), fill=GOLD)
     draw.text((680, 410), "КОЭФФИЦИЕНТ", font=sc._font(16, True), fill=MUTED)
     draw.text((680, 452), f"{odd:.2f}", font=sc._font(42, True), fill=TEXT)
 
@@ -98,12 +102,13 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
 def render_multisport_result_card(row: dict[str, Any], cfg: Any) -> bytes:
     result = str(row.get("result") or "").lower()
     won = result == "won"
-    accent = GREEN if won else (220, 76, 76)
+    void = result == "void"
+    accent = GREEN if won else (GOLD if void else (220, 76, 76))
     width, height = 1080, 650
     image = Image.new("RGBA", (width, height), BG + (255,))
     draw = ImageDraw.Draw(image)
     score = list(row.get("settled_score") or row.get("score") or [0, 0])
-    title = "✅ ПРОГРУЗ ЗАШЁЛ" if won else "❌ ПРОГРУЗ НЕ ЗАШЁЛ"
+    title = "✅ ПРОГРУЗ ЗАШЁЛ" if won else ("↩️ ВОЗВРАТ" if void else "❌ ПРОГРУЗ НЕ ЗАШЁЛ")
     draw.rounded_rectangle((24, 20, 1056, 100), 22, fill=PANEL, outline=accent, width=3)
     sc._center(draw, title, 43, sc._font(28, True), accent)
     draw.text((48, 132), str(row.get("league") or getattr(cfg, "title", "STEAM")), font=sc._fit(draw, str(row.get("league") or "LIVE"), 984, 20, False), fill=MUTED)
@@ -112,7 +117,9 @@ def render_multisport_result_card(row: dict[str, Any], cfg: Any) -> bytes:
     draw.text((75, 315), str(row.get("away") or "?"), font=sc._fit(draw, str(row.get("away") or "?"), 360, 28, True), fill=TEXT)
     draw.text((500, 225), f"{int(score[0])} : {int(score[1])}", font=sc._font(62, True), fill=TEXT)
     draw.rounded_rectangle((44, 425, 1036, 590), 24, fill=PANEL, outline=LINE, width=2)
-    draw.text((72, 452), f"ТБ {float(row.get('line') or 0):g}  @  {float(row.get('odd') or 0):.2f}", font=sc._font(36, True), fill=GOLD)
+    direction = str(row.get("direction") or "over")
+    market_label = ("ТБ" if direction == "over" else "ТМ") + f" {float(row.get('line') or 0):g}"
+    draw.text((72, 452), f"{market_label}  @  {float(row.get('odd') or 0):.2f}", font=sc._font(36, True), fill=GOLD)
     profit = float(row.get("profit_units") or 0.0)
     draw.text((72, 520), f"P/L {profit:+.2f}u", font=sc._font(28, True), fill=accent)
     return sc._save(image)

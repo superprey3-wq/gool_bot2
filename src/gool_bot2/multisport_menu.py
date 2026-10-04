@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -283,23 +284,29 @@ def _pick_needed_text(row: dict[str, Any]) -> str:
     return f"{prefix}для захода: {subject} нужно {win_min}+ {unit}"
 
 
+def _team_match_score(a: object, b: object) -> float:
+    left = norm_team(str(a or ""))
+    right = norm_team(str(b or ""))
+    if not left or not right:
+        return 0.0
+    if left == right:
+        return 1.0
+    if left in right or right in left:
+        return 0.94
+    return SequenceMatcher(None, left, right).ratio()
+
+
 def multisport_in_game_sections() -> list[str]:
-    """Pending multisport picks whose Flashscore match is currently LIVE."""
+    """Football-style view of pending PREMATCH picks whose match is now LIVE."""
     state = _load_json(state_path(), {})
     sports_state = state.get("sports") if isinstance(state, dict) else {}
     sports_state = sports_state if isinstance(sports_state, dict) else {}
     rows = load_journal(journal_path())
 
-    messages: list[str] = []
-    total = 0
-    sport_blocks: list[str] = []
+    active: list[tuple[dict[str, Any], dict[str, Any], str]] = []
 
     for sport in ("hockey", "basketball"):
-        icon, title = SPORT_META[sport]
         current = (sports_state.get(sport) or {}) if isinstance(sports_state, dict) else {}
-        # Flashscore is authoritative for "has the match started?".
-        # current["matches"] contains only Flashscore+1xBet mapped games and may
-        # lag behind even while the match is already live.
         fs_live_matches = [
             row for row in (current.get("flashscore_live_matches") or [])
             if isinstance(row, dict)
@@ -308,70 +315,73 @@ def multisport_in_game_sections() -> list[str]:
             row for row in (current.get("matches") or [])
             if isinstance(row, dict)
         ]
+
         live_by_fs = {
             str(row.get("flashscore_event_id") or ""): dict(row)
             for row in fs_live_matches
             if str(row.get("flashscore_event_id") or "")
         }
-        # Enrich authoritative Flashscore rows with decoded/mapped LIVE details
-        # when they are available, but never require them for the menu.
         for mapped in mapped_matches:
             fs_id = str(mapped.get("flashscore_event_id") or "")
             if not fs_id:
                 continue
-            if fs_id in live_by_fs:
-                live_by_fs[fs_id] = {**live_by_fs[fs_id], **mapped}
-            else:
-                live_by_fs[fs_id] = dict(mapped)
-        active: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        for row in rows:
-            if str(row.get("sport") or "") != sport:
+            live_by_fs[fs_id] = {**live_by_fs.get(fs_id, {}), **mapped}
+
+        for pick in rows:
+            if str(pick.get("sport") or "") != sport:
                 continue
-            if str(row.get("result") or "pending").lower() != "pending":
+            if str(pick.get("result") or "pending").lower() != "pending":
                 continue
-            if _row_phase(row) != "PREMATCH":
+            if _row_phase(pick) != "PREMATCH":
                 continue
-            fs_id = str(row.get("flashscore_event_id") or "")
+
+            fs_id = str(pick.get("flashscore_event_id") or "")
             live = live_by_fs.get(fs_id)
 
-            # Legacy/already-sent PREMATCH rows can carry an empty/stale FS id.
-            # Do not lose the pick after kickoff: recover by normalized teams
-            # inside the same sport, using Flashscore as the LIVE authority.
             if live is None:
-                wanted_home = norm_team(str(row.get("home") or ""))
-                wanted_away = norm_team(str(row.get("away") or ""))
+                best: tuple[float, dict[str, Any] | None] = (0.0, None)
                 for candidate in live_by_fs.values():
-                    cand_home = norm_team(str(candidate.get("home") or ""))
-                    cand_away = norm_team(str(candidate.get("away") or ""))
-                    if wanted_home and wanted_away and cand_home == wanted_home and cand_away == wanted_away:
-                        live = candidate
-                        break
+                    direct = min(
+                        _team_match_score(pick.get("home"), candidate.get("home")),
+                        _team_match_score(pick.get("away"), candidate.get("away")),
+                    )
+                    reverse = min(
+                        _team_match_score(pick.get("home"), candidate.get("away")),
+                        _team_match_score(pick.get("away"), candidate.get("home")),
+                    )
+                    score = max(direct, reverse)
+                    if score > best[0]:
+                        best = (score, candidate)
+                if best[0] >= 0.78:
+                    live = best[1]
 
             if live is not None:
-                active.append((row, live))
+                active.append((pick, live, sport))
 
-        if not active:
-            continue
-        total += len(active)
-        lines = [f"{icon} <b>{title} · В ИГРЕ</b> · <b>{len(active)}</b>"]
-        for idx, (pick, live) in enumerate(active, 1):
-            score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or "LIVE · Flashscore")
-            selection = str(pick.get("selection") or "?")
-            needed = _pick_needed_text(pick)
-            lines.append(
-                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}\n"
-                f"⏱ {period}\n"
-                f"↳ PREMATCH: <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
-                f"🎯 <b>{needed}</b>"
-            )
-        sport_blocks.append("\n\n".join(lines))
+    if not active:
+        return ["🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>0</b>"]
 
-    if not sport_blocks:
-        return []
-    messages.append(f"🟢 <b>ХОККЕЙ / БАСКЕТБОЛ · В ИГРЕ</b>\nАктивных PREMATCH ставок: <b>{total}</b>")
-    messages.extend(sport_blocks)
-    return messages
+    lines = [
+        "🟢 <b>GOOL MULTI · В ИГРЕ</b>",
+        f"Открыто: <b>{len(active)}</b>",
+    ]
+    for idx, (pick, live, sport) in enumerate(active, 1):
+        score = list(live.get("score") or [0, 0])
+        period = str(live.get("period") or "LIVE")
+        selection = str(pick.get("selection") or "?")
+        strength = float(pick.get("strength") or 0.0)
+        icon = SPORT_META.get(sport, ("🏟", ""))[0]
+        needed = _pick_needed_text(pick)
+        lines.append(
+            f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
+            f"сейчас {period} · {score[0]}:{score[1]}\n"
+            f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
+            f"🧠 <b>{strength:.0f}/100</b> · GOOL STATE\n"
+            f"↳ вход PREMATCH · 0:0\n"
+            f"↳ {needed}"
+        )
+
+    return ["\n\n".join(lines)]
 
 
 def multisport_report_text() -> str:

@@ -316,3 +316,51 @@ def test_multisport_in_game_recovers_legacy_pick_by_team_names(tmp_path: Path, m
     assert "Krylya Sovetov — Mikhaylov Academy U20" in text
     assert "1:1" in text
     assert "Ф1 +1.5 @ 1.59" in text
+
+
+def test_multisport_in_game_matches_football_style_and_fuzzy_recovers_team_names(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "basketball": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "LIVE-1",
+                    "home": "Piratas Bogota",
+                    "away": "Caimanes Llano",
+                    "score": [21, 18],
+                    "coarse_status": "2",
+                }],
+            },
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "selection": "Ф2 +4.5",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "line": 4.5,
+        "odd": 1.55,
+        "strength": 100,
+        "scope": "FULL_MATCH",
+    }])
+
+    text = "\n".join(multisport_in_game_sections())
+    assert "🟢 <b>GOOL MULTI · В ИГРЕ</b>" in text
+    assert "Открыто: <b>1</b>" in text
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "21:18" in text
+    assert "🎯 <b>Ф2 +4.5 @ 1.55</b>" in text
+    assert "🧠 <b>100/100</b> · GOOL STATE" in text
+    assert "вход PREMATCH · 0:0" in text

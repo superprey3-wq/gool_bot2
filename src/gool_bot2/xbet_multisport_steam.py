@@ -492,6 +492,8 @@ class MultiSportSteamWorker:
         self._last_prematch_index: dict[str, tuple[float, list[dict[str, Any]]]] = {}
         self._subgame_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._scope_scores: dict[str, dict[str, tuple[int, int]]] = defaultdict(dict)
+        self._prematch_cursor: dict[str, int] = defaultdict(int)
+        self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
         self._restore_history()
 
@@ -536,6 +538,7 @@ class MultiSportSteamWorker:
                 for row in (sport_state.get("prematch_matches") or []):
                     if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
                         continue
+                    self._prematch_latest[cfg.key][str(row.get("event_id"))] = dict(row)
                     lanes = [lane for lane in (row.get("market_lanes") or []) if isinstance(lane, dict)]
                     if lanes:
                         for lane in lanes:
@@ -1216,6 +1219,30 @@ class MultiSportSteamWorker:
         )
         return True, sent
 
+    def _prematch_batch(
+        self,
+        cfg: SportConfig,
+        mapped: list[tuple[dict[str, Any], dict[str, Any], bool, float]],
+    ) -> tuple[list[tuple[dict[str, Any], dict[str, Any], bool, float]], int]:
+        total_cap = max(1, _int_env("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", 160))
+        rows = list(mapped[:total_cap])
+        if not rows:
+            return [], 0
+        rows.sort(key=lambda item: float((item[1] or {}).get("start_ts") or 0.0))
+        batch_size = max(1, min(total_cap, _int_env("GOOL_MULTISPORT_PREMATCH_BATCH_SIZE", 48)))
+        if len(rows) <= batch_size:
+            self._prematch_cursor[cfg.key] = 0
+            return rows, len(rows)
+
+        start = self._prematch_cursor[cfg.key] % len(rows)
+        end = start + batch_size
+        if end <= len(rows):
+            batch = rows[start:end]
+        else:
+            batch = [*rows[start:], *rows[: end - len(rows)]]
+        self._prematch_cursor[cfg.key] = end % len(rows)
+        return batch, len(rows)
+
     def _scan_prematch(self, cfg: SportConfig, fs_today: list[dict[str, Any]]) -> dict[str, Any]:
         if not _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
             return {"enabled": False, "matches": []}
@@ -1228,7 +1255,8 @@ class MultiSportSteamWorker:
             and float(row.get("start_ts") or 0.0) - now <= horizon
         ]
         xbet_prematch = self._xbet_prematch_index(cfg)
-        mapped = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)[:max(1, _int_env("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", 160))]
+        mapped_all = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)
+        mapped, mapped_total = self._prematch_batch(cfg, mapped_all)
         decoded = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_GAME_WORKERS", 6)))
@@ -1271,18 +1299,29 @@ class MultiSportSteamWorker:
                     row["signals"] = signals
                     row["signal"] = signals[0]
                 latest.append(row)
+                self._prematch_latest[cfg.key][str(row.get("event_id") or "")] = dict(row)
+
+        # Keep the menu/state complete across rotating batches, but evict matches
+        # that have started or moved outside the current PREMATCH horizon.
+        cache = self._prematch_latest[cfg.key]
+        for event_id, cached in list(cache.items()):
+            start_ts = float(cached.get("start_ts") or 0.0)
+            if start_ts <= now or start_ts - now > horizon:
+                cache.pop(event_id, None)
+        visible = sorted(cache.values(), key=lambda row: float(row.get("start_ts") or 0.0))[:80]
         return {
             "enabled": True,
             "flashscore_prematch": len(fs_upcoming),
             "xbet_prematch": len(xbet_prematch),
-            "prematch_mapped": len(mapped),
+            "prematch_mapped": mapped_total,
+            "prematch_scanned": len(mapped),
             "prematch_decoded": decoded,
             "prematch_market_decode_failed": failed,
             "prematch_detected": detected,
             "prematch_delivered": delivered,
             "prematch_policy_blocked": policy_blocked,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
-            "matches": sorted(latest, key=lambda row: float(row.get("start_ts") or 0.0))[:80],
+            "matches": visible,
         }
 
     def _scan_sport(self, cfg: SportConfig) -> dict[str, Any]:
@@ -1352,6 +1391,7 @@ class MultiSportSteamWorker:
             "xbet_prematch": int(prematch.get("xbet_prematch") or 0),
             "prematch_mapped": int(prematch.get("prematch_mapped") or 0),
             "prematch_decoded": int(prematch.get("prematch_decoded") or 0),
+            "prematch_scanned": int(prematch.get("prematch_scanned") or 0),
             "prematch_detected": int(prematch.get("prematch_detected") or 0),
             "prematch_delivered": int(prematch.get("prematch_delivered") or 0),
             "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),

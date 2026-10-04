@@ -880,3 +880,63 @@ def test_prematch_history_support_can_raise_total_signal_strength(tmp_path):
     support = worker._prematch_history_support(ctx, lane, signal)
     assert support > 0
     assert support <= 3.0
+
+
+def test_sport_context_features_calculates_rest_back_to_back_and_totals(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    start = 2_000_000_000
+    ctx = {
+        "home_recent": [
+            {"event_id":"h1","home":"Home","away":"X","home_score":118,"away_score":112,"timestamp":start-20*3600},
+            {"event_id":"h2","home":"Y","away":"Home","home_score":110,"away_score":116,"timestamp":start-3*86400},
+        ],
+        "away_recent": [
+            {"event_id":"a1","home":"Away","away":"Z","home_score":108,"away_score":104,"timestamp":start-2*86400},
+            {"event_id":"a2","home":"Q","away":"Away","home_score":106,"away_score":111,"timestamp":start-5*86400},
+        ],
+        "home_at_home": [],
+        "away_away": [],
+        "h2h": [{"event_id":"x1","home":"Home","away":"Away","home_score":120,"away_score":117,"timestamp":start-10*86400}],
+    }
+    fs = {"home":"Home","away":"Away","start_ts":start}
+    feat = worker._sport_context_features(ctx, fs, SPORTS["basketball"])
+    assert feat["home_back_to_back"] is True
+    assert feat["away_back_to_back"] is False
+    assert feat["home_rest_days"] < feat["away_rest_days"]
+    assert feat["recent_total_avg"] > 200
+    assert feat["h2h_total_avg"] == 237
+
+
+def test_prematch_history_support_prefers_over_when_recent_totals_are_high(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    ctx = {
+        "home_recent": [
+            {"event_id":"1","home_score":120,"away_score":115},
+            {"event_id":"2","home_score":118,"away_score":114},
+        ],
+        "away_recent": [
+            {"event_id":"3","home_score":117,"away_score":116},
+        ],
+        "h2h": [{"event_id":"4","home_score":121,"away_score":119}],
+    }
+    lane = {"market_family":"match_total","line":220.5}
+    over = worker._prematch_history_support(ctx, lane, {"direction":"over","line":220.5})
+    under = worker._prematch_history_support(ctx, lane, {"direction":"under","line":220.5})
+    assert over > 0
+    assert under < 0
+
+
+def test_hockey_live_brain_falls_back_to_score_clock_without_flashscore_stats(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_ELAPSED_SECONDS", "30")
+    monkeypatch.setenv("GOOL_MULTISPORT_LIVE_MIN_CLOCK_DELTA_SECONDS", "20")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    rows = [
+        {"ts":100.0,"clock_seconds":300.0,"score":[0,0],"line":2.5,"over":1.95,"under":1.80,"probability":0.48,"scope":"PERIOD_2","market_family":"match_total","league":"KHL","live_game_stats":{}},
+        {"ts":160.0,"clock_seconds":360.0,"score":[0,0],"line":2.5,"over":1.95,"under":1.80,"probability":0.48,"scope":"PERIOD_2","market_family":"match_total","league":"KHL","live_game_stats":{}},
+        {"ts":220.0,"clock_seconds":420.0,"score":[0,0],"line":2.5,"over":1.95,"under":1.80,"probability":0.48,"scope":"PERIOD_2","market_family":"match_total","league":"KHL","live_game_stats":{}},
+        {"ts":280.0,"clock_seconds":480.0,"score":[0,0],"line":2.5,"over":1.95,"under":1.80,"probability":0.48,"scope":"PERIOD_2","market_family":"match_total","league":"KHL","live_game_stats":{}},
+    ]
+    signal = detect_live_segment_stats(rows, SPORTS["hockey"], now=280, score_changed_at=None)
+    assert signal is not None
+    assert signal["brain_mode"] == "segment_stats"
+    assert signal["hockey_pressure"] == {}

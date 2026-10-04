@@ -246,3 +246,47 @@ def test_hockey_segment_stats_reads_actual_subgame_scores(tmp_path, monkeypatch)
     assert stats["shots_on_goal"] == [14, 11]
     assert stats["penalties_2m"] == [2, 1]
     assert stats["powerplay_goals"] == [1, 0]
+
+
+
+def test_collect_prefetches_both_live_indexes_before_sport_scans(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    calls = []
+
+    def fake_index(cfg):
+        calls.append(("index", cfg.key))
+        return [{"I": f"{cfg.key}-1", "O1": "A", "O2": "B"}]
+
+    def fake_pre(cfg):
+        calls.append(("pre", cfg.key))
+        return []
+
+    def fake_scan(cfg, *, xbet_live_prefetched=None, xbet_prematch_prefetched=None):
+        calls.append(("scan", cfg.key, len(xbet_live_prefetched or [])))
+        return {
+            "flashscore_live": 0, "xbet_live": len(xbet_live_prefetched or []), "mapped": 0,
+            "decoded": 0, "score_mismatch": 0, "market_decode_failed": 0,
+            "detected": 0, "prematch_detected": 0, "flashscore_prematch": 0,
+            "prematch_decoded": 0, "delivered": 0, "prematch_delivered": 0,
+            "settled": 0, "xbet_diag": {"ok": True},
+        }
+
+    monkeypatch.setattr(worker, "_xbet_index", fake_index)
+    monkeypatch.setattr(worker, "_xbet_prematch_index", fake_pre)
+    monkeypatch.setattr(worker, "_scan_sport", fake_scan)
+    worker.collect_once()
+
+    first_scan = next(i for i, row in enumerate(calls) if row[0] == "scan")
+    assert ("index", "hockey") in calls[:first_scan]
+    assert ("index", "basketball") in calls[:first_scan]
+    scan_rows = [row for row in calls if row[0] == "scan"]
+    assert ("scan", "hockey", 1) in scan_rows
+    assert ("scan", "basketball", 1) in scan_rows
+
+
+def test_basketball_live_queries_have_fallback_profiles(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    queries = worker._xbet_queries(SPORTS["basketball"])
+    assert any("sports=3" in q and "antisports=188" in q and "partner=51" in q for q in queries)
+    assert any("sports=3" in q and "country=153" in q and "mobi=true" in q for q in queries)
+    assert any("sports=3" in q and "country=" not in q for q in queries)

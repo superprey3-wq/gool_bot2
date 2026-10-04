@@ -251,10 +251,8 @@ def multisport_in_game_sections() -> list[str]:
             period = str(live.get("period") or "LIVE")
             selection = str(pick.get("selection") or "?")
             lines.append(
-                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}
-"
-                f"⏱ {period}
-"
+                f"<b>{idx}. {pick.get('home','?')} — {pick.get('away','?')}</b> · {score[0]}:{score[1]}\n"
+                f"⏱ {period}\n"
                 f"↳ PREMATCH: <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>"
             )
         sport_blocks.append("\n\n".join(lines))

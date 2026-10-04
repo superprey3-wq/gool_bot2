@@ -9,6 +9,11 @@ on:
       - ".github/workflows/multisport-real-prematch-live-audit.yml"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit:
     runs-on: ubuntu-24.04

@@ -33,7 +33,36 @@ fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); day=datetim
 fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and float(m.meta["scheduled_start_ts"])>now and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
 print("PIPELINE_START",len(fixtures),flush=True)
 update_prematch_status(
- stage="brain", fixtures=len(fixtures), brain_eligible=0, priced=0,
+ stage="brain",
+ fixtures=len(fixtures),
+ brain_analysed=0,
+ brain_sample_ge6=0,
+ brain_profile_available=0,
+ brain_stage1_eligible=0,
+ brain_eligible=0,
+ brain_failures=0,
+ fusion_checked=0,
+ fusion_rescue_requested=0,
+ fusion_rescued=0,
+ fusion_failures=0,
+ shortlist=0,
+ shortlist_cap=0,
+ shortlist_qualified=0,
+ shortlist_rejected_sample=0,
+ shortlist_rejected_agreement=0,
+ shortlist_rejected_separation=0,
+ shortlist_rejected_probability=0,
+ shortlist_rejected_quality=0,
+ priced=0,
+ mode="PENDING",
+ singles=0,
+ doubles=0,
+ super=False,
+ xbet_matches=0,
+ xbet_refreshed=0,
+ delivered_cards=0,
+ delivered_entries=0,
+ delivered_parlays=0,
  value_hunter_stage="waiting_for_full_market",
  value_hunter_scanned_matches=0,
  value_hunter_modeled_markets=0,
@@ -91,6 +120,13 @@ fusion_rows=list(stage1_rows[:fusion_limit])
 if len(fusion_rows)<fusion_limit:
  fusion_rows.extend(rescue_pool[:fusion_limit-len(fusion_rows)])
 rescue_requested=sum(1 for r in fusion_rows if str(r["match"].provider_match_id) not in stage1_ids)
+update_prematch_status(
+ stage="fusion",
+ fusion_checked=0,
+ fusion_rescue_requested=rescue_requested,
+ fusion_rescued=0,
+ fusion_failures=0,
+)
 print(
  "PREMATCH_FUSION_PLAN",
  {"stage1":len(stage1_rows),"limit":fusion_limit,"rescue_requested":rescue_requested},

@@ -23,7 +23,9 @@ def test_prematch_choice_detector_requires_sustained_probability_support(monkeyp
 
 
 
-def test_choice_signal_start_uses_odd_field_not_team_name():
+def test_choice_signal_start_uses_odd_field_not_team_name(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_MIN_AGE_SECONDS", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_CHOICE_MIN_FAIR_EDGE_PP", "2.0")
     cfg = SPORTS["hockey"]
     rows = [
         {"ts": 100.0, "probability": 0.55, "odd": 1.90, "line": 0.0, "selection": "П1", "selection_side": "home", "home": "Calgary Flames"},

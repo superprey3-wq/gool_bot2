@@ -408,7 +408,8 @@ if d["mode"]=="NO_BET":print("NO QUALIFIED BETS",flush=True)
 update_prematch_status(
  stage="done",
  fixtures=len(fixtures),
- brain_eligible=len(rows),
+ brain_eligible=brain_eligible_total,
+ shortlist=len(rows),
  priced=len(priced),
  mode=str(d.get("mode") or "NO_BET"),
  singles=len(d.get("singles") or []),

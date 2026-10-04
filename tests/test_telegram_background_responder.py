@@ -6,6 +6,8 @@ from gool_bot2 import storage_market_signal_worker_var as worker
 def test_background_analysis_reply_uses_captured_credential(tmp_path: Path, monkeypatch):
     sent = []
     monkeypatch.setattr(worker.telegram_mod, "analysis_text", lambda *_args, **_kwargs: "ANALYSIS_OK")
+    import gool_bot2.multisport_menu as multisport_menu
+    monkeypatch.setattr(multisport_menu, "multisport_analysis_sections", lambda: ["HOCKEY_ANALYSIS", "BASKET_ANALYSIS"])
     monkeypatch.setattr(
         worker,
         "_direct_send_message",
@@ -18,8 +20,34 @@ def test_background_analysis_reply_uses_captured_credential(tmp_path: Path, monk
         {"update_id": 10, "message": {"chat": {"id": 123}, "text": "🧠 Анализ"}},
     )
 
-    assert actions == 1
-    assert sent == [("test-credential", 123, "ANALYSIS_OK")]
+    assert actions == 3
+    assert sent == [
+        ("test-credential", 123, "ANALYSIS_OK"),
+        ("test-credential", 123, "HOCKEY_ANALYSIS"),
+        ("test-credential", 123, "BASKET_ANALYSIS"),
+    ]
+
+
+def test_background_in_game_reply_includes_multisport_sections(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(worker.telegram_mod, "_force_reconcile_pending", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(worker.telegram_mod, "in_game_sections", lambda *_args, **_kwargs: ["FOOTBALL_LIVE"])
+    import gool_bot2.multisport_menu as multisport_menu
+    monkeypatch.setattr(multisport_menu, "multisport_in_game_sections", lambda: ["HOCKEY_AND_BASKET_LIVE"])
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 101, "message": {"chat": {"id": 123}, "text": "🟢 В игре"}},
+    )
+
+    assert actions == 2
+    assert sent == ["FOOTBALL_LIVE", "HOCKEY_AND_BASKET_LIVE"]
 
 
 def test_main_poll_does_not_compete_with_background_responder(tmp_path: Path, monkeypatch):

@@ -2587,6 +2587,19 @@ class MultiSportSteamWorker:
             state = states.get(str(row.get("flashscore_event_id") or ""))
             if not state or str(state.get("coarse_status") or "") != "3":
                 continue
+            # Legacy pending rows created before emblem metadata was journaled
+            # can still render proper result cards: refresh identity assets from
+            # the authoritative finished Flashscore row before settlement.
+            for key in (
+                "home_team_id",
+                "away_team_id",
+                "home_team_slug",
+                "away_team_slug",
+                "home_logo_file",
+                "away_logo_file",
+            ):
+                if not str(row.get(key) or "").strip() and str(state.get(key) or "").strip():
+                    row[key] = str(state.get(key) or "").strip()
             full_score = list(state.get("score") or [0, 0])
             scope = str(row.get("scope") or SCOPE_FULL)
             if scope == SCOPE_FULL:
@@ -2798,6 +2811,12 @@ class MultiSportSteamWorker:
             "home": row.get("home"),
             "away": row.get("away"),
             "league": row.get("league"),
+            "home_team_id": str(row.get("home_team_id") or ""),
+            "away_team_id": str(row.get("away_team_id") or ""),
+            "home_team_slug": str(row.get("home_team_slug") or ""),
+            "away_team_slug": str(row.get("away_team_slug") or ""),
+            "home_logo_file": str(row.get("home_logo_file") or ""),
+            "away_logo_file": str(row.get("away_logo_file") or ""),
             "score": list(row.get("score") or [0, 0]) if phase == "LIVE" else None,
             "match_score": list(row.get("match_score") or row.get("score") or [0, 0]) if phase == "LIVE" else None,
             "period": row.get("period") if phase == "LIVE" else None,

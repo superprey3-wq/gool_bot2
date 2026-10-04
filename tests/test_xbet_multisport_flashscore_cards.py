@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 from gool_bot2.xbet_multisport_card import render_multisport_prematch_card, render_multisport_steam_card
+from gool_bot2.hockey_signal_card import render_hockey_prematch_card
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
@@ -160,3 +161,73 @@ def test_multisport_prematch_card_is_distinct_png():
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
     image = Image.open(BytesIO(png))
     assert image.size == (1080, 900)
+
+
+def test_hockey_handicap_prematch_card_renders_png():
+    cfg = SPORTS["hockey"]
+    row = {
+        "phase": "PREMATCH",
+        "home": "Krylya Sovetov",
+        "away": "Mikhaylov Academy U20",
+        "league": "RUSSIA: MHL",
+        "start_ts": 1893456000,
+        "scope": "FULL_MATCH",
+        "market_family": "handicap",
+        "selection": "Ф1 +1.5",
+        "opening_line": 1.0,
+        "opening_odd": 1.66,
+    }
+    signal = {
+        "phase": "PREMATCH",
+        "direction": "home",
+        "selection_side": "home",
+        "selection": "Ф1 +1.5",
+        "line": 1.5,
+        "odd": 1.59,
+        "metric_delta": 5.9,
+        "probability_delta_pp": 5.9,
+        "line_delta": 0.5,
+        "moves": 3,
+        "strength": 100.0,
+        "extreme": True,
+        "start": {"line": 1.0, "odd": 1.66},
+    }
+    png = render_hockey_prematch_card(row, signal, cfg)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    image = Image.open(BytesIO(png))
+    assert image.size == (1080, 900)
+
+
+def test_multisport_delivery_uses_card_without_duplicate_caption(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    row = {
+        "phase": "PREMATCH",
+        "home": "Krylya Sovetov",
+        "away": "Mikhaylov Academy U20",
+        "league": "RUSSIA: MHL",
+        "start_ts": 1893456000,
+        "scope": "FULL_MATCH",
+        "market_family": "handicap",
+        "selection": "Ф1 +1.5",
+    }
+    signal = {
+        "phase": "PREMATCH",
+        "direction": "home",
+        "selection_side": "home",
+        "selection": "Ф1 +1.5",
+        "line": 1.5,
+        "odd": 1.59,
+        "strength": 100.0,
+        "metric_delta": 5.9,
+        "probability_delta_pp": 5.9,
+        "line_delta": 0.5,
+        "moves": 3,
+        "start": {"line": 1.0, "odd": 1.66},
+    }
+    seen = {}
+    import gool_bot2.xbet_multisport_steam as steam
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": seen.update({"caption": caption, "png": png}) or 1)
+    sent = worker._deliver(row, signal, SPORTS["hockey"])
+    assert sent == 1
+    assert seen["caption"] == ""
+    assert seen["png"].startswith(b"\x89PNG\r\n\x1a\n")

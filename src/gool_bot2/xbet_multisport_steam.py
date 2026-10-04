@@ -21,7 +21,8 @@ from .providers.common import norm_team
 from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
-from .xbet_multisport_card import render_multisport_prematch_card, render_multisport_steam_card
+from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card
+from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -1095,11 +1096,11 @@ class MultiSportSteamWorker:
         message = self._message(row, signal, cfg)
         if _truthy("XBET_MULTISPORT_CARDS_ENABLED", True):
             try:
-                png = (
-                    render_multisport_prematch_card(row, signal, cfg)
-                    if str(row.get("phase") or "LIVE").upper() == "PREMATCH"
-                    else render_multisport_steam_card(row, signal, cfg)
-                )
+                prematch = str(row.get("phase") or "LIVE").upper() == "PREMATCH"
+                if cfg.key == "hockey":
+                    png = render_hockey_prematch_card(row, signal, cfg) if prematch else render_hockey_live_card(row, signal, cfg)
+                else:
+                    png = render_basketball_prematch_card(row, signal, cfg) if prematch else render_basketball_live_card(row, signal, cfg)
                 sent = telegram.broadcast_photo(png, caption=message)
                 if sent:
                     return int(sent)

@@ -149,3 +149,24 @@ def test_production_prematchstatus_command_is_routed(tmp_path: Path, monkeypatch
     )
     assert actions == 1
     assert sent == ["PREMATCH_STATUS_OK"]
+
+
+def test_production_valuehunter_command_is_routed(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.delenv("GOOL_MULTI_JOURNAL_PATH", raising=False)
+    monkeypatch.setattr(
+        "gool_bot2.v4_value_hunter_delivery.value_hunter_report_text",
+        lambda _path: "VALUE_HUNTER_OK",
+    )
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 17, "message": {"chat": {"id": 123}, "text": "/valuehunter"}},
+    )
+    assert actions == 1
+    assert sent == ["VALUE_HUNTER_OK"]

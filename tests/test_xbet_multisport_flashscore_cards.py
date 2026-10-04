@@ -231,3 +231,21 @@ def test_multisport_delivery_uses_card_without_duplicate_caption(tmp_path, monke
     assert sent == 1
     assert seen["caption"] == ""
     assert seen["png"].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_multisport_flashscore_parser_preserves_team_emblem_meta():
+    body = (
+        "ZA÷NBA~"
+        "AA÷Ab12Cd34¬AB÷1¬AE÷Home Team¬AF÷Away Team"
+        "¬JA÷home123¬JB÷away456¬WU÷home-team¬WV÷away-team"
+        "¬OA÷homeLogo.png¬OB÷awayLogo.png~"
+    )
+    rows = parse_flashscore_events(body)
+    assert len(rows) == 1
+    meta = rows[0]["flashscore_meta"]
+    assert meta["home_team_id"] == "home123"
+    assert meta["away_team_id"] == "away456"
+    assert meta["home_team_slug"] == "home-team"
+    assert meta["away_team_slug"] == "away-team"
+    assert meta["home_logo_file"] == "homeLogo.png"
+    assert meta["away_logo_file"] == "awayLogo.png"

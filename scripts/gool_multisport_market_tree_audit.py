@@ -89,6 +89,11 @@ def main():
     runtime=Path("artifacts/multisport_market_tree/runtime"); runtime.mkdir(parents=True,exist_ok=True)
     os.environ["RUNTIME_DATA_DIR"]=str(runtime)
     os.environ["GOOL_MULTISPORT_MODE"]="shadow"
+    os.environ.setdefault("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT","3.0")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT","2.5")
+    os.environ.setdefault("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS","1")
+    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK","0")
+    os.environ.setdefault("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK","0")
     os.environ.setdefault("GOOL_MULTISPORT_SUBGAME_ROOT_ATTEMPTS","1")
     os.environ.setdefault("GOOL_MULTISPORT_SUBGAME_HTTP_TIMEOUT","2.5")
     os.environ.setdefault("GOOL_MULTISPORT_HTTP_ATTEMPTS","1")

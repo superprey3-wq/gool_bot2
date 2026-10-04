@@ -34,6 +34,7 @@ from .xbet_multisport_markets import (
     live_scopes_from_period,
     lane_score,
     market_lanes,
+    prematch_market_lanes,
     period_scores,
     raw_catalog,
     scope_from_subgame,
@@ -311,6 +312,67 @@ def detect_steam(
         "extreme": extreme,
         "threshold_scale": round(threshold_scale, 3),
         "line_floor": round(line_floor, 3),
+        "start": start,
+        "end": end,
+    }
+
+
+def detect_prematch_choice(
+    rows: list[dict[str, Any]],
+    cfg: SportConfig,
+    *,
+    now: float,
+) -> dict[str, Any] | None:
+    """Detect sustained PREMATCH support for handicap/moneyline selections."""
+    window = max(5 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_WINDOW_SECONDS", 6 * 60 * 60.0))
+    eligible = [row for row in rows if now - float(row.get("ts") or 0.0) <= window]
+    if len(eligible) < 3:
+        return None
+    age = float(eligible[-1]["ts"]) - float(eligible[0]["ts"])
+    if age < _float_env("GOOL_MULTISPORT_PREMATCH_MIN_AGE_SECONDS", 60.0):
+        return None
+
+    start, end = eligible[0], eligible[-1]
+    probability_delta_pp = (float(end.get("probability") or 0.0) - float(start.get("probability") or 0.0)) * 100.0
+    if probability_delta_pp <= 0:
+        return None
+    min_pp = _float_env("GOOL_MULTISPORT_PREMATCH_CHOICE_MIN_FAIR_EDGE_PP", 2.0)
+    moves = sum(
+        1
+        for left, right in zip(eligible, eligible[1:])
+        if float(right.get("probability") or 0.0) - float(left.get("probability") or 0.0) >= 0.002
+    )
+    extreme = probability_delta_pp >= min_pp * 1.8
+    if probability_delta_pp < min_pp or (moves < 2 and not extreme):
+        return None
+
+    try:
+        odd = float(end.get("odd") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+        return None
+
+    line_delta = float(end.get("line") or 0.0) - float(start.get("line") or 0.0)
+    strength = min(
+        100.0,
+        58.0 + probability_delta_pp * 4.0 + moves * 3.0 + (8.0 if extreme else 0.0),
+    )
+    return {
+        "phase": "PREMATCH",
+        "direction": str(end.get("selection_side") or end.get("choice_key") or "choice"),
+        "selection_side": str(end.get("selection_side") or end.get("choice_key") or ""),
+        "selection": str(end.get("selection") or "?"),
+        "line": float(end.get("line") or 0.0),
+        "odd": odd,
+        "fair_probability": round(float(end.get("probability") or 0.0), 6),
+        "metric_delta": round(probability_delta_pp, 3),
+        "probability_delta_pp": round(probability_delta_pp, 2),
+        "line_delta": round(line_delta, 2),
+        "moves": moves,
+        "age_seconds": round(age, 1),
+        "strength": round(strength, 1),
+        "extreme": extreme,
         "start": start,
         "end": end,
     }
@@ -982,11 +1044,14 @@ class MultiSportSteamWorker:
             return None, "prematch_outside_horizon"
 
         decoded, market_meta = self._market_tree(game, cfg, prematch=True)
-        lanes = market_lanes(decoded)
+        lanes = prematch_market_lanes(decoded, cfg.key)
         for lane in lanes:
             lane["lane_key"] = lane_key(lane)
-            lane["metric"] = _metric(lane, (0, 0), cfg)
-            lane["selection"] = selection_label(lane, "over")
+            if lane.get("choice_key"):
+                lane["metric"] = float(lane.get("probability") or 0.0) * 100.0
+            else:
+                lane["metric"] = _metric(lane, (0, 0), cfg)
+                lane["selection"] = selection_label(lane, "over")
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
             return None, "prematch_market_decode"
@@ -1252,7 +1317,11 @@ class MultiSportSteamWorker:
             return False, 0
         mode = _mode()
         direction = str(signal.get("direction") or "over")
-        pick_label = selection_label(row, direction, float(signal.get("line") or row.get("line") or 0.0))
+        pick_label = str(
+            signal.get("selection")
+            or row.get("selection")
+            or selection_label(row, direction, float(signal.get("line") or row.get("line") or 0.0))
+        )
         row_for_delivery = {**row, "selection": pick_label, "scope": scope, "market_family": family}
         sent = self._deliver(row_for_delivery, signal, cfg) if mode == "active" else 0
         entry = {
@@ -1282,6 +1351,8 @@ class MultiSportSteamWorker:
             "scheduled_start": row.get("scheduled_start"),
             "clock_seconds": row.get("clock_seconds"),
             "direction": direction,
+            "selection_side": str(signal.get("selection_side") or row.get("selection_side") or ""),
+            "moneyline_kind": str(row.get("moneyline_kind") or ""),
             "line": float(signal.get("line") or 0.0),
             "odd": float(signal.get("odd") or 0.0),
             "opening_line": float(((signal.get("start") or {}).get("line") or signal.get("line") or 0.0)) if phase == "PREMATCH" else None,
@@ -1370,7 +1441,11 @@ class MultiSportSteamWorker:
                         continue
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
-                    signal = detect_prematch_steam(history, cfg, now=float(lane_row["ts"]))
+                    signal = (
+                        detect_prematch_choice(history, cfg, now=float(lane_row["ts"]))
+                        if lane_row.get("choice_key")
+                        else detect_prematch_steam(history, cfg, now=float(lane_row["ts"]))
+                    )
                     if signal is None:
                         continue
                     signal = {

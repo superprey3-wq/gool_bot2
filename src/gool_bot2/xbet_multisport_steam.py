@@ -2592,10 +2592,14 @@ class MultiSportSteamWorker:
                 str(row.get("sport") or "") == sport
                 and row_identity == wanted_identity
                 and row_phase == wanted_phase
-                and row_scope == wanted_scope
-                and row_family == wanted_family
             ):
-                return True
+                # PREMATCH contract: one match = one pick. Once any PREMATCH
+                # market is journaled for a Flashscore match, later scans must
+                # never emit another family/scope for that same match.
+                if wanted_phase == "PREMATCH":
+                    return True
+                if row_scope == wanted_scope and row_family == wanted_family:
+                    return True
         return False
 
     def _format_clock(self, row: dict[str, Any]) -> str:
@@ -2684,7 +2688,11 @@ class MultiSportSteamWorker:
         row_for_delivery = {**row, "selection": pick_label, "scope": scope, "market_family": family}
         sent = self._deliver(row_for_delivery, signal, cfg) if mode == "active" else 0
         entry = {
-            "entry_id": f"{cfg.key}:{phase.lower()}:{event_id}:{scope}:{family}",
+            "entry_id": (
+                f"{cfg.key}:prematch:{row.get('flashscore_event_id') or event_id}"
+                if phase == "PREMATCH"
+                else f"{cfg.key}:{phase.lower()}:{event_id}:{scope}:{family}"
+            ),
             "journal_version": 2,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "phase": phase,

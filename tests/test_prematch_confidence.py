@@ -57,3 +57,13 @@ def test_shortlist_caps_and_ranks_by_confidence():
     assert stats["qualified"] == 3
     assert stats["selected"] == 2
     assert stats["cap"] == 2
+
+
+def test_shortlist_quality_v2_gate_is_realistic():
+    selected, stats = select_confident_prematch_rows([
+        row("good", quality=.74),
+        row("thin", quality=.70),
+    ], max_rows=120)
+    assert [x["match"].provider_match_id for x in selected] == ["good"]
+    assert stats["rejected_quality"] == 1
+    assert stats["min_quality"] == .72

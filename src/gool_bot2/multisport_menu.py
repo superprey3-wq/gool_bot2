@@ -105,7 +105,23 @@ def multisport_status_text() -> str:
     sports = state.get("sports") if isinstance(state, dict) else {}
     sports = sports if isinstance(sports, dict) else {}
     mode = str((state or {}).get("mode") or os.getenv("GOOL_MULTISPORT_MODE", "shadow")).upper()
-    lines = [f"🏟 <b>GOOL MULTI · STATUS</b> · {mode}"]
+    captured = str((state or {}).get("captured_at") or "нет снимка")
+    version = ""
+    for candidate in (
+        _runtime() / ".code_version",
+        Path("/home/container/gool_bot2_data/.code_version"),
+    ):
+        try:
+            raw = candidate.read_text("utf-8").strip()
+        except Exception:
+            continue
+        if raw:
+            version = raw[:12]
+            break
+    header = f"🏟 <b>GOOL MULTI · STATUS</b> · {mode}"
+    if version:
+        header += f" · {version}"
+    lines = [header, f"🕐 snapshot: {captured}"]
     for key in ("hockey", "basketball"):
         icon, title = SPORT_META[key]
         row = sports.get(key) or {}
@@ -115,7 +131,7 @@ def multisport_status_text() -> str:
         lines.append(
             f"{icon} <b>{title}</b>\n"
             f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · mapped {int(row.get('prematch_mapped') or 0)} · scan {int(row.get('prematch_scanned') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
-            f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · decoded {int(row.get('decoded') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
+            f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · 1xBet {int(row.get('xbet_live') or 0)} · mapped {int(row.get('mapped') or 0)} · decoded {int(row.get('decoded') or 0)} · mismatch {int(row.get('score_mismatch') or 0)} · decode_fail {int(row.get('market_decode_failed') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
     return "\n".join(lines)
 

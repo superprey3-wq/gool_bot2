@@ -2386,7 +2386,10 @@ class MultiSportSteamWorker:
                         failed += 1
                     continue
                 decoded += 1
-                signals: list[dict[str, Any]] = []
+                # Evaluate the complete market tree first, then choose ONE primary
+                # PREMATCH pick for this match. Previously each passing lane was sent
+                # immediately, which could produce repetitive handicap spam.
+                candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 for lane in row.get("market_lanes") or []:
                     allowed, policy_reason = lane_phase_policy(cfg.key, "PREMATCH", lane, row.get("period"))
                     if not allowed:
@@ -2411,13 +2414,32 @@ class MultiSportSteamWorker:
                             or selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0))
                         ),
                     }
-                    recorded, sent = self._record_signal(lane_row, signal, cfg)
+                    candidates.append((lane_row, signal))
+
+                signals: list[dict[str, Any]] = []
+                if candidates:
+                    family_bias = {
+                        "match_total": 0.8,
+                        "home_total": 0.6,
+                        "away_total": 0.6,
+                        "moneyline": 0.3,
+                        "handicap": 0.0,
+                    }
+                    candidates.sort(
+                        key=lambda item: (
+                            float(item[1].get("strength") or 0.0)
+                            + family_bias.get(str(item[0].get("market_family") or ""), 0.0),
+                            float(item[1].get("fair_probability") or 0.0),
+                        ),
+                        reverse=True,
+                    )
+                    best_row, best_signal = candidates[0]
+                    recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     detected += int(recorded)
                     delivered += int(bool(sent))
                     if recorded:
-                        signals.append(signal)
+                        signals.append(best_signal)
                 if signals:
-                    signals.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
                     row["signals"] = signals
                     row["signal"] = signals[0]
                 latest.append(row)

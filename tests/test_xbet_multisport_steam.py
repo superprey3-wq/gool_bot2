@@ -990,3 +990,37 @@ def test_flashscore_event_parser_keeps_segment_score_parts():
     rows = parse_flashscore_events(body)
     assert len(rows) == 1
     assert rows[0]["score_parts"] == [[28, 25], [28, 26]]
+
+
+def test_prematch_one_match_one_pick_across_market_families(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    cfg = SPORTS["basketball"]
+    base = {
+        "event_id": "xbet-1",
+        "flashscore_event_id": "FS123456",
+        "home": "Puerto Montt",
+        "away": "Ancud",
+        "league": "Chile: LNB",
+        "phase": "PREMATCH",
+        "start_ts": 2_000_000_000,
+    }
+    first_row = {**base, "scope": "FULL_MATCH", "market_family": "home_total", "selection": "ИТБ1 76"}
+    first_signal = {
+        "direction": "over", "line": 76.0, "odd": 1.73, "selection": "ИТБ1 76",
+        "strength": 100.0, "metric_delta": 1.0, "probability_delta_pp": 3.0,
+        "line_delta": 2.0, "moves": 3, "fair_probability": .56, "extreme": False,
+    }
+    second_row = {**base, "event_id": "xbet-rotated-2", "scope": "FULL_MATCH", "market_family": "match_total", "selection": "ТБ 152.5"}
+    second_signal = {**first_signal, "line": 152.5, "selection": "ТБ 152.5"}
+    third_row = {**base, "event_id": "xbet-rotated-3", "scope": "FULL_MATCH", "market_family": "away_total", "selection": "ИТБ2 76"}
+    third_signal = {**first_signal, "line": 76.0, "selection": "ИТБ2 76"}
+
+    assert worker._record_signal(first_row, first_signal, cfg)[0] is True
+    assert worker._record_signal(second_row, second_signal, cfg)[0] is False
+    assert worker._record_signal(third_row, third_signal, cfg)[0] is False
+
+    rows = __import__("gool_bot2.multisport_journal", fromlist=["load_journal"]).load_journal(worker.journal_path)
+    prematch = [row for row in rows if row.get("phase") == "PREMATCH" and row.get("flashscore_event_id") == "FS123456"]
+    assert len(prematch) == 1
+    assert prematch[0]["selection"] == "ИТБ1 76"

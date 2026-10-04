@@ -478,13 +478,31 @@ class MultiSportSteamWorker:
                 for row in (sport_state.get("matches") or []):
                     if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
                         continue
-                    self._append_history(row, cfg)
-                    restored += 1
+                    event_scope_key = f"{cfg.key}:{row.get('event_id')}"
+                    for scope, score in (row.get("scoped_scores") or {}).items():
+                        try:
+                            self._scope_scores[event_scope_key][str(scope)] = (int(score[0]), int(score[1]))
+                        except (TypeError, ValueError, IndexError):
+                            continue
+                    lanes = [lane for lane in (row.get("market_lanes") or []) if isinstance(lane, dict)]
+                    if lanes:
+                        for lane in lanes:
+                            self._append_history(self._lane_row(row, lane), cfg)
+                            restored += 1
+                    else:
+                        self._append_history(row, cfg)
+                        restored += 1
                 for row in (sport_state.get("prematch_matches") or []):
                     if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
                         continue
-                    self._append_prematch_history(row, cfg)
-                    restored += 1
+                    lanes = [lane for lane in (row.get("market_lanes") or []) if isinstance(lane, dict)]
+                    if lanes:
+                        for lane in lanes:
+                            self._append_prematch_history(self._lane_row(row, lane), cfg)
+                            restored += 1
+                    else:
+                        self._append_prematch_history(row, cfg)
+                        restored += 1
         if restored:
             print(f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored}", flush=True)
 

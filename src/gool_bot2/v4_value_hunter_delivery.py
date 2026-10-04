@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 from . import telegram
 from .journal import load_signal_journal, save_signal_journal
+from .prematch_status import prematch_status_data
 from .production_journal_serialization import _locked
 from .v4_prematch_card import render_v4_prematch_card
 from .v4_prematch_delivery import prematch_row_from_pick, prematch_keyboard, _market_label
@@ -201,8 +202,43 @@ def value_hunter_report_text(journal_path: Path) -> str:
         row for row in load_signal_journal(journal_path)
         if str(row.get("origin") or "").casefold() == "prematch_value"
     ]
+    status = prematch_status_data()
+    rejects = status.get("value_hunter_rejects") or {}
+    reject_labels = {
+        "odds": "кэф вне 2.20–6.00",
+        "quality": "quality ниже порога",
+        "probability": "модельная p ниже порога",
+        "profile_sample": "мало истории",
+        "edge": "edge ниже порога",
+        "ev": "EV ниже порога",
+        "probability_low_missing": "нет нижней границы p",
+        "lower_bound_not_above_market": "нижняя граница не выше рынка",
+        "asian_quarter_line": "азиатская четвертная линия",
+    }
+
+    scan_lines = [
+        "<b>Последний скан</b>",
+        f"матчей проверено: <b>{status.get('value_hunter_scanned_matches','—')}</b>",
+        f"смоделировано рынков: <b>{status.get('value_hunter_modeled_markets','—')}</b>",
+        f"high-odds 2.20–6.00: <b>{status.get('value_hunter_high_odds_markets','—')}</b>",
+        f"прошли VALUE-фильтры: <b>{status.get('value_hunter_qualified','—')}</b>",
+        f"кандидатов после выбора 1 на матч: <b>{status.get('value_hunter_candidates','—')}</b>",
+        f"отправлено в последнем цикле: <b>{status.get('value_hunter_sent','—')}</b>",
+    ]
+    if isinstance(rejects, dict) and rejects:
+        top = sorted(rejects.items(), key=lambda kv: int(kv[1]), reverse=True)[:6]
+        scan_lines.append("")
+        scan_lines.append("<b>Главные причины отсева</b>")
+        for key, count in top:
+            scan_lines.append(f"• {reject_labels.get(str(key), str(key))}: <b>{count}</b>")
+
     if not rows:
-        return "🔥 <b>GOOL VALUE HUNTER</b>\n\nПока сигналов нет."
+        return (
+            "🔥 <b>GOOL VALUE HUNTER</b>\n\n"
+            + "\n".join(scan_lines)
+            + "\n\nПока публичных VALUE-сигналов нет."
+        )
+
     settled = [r for r in rows if str(r.get("result") or "") in {"won", "lost", "push", "void"}]
     won = sum(1 for r in settled if r.get("result") == "won")
     lost = sum(1 for r in settled if r.get("result") == "lost")
@@ -217,6 +253,9 @@ def value_hunter_report_text(journal_path: Path) -> str:
     avg_odd = sum(float(r.get("odd") or 0.0) for r in rows) / max(1, len(rows))
     return (
         "🔥 <b>GOOL VALUE HUNTER</b>\n\n"
+        + "\n".join(scan_lines)
+        + "\n\n"
+        f"<b>История сигналов</b>\n"
         f"Всего: <b>{len(rows)}</b> · ✅ {won} · ❌ {lost} · ⏳ {pending}\n"
         f"Ср.кэф: <b>{avg_odd:.2f}</b> · P/L <b>{profit:+.2f}u</b> · ROI <b>{roi:+.1f}%</b>"
     )

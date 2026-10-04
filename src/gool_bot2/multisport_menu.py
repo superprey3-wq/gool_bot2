@@ -331,12 +331,11 @@ def multisport_in_game_sections() -> list[str]:
                 continue
             if _row_phase(row) != "PREMATCH":
                 continue
+
             fs_id = str(row.get("flashscore_event_id") or "")
             live = live_by_fs.get(fs_id)
 
             # Legacy/already-sent PREMATCH rows can carry an empty/stale FS id.
-            # Do not lose the pick after kickoff: recover by normalized teams
-            # inside the same sport, using Flashscore as the LIVE authority.
             if live is None:
                 wanted_home = norm_team(str(row.get("home") or ""))
                 wanted_away = norm_team(str(row.get("away") or ""))
@@ -346,6 +345,22 @@ def multisport_in_game_sections() -> list[str]:
                     if wanted_home and wanted_away and cand_home == wanted_home and cand_away == wanted_away:
                         live = candidate
                         break
+
+            # Authoritative persisted transition: once the worker has marked a
+            # PREMATCH pick in_game, never hide it just because the current
+            # state snapshot/mapping is temporarily missing.
+            if bool(row.get("in_game")):
+                fallback_live = {
+                    "flashscore_event_id": str(row.get("live_flashscore_event_id") or fs_id),
+                    "home": row.get("home"),
+                    "away": row.get("away"),
+                    "score": list(row.get("live_score") or [0, 0]),
+                    "period": "LIVE · Flashscore",
+                }
+                if live is None:
+                    live = fallback_live
+                else:
+                    live = {**fallback_live, **live}
 
             if live is not None:
                 active.append((row, live))

@@ -30,6 +30,15 @@ def update_prematch_status(**fields: Any) -> dict[str, Any]:
     return current
 
 
+
+def prematch_status_data() -> dict[str, Any]:
+    path = _path()
+    try:
+        data = json.loads(path.read_text("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
 def _fmt(value: Any) -> str:
     return "—" if value in {None, ""} else str(value)
 
@@ -79,4 +88,4 @@ def prematch_status_text() -> str:
     return "\n".join(lines)
 
 
-__all__ = ["prematch_status_text", "update_prematch_status"]
+__all__ = ["prematch_status_text", "prematch_status_data", "update_prematch_status"]

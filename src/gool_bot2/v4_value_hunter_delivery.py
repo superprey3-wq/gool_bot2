@@ -227,6 +227,7 @@ def value_hunter_report_text(journal_path: Path) -> str:
         f"завершение: <code>{status.get('last_cycle_finished_at') or '—'}</code>",
         "",
         "<b>Последний скан</b>",
+        f"VALUE-пул: <b>{status.get('value_hunter_scan_pool','—')}</b>",
         f"матчей проверено: <b>{status.get('value_hunter_scanned_matches','—')}</b>",
         f"смоделировано рынков: <b>{status.get('value_hunter_modeled_markets','—')}</b>",
         f"high-odds 2.20–6.00: <b>{status.get('value_hunter_high_odds_markets','—')}</b>",

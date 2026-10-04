@@ -184,3 +184,40 @@ def test_live_line_move_can_confirm_signal_when_devig_probability_stays_flat():
     assert signal["direction"] == "over"
     assert signal["line_delta"] == 4.0
     assert signal["probability_delta_pp"] == 0.0
+
+
+
+def test_persisted_state_index_fallback_keeps_identity_not_odds(tmp_path):
+    from datetime import datetime, timezone
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.state_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.state_path.write_text(json.dumps({
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "sports": {
+            "hockey": {
+                "matches": [{
+                    "event_id": "hx1",
+                    "home": "SKA",
+                    "away": "CSKA",
+                    "line": 99.5,
+                    "over": 9.99,
+                    "under": 1.01,
+                }],
+                "prematch_matches": [{
+                    "event_id": "hp1",
+                    "home": "Dynamo",
+                    "away": "Spartak",
+                    "line": 88.5,
+                }],
+            }
+        },
+    }), encoding="utf-8")
+
+    live = worker._state_index_fallback(SPORTS["hockey"], prematch=False)
+    pre = worker._state_index_fallback(SPORTS["hockey"], prematch=True)
+    assert live == [{"I": "hx1", "O1": "SKA", "O2": "CSKA", "_state_cache": True}]
+    assert pre == [{"I": "hp1", "O1": "Dynamo", "O2": "Spartak", "_state_cache": True}]
+    assert "line" not in live[0]
+    assert "over" not in live[0]

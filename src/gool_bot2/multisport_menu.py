@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import time
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -380,6 +381,26 @@ def multisport_in_game_sections() -> list[str]:
                         live = candidate
                         break
 
+            if live is None:
+                # Last-resort continuity for already-sent PREMATCH picks:
+                # once scheduled kickoff has passed, keep the pending pick in
+                # "In Game" for a sport-sized window even if Flashscore's live
+                # feed is temporarily unavailable or uses an unexpected status.
+                try:
+                    start_ts = float(row.get("scheduled_start_ts") or row.get("start_ts") or 0.0)
+                except (TypeError, ValueError):
+                    start_ts = 0.0
+                now_ts = time.time()
+                max_live_age = 5.0 * 3600.0 if sport == "basketball" else 4.0 * 3600.0
+                if start_ts > 0 and start_ts <= now_ts <= start_ts + max_live_age:
+                    live = {
+                        "flashscore_event_id": fs_id,
+                        "home": row.get("home"),
+                        "away": row.get("away"),
+                        "league": row.get("league"),
+                        "_scheduled_live_fallback": True,
+                    }
+
             if live is not None:
                 active.append((row, live))
 
@@ -388,14 +409,20 @@ def multisport_in_game_sections() -> list[str]:
         total += len(active)
         lines = []
         for idx, (pick, live) in enumerate(active, 1):
+            scheduled_fallback = bool(live.get("_scheduled_live_fallback"))
             score = list(live.get("score") or [0, 0])
             period = str(live.get("period") or live.get("status_code") or "LIVE")
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
             strength = float(pick.get("strength") or 0)
+            live_line = (
+                "сейчас матч после времени старта · счёт обновляется"
+                if scheduled_fallback
+                else f"сейчас {period} · {score[0]}:{score[1]}"
+            )
             lines.append(
                 f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
-                f"сейчас {period} · {score[0]}:{score[1]}\n"
+                f"{live_line}\n"
                 f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
                 f"🧠 {strength:.0f}/100 · PREMATCH\n"
                 f"↳ {needed}"

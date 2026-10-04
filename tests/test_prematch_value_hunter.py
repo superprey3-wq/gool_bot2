@@ -88,3 +88,10 @@ def test_valuehunter_report_shows_prematch_progress(tmp_path, monkeypatch):
     assert "RUNNING" in text
     assert "pricing" in text
     assert "waiting_for_full_market" in text
+
+
+def test_value_hunter_accepts_quality_v2_level():
+    p = pick(3.20, .40, .30, quality=.71)
+    ok, info = qualify_value_pick(p, meta(.33))
+    assert ok is True
+    assert "quality" not in info["reasons"]

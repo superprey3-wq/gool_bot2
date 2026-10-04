@@ -1449,14 +1449,24 @@ class MultiSportSteamWorker:
                 f"🧠 сила {float(signal.get('strength') or 0):.0f}/100 · движение {float(signal.get('metric_delta') or 0):.2f}\n"
                 f"📈 Δp {float(signal.get('probability_delta_pp') or 0):+.1f} п.п. · линия {float(signal.get('line_delta') or 0):+.1f}"
             )
+        if str(signal.get("brain_mode") or "") == "segment_stats":
+            return (
+                f"{cfg.icon} <b>GOOL MULTI · LIVE SEGMENT BRAIN · {cfg.title}</b>\n"
+                f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}\n"
+                f"🏆 {row.get('league') or 'LIVE'}\n"
+                f"⏱ {self._format_clock(row)} · ✅ Flashscore score sync\n"
+                f"{arrow} <b>{market_label} @ {float(signal.get('odd') or 0):.2f}</b>\n"
+                f"🧠 прогноз сегмента <b>{float(signal.get('projected_total') or 0):.2f}</b> · "
+                f"stat edge {float(signal.get('stat_edge') or 0):+.2f}\n"
+                f"⚡ темп {float(signal.get('recent_rate_per_min') or 0):.2f}/мин · "
+                f"рынок {'✅ подтверждает' if signal.get('market_confirmed') else '➖ нейтрален'}"
+            )
         return (
             f"{cfg.icon} <b>GOOL MULTI · LIVE · {cfg.title}</b>\n"
             f"<b>{row.get('home','?')} — {row.get('away','?')}</b> · {int(score[0])}:{int(score[1])}\n"
             f"🏆 {row.get('league') or 'LIVE'}\n"
             f"⏱ {self._format_clock(row)} · ✅ Flashscore\n"
-            f"{arrow} <b>{market_label} @ {float(signal.get('odd') or 0):.2f}</b>\n"
-            f"🧠 сила {float(signal.get('strength') or 0):.0f}/100 · движение {float(signal.get('metric_delta') or 0):.2f}\n"
-            f"📈 Δp {float(signal.get('probability_delta_pp') or 0):+.1f} п.п. · импульсов {int(signal.get('moves') or 0)}"
+            f"{arrow} <b>{market_label} @ {float(signal.get('odd') or 0):.2f}</b>"
         )
 
     def _deliver(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> int:

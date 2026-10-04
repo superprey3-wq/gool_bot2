@@ -38,10 +38,13 @@ def select_confident_prematch_rows(
     *,
     max_rows: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int | float]]:
-    """Return only structurally strong football profiles for bookmaker lookup.
+    """Return the strong PREMATCH shortlist plus a bounded evidence-quality rescue.
 
-    This is intentionally price-free. It reduces expensive market lookup without
-    changing the later value/edge policy. All thresholds are environment-tunable.
+    The normal gate remains unchanged. A fixture rejected *only* because evidence
+    quality is a little below the main threshold can be rescued when every
+    structural signal is stronger than normal. This prevents provider/H2H
+    coverage from reducing a day with hundreds of matches to one card, without
+    turning sparse or ambiguous profiles into public bets.
     """
     rows = [row for row in rows if isinstance(row, dict) and row.get("primary_trend")]
     max_rows = max(1, int(max_rows if max_rows is not None else _i("GOOL_PREMATCH_SHORTLIST_MAX", 120)))
@@ -51,7 +54,15 @@ def select_confident_prematch_rows(
     min_probability = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_PROBABILITY", 0.64)))
     min_quality = max(0.0, min(1.0, _f("GOOL_PREMATCH_SHORTLIST_MIN_QUALITY", 0.62)))
 
+    rescue_min_quality = max(0.0, min(min_quality, _f("GOOL_PREMATCH_RESCUE_MIN_QUALITY", 0.55)))
+    rescue_min_sample = max(min_sample, _i("GOOL_PREMATCH_RESCUE_MIN_SAMPLE", 10))
+    rescue_min_agreement = max(min_agreement, min(1.0, _f("GOOL_PREMATCH_RESCUE_MIN_AGREEMENT", 0.76)))
+    rescue_min_separation = max(min_separation, _f("GOOL_PREMATCH_RESCUE_MIN_SEPARATION", 0.030))
+    rescue_min_probability = max(min_probability, min(1.0, _f("GOOL_PREMATCH_RESCUE_MIN_PROBABILITY", 0.68)))
+    rescue_max = max(0, _i("GOOL_PREMATCH_RESCUE_MAX", 12))
+
     kept: list[dict[str, Any]] = []
+    quality_rescue_pool: list[dict[str, Any]] = []
     reject_sample = reject_agreement = reject_separation = reject_probability = reject_quality = 0
 
     for row in rows:
@@ -76,16 +87,37 @@ def select_confident_prematch_rows(
             continue
         if quality < min_quality:
             reject_quality += 1
+            if (
+                rescue_max > 0
+                and quality >= rescue_min_quality
+                and sample >= rescue_min_sample
+                and agreement >= rescue_min_agreement
+                and separation >= rescue_min_separation
+                and probability >= rescue_min_probability
+            ):
+                quality_rescue_pool.append({**row, "confidence_tier": "QUALITY_RESCUE"})
             continue
-        kept.append(row)
+        kept.append({**row, "confidence_tier": str(row.get("confidence_tier") or "PRIMARY")})
 
     kept.sort(key=_confidence_tuple, reverse=True)
+    quality_rescue_pool.sort(key=_confidence_tuple, reverse=True)
+    rescued = quality_rescue_pool[:rescue_max]
+
+    # Primary evidence always wins ranking priority. Rescue candidates fill only
+    # remaining shortlist capacity and remain clearly tagged for diagnostics.
     selected = kept[:max_rows]
+    remaining = max(0, max_rows - len(selected))
+    selected.extend(rescued[:remaining])
+
     stats: dict[str, int | float] = {
         "input": len(rows),
-        "qualified": len(kept),
+        "qualified": len(kept) + len(rescued),
+        "qualified_primary": len(kept),
         "selected": len(selected),
         "cap": max_rows,
+        "rescued_quality": min(len(rescued), remaining),
+        "rescue_pool": len(quality_rescue_pool),
+        "rescue_max": rescue_max,
         "rejected_sample": reject_sample,
         "rejected_agreement": reject_agreement,
         "rejected_separation": reject_separation,
@@ -96,6 +128,11 @@ def select_confident_prematch_rows(
         "min_separation": min_separation,
         "min_probability": min_probability,
         "min_quality": min_quality,
+        "rescue_min_quality": rescue_min_quality,
+        "rescue_min_sample": rescue_min_sample,
+        "rescue_min_agreement": rescue_min_agreement,
+        "rescue_min_separation": rescue_min_separation,
+        "rescue_min_probability": rescue_min_probability,
     }
     return selected, stats
 

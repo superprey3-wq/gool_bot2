@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw
 
 from . import signal_cards as sc
+from .xbet_multisport_markets import SCOPE_FULL, SCOPE_LABEL_RU, selection_label
 
 
 BG = (5, 10, 18)
@@ -34,7 +35,7 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
     image = Image.new("RGBA", (width, height), BG + (255,))
     draw = ImageDraw.Draw(image)
 
-    score = list(row.get("score") or [0, 0])
+    score = list(row.get("match_score") or row.get("score") or [0, 0])
     home = str(row.get("home") or "?")
     away = str(row.get("away") or "?")
     league = str(row.get("league") or "LIVE")
@@ -71,9 +72,11 @@ def render_multisport_steam_card(row: dict[str, Any], signal: dict[str, Any], cf
 
     line = float(signal.get("line") or end.get("line") or row.get("line") or 0.0)
     odd = float(signal.get("odd") or end.get(direction) or row.get(direction) or 0.0)
-    market_label = ("ТБ" if direction == "over" else "ТМ") + f" {line:g}"
+    market_label = str(signal.get("selection") or row.get("selection") or selection_label(row, direction, line))
+    scope = str(row.get("scope") or signal.get("scope") or SCOPE_FULL)
+    scope_label = SCOPE_LABEL_RU.get(scope, scope)
     draw.rounded_rectangle((44, 385, 1036, 525), 24, fill=PANEL2, outline=GOLD, width=3)
-    draw.text((72, 410), "LIVE TOTAL • 1xBET", font=sc._font(16, True), fill=MUTED)
+    draw.text((72, 410), f"LIVE • {scope_label.upper()} • 1xBET", font=sc._fit(draw, f"LIVE • {scope_label.upper()} • 1xBET", 560, 16, True), fill=MUTED)
     draw.text((72, 454), market_label, font=sc._font(40, True), fill=GOLD)
     draw.text((680, 410), "КОЭФФИЦИЕНТ", font=sc._font(16, True), fill=MUTED)
     draw.text((680, 452), f"{odd:.2f}", font=sc._font(42, True), fill=TEXT)
@@ -115,7 +118,9 @@ def render_multisport_prematch_card(row: dict[str, Any], signal: dict[str, Any],
     direction = str(signal.get("direction") or "over")
     line = float(signal.get("line") or row.get("line") or 0.0)
     odd = float(signal.get("odd") or row.get(direction) or 0.0)
-    market_label = ("ТБ" if direction == "over" else "ТМ") + f" {line:g}"
+    market_label = str(signal.get("selection") or row.get("selection") or selection_label(row, direction, line))
+    scope = str(row.get("scope") or signal.get("scope") or SCOPE_FULL)
+    scope_label = SCOPE_LABEL_RU.get(scope, scope)
     strength_score = float(signal.get("strength") or 0.0)
     start_row = dict(signal.get("start") or {})
     opening_line = float(start_row.get("line") or row.get("opening_line") or line)
@@ -141,7 +146,7 @@ def render_multisport_prematch_card(row: dict[str, Any], signal: dict[str, Any],
     draw.text((738, 257), kickoff, font=sc._fit(draw, kickoff, 225, 20, True), fill=GOLD)
 
     draw.rounded_rectangle((44, 385, 1036, 525), 24, fill=PANEL2, outline=GOLD, width=3)
-    draw.text((72, 410), "PREMATCH TOTAL • 1xBET", font=sc._font(16, True), fill=MUTED)
+    draw.text((72, 410), f"PREMATCH • {scope_label.upper()} • 1xBET", font=sc._fit(draw, f"PREMATCH • {scope_label.upper()} • 1xBET", 560, 16, True), fill=MUTED)
     draw.text((72, 454), market_label, font=sc._font(40, True), fill=GOLD)
     draw.text((680, 410), "КОЭФФИЦИЕНТ", font=sc._font(16, True), fill=MUTED)
     draw.text((680, 452), f"{odd:.2f}", font=sc._font(42, True), fill=TEXT)
@@ -189,7 +194,7 @@ def render_multisport_result_card(row: dict[str, Any], cfg: Any) -> bytes:
     draw.text((500, 225), f"{int(score[0])} : {int(score[1])}", font=sc._font(62, True), fill=TEXT)
     draw.rounded_rectangle((44, 425, 1036, 590), 24, fill=PANEL, outline=LINE, width=2)
     direction = str(row.get("direction") or "over")
-    market_label = ("ТБ" if direction == "over" else "ТМ") + f" {float(row.get('line') or 0):g}"
+    market_label = str(row.get("selection") or selection_label(row, direction, float(row.get("line") or 0)))
     draw.text((72, 452), f"{market_label}  @  {float(row.get('odd') or 0):.2f}", font=sc._font(36, True), fill=GOLD)
     profit = float(row.get("profit_units") or 0.0)
     draw.text((72, 520), f"P/L {profit:+.2f}u", font=sc._font(28, True), fill=accent)

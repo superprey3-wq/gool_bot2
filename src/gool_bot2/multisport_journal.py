@@ -19,8 +19,15 @@ def normalize_entry(row: dict[str, Any]) -> dict[str, Any]:
     out["phase"] = phase
     out.setdefault("signal_type", "prematch_total_movement" if phase == "PREMATCH" else "live_total_movement")
     out.setdefault("market_family", "match_total")
+    out.setdefault("scope", "FULL_MATCH")
+    sport = str(out.get("sport") or "")
+    out.setdefault("card_profile", f"{sport}_{phase.lower()}" if sport else phase.lower())
+    out.setdefault("phase_policy", "prematch_all_scheduled_scopes" if phase == "PREMATCH" else "live_phase_routed")
     direction = str(out.get("direction") or "over").lower()
-    out["direction"] = "under" if direction == "under" else "over"
+    if str(out.get("market_family") or "") in {"handicap", "moneyline"}:
+        out["direction"] = direction if direction in {"home", "away", "draw"} else str(out.get("selection_side") or direction)
+    else:
+        out["direction"] = "under" if direction == "under" else "over"
     if not out.get("selection"):
         prefix = "ТМ" if out["direction"] == "under" else "ТБ"
         try:
@@ -53,12 +60,13 @@ def save_journal(path: Path, rows: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
-def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+def entry_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
     item = normalize_entry(row)
     return (
         str(item.get("sport") or ""),
         str(item.get("phase") or ""),
         str(item.get("event_id") or ""),
+        str(item.get("scope") or "FULL_MATCH"),
         str(item.get("market_family") or ""),
     )
 
@@ -111,6 +119,7 @@ def grouped_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
             for sport in ("hockey", "basketball")
         },
         "markets": dict(Counter(str(row.get("market_family") or "unknown") for row in normalized)),
+        "scopes": dict(Counter(str(row.get("scope") or "FULL_MATCH") for row in normalized)),
     }
 
 

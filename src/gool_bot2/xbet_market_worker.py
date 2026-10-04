@@ -123,7 +123,8 @@ class ScoreEpochMultiSportSteamWorker(MultiSportSteamWorker):
     """
 
     def _append_history(self, row: dict[str, Any]) -> tuple[list[dict[str, Any]], float | None]:
-        key = f"{row['sport']}:{row['event_id']}"
+        lane = str(row.get("lane_key") or "FULL_MATCH:match_total")
+        key = f"{row['sport']}:{row['event_id']}:{lane}"
         score = (int(row["score"][0]), int(row["score"][1]))
         previous_score = self._last_score.get(key)
         if (

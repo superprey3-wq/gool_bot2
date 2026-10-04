@@ -49,3 +49,15 @@ def test_grouped_stats_keep_prematch_and_live_separate(tmp_path: Path):
     assert value["by_sport"]["hockey"]["by_phase"]["PREMATCH"]["won"] == 1
     assert value["by_sport"]["hockey"]["by_phase"]["LIVE"]["lost"] == 1
     assert round(value["all"]["profit_units"], 2) == -0.2
+
+
+
+def test_same_event_same_phase_can_store_different_period_scopes(tmp_path: Path):
+    path = tmp_path / "journal.json"
+    base = {
+        "sport": "hockey", "phase": "PREMATCH", "event_id": "77",
+        "market_family": "match_total", "direction": "over", "line": 1.5, "odd": 1.8,
+    }
+    assert append_unique(path, {**base, "scope": "PERIOD_1", "selection": "1-й период: ТБ 1.5"})
+    assert append_unique(path, {**base, "scope": "PERIOD_2", "selection": "2-й период: ТБ 1.5"})
+    assert len(load_journal(path)) == 2

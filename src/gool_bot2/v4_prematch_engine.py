@@ -189,8 +189,9 @@ def choose_delivery(
     used = set()
     for acc in doubles:
         legs = acc["legs"]
-        if any(p.model_probability < .69 or p.data_quality < .75 or p.edge < .060 for p in legs):
-            continue
+        # build_accumulators has already applied calibrated qualified_pick
+        # (odds, p, edge, EV and quality after market shrinkage) and combined
+        # probability/odds gates. Do not apply a second leg-quality wall here.
         if any(p.event_id in used for p in legs):
             continue
         strong.append(acc)

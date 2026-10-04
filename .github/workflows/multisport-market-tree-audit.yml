@@ -1,0 +1,36 @@
+name: Multisport raw market tree audit
+
+on:
+  pull_request:
+    paths:
+      - "scripts/gool_multisport_market_tree_audit.py"
+      - ".github/workflows/multisport-market-tree-audit.yml"
+      - "src/gool_bot2/xbet_multisport_*.py"
+  workflow_dispatch:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+      - name: Probe real 1xBet market trees
+        run: python scripts/gool_multisport_market_tree_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multisport-market-tree
+          path: artifacts/multisport_market_tree/
+          retention-days: 7

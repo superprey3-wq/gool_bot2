@@ -54,9 +54,9 @@ def render_basketball_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
 
     vals=[
         ("СИЛА",f"{float(signal.get('strength') or 0):.0f}/100"),
-        ("СДВИГ",f"{float(signal.get('line_delta') or 0):+.1f}"),
-        ("ΔP",f"{float(signal.get('probability_delta_pp') or 0):+.1f} п.п."),
-        ("ИМПУЛЬСЫ",f"{int(signal.get('moves') or 0)}x"),
+        ("ПРОГНОЗ",f"{float(signal.get('projected_total') or signal.get('line') or 0):.1f}"),
+        ("STAT EDGE",f"{float(signal.get('stat_edge') or 0):+.1f}"),
+        ("ТЕМП/МИН",f"{float(signal.get('recent_rate_per_min') or 0):.1f}"),
     ]
     for i,(t,v) in enumerate(vals):
         x=42+i*249
@@ -65,7 +65,7 @@ def render_basketball_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
         d.text((x+16,630),v,font=sc._fit(d,v,195,25,True),fill=ORANGE if i!=2 else GOLD)
     d.rounded_rectangle((42,720,1038,826),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,742),"LIVE POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,777),"Матч + ИТ команд + текущая четверть и её половина",font=sc._fit(d,"Матч + ИТ команд + текущая четверть и её половина",900,22,True),fill=GREEN)
+    d.text((68,777),"Только ТБ/ТМ текущей четверти • Brain = статистика сегмента",font=sc._fit(d,"Матч + ИТ команд + текущая четверть и её половина",900,22,True),fill=GREEN)
     d.rounded_rectangle((300,850,780,900),15,fill=COURT)
     sc._center(d,"BASKET LIVE • СИГНАЛ",860,sc._font(20,True),BG)
     return sc._save(im)
@@ -106,7 +106,7 @@ def render_basketball_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:A
     d.text((68,628),move,font=sc._fit(d,move,920,28,True),fill=ORANGE)
     d.rounded_rectangle((42,720,1038,810),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,740),"PREMATCH POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,773),"Матч + ИТ + обе половины + тоталы всех 4 четвертей",font=sc._fit(d,"Матч + ИТ + обе половины + тоталы всех 4 четвертей",900,22,True),fill=GREEN)
+    d.text((68,773),"Все PREMATCH рынки: тоталы/ИТ/форы/исходы + половины/четверти",font=sc._fit(d,"Матч + ИТ + обе половины + тоталы всех 4 четвертей",900,22,True),fill=GREEN)
     d.rounded_rectangle((280,830,800,880),15,fill=COURT)
     sc._center(d,"BASKET PREMATCH • СИГНАЛ",840,sc._font(20,True),BG)
     return sc._save(im)

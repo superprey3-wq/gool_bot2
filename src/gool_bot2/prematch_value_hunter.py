@@ -32,13 +32,25 @@ def _i(name: str, default: int) -> int:
         return int(default)
 
 
-def _dynamic_gates(odds: float) -> tuple[float, float]:
-    """Higher prices need stronger evidence, not merely a higher payout."""
+def _dynamic_gates(odds: float) -> tuple[float, float, float]:
+    """Higher prices need stronger edge, EV and evidence quality."""
     if odds >= 4.0:
-        return max(.10, _f("GOOL_VALUE_HUNTER_EDGE_4PLUS", .10)), max(.25, _f("GOOL_VALUE_HUNTER_EV_4PLUS", .25))
+        return (
+            max(.10, _f("GOOL_VALUE_HUNTER_EDGE_4PLUS", .10)),
+            max(.25, _f("GOOL_VALUE_HUNTER_EV_4PLUS", .25)),
+            max(.68, _f("GOOL_VALUE_HUNTER_QUALITY_4PLUS", .68)),
+        )
     if odds >= 3.0:
-        return max(.09, _f("GOOL_VALUE_HUNTER_EDGE_3PLUS", .09)), max(.18, _f("GOOL_VALUE_HUNTER_EV_3PLUS", .18))
-    return max(.08, _f("GOOL_VALUE_HUNTER_EDGE", .08)), max(.15, _f("GOOL_VALUE_HUNTER_EV", .15))
+        return (
+            max(.09, _f("GOOL_VALUE_HUNTER_EDGE_3PLUS", .09)),
+            max(.18, _f("GOOL_VALUE_HUNTER_EV_3PLUS", .18)),
+            max(.65, _f("GOOL_VALUE_HUNTER_QUALITY_3PLUS", .65)),
+        )
+    return (
+        max(.08, _f("GOOL_VALUE_HUNTER_EDGE", .08)),
+        max(.15, _f("GOOL_VALUE_HUNTER_EV", .15)),
+        max(.62, _f("GOOL_VALUE_HUNTER_MIN_QUALITY", .62)),
+    )
 
 
 def analysis_value_rows(
@@ -103,10 +115,9 @@ def qualify_value_pick(pick: PrematchPick, meta: dict[str, Any]) -> tuple[bool, 
     odds = float(pick.odds)
     min_odds = _f("GOOL_VALUE_HUNTER_MIN_ODDS", 2.20)
     max_odds = _f("GOOL_VALUE_HUNTER_MAX_ODDS", 6.00)
-    min_quality = _f("GOOL_VALUE_HUNTER_MIN_QUALITY", .70)
     min_probability = _f("GOOL_VALUE_HUNTER_MIN_PROBABILITY", .24)
     min_profile_sample = _i("GOOL_VALUE_HUNTER_MIN_PROFILE_SAMPLE", 8)
-    edge_gate, ev_gate = _dynamic_gates(odds)
+    edge_gate, ev_gate, quality_gate = _dynamic_gates(odds)
 
     low = meta.get("probability_low")
     try:
@@ -124,7 +135,7 @@ def qualify_value_pick(pick: PrematchPick, meta: dict[str, Any]) -> tuple[bool, 
     robust_edge = None if low is None else low - float(pick.market_probability)
     reasons: list[str] = []
     if not (min_odds <= odds <= max_odds): reasons.append("odds")
-    if pick.data_quality < min_quality: reasons.append("quality")
+    if pick.data_quality < quality_gate: reasons.append("quality")
     if pick.model_probability < min_probability: reasons.append("probability")
     if int(meta.get("profile_sample") or 0) < min_profile_sample: reasons.append("profile_sample")
     if pick.edge < edge_gate: reasons.append("edge")
@@ -153,6 +164,7 @@ def qualify_value_pick(pick: PrematchPick, meta: dict[str, Any]) -> tuple[bool, 
         "value_score": round(value_score, 2),
         "edge_gate": edge_gate,
         "ev_gate": ev_gate,
+        "quality_gate": quality_gate,
         "adjusted_probability_low": low,
         "robust_edge": robust_edge,
         "reasons": reasons,
@@ -206,4 +218,36 @@ def diagnose_value_rows(
     }
 
 
-__all__ = ["analysis_value_rows", "qualify_value_pick", "select_best_value_pick", "diagnose_value_rows"]
+def select_value_scan_rows(rows: Iterable[dict[str, Any]], *, max_rows: int | None = None) -> list[dict[str, Any]]:
+    """Choose a bounded VALUE-only scan pool before the ordinary shortlist.
+
+    This deliberately does not require the normal PREMATCH agreement/probability
+    gates: the market price itself is part of VALUE discovery. It does require
+    enough history and the minimum evidence quality that could pass the lowest
+    VALUE odds tier.
+    """
+    cap = max(1, int(max_rows if max_rows is not None else _i("GOOL_VALUE_HUNTER_SCAN_MAX", 40)))
+    min_sample = max(1, _i("GOOL_VALUE_HUNTER_MIN_PROFILE_SAMPLE", 8))
+    min_quality = max(0.0, min(1.0, _f("GOOL_VALUE_HUNTER_MIN_QUALITY", .62)))
+    pool = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("primary_trend"):
+            continue
+        if int(row.get("sample") or 0) < min_sample:
+            continue
+        if float(row.get("quality") or 0.0) < min_quality:
+            continue
+        pool.append(row)
+    pool.sort(
+        key=lambda row: (
+            float(row.get("quality") or 0.0),
+            float((row.get("primary_trend") or {}).get("rank_score") or 0.0),
+            float(row.get("brain_score") or 0.0),
+            int(row.get("sample") or 0),
+        ),
+        reverse=True,
+    )
+    return pool[:cap]
+
+
+__all__ = ["analysis_value_rows", "qualify_value_pick", "select_best_value_pick", "diagnose_value_rows", "select_value_scan_rows"]

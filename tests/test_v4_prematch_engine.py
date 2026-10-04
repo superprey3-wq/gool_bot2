@@ -168,3 +168,14 @@ def test_delivery_doubles_require_six_point_edge_after_market_blend():
     ]
     delivery = choose_delivery(low, max_singles=0, max_doubles=3)
     assert delivery["doubles"] == []
+
+
+
+def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
+    picks = [
+        PrematchPick("r1", "A", "B", "match_total", "over 1.5", 1.55, .82, .68, .70),
+        PrematchPick("r2", "C", "D", "match_total", "over 1.5", 1.58, .81, .67, .70),
+    ]
+    delivery = choose_delivery(picks, max_singles=0, max_doubles=1)
+    assert len(delivery["doubles"]) == 1
+    assert all(leg.data_quality == .70 for leg in delivery["doubles"][0]["legs"])

@@ -294,7 +294,7 @@ def detect_prematch_steam(
     *,
     now: float,
 ) -> dict[str, Any] | None:
-    window = max(5 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_WINDOW_SECONDS", 60 * 60.0))
+    window = max(5 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_WINDOW_SECONDS", 6 * 60 * 60.0))
     eligible = [row for row in rows if now - float(row.get("ts") or 0.0) <= window]
     if len(eligible) < 3:
         return None
@@ -847,7 +847,7 @@ class MultiSportSteamWorker:
         start_ts = float(fs.get("start_ts") or 0.0)
         if start_ts <= now:
             return None, "prematch_started"
-        horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 6 * 60 * 60.0))
+        horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 30 * 60 * 60.0))
         if start_ts - now > horizon:
             return None, "prematch_outside_horizon"
 
@@ -1174,7 +1174,7 @@ class MultiSportSteamWorker:
         if not _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
             return {"enabled": False, "matches": []}
         now = time.time()
-        horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 6 * 60 * 60.0))
+        horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 30 * 60 * 60.0))
         fs_upcoming = [
             row for row in fs_today
             if str(row.get("coarse_status") or "") == "1"
@@ -1182,7 +1182,7 @@ class MultiSportSteamWorker:
             and float(row.get("start_ts") or 0.0) - now <= horizon
         ]
         xbet_prematch = self._xbet_prematch_index(cfg)
-        mapped = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)[:max(1, _int_env("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", 80))]
+        mapped = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)[:max(1, _int_env("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", 160))]
         decoded = failed = detected = delivered = 0
         latest: list[dict[str, Any]] = []
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_GAME_WORKERS", 6)))

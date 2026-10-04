@@ -27,6 +27,7 @@ from .xbet_multisport_markets import (
     balanced_total as sport_balanced_total,
     decode_core_markets,
     lane_key,
+    lane_phase_policy,
     lane_score,
     market_lanes,
     period_scores,
@@ -1126,6 +1127,8 @@ class MultiSportSteamWorker:
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
             "signal_type": f"{phase.lower()}_{family}_movement",
             "market_family": family,
+            "phase_policy": str(row.get("phase_policy") or ""),
+            "card_profile": f"{cfg.key}_{phase.lower()}",
             "scope": scope,
             "lane_key": str(row.get("lane_key") or f"{scope}:{family}"),
             "selection": pick_label,
@@ -1183,7 +1186,7 @@ class MultiSportSteamWorker:
         ]
         xbet_prematch = self._xbet_prematch_index(cfg)
         mapped = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)[:max(1, _int_env("GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT", 160))]
-        decoded = failed = detected = delivered = 0
+        decoded = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_GAME_WORKERS", 6)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1200,7 +1203,11 @@ class MultiSportSteamWorker:
                 decoded += 1
                 signals: list[dict[str, Any]] = []
                 for lane in row.get("market_lanes") or []:
-                    lane_row = self._lane_row(row, lane)
+                    allowed, policy_reason = lane_phase_policy(cfg.key, "PREMATCH", lane, row.get("period"))
+                    if not allowed:
+                        policy_blocked += 1
+                        continue
+                    lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
                     signal = detect_prematch_steam(history, cfg, now=float(lane_row["ts"]))
                     if signal is None:
@@ -1230,6 +1237,7 @@ class MultiSportSteamWorker:
             "prematch_market_decode_failed": failed,
             "prematch_detected": detected,
             "prematch_delivered": delivered,
+            "prematch_policy_blocked": policy_blocked,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
             "matches": sorted(latest, key=lambda row: float(row.get("start_ts") or 0.0))[:80],
         }
@@ -1243,7 +1251,7 @@ class MultiSportSteamWorker:
         xbet_live = self._xbet_index(cfg)
         mapped = map_xbet_to_flashscore(xbet_live, fs_live)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
 
-        decoded = mismatch = failed = detected = delivered = 0
+        decoded = mismatch = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -1265,7 +1273,11 @@ class MultiSportSteamWorker:
                 decoded += 1
                 signals: list[dict[str, Any]] = []
                 for lane in row.get("market_lanes") or []:
-                    lane_row = self._lane_row(row, lane)
+                    allowed, policy_reason = lane_phase_policy(cfg.key, "LIVE", lane, row.get("period"))
+                    if not allowed:
+                        policy_blocked += 1
+                        continue
+                    lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history, score_changed_at = self._append_history(lane_row, cfg)
                     signal = detect_steam(history, cfg, now=float(lane_row["ts"]), score_changed_at=score_changed_at)
                     if signal is None:
@@ -1299,6 +1311,7 @@ class MultiSportSteamWorker:
             "prematch_decoded": int(prematch.get("prematch_decoded") or 0),
             "prematch_detected": int(prematch.get("prematch_detected") or 0),
             "prematch_delivered": int(prematch.get("prematch_delivered") or 0),
+            "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),
             "prematch_matches": list(prematch.get("matches") or []),
             "flashscore_live": len(fs_live),
             "xbet_live": len(xbet_live),
@@ -1308,6 +1321,7 @@ class MultiSportSteamWorker:
             "market_decode_failed": failed,
             "detected": detected,
             "delivered": delivered,
+            "policy_blocked": policy_blocked,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],

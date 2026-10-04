@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 SPORT_META = {
@@ -108,7 +109,11 @@ def sport_overview_text(sport: str) -> str:
         for row in prematch_matches[:6]:
             start_ts = float(row.get("start_ts") or 0.0)
             import datetime as _dt
-            start_label = _dt.datetime.fromtimestamp(start_ts, _dt.timezone.utc).strftime("%d.%m %H:%M UTC") if start_ts else "время ?"
+            try:
+                _tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+            except Exception:
+                _tz = _dt.timezone.utc
+            start_label = _dt.datetime.fromtimestamp(start_ts, _tz).strftime("%d.%m %H:%M МСК") if start_ts else "время ?"
             line = float(row.get("line") or 0.0)
             over = float(row.get("over") or 0.0)
             under = float(row.get("under") or 0.0)

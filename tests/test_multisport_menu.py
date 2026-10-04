@@ -365,3 +365,44 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Ф2 +4.5 @ 1.55" in text
     assert "100/100 · PREMATCH" in text
     assert "может проиграть максимум в 4" in text
+
+
+def test_started_pending_multisport_pick_stays_in_game_when_flashscore_lookup_is_empty(tmp_path: Path, monkeypatch):
+    import time as _time
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: [])
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-PIRATAS",
+        "home": "Piratas de Bogota",
+        "away": "Caimanes del Llano",
+        "selection": "Ф2 +4.5",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "line": 4.5,
+        "odd": 1.55,
+        "strength": 100,
+        "scope": "FULL_MATCH",
+        "scheduled_start_ts": _time.time() - 3600,
+    }])
+
+    text = "\n".join(menu.multisport_in_game_sections())
+    assert "Piratas de Bogota — Caimanes del Llano" in text
+    assert "матч после времени старта" in text
+    assert "Ф2 +4.5 @ 1.55" in text
+    assert "может проиграть максимум в 4" in text

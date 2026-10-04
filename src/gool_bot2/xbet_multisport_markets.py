@@ -293,6 +293,90 @@ def market_lanes(decoded_by_scope: dict[str, dict[str, Any]]) -> list[dict[str, 
     return lanes
 
 
+
+def _fair_two_way(a: float, b: float) -> tuple[float, float]:
+    ia, ib = 1.0 / float(a), 1.0 / float(b)
+    total = ia + ib
+    return ia / total, ib / total
+
+
+def _fair_many(values: dict[str, float]) -> dict[str, float]:
+    inv = {key: 1.0 / float(value) for key, value in values.items() if float(value) > 1.001}
+    total = sum(inv.values())
+    return {key: value / total for key, value in inv.items()} if total > 0 else {}
+
+
+def prematch_market_lanes(decoded_by_scope: dict[str, dict[str, Any]], sport: str) -> list[dict[str, Any]]:
+    """Flatten every safely settleable decoded PREMATCH market.
+
+    Totals keep their existing two-sided lane. Handicap and moneyline choices
+    become independent choice lanes so movement can be tracked per selection.
+    Hockey regulation 1X2 is catalogued but not auto-signalled because final
+    Flashscore score may include OT/shootout; prefer a verified two-way winner.
+    """
+    lanes = market_lanes(decoded_by_scope)
+    for scope, decoded in decoded_by_scope.items():
+        for item in decoded.get("handicap") or []:
+            try:
+                home_odd = float(item["home"])
+                away_odd = float(item["away"])
+                home_line = float(item["home_line"])
+                away_line = float(item["away_line"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            ph, pa = _fair_two_way(home_odd, away_odd)
+            lanes.extend([
+                {
+                    "scope": scope, "market_family": "handicap", "choice_key": "home",
+                    "selection_side": "home", "line": home_line, "odd": home_odd,
+                    "probability": ph, "metric": ph * 100.0,
+                    "selection": f"Ф1 {home_line:+g}",
+                },
+                {
+                    "scope": scope, "market_family": "handicap", "choice_key": "away",
+                    "selection_side": "away", "line": away_line, "odd": away_odd,
+                    "probability": pa, "metric": pa * 100.0,
+                    "selection": f"Ф2 {away_line:+g}",
+                },
+            ])
+
+        moneyline = dict(decoded.get("moneyline") or {})
+        variants = [v for v in (moneyline.get("variants") or []) if isinstance(v, dict)]
+        chosen: dict[str, Any] | None = None
+        if str(sport).casefold() == "hockey":
+            chosen = next((v for v in variants if str(v.get("kind") or "") == "moneyline_2way"), None)
+        else:
+            chosen = next((v for v in variants if str(v.get("kind") or "") == "moneyline_2way"), None)
+            if chosen is None and str(moneyline.get("kind") or "") == "moneyline_2way":
+                chosen = moneyline
+        if not chosen:
+            continue
+        odds = {}
+        for side in ("home", "away"):
+            try:
+                value = float(chosen.get(side))
+            except (TypeError, ValueError):
+                continue
+            if value > 1.001:
+                odds[side] = value
+        if len(odds) != 2:
+            continue
+        fair = _fair_many(odds)
+        for side in ("home", "away"):
+            lanes.append({
+                "scope": scope,
+                "market_family": "moneyline",
+                "choice_key": side,
+                "selection_side": side,
+                "moneyline_kind": str(chosen.get("kind") or "moneyline_2way"),
+                "line": 0.0,
+                "odd": odds[side],
+                "probability": fair.get(side, 0.5),
+                "metric": fair.get(side, 0.5) * 100.0,
+                "selection": "П1" if side == "home" else "П2",
+            })
+    return lanes
+
 def period_scores(game: dict[str, Any], sport: str) -> dict[str, tuple[int, int]]:
     sc = game.get("SC") or {}
     result: dict[str, tuple[int, int]] = {}
@@ -352,7 +436,9 @@ SCOPE_LABEL_RU = {
 
 
 def lane_key(lane: dict[str, Any]) -> str:
-    return f"{str(lane.get('scope') or SCOPE_FULL)}:{str(lane.get('market_family') or 'match_total')}"
+    base = f"{str(lane.get('scope') or SCOPE_FULL)}:{str(lane.get('market_family') or 'match_total')}"
+    choice = str(lane.get("choice_key") or "")
+    return f"{base}:{choice}" if choice else base
 
 
 def selection_label(lane: dict[str, Any], direction: str, line: float | None = None) -> str:

@@ -1414,6 +1414,10 @@ class MultiSportSteamWorker:
         count = max(100, _int_env("GOOL_MULTISPORT_PREMATCH_INDEX_COUNT", 1000))
         base = {"sports": cfg.sport_id, "count": count, "lng": "en", "cfview": 2, "mode": 4}
         return [
+            # GitHub-verified 1xBet Basketball/Hockey prematch discovery.
+            urllib.parse.urlencode({**base, "country": 71, "gr": 70, "tf": 2200000, "tz": 5, "getEmpty": "true"}),
+            urllib.parse.urlencode({**base, "country": 71, "gr": 70, "getEmpty": "true"}),
+            # Existing fallbacks.
             urllib.parse.urlencode({**base, "country": 1, "getEmpty": "true"}),
             urllib.parse.urlencode({**base, "country": 19, "getEmpty": "true"}),
             urllib.parse.urlencode({**base, "country": 1, "tf": 2200000, "tz": 0, "getEmpty": "true"}),

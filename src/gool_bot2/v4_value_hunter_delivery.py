@@ -216,7 +216,16 @@ def value_hunter_report_text(journal_path: Path) -> str:
         "asian_quarter_line": "азиатская четвертная линия",
     }
 
+    running = bool(status.get("running"))
+    prematch_stage = str(status.get("stage") or "—")
+    hunter_stage = str(status.get("value_hunter_stage") or "not_recorded")
     scan_lines = [
+        "<b>Состояние</b>",
+        f"PREMATCH: <b>{'RUNNING' if running else 'IDLE'}</b> · этап <b>{prematch_stage}</b>",
+        f"VALUE HUNTER: <b>{hunter_stage}</b>",
+        f"старт цикла: <code>{status.get('last_cycle_started_at') or '—'}</code>",
+        f"завершение: <code>{status.get('last_cycle_finished_at') or '—'}</code>",
+        "",
         "<b>Последний скан</b>",
         f"матчей проверено: <b>{status.get('value_hunter_scanned_matches','—')}</b>",
         f"смоделировано рынков: <b>{status.get('value_hunter_modeled_markets','—')}</b>",

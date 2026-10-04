@@ -22,6 +22,18 @@ from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .xbet_multisport_card import render_multisport_prematch_card, render_multisport_steam_card
+from .xbet_multisport_markets import (
+    SCOPE_FULL,
+    balanced_total as sport_balanced_total,
+    decode_core_markets,
+    lane_key,
+    lane_score,
+    market_lanes,
+    period_scores,
+    raw_catalog,
+    scope_from_subgame,
+    selection_label,
+)
 
 
 @dataclass(frozen=True)
@@ -429,6 +441,10 @@ class MultiSportSteamWorker:
         self._prematch_roots: dict[str, str] = {key: PREMATCH_ROOTS[0] for key in SPORTS}
         self._index_diag: dict[str, dict[str, Any]] = {}
         self._prematch_index_diag: dict[str, dict[str, Any]] = {}
+        self._last_index: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+        self._last_prematch_index: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+        self._subgame_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._scope_scores: dict[str, dict[str, tuple[int, int]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
         self._restore_history()
 

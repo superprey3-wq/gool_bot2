@@ -1985,6 +1985,7 @@ class MultiSportSteamWorker:
             "projected_total": None,
             "live_game_stats": stats_payload,
             "history_points": len(recent),
+            "recent_window_seconds": round(age, 1),
             "recent_score_rate": round(recent_score_rate, 3),
             "recent_shot_rate": round(recent_shot_rate, 3),
             "direction_hint": direction_hint,

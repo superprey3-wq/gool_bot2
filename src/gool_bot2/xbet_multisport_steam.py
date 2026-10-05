@@ -1150,7 +1150,7 @@ def price_flashscore_live_candidate(
             return None
     min_edge = _float_env(
         f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
-        0.35 if cfg.key == "hockey" else 2.5,
+        0.65 if cfg.key == "hockey" else 2.5,
     )
     if stat_edge < min_edge:
         return None
@@ -3590,6 +3590,30 @@ class MultiSportSteamWorker:
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)
         family = str(row.get("market_family") or "match_total")
+
+        if cfg.key == "hockey" and phase == "LIVE":
+            # Until the hockey model proves stable, never chase the same game
+            # across multiple periods. One LIVE bet per hockey match is the
+            # production default; it can be relaxed explicitly later.
+            wanted_identity = str(row.get("flashscore_event_id") or event_id or "")
+            max_per_match = max(1, _int_env("GOOL_HOCKEY_LIVE_MAX_BETS_PER_MATCH", 1))
+            prior_live = 0
+            for previous in load_journal(self.journal_path):
+                previous_phase = str(previous.get("phase") or "").upper()
+                previous_identity = str(previous.get("flashscore_event_id") or previous.get("event_id") or "")
+                if (
+                    str(previous.get("sport") or "") == "hockey"
+                    and previous_phase == "LIVE"
+                    and previous_identity == wanted_identity
+                ):
+                    prior_live += 1
+            if prior_live >= max_per_match:
+                print(
+                    f"GOOL_HOCKEY_LIVE_MATCH_CAP match={row.get('home')}--{row.get('away')} "
+                    f"prior={prior_live} cap={max_per_match}",
+                    flush=True,
+                )
+                return False, 0
         if self._already_seen(
             cfg.key,
             event_id,

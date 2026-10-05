@@ -577,6 +577,16 @@ def _infer_flashscore_scope(
             segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
             minute_idx = max(1, min(4, (minute - 1) // segment_minutes + 1))
 
+            # Flashscore AC is not consistently a whole-match minute during
+            # quarter breaks. In that state it can jump far enough to look like
+            # Q4 even though only Q1+Q2 score parts exist. Never allow a raw AC
+            # value to skip over an unobserved basketball quarter. During live
+            # play the current quarter is already present in score_parts, so
+            # this clamp leaves normal Q2/Q3/Q4 detection unchanged.
+            if parts:
+                next_possible_quarter = min(4, len(parts) + 1)
+                minute_idx = min(minute_idx, next_possible_quarter)
+
     idx = max(parts_idx, minute_idx or 1)
     guessed = f"{prefix}{idx}"
     available = [str(value) for value in (section_keys or []) if str(value).startswith(prefix)]

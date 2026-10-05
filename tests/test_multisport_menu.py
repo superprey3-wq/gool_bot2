@@ -882,7 +882,9 @@ def test_in_game_groups_live_and_prematch_bets_under_one_match(tmp_path: Path, m
     text = "\n".join(menu.multisport_in_game_sections())
 
     assert text.count("Kristall Saratov — Metallurg Novokuznetsk") == 1
-    assert "🔴 LIVE · 🎯 <b>1-й период: ТБ 1 @ 1.78</b> · R67" in text
-    assert "🟡 PREMATCH · 🎯 <b>Ф1 +1.5 @ 1.61</b> · R100" in text
+    assert "🎯 <b>1-й период: ТБ 1 @ 1.78</b>" in text
+    assert "🧠 67/100 · 🔴 LIVE" in text
+    assert "🎯 <b>Ф1 +1.5 @ 1.61</b>" in text
+    assert "🧠 100/100 · 🟡 PREMATCH" in text
     assert "Матчей: <b>1</b> · ставок: <b>2</b>" in text
 

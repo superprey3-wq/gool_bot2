@@ -1733,10 +1733,12 @@ class MultiSportSteamWorker:
         pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
         borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+        if not stats_payload.get("current_segment_available"):
+            state = "WAIT"
         if cfg.key == "basketball" and str(fs.get("status_code") or "") == "38":
             state = "WAIT"
             reason = "перерыв между половинами — LIVE ставку не открываем"
-        if remaining > 0 and remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
+        if elapsed > 0 and remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
             state = "WAIT"
             reason = "сегмент почти закончился — новую LIVE ставку не открываем"
         return {

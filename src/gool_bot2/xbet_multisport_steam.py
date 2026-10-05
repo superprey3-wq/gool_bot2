@@ -533,9 +533,25 @@ def _infer_flashscore_scope(
 
 
 def flashscore_live_period_label(fs: dict[str, Any], sport: str) -> str:
+    explicit = str(fs.get("period") or "").strip()
     cfg = SPORTS.get(str(sport or "").casefold())
     if cfg is None:
-        return str(fs.get("period") or fs.get("status_code") or "LIVE")
+        return explicit or str(fs.get("status_code") or "LIVE")
+
+    # If Flashscore/current mapped state has no usable whole-match minute, keep
+    # an already decoded provider label (2nd period / Q2 / etc.) instead of
+    # inventing PERIOD_1. With no label and no score-part evidence, say LIVE.
+    minute_idx = _segment_index_from_minute(fs, cfg)
+    score_parts = [
+        row for row in (fs.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    if minute_idx <= 0:
+        if explicit:
+            return explicit
+        if not score_parts:
+            return "LIVE"
+
     scope = _infer_flashscore_scope(fs, cfg)
     return _flashscore_period_label(scope, str(fs.get("status_code") or ""))
 

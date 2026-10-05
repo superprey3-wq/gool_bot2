@@ -1,13 +1,7 @@
-name: Basketball daily quarter scores
+name: Basketball quarter pattern audit
 
 on:
-  workflow_dispatch:
-    inputs:
-      date:
-        description: "Date in YYYY-MM-DD, blank = today in Europe/Moscow"
-        required: false
-        default: ""
-  push:
+  pull_request:
     branches:
       - main
     paths:
@@ -31,15 +25,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e '.[dev]'
 
-      - name: Collect all basketball matches and quarter scores
-        env:
-          AUDIT_DATE: ${{ github.event.inputs.date }}
+      - name: Collect 2026-10-05 basketball quarter scores
         run: |
-          ARGS=""
-          if [ -n "${AUDIT_DATE}" ]; then
-            ARGS="--date ${AUDIT_DATE}"
-          fi
-          python scripts/basketball_daily_quarters.py ${ARGS} --tz Europe/Moscow --out-dir artifacts/basketball_daily_quarters
+          python scripts/basketball_daily_quarters.py --date 2026-10-05 --tz Europe/Moscow --out-dir artifacts/basketball_daily_quarters
 
       - name: Publish report
         if: always()
@@ -51,7 +39,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: basketball-daily-quarter-scores
+          name: basketball-quarter-pattern-audit-2026-10-05
           path: artifacts/basketball_daily_quarters/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2

@@ -272,3 +272,18 @@ def test_prematch_respects_shared_minimum_odd(monkeypatch):
         "selection": "Ф2 +2.5",
     }
     assert prematch_signal(lane, _strong_features(), "NHL") is None
+
+
+def test_live_integer_line_push_reduces_displayed_confidence():
+    brain = _live_brain(recent_shot_rate=0.5)
+    brain["elapsed_seconds"] = 600.0
+    brain["segment_score_verified"] = True
+    lane = _live_lane(elapsed=600, line=1.0, market_over=0.70)
+
+    signal = live_signal(brain, lane)
+
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["push_probability"] > 0.0
+    assert signal["push_confidence_penalty"] > 0.0
+    assert signal["strength"] < 87.0

@@ -12,7 +12,11 @@ from zoneinfo import ZoneInfo
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
 from .multisport_parlay import parlay_text
 from .providers.flashscore import FlashscoreProvider
-from .xbet_multisport_steam import parse_flashscore_events
+from .xbet_multisport_steam import (
+    flashscore_live_period_label,
+    flashscore_scope_completed,
+    parse_flashscore_events,
+)
 from .providers.common import norm_team
 from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
@@ -403,6 +407,12 @@ def multisport_in_game_sections() -> list[str]:
                         break
 
             if live is not None:
+                scope = str(row.get("scope") or "FULL_MATCH")
+                # A P1/Q1 bet is no longer "in game" once Flashscore has moved
+                # to the next segment, even if the worker has not persisted the
+                # settlement during this exact menu refresh yet.
+                if scope != "FULL_MATCH" and flashscore_scope_completed(live, sport, scope):
+                    continue
                 active.append((row, live))
 
         if active:
@@ -428,7 +438,11 @@ def multisport_in_game_sections() -> list[str]:
         lines = []
         for idx, (pick, live) in enumerate(active, 1):
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or pick.get("period") or live.get("status_code") or "LIVE")
+            current_period = flashscore_live_period_label(live, sport)
+            if not current_period or current_period == "LIVE":
+                current_period = str(live.get("period") or "LIVE")
+            pick_scope = str(pick.get("scope") or "FULL_MATCH")
+            pick_scope_label = SCOPE_LABEL_RU.get(pick_scope, pick_scope)
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
             strength = float(pick.get("strength") or 0)
@@ -436,8 +450,9 @@ def multisport_in_game_sections() -> list[str]:
             phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
             lines.append(
                 f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
-                f"сейчас {period} · {score[0]}:{score[1]}\n"
+                f"сейчас <b>{current_period}</b> · {score[0]}:{score[1]}\n"
                 f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
+                f"📌 рынок ставки: {pick_scope_label}\n"
                 f"🧠 {strength:.0f}/100 · {phase_badge}\n"
                 f"↳ {needed}"
             )

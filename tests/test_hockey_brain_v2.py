@@ -203,3 +203,57 @@ def test_live_uses_bookmaker_period_score_when_flashscore_parts_are_incomplete()
     assert signal is not None
     assert signal["direction"] == "under"
     assert signal["segment_score_source"] == "1xbet_subgame_fallback"
+
+
+def test_full_quality_without_model_separation_stays_out_of_prematch_shortlist():
+    features = {
+        "home_recent_n": 10,
+        "away_recent_n": 10,
+        "home_gf_avg": 2.525,
+        "home_ga_avg": 2.525,
+        "away_gf_avg": 2.525,
+        "away_ga_avg": 2.525,
+        "home_venue_gf_avg": 2.525,
+        "home_venue_ga_avg": 2.525,
+        "away_venue_gf_avg": 2.525,
+        "away_venue_ga_avg": 2.525,
+        "recent_total_avg": 5.05,
+        "venue_total_avg": 5.05,
+        "h2h_total_avg": 5.05,
+        "home_rest_days": 1.0,
+        "away_rest_days": 1.0,
+        "rest_advantage_days": 0.0,
+    }
+    result = prematch_candidate(features, "KHL")
+    assert result["data_quality"] >= 0.99
+    assert result["state"] == "WAIT"
+
+
+def test_prematch_period_total_uses_period_lambda_not_full_match_lambda():
+    features = _strong_features()
+    lane = {
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "line": 1.5,
+        "over": 1.90,
+        "under": 1.90,
+        "probability": 0.50,
+    }
+    signal = prematch_signal(lane, features, "NHL")
+    assert signal is not None
+    assert signal["scope_goal_share"] == 0.34
+    assert signal["lambda_home"] < signal["full_match_lambda_home"]
+    assert signal["lambda_away"] < signal["full_match_lambda_away"]
+    # The old bug produced ~0.98 OVER by feeding a full-match lambda into P1.
+    assert signal["model_probability"] < 0.85
+    assert signal["strength"] <= 87.0
+
+
+def test_live_short_pressure_window_does_not_count_as_shot_confirmation():
+    brain = _live_brain(recent_shot_rate=0.0)
+    brain["elapsed_seconds"] = 600.0
+    brain["recent_window_seconds"] = 30.0
+    brain["segment_score_verified"] = True
+    lane = _live_lane(elapsed=600, line=1.5, market_over=0.70)
+
+    assert live_signal(brain, lane) is None

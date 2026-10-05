@@ -32,6 +32,7 @@ def _live_brain(*, scope="PERIOD_2", recent_shot_rate=2.6, match_score=(1, 1)):
     return {
         "scope": scope,
         "history_points": 3,
+        "recent_window_seconds": 60.0,
         "recent_shot_rate": recent_shot_rate,
         "league": "KHL",
         "live_game_stats": {

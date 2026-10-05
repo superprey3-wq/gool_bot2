@@ -1836,6 +1836,9 @@ class MultiSportSteamWorker:
         score_delta = max(0, current_total - first_total)
         recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
         recent_shot_rate = 0.0
+        recent_blocked_rate = 0.0
+        recent_penalty_delta = 0.0
+        recent_pp_goal_delta = 0.0
         projection: float | None = None
 
         if cfg.key == "hockey":
@@ -1851,6 +1854,26 @@ class MultiSportSteamWorker:
             penalty_total = sum(max(0.0, float(v)) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
             blocked = list(stats.get("blocked_shots") or [])
             blocked_total = sum(max(0.0, float(v)) for v in blocked[:2]) if len(blocked) >= 2 else 0.0
+
+            first_blocked = list(first_stats.get("blocked_shots") or [])
+            first_blocked_total = (
+                sum(max(0.0, float(v)) for v in first_blocked[:2])
+                if len(first_blocked) >= 2 else blocked_total
+            )
+            first_penalties = list(first_stats.get("penalties_2m") or first_stats.get("penalties") or [])
+            first_penalty_total = (
+                sum(max(0.0, float(v)) for v in first_penalties[:2])
+                if len(first_penalties) >= 2 else penalty_total
+            )
+            first_pp = list(first_stats.get("powerplay_goals") or first_stats.get("power_play_goals") or [])
+            first_pp_total = (
+                sum(max(0.0, float(v)) for v in first_pp[:2])
+                if len(first_pp) >= 2 else pp_total
+            )
+            if len(recent) >= 2:
+                recent_blocked_rate = max(0.0, blocked_total - first_blocked_total) * 60.0 / age
+                recent_penalty_delta = max(0.0, penalty_total - first_penalty_total)
+                recent_pp_goal_delta = max(0.0, pp_total - first_pp_total)
 
             if elapsed >= 45.0:
                 overall_shot_rate = shot_total * 60.0 / max(1.0, elapsed)
@@ -1990,6 +2013,9 @@ class MultiSportSteamWorker:
             "recent_window_seconds": round(age, 1),
             "recent_score_rate": round(recent_score_rate, 3),
             "recent_shot_rate": round(recent_shot_rate, 3),
+            "recent_blocked_rate": round(recent_blocked_rate, 3),
+            "recent_penalty_delta": round(recent_penalty_delta, 3),
+            "recent_pp_goal_delta": round(recent_pp_goal_delta, 3),
             "direction_hint": direction_hint,
             "prematch_match_lambda": (
                 round(float(prematch_match_lambda), 4)
@@ -3659,6 +3685,10 @@ class MultiSportSteamWorker:
             "remaining_seconds": signal.get("remaining_seconds"),
             "overall_rate_per_min": signal.get("overall_rate_per_min"),
             "recent_rate_per_min": signal.get("recent_rate_per_min"),
+            "recent_blocked_rate_per_min": signal.get("recent_blocked_rate_per_min"),
+            "recent_window_seconds": signal.get("recent_window_seconds"),
+            "recent_penalty_delta": signal.get("recent_penalty_delta"),
+            "recent_pp_goal_delta": signal.get("recent_pp_goal_delta"),
             "market_confirmed": signal.get("market_confirmed"),
             "live_game_stats": row.get("live_game_stats") or {},
             "hockey_pressure": signal.get("hockey_pressure") or {},

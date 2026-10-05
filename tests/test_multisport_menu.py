@@ -734,9 +734,9 @@ def test_in_game_normalizes_raw_flashscore_minute_to_real_hockey_period(tmp_path
 
     text = "\n".join(menu.multisport_in_game_sections())
 
-    assert "сейчас <b>2-й период</b> · 0:1" in text
+    assert "сейчас 2-й период · 0:1" in text
     assert "сейчас 27" not in text
-    assert "сейчас <b>3-й период</b>" not in text
+    assert "сейчас 3-й период" not in text
     assert "📌 рынок ставки: Матч" in text
 
 

@@ -946,14 +946,31 @@ def _priced_segment_projection(
         raw_pace_total = current * duration / max(1.0, elapsed)
         projection = prior * (1.0 - observed_weight) + raw_pace_total * observed_weight
     else:
-        stats = dict((lane.get("live_game_stats") or brain.get("live_game_stats") or {}).get("segment_stats") or {})
+        stats_payload = dict(lane.get("live_game_stats") or brain.get("live_game_stats") or {})
+        stats = dict(stats_payload.get("segment_stats") or {})
+        stats_mode = str(stats_payload.get("stats_mode") or "")
         shots = list(stats.get("shots_on_goal") or stats.get("shots") or [])
         shot_total = (
             max(0.0, float(shots[0])) + max(0.0, float(shots[1]))
             if len(shots) >= 2 else 0.0
         )
         raw_goal_total = current * duration / max(1.0, elapsed)
-        if shot_total > 0:
+        if stats_mode == "cumulative_through_current_segment":
+            # Cumulative P1+P2(+P3) shots are excellent candidate evidence but
+            # must not be treated as if every shot happened in the current
+            # period. For pricing, use only the fresh shot-rate delta already
+            # measured by the Flashscore Brain across recent snapshots.
+            try:
+                recent_shot_rate = max(0.0, float(brain.get("recent_shot_rate") or 0.0))
+            except (TypeError, ValueError):
+                recent_shot_rate = 0.0
+            if recent_shot_rate > 0:
+                projected_remaining_shots = recent_shot_rate * remaining / 60.0
+                shot_projection = current + projected_remaining_shots * _float_env("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08)
+                observed_total = raw_goal_total * 0.55 + shot_projection * 0.45
+            else:
+                observed_total = raw_goal_total
+        elif shot_total > 0:
             projected_shots = shot_total * duration / max(1.0, elapsed)
             shot_goal_total = projected_shots * _float_env("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08)
             observed_total = raw_goal_total * 0.45 + shot_goal_total * 0.55
@@ -1606,10 +1623,22 @@ class MultiSportSteamWorker:
             requested_scope = _infer_flashscore_scope(fs, cfg, list(sections))
         scope = requested_scope
         selected = dict(sections.get(scope) or {})
-        if not selected:
-            selected = dict(sections.get("FULL_MATCH") or {})
-            scope = "FULL_MATCH" if selected else requested_scope
-        stats = dict(selected.get("stats") or {})
+        selected_stats = dict(selected.get("stats") or {})
+        # Flashscore can expose a current-period/quarter section header before
+        # it exposes any stats inside that section. Do not treat an empty
+        # section as usable: fall back to cumulative FULL_MATCH stats and
+        # reconstruct the current segment from the baseline delta below.
+        if not selected_stats:
+            full_match = dict(sections.get("FULL_MATCH") or {})
+            full_stats = dict(full_match.get("stats") or {})
+            if full_stats:
+                selected = full_match
+                selected_stats = full_stats
+                scope = "FULL_MATCH"
+            elif not selected:
+                selected = full_match
+                scope = "FULL_MATCH" if full_match else requested_scope
+        stats = selected_stats or dict(selected.get("stats") or {})
         segment_stats: dict[str, list[float]] = {}
         segment_attempts: dict[str, list[float]] = {}
         for key, item in stats.items():
@@ -1631,72 +1660,14 @@ class MultiSportSteamWorker:
         stats_mode = "direct_segment"
         current_segment_available = bool(segment_stats) and scope == requested_scope
         if scope == "FULL_MATCH" and requested_scope and requested_scope != "FULL_MATCH":
-            # Flashscore often exposes hockey/basketball LIVE stats only as
-            # cumulative FULL_MATCH. In the first segment cumulative == segment.
-            # From segment 2 onward, subtract the first cumulative snapshot seen
-            # in that segment to reconstruct its own shots/attempts/rebounds/etc.
-            first_segment = requested_scope.endswith("_1")
-            if first_segment:
-                scope = requested_scope
-                current_segment_available = bool(segment_stats)
-                stats_mode = "full_match_first_segment"
-            else:
-                baseline_key = f"{cfg.key}:{event_id}:{requested_scope}"
-                baseline = self._fs_scope_stat_baseline.get(baseline_key)
-                self._fs_scope_stat_samples[baseline_key] += 1
-                if baseline is None:
-                    self._fs_scope_stat_baseline[baseline_key] = {
-                        "stats": {k: list(v) for k, v in segment_stats.items()},
-                        "attempts": {k: list(v) for k, v in segment_attempts.items()},
-                        "at": time.time(),
-                    }
-                    segment_stats = {}
-                    segment_attempts = {}
-                    current_segment_available = False
-                    stats_mode = "full_match_delta_baseline"
-                else:
-                    base_stats = dict(baseline.get("stats") or {})
-                    base_attempts = dict(baseline.get("attempts") or {})
-                    percentage_keys = {
-                        "field_goals",
-                        "2_point_field_goals",
-                        "3_point_field_goals",
-                        "free_throws",
-                    }
-                    delta_stats: dict[str, list[float]] = {}
-                    for key, pair in segment_stats.items():
-                        if key in percentage_keys:
-                            continue
-                        base = list(base_stats.get(key) or [])
-                        if len(pair) >= 2 and len(base) >= 2:
-                            delta_stats[key] = [
-                                max(0.0, float(pair[0]) - float(base[0])),
-                                max(0.0, float(pair[1]) - float(base[1])),
-                            ]
-                    delta_attempts: dict[str, list[float]] = {}
-                    for key, pair in segment_attempts.items():
-                        base = list(base_attempts.get(key) or [])
-                        if len(pair) >= 2 and len(base) >= 2:
-                            delta_attempts[key] = [
-                                max(0.0, float(pair[0]) - float(base[0])),
-                                max(0.0, float(pair[1]) - float(base[1])),
-                            ]
-
-                    # Rebuild shooting percentages from made/attempt deltas.
-                    for prefix in ("field_goals", "2_point_field_goals", "3_point_field_goals", "free_throws"):
-                        made = delta_stats.get(f"{prefix}_made")
-                        attempts_pair = delta_stats.get(f"{prefix}_attempts")
-                        if made and attempts_pair:
-                            delta_stats[prefix] = [
-                                0.0 if attempts_pair[0] <= 0 else 100.0 * made[0] / attempts_pair[0],
-                                0.0 if attempts_pair[1] <= 0 else 100.0 * made[1] / attempts_pair[1],
-                            ]
-
-                    segment_stats = delta_stats
-                    segment_attempts = delta_attempts
-                    scope = requested_scope
-                    current_segment_available = self._fs_scope_stat_samples[baseline_key] >= 2
-                    stats_mode = "full_match_delta"
+            # Product rule: the LIVE Brain may use cumulative Flashscore stats
+            # through the current segment. Q2 = Q1+Q2, P3 = P1+P2+P3, etc.
+            # The bet itself is still priced ONLY on the current quarter/period.
+            # This avoids throwing away useful LIVE pressure just because
+            # Flashscore has not published a separate segment-stat section.
+            scope = requested_scope
+            current_segment_available = bool(segment_stats)
+            stats_mode = "cumulative_through_current_segment"
 
         out: dict[str, Any] = {
             "source": "flashscore",

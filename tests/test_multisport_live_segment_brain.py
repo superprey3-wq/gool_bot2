@@ -373,36 +373,21 @@ def test_collect_once_does_not_query_xbet_when_flashscore_brain_has_no_candidate
     assert state["sports"]["hockey"]["prematch_brain_candidates"] == 0
     assert state["sports"]["basketball"]["prematch_brain_candidates"] == 0
 
-def test_full_match_stats_are_reconstructed_as_current_hockey_period_delta(tmp_path, monkeypatch):
+def test_full_match_stats_are_used_cumulatively_through_current_hockey_period(tmp_path, monkeypatch):
     worker = MultiSportSteamWorker(tmp_path)
-    monkeypatch.setenv("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", "4")
-    snapshots = [
-        {
-            "sections": {
-                "FULL_MATCH": {
-                    "stats": {
-                        "shots_on_goal": {"home": 20, "away": 18},
-                        "blocked_shots": {"home": 8, "away": 7},
-                        "penalties": {"home": 3, "away": 2},
-                    }
+    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: {
+        "sections": {
+            "FULL_MATCH": {
+                "stats": {
+                    "shots_on_goal": {"home": 24, "away": 21},
+                    "blocked_shots": {"home": 9, "away": 9},
+                    "penalties": {"home": 4, "away": 2},
                 }
             }
-        },
-        {
-            "sections": {
-                "FULL_MATCH": {
-                    "stats": {
-                        "shots_on_goal": {"home": 24, "away": 21},
-                        "blocked_shots": {"home": 9, "away": 9},
-                        "penalties": {"home": 4, "away": 2},
-                    }
-                }
-            }
-        },
-    ]
-    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: snapshots.pop(0))
+        }
+    })
     fs = {
-        "flashscore_event_id": "HDELTA01",
+        "flashscore_event_id": "HCUM001",
         "home": "Home",
         "away": "Away",
         "league": "AHL",
@@ -411,18 +396,14 @@ def test_full_match_stats_are_reconstructed_as_current_hockey_period_delta(tmp_p
         "status_code": "15",
     }
 
-    first = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_2")
-    worker._fs_live_stats_cache.clear()
-    second = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_2")
+    stats = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_2")
 
-    assert first["current_segment_available"] is False
-    assert first["stats_mode"] == "full_match_delta_baseline"
-    assert second["current_segment_available"] is True
-    assert second["scope"] == "PERIOD_2"
-    assert second["stats_mode"] == "full_match_delta"
-    assert second["segment_stats"]["shots_on_goal"] == [4.0, 3.0]
-    assert second["segment_stats"]["blocked_shots"] == [1.0, 2.0]
-    assert second["segment_stats"]["penalties"] == [1.0, 0.0]
+    assert stats["current_segment_available"] is True
+    assert stats["scope"] == "PERIOD_2"
+    assert stats["stats_mode"] == "cumulative_through_current_segment"
+    assert stats["segment_stats"]["shots_on_goal"] == [24.0, 21.0]
+    assert stats["segment_stats"]["blocked_shots"] == [9.0, 9.0]
+    assert stats["segment_stats"]["penalties"] == [4.0, 2.0]
 
 
 def test_flashscore_numeric_status_is_match_minute_with_score_parts_crosscheck():
@@ -512,4 +493,81 @@ def test_flashscore_derives_new_segment_score_when_score_parts_lag():
         SPORTS["basketball"],
     )
     assert basket["QUARTER_3"] == (3, 4)
+
+def test_empty_current_period_section_uses_cumulative_full_match_immediately(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: {
+        "sections": {
+            "PERIOD_3": {"key": "PERIOD_3", "label": "3rd period", "stats": {}, "raw": []},
+            "FULL_MATCH": {
+                "key": "FULL_MATCH",
+                "label": "Full match",
+                "stats": {
+                    "shots_on_goal": {"home": 30, "away": 27},
+                    "blocked_shots": {"home": 13, "away": 9},
+                    "penalties": {"home": 5, "away": 3},
+                },
+                "raw": [],
+            },
+        }
+    })
+    fs = {
+        "flashscore_event_id": "EMPTY-P3",
+        "home": "Anaheim Ducks",
+        "away": "Florida Panthers",
+        "league": "NHL",
+        "score": [2, 1],
+        "score_parts": [[1, 0], [1, 1], [0, 0]],
+        "status_code": "46",
+    }
+
+    stats = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_3")
+
+    assert stats["stats_mode"] == "cumulative_through_current_segment"
+    assert stats["scope"] == "PERIOD_3"
+    assert stats["current_segment_available"] is True
+    assert stats["segment_stats"]["shots_on_goal"] == [30.0, 27.0]
+    assert stats["segment_stats"]["blocked_shots"] == [13.0, 9.0]
+    assert stats["segment_stats"]["penalties"] == [5.0, 3.0]
+
+def test_basketball_q3_uses_cumulative_q1_q2_q3_stats_when_only_full_match_exists(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: {
+        "sections": {
+            "QUARTER_3": {"key": "QUARTER_3", "label": "3rd quarter", "stats": {}, "raw": []},
+            "FULL_MATCH": {
+                "key": "FULL_MATCH",
+                "label": "Full match",
+                "stats": {
+                    "rebounds": {"home": 26, "away": 21},
+                    "turnovers": {"home": 7, "away": 8},
+                    "field_goals": {
+                        "home": 47.5,
+                        "away": 44.2,
+                        "home_attempts": 40,
+                        "away_attempts": 43,
+                    },
+                },
+                "raw": [],
+            },
+        }
+    })
+    fs = {
+        "flashscore_event_id": "BCUMQ3",
+        "home": "Home",
+        "away": "Away",
+        "league": "Chile",
+        "score": [58, 54],
+        "score_parts": [[20, 18], [19, 20], [19, 16]],
+        "status_code": "23",
+    }
+
+    stats = worker._flashscore_live_stats(fs, SPORTS["basketball"], current_period="QUARTER_3")
+
+    assert stats["scope"] == "QUARTER_3"
+    assert stats["current_segment_available"] is True
+    assert stats["stats_mode"] == "cumulative_through_current_segment"
+    assert stats["segment_stats"]["rebounds"] == [26.0, 21.0]
+    assert stats["segment_stats"]["turnovers"] == [7.0, 8.0]
+    assert stats["segment_attempts"]["field_goals"] == [40.0, 43.0]
 

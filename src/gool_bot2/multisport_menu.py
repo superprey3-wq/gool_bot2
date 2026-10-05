@@ -485,13 +485,14 @@ def multisport_in_game_sections() -> list[str]:
             picks.sort(key=lambda pick: (0 if _row_phase(pick) == "LIVE" else 1, str(pick.get("created_at") or "")))
             first = picks[0]
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or "LIVE")
-            # Never leak raw numeric AC as a human period label.
+            period = str(live.get("period") or live.get("status_code") or "LIVE")
+            # Textual provider labels such as Q2/P2/LIVE are useful. Bare
+            # numeric AC values such as "15" are not a human period label.
             if not period or period.strip().isdigit():
                 period = "LIVE"
             block = [
                 f"<b>{idx}. {icon} {first.get('home','?')} — {first.get('away','?')}</b>",
-                f"сейчас <b>{period}</b> · {score[0]}:{score[1]}",
+                f"сейчас {period} · {score[0]}:{score[1]}",
             ]
             for pick in picks:
                 selection = str(pick.get("selection") or "?")

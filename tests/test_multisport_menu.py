@@ -479,7 +479,7 @@ def test_multisport_analysis_shows_flashscore_brain_before_xbet_match(tmp_path: 
     assert "броски в створ 11:10" in text
     assert "BORDERLINE" in text
     assert "R64" in text
-    assert "кандидат выбран Brain" in text
+    assert "Brain уже выбрал матч" in text
     assert "рынок 1xBet ещё не синхронизирован" not in text
 
 def test_multisport_analysis_shows_flashscore_brain_before_xbet_mapping(tmp_path: Path, monkeypatch):

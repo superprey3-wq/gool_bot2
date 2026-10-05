@@ -3049,6 +3049,12 @@ class MultiSportSteamWorker:
 
         current_period = _period(game)
         fs_scope = _infer_flashscore_scope(fs, cfg)
+        fs_has_scope_evidence = bool(
+            str(fs.get("status_code") or "").strip()
+            or [p for p in (fs.get("score_parts") or []) if isinstance(p, (list, tuple)) and len(p) >= 2]
+        )
+        if not fs_has_scope_evidence:
+            fs_scope = next(iter(live_scopes_from_period(cfg.key, current_period)), fs_scope)
         wanted_live_scopes = set(live_scopes_from_period(cfg.key, current_period))
         if fs_scope:
             wanted_live_scopes.add(fs_scope)

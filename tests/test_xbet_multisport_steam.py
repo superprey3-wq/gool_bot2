@@ -116,6 +116,104 @@ def test_multisport_settlement_handles_over_under_and_void():
     assert settle_multisport_pick({"direction": "over", "line": 6.0}, 3, 3) == "void"
 
 
+def test_multisport_settlement_honours_displayed_total_when_legacy_direction_disagrees():
+    # Exact Puerto Montt class of bug: the user saw OVER, but an old row saved
+    # technical direction=under before the label/direction invariant existed.
+    assert settle_multisport_pick({
+        "market_family": "match_total",
+        "selection": "ТБ 152.5",
+        "direction": "under",
+        "line": 152.5,
+    }, 93, 80) == "won"
+    assert settle_multisport_pick({
+        "market_family": "home_total",
+        "selection": "ИТБ1 76",
+        "direction": "under",
+        "line": 76,
+    }, 93, 80) == "won"
+
+
+def test_record_signal_rebuilds_total_label_from_brain_direction(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    row = {
+        "phase": "PREMATCH",
+        "origin": "multisport_prematch",
+        "event_id": "xb-puerto",
+        "flashscore_event_id": "FS-PUERTO",
+        "home": "Puerto Montt",
+        "away": "Ancud",
+        "league": "Chile",
+        "scope": "FULL_MATCH",
+        "market_family": "home_total",
+        "selection": "ИТБ1 76",
+        "line": 76,
+        "start_ts": 9999999999,
+    }
+    signal = {
+        "direction": "under",
+        "line": 76,
+        "odd": 1.73,
+        "fair_probability": .55,
+        "metric_delta": 3.0,
+        "probability_delta_pp": 4.0,
+        "line_delta": -2.0,
+        "moves": 3,
+        "strength": 82.0,
+        "start": {"line": 78, "under": 1.90},
+    }
+
+    recorded, _ = worker._record_signal(row, signal, SPORTS["basketball"])
+
+    assert recorded is True
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["direction"] == "under"
+    assert saved["selection"] == "ИТМ1 76"
+
+
+def test_settle_repairs_already_final_legacy_basketball_result(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "origin": "multisport_prematch",
+        "event_id": "xb-puerto",
+        "flashscore_event_id": "FS-PUERTO",
+        "home": "Puerto Montt",
+        "away": "Ancud",
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "selection": "ТБ 152.5",
+        "direction": "under",
+        "line": 152.5,
+        "odd": 1.73,
+        "result": "lost",
+        "profit_units": -1.0,
+    }])
+
+    changed = worker._settle(SPORTS["basketball"], {
+        "FS-PUERTO": {
+            "flashscore_event_id": "FS-PUERTO",
+            "coarse_status": "3",
+            "score": [93, 80],
+        }
+    })
+
+    assert changed == 1
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["direction"] == "over"
+    assert saved["result"] == "won"
+    assert saved["profit_units"] == 0.73
+    assert saved["settled_score"] == [93, 80]
+    assert saved["settlement_correction"] == "displayed_selection_direction_mismatch"
+
+
 def test_hockey_prematch_line_move_emits_signal():
     cfg = SPORTS["hockey"]
     rows = [

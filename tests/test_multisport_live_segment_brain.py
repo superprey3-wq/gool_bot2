@@ -263,6 +263,39 @@ def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monke
     assert result["period"] == "4-я четверть"
     assert result["scope"] == "QUARTER_4"
 
+def test_basketball_halftime_status_cannot_skip_from_q2_to_q4(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_3",
+            "available": True,
+            "current_segment_available": True,
+            "segment_stats": {"rebounds": [0.0, 0.0], "turnovers": [0.0, 0.0]},
+            "segment_attempts": {},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BHALF001",
+        "home": "Besiktas",
+        "away": "Trabzonspor",
+        "league": "TURKEY: Super Lig",
+        "score": [46, 46],
+        "score_parts": [[24, 17], [22, 29]],
+        # This is the problematic break snapshot: interpreting AC=38 as a
+        # normal match minute would jump directly to Q4.
+        "status_code": "38",
+        "period_start_ts": __import__("time").time() - 30,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_3"
+    assert result["period"] == "3-я четверть"
+
+
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
     monkeypatch.setenv("GOOL_MULTISPORT_MAX_ODD", "3.25")

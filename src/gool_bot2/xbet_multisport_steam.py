@@ -4083,6 +4083,8 @@ class MultiSportSteamWorker:
                     "league": str(row.get("league") or ""),
                     "score": list(row.get("score") or [0, 0]),
                     "score_parts": list(row.get("score_parts") or []),
+                    "scope": str((analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}).get("scope") or ""),
+                    "period": str((analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}).get("period") or ""),
                     "status_code": str(row.get("status_code") or ""),
                     "coarse_status": str(row.get("coarse_status") or ""),
                     "match_start_ts": int(row.get("match_start_ts") or 0),

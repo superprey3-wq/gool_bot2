@@ -340,18 +340,48 @@ def multisport_in_game_sections() -> list[str]:
             row for row in (current.get("flashscore_live_matches") or [])
             if isinstance(row, dict)
         ]
-        # The Telegram menu must not depend on the worker state refresh cadence.
-        # Fetch fresh Flashscore LIVE rows on demand and merge them in.
-        fresh_live = _direct_flashscore_live(sport)
-        fresh_by_id = {
+        analysis_by_id = {
             str(row.get("flashscore_event_id") or ""): dict(row)
-            for row in fresh_live
-            if str(row.get("flashscore_event_id") or "")
+            for row in (current.get("flashscore_analysis_matches") or [])
+            if isinstance(row, dict) and str(row.get("flashscore_event_id") or "")
         }
+        # The Telegram menu must not depend on the worker state refresh cadence.
+        # Fetch fresh Flashscore LIVE rows on demand for score/status, then merge
+        # the already-decoded Flashscore Brain scope/period on top. Raw AC alone
+        # is not a safe period label for every hockey/basketball feed.
+        fresh_live = _direct_flashscore_live(sport)
+        fresh_by_id = {}
+        for row in fresh_live:
+            fs_id = str(row.get("flashscore_event_id") or "")
+            if not fs_id:
+                continue
+            analysis = analysis_by_id.get(fs_id) or {}
+            fresh_by_id[fs_id] = {**analysis, **dict(row)}
+            if analysis.get("scope"):
+                fresh_by_id[fs_id]["scope"] = analysis.get("scope")
+            if analysis.get("period"):
+                fresh_by_id[fs_id]["period"] = analysis.get("period")
         for row in fs_live_matches:
             fs_id = str(row.get("flashscore_event_id") or "")
-            if fs_id and fs_id not in fresh_by_id:
-                fresh_by_id[fs_id] = dict(row)
+            if not fs_id:
+                continue
+            analysis = analysis_by_id.get(fs_id) or {}
+            saved = {**dict(row)}
+            if analysis.get("scope"):
+                saved["scope"] = analysis.get("scope")
+            if analysis.get("period"):
+                saved["period"] = analysis.get("period")
+            if fs_id in fresh_by_id:
+                # Fresh row wins for score/status; decoded Brain wins for
+                # period/scope above.
+                merged = {**saved, **fresh_by_id[fs_id]}
+                if analysis.get("scope"):
+                    merged["scope"] = analysis.get("scope")
+                if analysis.get("period"):
+                    merged["period"] = analysis.get("period")
+                fresh_by_id[fs_id] = merged
+            else:
+                fresh_by_id[fs_id] = {**analysis, **saved}
         fs_live_matches = list(fresh_by_id.values())
         mapped_matches = [
             row for row in (current.get("matches") or [])
@@ -409,8 +439,7 @@ def multisport_in_game_sections() -> list[str]:
                 active.append((row, live))
 
         if active:
-            # Deduplicate bets, not matches. A match may legitimately contain
-            # both a started PREMATCH pick and a new LIVE period/quarter pick.
+            # Deduplicate individual bets first.
             unique_active: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             for pick, live in active:
                 key = str(pick.get("entry_id") or "")
@@ -427,28 +456,61 @@ def multisport_in_game_sections() -> list[str]:
             active.sort(key=lambda pair: (0 if _row_phase(pair[0]) == "LIVE" else 1, str(pair[0].get("created_at") or "")))
         if not active:
             continue
+
+        # One visual block per match. A started PREMATCH pick and a valid current
+        # LIVE segment pick belong under the same scoreboard, not as duplicate
+        # numbered matches.
+        grouped: dict[str, dict[str, Any]] = {}
+        for pick, live in active:
+            fs_id = str(live.get("flashscore_event_id") or pick.get("flashscore_event_id") or "")
+            group_key = fs_id or (
+                norm_team(str(pick.get("home") or "")) + "|" + norm_team(str(pick.get("away") or ""))
+            )
+            group = grouped.setdefault(group_key, {"live": live, "picks": []})
+            group["picks"].append(pick)
+            # Prefer the row carrying decoded Brain period/scope.
+            if str(live.get("period") or "") or str(live.get("scope") or ""):
+                group["live"] = live
+
         total += len(active)
         lines = []
-        for idx, (pick, live) in enumerate(active, 1):
+        for idx, group in enumerate(grouped.values(), 1):
+            live = dict(group["live"])
+            picks = list(group["picks"])
+            picks.sort(key=lambda pick: (0 if _row_phase(pick) == "LIVE" else 1, str(pick.get("created_at") or "")))
+            first = picks[0]
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or pick.get("period") or live.get("status_code") or "LIVE")
-            selection = str(pick.get("selection") or "?")
-            needed = _pick_needed_text(pick)
-            strength = float(pick.get("strength") or 0)
-            phase_name = _row_phase(pick)
-            phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
-            lines.append(
-                f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
-                f"сейчас {period} · {score[0]}:{score[1]}\n"
-                f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
-                f"🧠 {strength:.0f}/100 · {phase_badge}\n"
-                f"↳ {needed}"
-            )
+            period = str(live.get("period") or "LIVE")
+            # Never leak raw numeric AC as a human period label.
+            if not period or period.strip().isdigit():
+                period = "LIVE"
+            block = [
+                f"<b>{idx}. {icon} {first.get('home','?')} — {first.get('away','?')}</b>",
+                f"сейчас <b>{period}</b> · {score[0]}:{score[1]}",
+            ]
+            for pick in picks:
+                selection = str(pick.get("selection") or "?")
+                needed = _pick_needed_text(pick)
+                strength = float(pick.get("strength") or 0)
+                phase_name = _row_phase(pick)
+                phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
+                block.extend([
+                    f"{phase_badge} · 🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b> · R{strength:.0f}",
+                    f"↳ {needed}",
+                ])
+            lines.append("\n".join(block))
         sport_blocks.append("\n\n".join(lines))
 
     if not sport_blocks:
         return []
-    messages.append(f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\nОткрыто: <b>{total}</b>")
+    # total is number of active bets; report both bets and visually grouped matches.
+    grouped_matches = sum(
+        part.count("\nсейчас <b>") for part in sport_blocks
+    )
+    messages.append(
+        f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\n"
+        f"Матчей: <b>{grouped_matches}</b> · ставок: <b>{total}</b>"
+    )
     messages.extend(sport_blocks)
     return messages
 

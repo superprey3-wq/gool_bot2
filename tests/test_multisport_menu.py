@@ -811,7 +811,7 @@ def test_in_game_uses_brain_period_over_raw_numeric_status_and_drops_old_period_
 
     text = "\n".join(menu.multisport_in_game_sections())
 
-    assert "сейчас <b>2-й период</b> · 0:1" in text
+    assert "сейчас 2-й период · 0:1" in text
     assert "сейчас 15" not in text
     assert "1-й период: ТБ 1 @ 1.72" not in text
     assert "Ф2 +2 @ 1.73" in text

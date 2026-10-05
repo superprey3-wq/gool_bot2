@@ -435,3 +435,50 @@ def test_multisport_in_game_fuzzy_matches_and_deduplicates_legacy_rows(tmp_path:
     text = "\n".join(multisport_in_game_sections())
     assert text.count("Piratas Bogota — Caimanes Llano") == 1
     assert "22:24" in text
+
+def test_multisport_analysis_shows_flashscore_brain_before_xbet_match(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_analysis_matches": [{
+                    "flashscore_event_id": "HFS001",
+                    "home": "Oshawa Generals",
+                    "away": "Sarnia Sting",
+                    "score": [0, 1],
+                    "period": "2-й период",
+                    "brain_state": "BORDERLINE",
+                    "brain_score": 64,
+                    "brain_reason": "броски 21, темп бросков 2.3/мин, шайбы периода 1",
+                    "live_game_stats": {"segment_stats": {"shots_on_goal": [11, 10]}},
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_analysis_matches": []},
+        },
+    })
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "HFS001",
+            "home": "Oshawa Generals",
+            "away": "Sarnia Sting",
+            "score": [0, 1],
+            "status_code": "46",
+            "coarse_status": "2",
+        }] if sport == "hockey" else []
+    ))
+
+    text = "\n".join(menu.multisport_analysis_sections())
+
+    assert "Oshawa Generals — Sarnia Sting" in text
+    assert "2-й период" in text
+    assert "броски в створ 11:10" in text
+    assert "BORDERLINE" in text
+    assert "R64" in text
+    assert "кандидат выбран Brain" in text
+    assert "рынок 1xBet ещё не синхронизирован" not in text
+

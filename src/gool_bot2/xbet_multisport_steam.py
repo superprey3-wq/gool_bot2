@@ -448,6 +448,49 @@ def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str,
     return out
 
 
+def _infer_flashscore_scope(
+    fs: dict[str, Any],
+    cfg: SportConfig,
+    section_keys: list[str] | tuple[str, ...] | None = None,
+) -> str:
+    """Infer the current hockey period / basketball quarter from Flashscore itself."""
+    prefix = "PERIOD_" if cfg.key == "hockey" else "QUARTER_"
+    maximum = 3 if cfg.key == "hockey" else 4
+    parts = [
+        row for row in (fs.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    idx = max(1, min(maximum, len(parts) or 1))
+    guessed = f"{prefix}{idx}"
+    available = [str(value) for value in (section_keys or []) if str(value).startswith(prefix)]
+    if guessed in available:
+        return guessed
+    if available:
+        def number(value: str) -> int:
+            try:
+                return int(value.rsplit("_", 1)[1])
+            except (TypeError, ValueError, IndexError):
+                return 0
+        eligible = [value for value in available if number(value) <= idx]
+        return max(eligible or available, key=number)
+    return guessed
+
+
+def _flashscore_period_label(scope: str, status_code: str = "") -> str:
+    if str(status_code or "") == "38":
+        return "Перерыв"
+    labels = {
+        "PERIOD_1": "1-й период",
+        "PERIOD_2": "2-й период",
+        "PERIOD_3": "3-й период",
+        "QUARTER_1": "1-я четверть",
+        "QUARTER_2": "2-я четверть",
+        "QUARTER_3": "3-я четверть",
+        "QUARTER_4": "4-я четверть",
+    }
+    return labels.get(str(scope or ""), str(status_code or "LIVE") or "LIVE")
+
+
 def _score_sync_allowed(
     cfg: SportConfig,
     fs_score: tuple[int, int],
@@ -1233,6 +1276,9 @@ class MultiSportSteamWorker:
         self._stop = threading.Event()
         self._history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=50))
         self._prematch_history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=180))
+        # Flashscore-only Brain history is intentionally independent from 1xBet.
+        # It decides which LIVE games are interesting before bookmaker pricing.
+        self._fs_brain_history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=30))
         self._last_score: dict[str, tuple[int, int]] = {}
         self._score_changed_at: dict[str, float] = {}
         self._last_period: dict[str, str] = {}
@@ -1344,6 +1390,8 @@ class MultiSportSteamWorker:
         sections = dict(detailed.get("sections") or {})
         wanted = live_scopes_from_period(cfg.key, current_period)
         scope = next(iter(wanted), "")
+        if not scope:
+            scope = _infer_flashscore_scope(fs, cfg, list(sections))
         selected = dict(sections.get(scope) or {})
         if not selected:
             selected = dict(sections.get("FULL_MATCH") or {})
@@ -1385,6 +1433,212 @@ class MultiSportSteamWorker:
 
         self._fs_live_stats_cache[cache_key] = (now, dict(out))
         return out
+
+    def _flashscore_live_brain(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        """Run a Flashscore-first LIVE Brain before any bookmaker lookup."""
+        event_id = str(fs.get("flashscore_event_id") or "")
+        scoped_scores = _flashscore_scoped_scores(fs, cfg)
+        inferred_scope = _infer_flashscore_scope(fs, cfg)
+        stats_payload = self._flashscore_live_stats(fs, cfg, current_period=inferred_scope)
+        scope = str(stats_payload.get("scope") or inferred_scope)
+        if scope == SCOPE_FULL:
+            scope = inferred_scope
+        segment_score = scoped_scores.get(scope)
+        if segment_score is None:
+            full = list(fs.get("score") or [0, 0])
+            segment_score = (int(full[0] or 0), int(full[1] or 0))
+
+        now = time.time()
+        snapshot = {
+            "ts": now,
+            "scope": scope,
+            "score": [int(segment_score[0]), int(segment_score[1])],
+            "live_game_stats": stats_payload,
+        }
+        key = f"{cfg.key}:{event_id}:{scope}"
+        history = self._fs_brain_history[key]
+        history.append(snapshot)
+        recent = [row for row in history if now - float(row.get("ts") or 0.0) <= 180.0]
+        first = recent[0] if recent else snapshot
+        age = max(1.0, now - float(first.get("ts") or now))
+
+        stats = dict(stats_payload.get("segment_stats") or {})
+        current_total = int(segment_score[0]) + int(segment_score[1])
+        previous_score = list(first.get("score") or [0, 0])
+        score_delta = max(0, current_total - int(previous_score[0] or 0) - int(previous_score[1] or 0))
+        recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
+
+        if cfg.key == "hockey":
+            shots = list(stats.get("shots_on_goal") or stats.get("shots") or [])
+            shot_total = sum(max(0.0, float(v)) for v in shots[:2]) if len(shots) >= 2 else 0.0
+            first_stats = dict((first.get("live_game_stats") or {}).get("segment_stats") or {})
+            first_shots = list(first_stats.get("shots_on_goal") or first_stats.get("shots") or [])
+            first_shot_total = sum(max(0.0, float(v)) for v in first_shots[:2]) if len(first_shots) >= 2 else shot_total
+            recent_shot_rate = max(0.0, shot_total - first_shot_total) * 60.0 / age if len(recent) >= 2 else 0.0
+            pp = list(stats.get("powerplay_goals") or [])
+            pp_total = sum(max(0.0, float(v)) for v in pp[:2]) if len(pp) >= 2 else 0.0
+            penalties = list(stats.get("penalties_2m") or stats.get("penalties") or [])
+            penalty_total = sum(max(0.0, float(v)) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
+            rating = (
+                28.0
+                + min(30.0, shot_total * 1.45)
+                + min(18.0, recent_shot_rate * 6.0)
+                + min(12.0, current_total * 5.0)
+                + min(7.0, pp_total * 3.5)
+                + min(5.0, penalty_total * 0.8)
+            )
+            reason = f"броски {shot_total:g}, темп бросков {recent_shot_rate:.1f}/мин, шайбы периода {current_total}"
+        else:
+            rebounds = list(stats.get("rebounds") or [])
+            rebound_total = sum(max(0.0, float(v)) for v in rebounds[:2]) if len(rebounds) >= 2 else 0.0
+            turnovers = list(stats.get("turnovers") or [])
+            turnover_total = sum(max(0.0, float(v)) for v in turnovers[:2]) if len(turnovers) >= 2 else 0.0
+            attempts = dict(stats_payload.get("segment_attempts") or {})
+            fg_attempts = 0.0
+            for key_name in ("field_goals", "two_point_field_goals", "three_point_field_goals"):
+                pair = list(attempts.get(key_name) or [])
+                if len(pair) >= 2:
+                    fg_attempts = max(fg_attempts, sum(max(0.0, float(v)) for v in pair[:2]))
+            rating = (
+                26.0
+                + min(32.0, current_total * 0.85)
+                + min(22.0, recent_score_rate * 2.2)
+                + min(8.0, fg_attempts * 0.18)
+                + min(7.0, rebound_total * 0.18)
+                + min(5.0, turnover_total * 0.20)
+            )
+            reason = f"очки четверти {current_total}, свежий темп {recent_score_rate:.1f}/мин, подборы {rebound_total:g}"
+
+        if not stats_payload.get("available"):
+            rating = min(rating, 48.0)
+            reason = "Flashscore LIVE есть, статистика сегмента ещё прогревается"
+
+        pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", 68.0)
+        borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", 56.0)
+        state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+        return {
+            "flashscore_event_id": event_id,
+            "home": str(fs.get("home") or ""),
+            "away": str(fs.get("away") or ""),
+            "league": str(fs.get("league") or ""),
+            "score": list(fs.get("score") or [0, 0]),
+            "score_parts": list(fs.get("score_parts") or []),
+            "scope": scope,
+            "period": _flashscore_period_label(scope, str(fs.get("status_code") or "")),
+            "status_code": str(fs.get("status_code") or ""),
+            "brain_state": state,
+            "brain_score": round(max(0.0, min(100.0, rating)), 1),
+            "brain_reason": reason,
+            "current_segment_score": [int(segment_score[0]), int(segment_score[1])],
+            "live_game_stats": stats_payload,
+            "history_points": len(recent),
+            "recent_score_rate": round(recent_score_rate, 3),
+        }
+
+    def _flashscore_live_analysis(
+        self,
+        fs_live: list[dict[str, Any]],
+        cfg: SportConfig,
+    ) -> list[dict[str, Any]]:
+        maximum = max(1, min(120, _int_env("GOOL_MULTISPORT_LIVE_FS_BRAIN_MAX", 80)))
+        rows = list(fs_live[:maximum])
+        if not rows:
+            return []
+        workers = max(2, min(12, _int_env("GOOL_MULTISPORT_LIVE_FS_BRAIN_WORKERS", 6)))
+        out: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(self._flashscore_live_brain, row, cfg) for row in rows]
+            for future in as_completed(futures):
+                try:
+                    item = future.result(timeout=18)
+                except Exception:
+                    continue
+                if item:
+                    out.append(item)
+        out.sort(key=lambda row: float(row.get("brain_score") or 0.0), reverse=True)
+        return out
+
+    def _flashscore_prematch_candidate(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        context = self._flashscore_prematch_context(fs, cfg)
+        features = self._sport_context_features(context, fs, cfg)
+        home_n = int(features.get("home_recent_n") or 0)
+        away_n = int(features.get("away_recent_n") or 0)
+        h2h_n = int(features.get("h2h_n") or 0)
+        history_quality = min(1.0, min(home_n, away_n) / 5.0)
+        h2h_quality = min(1.0, h2h_n / 5.0)
+
+        home_win = features.get("home_win_pct")
+        away_win = features.get("away_win_pct")
+        venue_home = features.get("home_venue_win_pct")
+        venue_away = features.get("away_venue_win_pct")
+        form_gap = abs(float(home_win) - float(away_win)) if home_win is not None and away_win is not None else 0.0
+        venue_gap = abs(float(venue_home) - float(venue_away)) if venue_home is not None and venue_away is not None else 0.0
+        rest = abs(float(features.get("rest_advantage_days") or 0.0))
+        recent_total = features.get("recent_total_avg")
+        h2h_total = features.get("h2h_total_avg")
+        total_agreement = 0.0
+        if recent_total is not None and h2h_total is not None:
+            scale = max(1.0, abs(float(recent_total)))
+            total_agreement = max(0.0, 1.0 - abs(float(recent_total) - float(h2h_total)) / scale)
+
+        rating = (
+            32.0
+            + 34.0 * history_quality
+            + 8.0 * h2h_quality
+            + 16.0 * min(1.0, form_gap)
+            + 6.0 * min(1.0, venue_gap)
+            + 2.0 * min(2.0, rest)
+            + 6.0 * total_agreement
+        )
+        pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_PREMATCH_FS_BRAIN_PASS", 70.0)
+        borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_PREMATCH_FS_BRAIN_BORDERLINE", 58.0)
+        state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+        return {
+            **dict(fs),
+            "prematch_brain": {
+                "state": state,
+                "score": round(max(0.0, min(100.0, rating)), 1),
+                "history_quality": round(history_quality, 3),
+                "h2h_quality": round(h2h_quality, 3),
+                "form_gap": round(form_gap, 3),
+                "venue_gap": round(venue_gap, 3),
+                "features": features,
+            },
+        }
+
+    def _flashscore_prematch_shortlist(
+        self,
+        fs_upcoming: list[dict[str, Any]],
+        cfg: SportConfig,
+    ) -> list[dict[str, Any]]:
+        scan_max = max(1, min(160, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_SCAN_MAX", 64)))
+        price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", 32)))
+        rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
+        if not rows:
+            return []
+        workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_WORKERS", 6)))
+        analysed: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(self._flashscore_prematch_candidate, row, cfg) for row in rows]
+            for future in as_completed(futures):
+                try:
+                    item = future.result(timeout=24)
+                except Exception:
+                    continue
+                if item:
+                    analysed.append(item)
+        interesting = [
+            row for row in analysed
+            if str((row.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
+        ]
+        interesting.sort(
+            key=lambda row: (
+                float((row.get("prematch_brain") or {}).get("score") or 0.0),
+                -float(row.get("start_ts") or 0.0),
+            ),
+            reverse=True,
+        )
+        return interesting[:price_max]
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
         """Recent form + H2H from Flashscore, analogous to the football collector."""

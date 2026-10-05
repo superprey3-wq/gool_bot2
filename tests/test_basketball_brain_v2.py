@@ -3,6 +3,7 @@ from gool_bot2.basketball_brain_v2 import (
     live_signal,
     prematch_candidate,
     prematch_signal,
+    q3_rebound_assist,
     recent_possession_metrics,
 )
 
@@ -270,3 +271,67 @@ def test_late_close_q4_under_is_blocked_for_intentional_foul_risk():
         ),
     )
     assert signal is None
+
+
+def test_q3_rebound_assist_detects_large_halftime_deficit_then_close_q3():
+    brain = {
+        "scope": "QUARTER_3",
+        "score_parts": [[10, 20], [11, 21]],
+        "elapsed_seconds": 300,
+    }
+    assist = q3_rebound_assist(
+        brain,
+        elapsed_seconds=300,
+        current_segment_score=[18, 20],
+    )
+    assert assist["active"] is True
+    assert assist["trailing_side"] == "home"
+    assert assist["halftime_deficit"] == 20.0
+    assert assist["q3_margin"] == -2.0
+    assert assist["margin_improvement"] >= 8.0
+    assert assist["stage"] == "close"
+    assert assist["applied"] is False
+
+
+def test_q3_rebound_assist_detects_true_q3_reversal():
+    brain = {
+        "scope": "QUARTER_3",
+        "score_parts": [[21, 16], [30, 19]],
+    }
+    assist = q3_rebound_assist(
+        brain,
+        elapsed_seconds=360,
+        current_segment_score=[17, 28],
+    )
+    assert assist["active"] is True
+    assert assist["trailing_side"] == "away"
+    assert assist["stage"] == "reversal"
+    assert assist["q3_margin"] == 11.0
+
+
+def test_q3_rebound_assist_does_not_trigger_when_q1_q2_winners_split():
+    brain = {
+        "scope": "QUARTER_3",
+        "score_parts": [[24, 17], [22, 29]],
+    }
+    assist = q3_rebound_assist(
+        brain,
+        elapsed_seconds=300,
+        current_segment_score=[26, 20],
+    )
+    assert assist["active"] is False
+    assert assist["stage"] == "none"
+
+
+def test_q3_assist_is_soft_and_only_adds_context_to_valid_signal():
+    brain = _brain(current=(18, 20), recent_poss=2.2, recent_score=4.1)
+    brain["score_parts"] = [[10, 20], [11, 21], [18, 20]]
+    signal = live_signal(
+        brain,
+        _lane(score=(18, 20), elapsed=300, line=42.5, market_over=0.46),
+    )
+    assert signal is not None
+    assist = signal["q3_rebound_assist"]
+    assert assist["active"] is True
+    assert assist["stage"] == "close"
+    assert assist["applied"] is True

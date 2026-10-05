@@ -453,22 +453,34 @@ def _infer_flashscore_scope(
     cfg: SportConfig,
     section_keys: list[str] | tuple[str, ...] | None = None,
 ) -> str:
-    """Infer current segment from sport-specific Flashscore status first."""
-    status = str(fs.get("status_code") or "").strip()
-    if cfg.key == "hockey":
-        direct = {"14": "PERIOD_1", "15": "PERIOD_2", "16": "PERIOD_3"}
-    else:
-        direct = {"22": "QUARTER_1", "23": "QUARTER_2", "24": "QUARTER_3", "25": "QUARTER_4"}
-    if status in direct:
-        return direct[status]
+    """Infer current segment from Flashscore minute + score-part evidence.
 
+    For hockey/basketball the master-feed AC value frequently behaves like a
+    whole-match minute (e.g. hockey 46 => P3, basketball 23/38 => later quarters),
+    not a universal status enum. Score-parts are used as a second authority.
+    """
     prefix = "PERIOD_" if cfg.key == "hockey" else "QUARTER_"
     maximum = 3 if cfg.key == "hockey" else 4
     parts = [
         row for row in (fs.get("score_parts") or [])
         if isinstance(row, (list, tuple)) and len(row) >= 2
     ]
-    idx = max(1, min(maximum, len(parts) or 1))
+    parts_idx = max(1, min(maximum, len(parts) or 1))
+
+    minute_idx = 0
+    try:
+        minute = int(float(str(fs.get("status_code") or "").strip()))
+    except (TypeError, ValueError):
+        minute = 0
+    if minute > 0:
+        if cfg.key == "hockey":
+            minute_idx = max(1, min(3, (minute - 1) // 20 + 1))
+        else:
+            league = str(fs.get("league") or "").casefold()
+            segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
+            minute_idx = max(1, min(4, (minute - 1) // segment_minutes + 1))
+
+    idx = max(parts_idx, minute_idx or 1)
     guessed = f"{prefix}{idx}"
     available = [str(value) for value in (section_keys or []) if str(value).startswith(prefix)]
     if guessed in available:
@@ -485,8 +497,6 @@ def _infer_flashscore_scope(
 
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
-    if str(status_code or "") == "38" and str(scope or "").startswith("QUARTER_"):
-        return "Перерыв"
     labels = {
         "PERIOD_1": "1-й период",
         "PERIOD_2": "2-й период",
@@ -1815,9 +1825,6 @@ class MultiSportSteamWorker:
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
         if not stats_payload.get("current_segment_available"):
             state = "WAIT"
-        if cfg.key == "basketball" and str(fs.get("status_code") or "") == "38":
-            state = "WAIT"
-            reason = "перерыв между половинами — LIVE ставку не открываем"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),

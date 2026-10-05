@@ -329,11 +329,23 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     try:
-        elapsed = float(lane.get("clock_seconds"))
         line = float(lane.get("line"))
     except (TypeError, ValueError):
         return None
-    if elapsed <= 0 or elapsed >= 1200:
+
+    # For hockey the bookmaker clock can be cumulative (1200/2400+) or stale
+    # at a period boundary. The Flashscore Brain already follows the current
+    # segment and its period_start_ts, so prefer that local clock and keep the
+    # bookmaker clock only as a fallback.
+    brain_elapsed = _num(brain.get("elapsed_seconds"))
+    book_elapsed = _num(lane.get("clock_seconds"))
+    if brain_elapsed is not None and 0.0 < brain_elapsed < 1200.0:
+        elapsed = float(brain_elapsed)
+        clock_source = "flashscore_period"
+    elif book_elapsed is not None and 0.0 < book_elapsed < 1200.0:
+        elapsed = float(book_elapsed)
+        clock_source = "1xbet_period_fallback"
+    else:
         return None
     remaining = 1200.0 - elapsed
     if elapsed < 120.0 or remaining < 75.0:
@@ -402,9 +414,12 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     agreements = 1
+    recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
     if direction == "over" and recent_shot_rate >= 1.90:
         agreements += 1
-    elif direction == "under" and 0.0 < recent_shot_rate <= 1.10:
+    elif direction == "under" and recent_shot_rate <= 1.10 and recent_window >= 20.0:
+        # Zero fresh SOG over a real multi-snapshot window is meaningful slow
+        # pressure; zero from a single/unavailable snapshot is not.
         agreements += 1
     if direction == "over" and special_factor >= 1.04:
         agreements += 1
@@ -450,7 +465,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "flashscore_brain_score": float(brain.get("brain_score") or 0.0),
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),
-        "projection_clock_source": "hockey_v2_poisson_update",
+        "projection_clock_source": clock_source,
+        "recent_window_seconds": round(recent_window, 1),
         "start": {},
         "end": dict(lane),
     }

@@ -604,12 +604,15 @@ def _infer_flashscore_scope(
 
 
 def _flashscore_break_transition(fs: dict[str, Any], cfg: SportConfig) -> bool:
-    """True when raw Flashscore AC tries to skip an unobserved basketball quarter.
+    """True while Flashscore is between basketball quarters.
 
-    This is the halftime/quarter-break failure mode seen in production: only
-    Q1+Q2 score parts exist, while AC numerically looks like a late Q4 minute.
-    In that state AO/period_start_ts belongs to the break transition and must
-    not be used as elapsed time for the next quarter.
+    Two production variants exist:
+    1) AC numerically jumps too far (for example Q2 -> apparent Q4);
+    2) AC already points to the next quarter, but score_parts still contains
+       only completed quarters and the full score has no unassigned points.
+
+    In either case AO/period_start_ts is transition/break time, not elapsed
+    gameplay in the next quarter.
     """
     if cfg.key != "basketball":
         return False
@@ -619,9 +622,29 @@ def _flashscore_break_transition(fs: dict[str, Any], cfg: SportConfig) -> bool:
     ]
     if not parts or len(parts) >= 4:
         return False
+
     raw_idx = _numeric_live_segment_index(fs, cfg)
     next_possible = min(4, len(parts) + 1)
-    return raw_idx > next_possible
+    inferred_idx = max(1, min(next_possible, raw_idx or len(parts)))
+
+    # Impossible raw skip is always transition evidence.
+    if raw_idx > next_possible:
+        return True
+
+    # If Flashscore points to a quarter that has no score-part row yet and the
+    # full score is exactly the sum of completed quarters, the next quarter has
+    # not produced observable game state yet. Wait instead of treating the
+    # break clock as quarter elapsed time.
+    if inferred_idx > len(parts):
+        try:
+            full = list(fs.get("score") or [0, 0])
+            completed_home = sum(int(row[0] or 0) for row in parts)
+            completed_away = sum(int(row[1] or 0) for row in parts)
+            if int(full[0] or 0) == completed_home and int(full[1] or 0) == completed_away:
+                return True
+        except (TypeError, ValueError, IndexError):
+            pass
+    return False
 
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:

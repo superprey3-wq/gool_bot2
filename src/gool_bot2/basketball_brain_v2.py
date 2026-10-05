@@ -399,6 +399,142 @@ def recent_possession_metrics(
     }
 
 
+def live_quarter_context_assist(
+    brain: dict[str, Any],
+    profile: dict[str, float],
+) -> dict[str, Any]:
+    """Soft quarter-history prior for the live total model.
+
+    The layer only nudges the pre-live quarter prior. Live possession/PPP data
+    still dominates as the quarter progresses.
+    """
+    scope = str(brain.get("scope") or "")
+    base = float(profile.get("quarter_total") or 41.5)
+    scale = max(0.75, min(1.50, base / 41.5))
+    parts = [
+        row for row in (brain.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+
+    out: dict[str, Any] = {
+        "active": False,
+        "scope": scope,
+        "base_prior_total": round(base, 3),
+        "adjusted_prior_total": round(base, 3),
+        "prior_adjustment": 0.0,
+        "q4_baseline_adjustment": 0.0,
+        "game_state_adjustment": 0.0,
+        "mean_reversion_adjustment": 0.0,
+        "previous_quarter_total": None,
+        "entering_q4_margin": None,
+        "diagnostic_q3_split_winners": {
+            "active": False,
+            "q1_winner": None,
+            "q2_winner": None,
+            "watch_side": None,
+            "audit_prior": "12/16",
+        },
+        "reasons": [],
+    }
+
+    quarter_map = {
+        "QUARTER_1": 1,
+        "QUARTER_2": 2,
+        "QUARTER_3": 3,
+        "QUARTER_4": 4,
+    }
+    quarter = quarter_map.get(scope)
+    if quarter is None:
+        return out
+
+    reasons: list[str] = []
+    adjustment = 0.0
+    q4_adj = 0.0
+    state_adj = 0.0
+    reversion_adj = 0.0
+
+    # Daily audit showed Q4 as the lowest-scoring quarter. Apply only a small
+    # conservative shrink so one-day evidence cannot overpower live stats.
+    if quarter == 4:
+        q4_adj = -min(2.4 * scale, max(1.0 * scale, base * 0.04))
+        adjustment += q4_adj
+        reasons.append("Q4 conservative lower-scoring prior")
+
+        if len(parts) >= 3:
+            try:
+                home3 = sum(float(parts[i][0]) for i in range(3))
+                away3 = sum(float(parts[i][1]) for i in range(3))
+                entering_margin = abs(home3 - away3)
+                out["entering_q4_margin"] = round(entering_margin, 2)
+                if entering_margin <= 5.0:
+                    state_adj = 1.2 * scale
+                    reasons.append("close game entering Q4")
+                elif entering_margin <= 19.0:
+                    state_adj = -0.8 * scale
+                    reasons.append("comfortable Q4 margin")
+                else:
+                    state_adj = -1.3 * scale
+                    reasons.append("Q4 blowout/garbage-time risk")
+                adjustment += state_adj
+            except (TypeError, ValueError, IndexError):
+                pass
+
+    # Mean reversion: a very hot quarter usually cools next; a very cold one
+    # usually rebounds. Thresholds are league-relative through quarter baseline.
+    prev_index = quarter - 2
+    if prev_index >= 0 and len(parts) > prev_index:
+        try:
+            prev_total = float(parts[prev_index][0]) + float(parts[prev_index][1])
+            out["previous_quarter_total"] = round(prev_total, 2)
+            deviation = prev_total - base
+            trigger = 5.0 * scale
+            if abs(deviation) >= trigger:
+                raw = -0.18 * deviation
+                cap = 2.5 * scale
+                if raw >= 0:
+                    reversion_adj = min(cap, max(0.8 * scale, raw))
+                    reasons.append("cold previous quarter -> mean-reversion up")
+                else:
+                    reversion_adj = max(-cap, min(-0.8 * scale, raw))
+                    reasons.append("hot previous quarter -> mean-reversion down")
+                adjustment += reversion_adj
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    # Interesting one-day pattern only: when Q1/Q2 winners split, Q3 winner
+    # matched the Q1 winner in 12/16. Log it, never move the total projection.
+    if quarter == 3 and len(parts) >= 2:
+        try:
+            q1m = float(parts[0][0]) - float(parts[0][1])
+            q2m = float(parts[1][0]) - float(parts[1][1])
+            if q1m != 0 and q2m != 0 and (q1m > 0) != (q2m > 0):
+                q1_winner = "home" if q1m > 0 else "away"
+                q2_winner = "home" if q2m > 0 else "away"
+                out["diagnostic_q3_split_winners"] = {
+                    "active": True,
+                    "q1_winner": q1_winner,
+                    "q2_winner": q2_winner,
+                    "watch_side": q1_winner,
+                    "audit_prior": "12/16",
+                }
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    max_adjustment = 4.0 * scale
+    adjustment = _clamp(adjustment, -max_adjustment, max_adjustment)
+    adjusted = max(1.0, base + adjustment)
+    out.update({
+        "active": bool(reasons) or bool(out["diagnostic_q3_split_winners"]["active"]),
+        "adjusted_prior_total": round(adjusted, 3),
+        "prior_adjustment": round(adjustment, 3),
+        "q4_baseline_adjustment": round(q4_adj, 3),
+        "game_state_adjustment": round(state_adj, 3),
+        "mean_reversion_adjustment": round(reversion_adj, 3),
+        "reasons": reasons,
+    })
+    return out
+
+
 def q3_rebound_assist(
     brain: dict[str, Any],
     *,
@@ -552,7 +688,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
 
     league = str(lane.get("league") or brain.get("league") or "")
     profile = league_profile(league)
-    prior_total = profile["quarter_total"]
+    quarter_context = live_quarter_context_assist(brain, profile)
+    prior_total = float(quarter_context.get("adjusted_prior_total") or profile["quarter_total"])
     prior_possessions = profile["quarter_possessions"]
     prior_ppp_pair = prior_total / max(1.0, prior_possessions)
     prior_poss_per_min = prior_possessions / (duration / 60.0)
@@ -745,6 +882,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "agreement_blocks": agreement,
         "four_factors": factors,
         "q3_rebound_assist": q3_assist,
+        "quarter_context_assist": quarter_context,
         "market_confirmed": edge >= 0.055,
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,

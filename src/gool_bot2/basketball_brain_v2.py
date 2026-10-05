@@ -228,7 +228,7 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     else:
         return None
 
-    if not (1.20 < odd < 6.0):
+    if not (1.45 <= odd <= 3.25):
         return None
     edge = model_p - market_p
     if edge < 0.055 or model_p < 0.55:
@@ -256,10 +256,10 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         return None
 
     strength = _clamp(
-        49.0
-        + quality * 13.0
-        + min(0.20, max(0.0, model_p - 0.5)) * 42.0
-        + min(0.18, max(0.0, edge)) * 65.0
+        48.0
+        + quality * 12.0
+        + min(0.20, max(0.0, model_p - 0.5)) * 45.0
+        + min(0.20, max(0.0, edge)) * 60.0
         + (agreement - 1) * 3.0,
         0.0,
         88.0,
@@ -520,7 +520,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_p, market_p, odd = max(choices, key=lambda x: x[0])
 
-    if not (1.20 < odd < 6.0):
+    if not (1.45 <= odd <= 3.25):
         return None
     if edge < 0.055 or model_p < 0.56:
         return None
@@ -561,10 +561,10 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     strength = _clamp(
-        49.0
-        + data_quality * 13.0
-        + min(0.20, max(0.0, model_p - 0.5)) * 42.0
-        + min(0.18, max(0.0, edge)) * 65.0
+        48.0
+        + data_quality * 12.0
+        + min(0.20, max(0.0, model_p - 0.5)) * 45.0
+        + min(0.20, max(0.0, edge)) * 60.0
         + (agreement - 1) * 3.0,
         0.0,
         88.0,

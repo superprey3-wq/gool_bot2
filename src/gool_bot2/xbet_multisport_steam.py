@@ -473,6 +473,49 @@ def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str,
     return out
 
 
+def _numeric_live_segment_index(fs: dict[str, Any], cfg: SportConfig) -> int:
+    """Return current segment index only when Flashscore exposes a numeric whole-match minute."""
+    try:
+        minute = int(float(str(fs.get("status_code") or "").strip()))
+    except (TypeError, ValueError):
+        return 0
+    if minute <= 0:
+        return 0
+    if cfg.key == "hockey":
+        return max(1, min(3, (minute - 1) // 20 + 1))
+    league = str(fs.get("league") or "").casefold()
+    segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
+    return max(1, min(4, (minute - 1) // segment_minutes + 1))
+
+
+def multisport_scope_is_complete(fs: dict[str, Any], sport: str, scope: str) -> bool:
+    """True once a scoped market's segment has definitely ended."""
+    cfg = SPORTS.get(str(sport or "").casefold())
+    if cfg is None:
+        return False
+    scope = str(scope or SCOPE_FULL)
+    if str(fs.get("coarse_status") or "") == "3":
+        return True
+    current = _numeric_live_segment_index(fs, cfg)
+    if current <= 0:
+        return False
+    if cfg.key == "hockey" and scope.startswith("PERIOD_"):
+        try:
+            target = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return False
+        return current > target
+    if cfg.key == "basketball" and scope.startswith("QUARTER_"):
+        try:
+            target = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return False
+        return current > target
+    if cfg.key == "basketball" and scope == "FIRST_HALF":
+        return current > 2
+    return False
+
+
 def _infer_flashscore_scope(
     fs: dict[str, Any],
     cfg: SportConfig,
@@ -3223,7 +3266,13 @@ class MultiSportSteamWorker:
             if stored_result in _FINAL_RESULTS and not repair_direction_mismatch:
                 continue
             state = states.get(str(row.get("flashscore_event_id") or ""))
-            if not state or str(state.get("coarse_status") or "") != "3":
+            if not state:
+                continue
+            scope = str(row.get("scope") or SCOPE_FULL)
+            if scope == SCOPE_FULL:
+                if str(state.get("coarse_status") or "") != "3":
+                    continue
+            elif not multisport_scope_is_complete(state, cfg.key, scope):
                 continue
             # Legacy pending rows created before emblem metadata was journaled
             # can still render proper result cards: refresh identity assets from
@@ -3239,7 +3288,6 @@ class MultiSportSteamWorker:
                 if not str(row.get(key) or "").strip() and str(state.get(key) or "").strip():
                     row[key] = str(state.get(key) or "").strip()
             full_score = list(state.get("score") or [0, 0])
-            scope = str(row.get("scope") or SCOPE_FULL)
             if scope == SCOPE_FULL:
                 # FULL_MATCH uses the authoritative final Flashscore score.
                 # In basketball/hockey this includes overtime when the selected
@@ -3820,6 +3868,51 @@ class MultiSportSteamWorker:
             self._save_sent_parlay_signatures(sent_signatures)
         return delivered
 
+    def _enrich_parlay_source_rows(
+        self,
+        rows: list[dict[str, Any]],
+        fs_today: list[dict[str, Any]],
+        cfg: SportConfig,
+    ) -> list[dict[str, Any]]:
+        """Attach fresh Flashscore identity/logo metadata before building parlays."""
+        by_id = {
+            str(item.get("flashscore_event_id") or ""): item
+            for item in fs_today
+            if str(item.get("flashscore_event_id") or "")
+        }
+        out: list[dict[str, Any]] = []
+        keys = (
+            "home_team_id", "away_team_id",
+            "home_team_slug", "away_team_slug",
+            "home_logo_file", "away_logo_file",
+        )
+        for raw in rows:
+            row = dict(raw)
+            if str(row.get("sport") or "") != cfg.key:
+                out.append(row)
+                continue
+            fs = by_id.get(str(row.get("flashscore_event_id") or ""))
+            if fs is None:
+                best = None
+                best_score = 0.0
+                for candidate in fs_today:
+                    quality, reversed_order, weakest = _match_quality(
+                        {"O1": row.get("home"), "O2": row.get("away")},
+                        candidate,
+                    )
+                    if reversed_order:
+                        continue
+                    if quality > best_score and weakest >= 0.72:
+                        best, best_score = candidate, quality
+                if best_score >= 0.82:
+                    fs = best
+            if fs:
+                for key in keys:
+                    if not str(row.get(key) or "").strip() and str(fs.get(key) or "").strip():
+                        row[key] = str(fs.get(key) or "").strip()
+            out.append(row)
+        return out
+
     def _scan_sport(
         self,
         cfg: SportConfig,
@@ -3839,7 +3932,8 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
-        prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
+        parlay_source = self._enrich_parlay_source_rows(load_journal(self.journal_path), fs_today, cfg)
+        prematch_parlays = build_sport_parlays(parlay_source, cfg.key)
         parlay_delivered = self._deliver_new_parlays(cfg, prematch_parlays)
         fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]
         live_analysis = [dict(row) for row in (prepared.get("live_analysis") or [])]

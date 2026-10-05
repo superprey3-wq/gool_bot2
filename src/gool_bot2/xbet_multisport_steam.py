@@ -3534,7 +3534,7 @@ class MultiSportSteamWorker:
                     prefetched_prematch[key] = list(rows or [])
 
         print(
-            "GOOL_MULTISPORT_PRICE_FETCH "
+            "GOOL_MULTISPORT_PREFETCH "
             + " ".join(
                 f"{key}:live={len(prefetched_live.get(key) or [])},pre={len(prefetched_prematch.get(key) or [])}"
                 for key, _cfg in enabled

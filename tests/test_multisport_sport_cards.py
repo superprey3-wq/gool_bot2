@@ -52,3 +52,36 @@ def test_basketball_cards_render_as_png():
     ):
         assert png.startswith(b"\x89PNG")
         assert len(png) > 5000
+
+
+def test_prematch_cards_render_long_team_names_without_layout_crash():
+    basket = {
+        "home": "Sacramento Kings",
+        "away": "Los Angeles Lakers",
+        "league": "USA: NBA - Pre-season",
+        "start_ts": 1791252000,
+        "scope": "FIRST_HALF",
+        "market_family": "match_total",
+    }
+    hockey = {
+        "home": "MHC Spartak MAH",
+        "away": "Mikhaylov Academy U20",
+        "league": "RUSSIA: MHL",
+        "start_ts": 1791300600,
+        "scope": "PERIOD_1",
+        "market_family": "away_total",
+    }
+    basket_png = render_basketball_prematch_card(
+        basket,
+        {**_signal(118.5), "selection": "1-я половина: ТМ 118.5", "direction": "under"},
+        SPORTS["basketball"],
+    )
+    hockey_png = render_hockey_prematch_card(
+        hockey,
+        {**_signal(0.5), "selection": "1-й период: ИТБ2 0.5", "direction": "over"},
+        SPORTS["hockey"],
+    )
+    assert basket_png.startswith(b"\x89PNG")
+    assert hockey_png.startswith(b"\x89PNG")
+    assert len(basket_png) > 5000
+    assert len(hockey_png) > 5000

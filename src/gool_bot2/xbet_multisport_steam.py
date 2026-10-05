@@ -868,12 +868,76 @@ def detect_live_segment_stats(
     }
 
 
+def _expected_live_segment_total(cfg: SportConfig, league: str) -> float:
+    if cfg.key == "hockey":
+        return _float_env("GOOL_HOCKEY_LIVE_EXPECTED_PERIOD_TOTAL", 1.90)
+    text = str(league or "").casefold()
+    if ("nba" in text or "g league" in text) and "wnba" not in text:
+        return _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_NBA_QUARTER_TOTAL", 56.0)
+    return _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_QUARTER_TOTAL", 48.0)
+
+
+def _priced_segment_projection(
+    brain: dict[str, Any],
+    lane: dict[str, Any],
+    cfg: SportConfig,
+) -> tuple[float, float, float] | None:
+    """Project current segment only after Brain selected the game.
+
+    Flashscore stats choose the candidate. Once selected, the already-fetched
+    1xBet game snapshot contributes a reliable local segment clock. That clock
+    is not used for discovery; it is used only to price the chosen candidate.
+    """
+    try:
+        elapsed = float(lane.get("clock_seconds"))
+    except (TypeError, ValueError):
+        return None
+    duration = float(_segment_duration_seconds(lane, cfg))
+    if elapsed <= 0 or elapsed > duration:
+        return None
+    remaining = max(0.0, duration - elapsed)
+    if remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
+        return None
+
+    score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+    try:
+        current = max(0.0, float(score[0])) + max(0.0, float(score[1]))
+    except (TypeError, ValueError, IndexError):
+        return None
+
+    prior = _expected_live_segment_total(cfg, str(lane.get("league") or brain.get("league") or ""))
+    observed_weight = max(0.20, min(0.85, elapsed / max(1.0, duration)))
+
+    if cfg.key == "basketball":
+        raw_pace_total = current * duration / max(1.0, elapsed)
+        projection = prior * (1.0 - observed_weight) + raw_pace_total * observed_weight
+    else:
+        stats = dict((lane.get("live_game_stats") or brain.get("live_game_stats") or {}).get("segment_stats") or {})
+        shots = list(stats.get("shots_on_goal") or stats.get("shots") or [])
+        shot_total = (
+            max(0.0, float(shots[0])) + max(0.0, float(shots[1]))
+            if len(shots) >= 2 else 0.0
+        )
+        raw_goal_total = current * duration / max(1.0, elapsed)
+        if shot_total > 0:
+            projected_shots = shot_total * duration / max(1.0, elapsed)
+            shot_goal_total = projected_shots * _float_env("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08)
+            observed_total = raw_goal_total * 0.45 + shot_goal_total * 0.55
+        else:
+            observed_total = raw_goal_total
+        projection = prior * (1.0 - observed_weight) + observed_total * observed_weight
+
+    # A projection can never finish below the score already recorded.
+    projection = max(current, projection)
+    return float(projection), float(elapsed), float(remaining)
+
+
 def price_flashscore_live_candidate(
     brain: dict[str, Any],
     lane: dict[str, Any],
     cfg: SportConfig,
 ) -> dict[str, Any] | None:
-    """Attach the current 1xBet segment price to a Flashscore Brain candidate."""
+    """Attach current 1xBet segment price after Flashscore Brain selection."""
     if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
         return None
     if str(lane.get("market_family") or "") != "match_total":
@@ -881,11 +945,16 @@ def price_flashscore_live_candidate(
     scope = str(brain.get("scope") or "")
     if str(lane.get("scope") or "") != scope:
         return None
+
+    projected = _priced_segment_projection(brain, lane, cfg)
+    if projected is None:
+        return None
+    projection, elapsed, remaining = projected
     try:
-        projection = float(brain.get("projected_total"))
         line = float(lane.get("line"))
     except (TypeError, ValueError):
         return None
+
     raw_edge = projection - line
     direction = "over" if raw_edge > 0 else "under"
     stat_edge = abs(raw_edge)
@@ -910,6 +979,8 @@ def price_flashscore_live_candidate(
     brain_score = float(brain.get("brain_score") or 0.0)
     edge_ratio = stat_edge / max(1e-6, min_edge)
     strength = min(100.0, brain_score * 0.72 + 20.0 + min(18.0, edge_ratio * 8.0))
+    score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+    current_total = int(score[0] or 0) + int(score[1] or 0)
     return {
         "brain_mode": "flashscore_stat_first",
         "direction": direction,
@@ -920,9 +991,9 @@ def price_flashscore_live_candidate(
         "stat_edge": round(stat_edge, 3),
         "projected_total": round(projection, 2),
         "raw_stat_projection": round(projection, 2),
-        "current_segment_total": int(brain.get("current_segment_total") or 0),
-        "elapsed_seconds": brain.get("elapsed_seconds"),
-        "remaining_seconds": brain.get("remaining_seconds"),
+        "current_segment_total": current_total,
+        "elapsed_seconds": round(elapsed, 1),
+        "remaining_seconds": round(remaining, 1),
         "recent_rate_per_min": brain.get("recent_score_rate"),
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,
@@ -931,6 +1002,7 @@ def price_flashscore_live_candidate(
         "strength": round(strength, 1),
         "market_confirmed": market_probability >= 0.50,
         "market_probability": round(market_probability, 4),
+        "projection_clock_source": "1xbet_after_flashscore_brain",
         "flashscore_brain_score": round(brain_score, 1),
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),
@@ -1705,28 +1777,36 @@ class MultiSportSteamWorker:
         if not stats_payload.get("current_segment_available"):
             rating = min(rating, 48.0)
             reason = "Flashscore LIVE есть, статистика именно текущего периода/четверти ещё недоступна"
-        if elapsed <= 0:
-            rating = min(rating, 54.0)
-            reason += " · часы сегмента ещё не синхронизированы"
-
         direction_hint = ""
-        if projection is not None and elapsed >= (75.0 if cfg.key == "hockey" else 90.0):
-            if cfg.key == "hockey":
-                expected_segment = _float_env("GOOL_HOCKEY_LIVE_EXPECTED_PERIOD_TOTAL", 1.90)
-                deviation_scale = max(0.10, _float_env("GOOL_HOCKEY_LIVE_INTEREST_SCALE", 0.35))
+        # Candidate discovery stays Flashscore-only. Do not use AO as a game
+        # clock: real basketball feeds proved that its age can differ sharply
+        # from the actual quarter clock. Short-window stat changes can still
+        # mark slow/fast games as interesting before bookmaker pricing.
+        if len(recent) >= 2 and age >= 25.0:
+            if cfg.key == "basketball":
+                if recent_score_rate <= _float_env("GOOL_BASKETBALL_LIVE_SLOW_PACE_PER_MIN", 2.2):
+                    rating = max(rating, 58.0)
+                    direction_hint = "under"
+                    reason += f" · свежий темп {recent_score_rate:.1f}/мин выглядит низким"
+                elif recent_score_rate >= _float_env("GOOL_BASKETBALL_LIVE_FAST_PACE_PER_MIN", 5.8):
+                    rating = max(rating, 68.0)
+                    direction_hint = "over"
+                    reason += f" · свежий темп {recent_score_rate:.1f}/мин выглядит высоким"
             else:
-                league = str(fs.get("league") or "").casefold()
-                expected_segment = (
-                    _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_NBA_QUARTER_TOTAL", 56.0)
-                    if ("nba" in league or "g league" in league) and "wnba" not in league
-                    else _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_QUARTER_TOTAL", 48.0)
-                )
-                deviation_scale = max(1.0, _float_env("GOOL_BASKETBALL_LIVE_INTEREST_SCALE", 5.0))
-            deviation = abs(float(projection) - expected_segment)
-            projection_interest = min(98.0, 48.0 + (deviation / deviation_scale) * 12.0)
-            rating = max(rating, projection_interest)
-            direction_hint = "over" if float(projection) > expected_segment else "under"
-            reason += f" · прогноз {float(projection):.1f} vs база {expected_segment:.1f} ({direction_hint.upper()})"
+                first_stats = dict((first.get("live_game_stats") or {}).get("segment_stats") or {})
+                first_shots = list(first_stats.get("shots_on_goal") or first_stats.get("shots") or [])
+                now_shots = list(stats.get("shots_on_goal") or stats.get("shots") or [])
+                if len(first_shots) >= 2 and len(now_shots) >= 2:
+                    shot_delta = max(0.0, float(now_shots[0]) + float(now_shots[1]) - float(first_shots[0]) - float(first_shots[1]))
+                    recent_shot_rate = shot_delta * 60.0 / max(1.0, age)
+                    if recent_shot_rate <= _float_env("GOOL_HOCKEY_LIVE_SLOW_SHOTS_PER_MIN", 0.9):
+                        rating = max(rating, 52.0)
+                        direction_hint = "under"
+                        reason += f" · свежий темп бросков {recent_shot_rate:.1f}/мин низкий"
+                    elif recent_shot_rate >= _float_env("GOOL_HOCKEY_LIVE_FAST_SHOTS_PER_MIN", 2.2):
+                        rating = max(rating, 64.0)
+                        direction_hint = "over"
+                        reason += f" · свежий темп бросков {recent_shot_rate:.1f}/мин высокий"
 
         pass_default = 62.0 if cfg.key == "hockey" else 68.0
         borderline_default = 50.0 if cfg.key == "hockey" else 56.0
@@ -1738,9 +1818,6 @@ class MultiSportSteamWorker:
         if cfg.key == "basketball" and str(fs.get("status_code") or "") == "38":
             state = "WAIT"
             reason = "перерыв между половинами — LIVE ставку не открываем"
-        if elapsed > 0 and remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
-            state = "WAIT"
-            reason = "сегмент почти закончился — новую LIVE ставку не открываем"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -1758,7 +1835,7 @@ class MultiSportSteamWorker:
             "current_segment_total": current_total,
             "elapsed_seconds": round(elapsed, 1),
             "remaining_seconds": round(remaining, 1),
-            "projected_total": None if projection is None else round(float(projection), 2),
+            "projected_total": None,
             "live_game_stats": stats_payload,
             "history_points": len(recent),
             "recent_score_rate": round(recent_score_rate, 3),
@@ -3538,7 +3615,6 @@ class MultiSportSteamWorker:
         live_candidates = [
             row for row in live_analysis
             if str(row.get("brain_state") or "") in {"PASS", "BORDERLINE"}
-            and row.get("projected_total") is not None
         ][:live_price_max]
 
         now = time.time()

@@ -127,24 +127,51 @@ def render_basketball_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:A
     return sc._save(im)
 
 
+
 def render_basketball_result_card(row:dict[str,Any],cfg:Any)->bytes:
     result=str(row.get("result") or "pending").lower()
     accent=GREEN if result=="won" else GOLD if result=="void" else RED
     im=Image.new("RGBA",(1080,640),BG+(255,)); d=ImageDraw.Draw(im)
     _header(d,str(row.get("phase") or "LIVE").upper())
+
     title="✅ ЗАШЁЛ" if result=="won" else "↩️ ВОЗВРАТ" if result=="void" else "❌ НЕ ЗАШЁЛ"
-    d.text((52,128),title,font=sc._font(27,True),fill=accent)
-    d.text((52,166),str(row.get("league") or "BASKETBALL"),font=sc._fit(d,str(row.get("league") or "BASKETBALL"),960,18,False),fill=MUTED)
-    d.rounded_rectangle((42,205,1038,390),26,fill=PANEL,outline=accent,width=3)
+    d.text((52,122),title,font=sc._font(28,True),fill=accent)
+    league=str(row.get("league") or "BASKETBALL")
+    d.text((52,160),league,font=sc._fit(d,league,960,18,False),fill=MUTED)
+
+    # One coherent match block: badge + team | score | team + badge.
+    d.rounded_rectangle((42,196,1038,405),26,fill=PANEL,outline=accent,width=3)
     home,away=str(row.get("home") or "?"),str(row.get("away") or "?")
-    _team_badges(im,d,row,home,away,accent)
-    d.text((205,245),home,font=sc._fit(d,home,290,23,True),fill=TEXT)
-    d.text((560,245),away,font=sc._fit(d,away,290,23,True),fill=TEXT)
+    sc._badge(im,d,128,300,sc._logo(row,"home"),home,accent)
+    sc._badge(im,d,952,300,sc._logo(row,"away"),away,accent)
+
+    def center_region(text:str,cx:int,y:int,width:int,size:int,fill)->None:
+        font=sc._fit(d,text,width,size,True)
+        box=d.textbbox((0,0),text,font=font)
+        d.text((cx-(box[2]-box[0])/2,y),text,font=font,fill=fill)
+
+    center_region(home,290,252,230,23,TEXT)
+    center_region(away,790,252,230,23,TEXT)
+
     score=list(row.get("settled_score") or row.get("score") or [0,0])
-    d.rounded_rectangle((570,245,835,350),16,fill=(31,17,10),outline=ORANGE,width=2)
-    sc._center(d,f"{int(score[0])} : {int(score[1])}",270,sc._font(38,True),TEXT)
-    d.rounded_rectangle((42,420,1038,578),22,fill=PANEL,outline=LINE,width=2)
+    d.rounded_rectangle((405,238,675,360),20,fill=(31,17,10),outline=ORANGE,width=3)
+    center_region("ФИНАЛ",540,253,220,13,MUTED)
+    center_region(f"{int(score[0])} : {int(score[1])}",540,287,230,43,TEXT)
+
+    scope=str(row.get("scope") or SCOPE_FULL)
+    scope_label=SCOPE_LABEL_RU.get(scope,scope)
+    center_region(scope_label.upper(),540,369,430,15,accent)
+
+    # Bet/result block kept separate from the scoreboard.
+    d.rounded_rectangle((42,430,1038,590),22,fill=(31,17,10),outline=LINE,width=2)
     pick=str(row.get("selection") or "?")
-    d.text((70,448),f"{pick} @ {float(row.get('odd') or 0):.2f}",font=sc._fit(d,f"{pick} @ {float(row.get('odd') or 0):.2f}",900,33,True),fill=GOLD)
-    d.text((70,518),f"P/L {float(row.get('profit_units') or 0):+.2f}u",font=sc._font(27,True),fill=accent)
+    odd=float(row.get("odd") or 0)
+    d.text((70,454),"СТАВКА",font=sc._font(14,True),fill=MUTED)
+    d.text((70,482),f"{pick} @ {odd:.2f}",font=sc._fit(d,f"{pick} @ {odd:.2f}",690,34,True),fill=GOLD)
+    d.text((70,535),f"P/L {float(row.get('profit_units') or 0):+.2f}u",font=sc._font(28,True),fill=accent)
+
+    result_text="WIN" if result=="won" else "VOID" if result=="void" else "LOSS"
+    d.rounded_rectangle((820,468,995,548),18,fill=PANEL,outline=accent,width=2)
+    center_region(result_text,907,490,145,24,accent)
     return sc._save(im)
+

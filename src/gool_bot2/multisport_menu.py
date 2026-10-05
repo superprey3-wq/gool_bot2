@@ -522,9 +522,9 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
                     ),
                     None,
                 )
-            score = list(fs.get("score") or (row or {}).get("score") or (brain or {}).get("score") or [0, 0])
-            period = str((row or {}).get("period") or (brain or {}).get("period") or fs.get("status_code") or "LIVE")
-            stats_payload = dict((row or {}).get("live_game_stats") or (brain or {}).get("live_game_stats") or {})
+            score = list(fs.get("score") or (brain or {}).get("score") or (row or {}).get("score") or [0, 0])
+            period = str((brain or {}).get("period") or (row or {}).get("period") or fs.get("status_code") or "LIVE")
+            stats_payload = dict((brain or {}).get("live_game_stats") or (row or {}).get("live_game_stats") or {})
             if not stats_payload and fs_id:
                 try:
                     detailed = provider.fetch_stats_detailed(fs_id)
@@ -558,18 +558,23 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
                 brain_state = str(brain.get("brain_state") or "WAIT").upper()
                 brain_score = float(brain.get("brain_score") or 0.0)
                 brain_reason = str(brain.get("brain_reason") or "Flashscore статистика анализируется")
+                projected = brain.get("projected_total")
+                projection = (
+                    f" · прогноз сегмента {float(projected):.1f}"
+                    if projected is not None else ""
+                )
                 if row is None and brain_state in {"PASS", "BORDERLINE"}:
                     decision = (
-                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f} · {brain_reason}\n"
-                        f"💰 1xBet: кандидат выбран Brain, ждём/ищем цену текущего периода/четверти"
+                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f}{projection} · {brain_reason}\n"
+                        f"💰 1xBet: Brain уже выбрал матч, теперь ищем цену текущего периода/четверти"
                     )
                 elif row is not None and brain_state in {"PASS", "BORDERLINE"}:
                     decision = (
-                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f} · {brain_reason}\n"
-                        f"💰 1xBet найден, но линия/цена ещё не прошла финальные фильтры ставки"
+                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f}{projection} · {brain_reason}\n"
+                        f"💰 1xBet найден, но edge/коэффициент не прошёл финальный фильтр"
                     )
                 else:
-                    decision = f"⏳ <b>WAIT</b> · Brain R{brain_score:.0f} · {brain_reason}"
+                    decision = f"⏳ <b>WAIT</b> · Brain R{brain_score:.0f}{projection} · {brain_reason}"
             elif row is None:
                 decision = "⏳ <b>WAIT</b> · Flashscore LIVE есть, Brain ещё прогревает статистику"
             else:

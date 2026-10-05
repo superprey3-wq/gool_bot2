@@ -295,12 +295,14 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     if agreement < 2:
         return None
 
+    push_confidence_penalty = min(0.45, max(0.0, push)) * 10.0
     strength = _clamp(
         45.0
         + quality * 10.0
         + (model_probability - 0.5) * 35.0
         + edge * 70.0
-        + (agreement - 1) * 3.0,
+        + (agreement - 1) * 3.0
+        - push_confidence_penalty,
         0.0,
         87.0,
     )
@@ -316,6 +318,7 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         "model_probability": round(model_probability, 6),
         "market_probability": round(market_probability, 6),
         "push_probability": round(push, 6),
+        "push_confidence_penalty": round(push_confidence_penalty, 2),
         "edge": round(edge, 6),
         "strength": round(strength, 1),
         "lambda_home": round(lam_home, 3),
@@ -480,12 +483,14 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     quality = _clamp(0.45 + min(0.25, int(brain.get("history_points") or 0) * 0.06) + (0.15 if stats_payload.get("current_segment_available") else 0.0), 0.0, 0.9)
+    push_confidence_penalty = min(0.45, max(0.0, push)) * 12.0
     strength = _clamp(
         45.0
         + quality * 10.0
         + (model_probability - 0.5) * 35.0
         + edge * 70.0
-        + (agreements - 1) * 3.0,
+        + (agreements - 1) * 3.0
+        - push_confidence_penalty,
         0.0,
         87.0,
     )
@@ -498,6 +503,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "model_probability": round(model_probability, 6),
         "market_probability": round(market_probability, 6),
         "push_probability": round(push, 6),
+        "push_confidence_penalty": round(push_confidence_penalty, 2),
         "edge": round(edge, 6),
         "metric_delta": round(edge * 100.0, 3),
         "stat_edge": round(abs((current + lam_remaining) - line), 3),

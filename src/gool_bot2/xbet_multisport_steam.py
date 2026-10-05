@@ -1606,10 +1606,22 @@ class MultiSportSteamWorker:
             requested_scope = _infer_flashscore_scope(fs, cfg, list(sections))
         scope = requested_scope
         selected = dict(sections.get(scope) or {})
-        if not selected:
-            selected = dict(sections.get("FULL_MATCH") or {})
-            scope = "FULL_MATCH" if selected else requested_scope
-        stats = dict(selected.get("stats") or {})
+        selected_stats = dict(selected.get("stats") or {})
+        # Flashscore can expose a current-period/quarter section header before
+        # it exposes any stats inside that section. Do not treat an empty
+        # section as usable: fall back to cumulative FULL_MATCH stats and
+        # reconstruct the current segment from the baseline delta below.
+        if not selected_stats:
+            full_match = dict(sections.get("FULL_MATCH") or {})
+            full_stats = dict(full_match.get("stats") or {})
+            if full_stats:
+                selected = full_match
+                selected_stats = full_stats
+                scope = "FULL_MATCH"
+            elif not selected:
+                selected = full_match
+                scope = "FULL_MATCH" if full_match else requested_scope
+        stats = selected_stats or dict(selected.get("stats") or {})
         segment_stats: dict[str, list[float]] = {}
         segment_attempts: dict[str, list[float]] = {}
         for key, item in stats.items():

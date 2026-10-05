@@ -299,6 +299,41 @@ def test_basketball_halftime_status_cannot_skip_from_q2_to_q4(tmp_path, monkeypa
     assert result["brain_state"] == "WAIT"
 
 
+def test_basketball_halftime_q3_label_without_q3_score_part_is_still_break(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_3",
+            "available": True,
+            "current_segment_available": True,
+            "segment_stats": {"rebounds": [7.0, 8.0], "turnovers": [2.0, 2.0]},
+            "segment_attempts": {},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BHALF002",
+        "home": "Home",
+        "away": "Away",
+        "league": "ISRAEL: League Cup",
+        "score": [33, 40],
+        "score_parts": [[19, 27], [14, 13]],
+        # AC already maps to Q3, but there is still no Q3 score-part row and
+        # the full score is exactly Q1+Q2.
+        "status_code": "23",
+        "period_start_ts": __import__("time").time() - 600,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_3"
+    assert result["break_transition"] is True
+    assert result["elapsed_seconds"] == 0.0
+    assert result["brain_state"] == "WAIT"
+
+
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
     monkeypatch.setenv("GOOL_MULTISPORT_MAX_ODD", "3.25")

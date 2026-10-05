@@ -402,6 +402,11 @@ def multisport_in_game_sections() -> list[str]:
                 live_by_fs[fs_id] = {**live_by_fs[fs_id], **mapped}
             else:
                 live_by_fs[fs_id] = dict(mapped)
+            analysis = analysis_by_id.get(fs_id) or {}
+            if analysis.get("scope"):
+                live_by_fs[fs_id]["scope"] = analysis.get("scope")
+            if analysis.get("period"):
+                live_by_fs[fs_id]["period"] = analysis.get("period")
         active: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for row in rows:
             if str(row.get("sport") or "") != sport:

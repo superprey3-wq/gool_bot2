@@ -257,3 +257,18 @@ def test_live_short_pressure_window_does_not_count_as_shot_confirmation():
     lane = _live_lane(elapsed=600, line=1.5, market_over=0.70)
 
     assert live_signal(brain, lane) is None
+
+
+def test_prematch_respects_shared_minimum_odd(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
+    lane = {
+        "scope": "FULL_MATCH",
+        "market_family": "handicap",
+        "selection_side": "away",
+        "choice_key": "away",
+        "line": 2.5,
+        "odd": 1.38,
+        "probability": 0.66,
+        "selection": "Ф2 +2.5",
+    }
+    assert prematch_signal(lane, _strong_features(), "NHL") is None

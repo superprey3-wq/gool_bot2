@@ -5,6 +5,8 @@ from gool_bot2.xbet_multisport_steam import (
     SPORTS,
     _infer_flashscore_scope,
     detect_live_segment_stats,
+    parse_flashscore_events,
+    price_flashscore_live_candidate,
 )
 
 
@@ -198,6 +200,7 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
             "source": "flashscore",
             "scope": "PERIOD_2",
             "available": True,
+            "current_segment_available": True,
             "segment_stats": {
                 "shots_on_goal": [4.0, 3.0],
                 "blocked_shots": [2.0, 1.0],
@@ -214,6 +217,7 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
         "score": [1, 2],
         "score_parts": [[0, 1], [1, 1]],
         "status_code": "46",
+        "period_start_ts": __import__("time").time() - 420,
     }
 
     result = worker._flashscore_live_brain(fs, SPORTS["hockey"])
@@ -224,7 +228,7 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
     assert "броски 7" in result["brain_reason"]
 
 
-def test_intermission_never_becomes_pricing_candidate(tmp_path, monkeypatch):
+def test_basketball_numeric_status_code_does_not_override_quarter_scope(tmp_path, monkeypatch):
     worker = MultiSportSteamWorker(tmp_path)
     monkeypatch.setattr(
         worker,
@@ -233,24 +237,27 @@ def test_intermission_never_becomes_pricing_candidate(tmp_path, monkeypatch):
             "source": "flashscore",
             "scope": "QUARTER_2",
             "available": True,
-            "segment_stats": {"rebounds": [18.0, 17.0]},
+            "current_segment_available": True,
+            "segment_stats": {"rebounds": [18.0, 17.0], "turnovers": [5.0, 6.0]},
             "segment_attempts": {},
         },
     )
     fs = {
-        "flashscore_event_id": "BHALF001",
+        "flashscore_event_id": "BQ200001",
         "home": "Home",
         "away": "Away",
         "league": "NBA",
         "score": [61, 59],
         "score_parts": [[31, 29], [30, 30]],
         "status_code": "38",
+        "period_start_ts": __import__("time").time() - 300,
     }
 
     result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
 
-    assert result["period"] == "Перерыв"
-    assert result["brain_state"] == "WAIT"
+    assert result["period"] == "2-я четверть"
+    assert result["scope"] == "QUARTER_2"
+    assert result["projected_total"] is not None
 
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")

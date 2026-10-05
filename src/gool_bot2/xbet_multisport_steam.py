@@ -3519,21 +3519,33 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
+                target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
-                    allowed, policy_reason = lane_phase_policy(cfg.key, "LIVE", lane, row.get("period"))
-                    if not allowed:
+                    # Product contract: LIVE pricing is only the current
+                    # Flashscore period/quarter total. The Brain has already
+                    # selected the game before this 1xBet market is considered.
+                    if (
+                        str(lane.get("market_family") or "") != "match_total"
+                        or not target_scope
+                        or str(lane.get("scope") or "") != target_scope
+                    ):
                         policy_blocked += 1
                         continue
-                    lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
-                    history, score_changed_at = self._append_history(lane_row, cfg)
-                    signal = detect_live_segment_stats(history, cfg, now=float(lane_row["ts"]), score_changed_at=score_changed_at)
+                    lane_row = self._lane_row(row, {**lane, "phase_policy": "flashscore_brain_current_segment"})
+                    self._append_history(lane_row, cfg)
+                    signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
                     if signal is None:
                         continue
                     signal = {
                         **signal,
                         "scope": lane_row.get("scope"),
                         "market_family": lane_row.get("market_family"),
-                        "selection": selection_label(lane_row, str(signal.get("direction") or "over"), float(signal.get("line") or 0.0)),
+                        "selection": selection_label(
+                            lane_row,
+                            str(signal.get("direction") or "over"),
+                            float(signal.get("line") or 0.0),
+                        ),
                     }
                     recorded, sent = self._record_signal(lane_row, signal, cfg)
                     if recorded:
@@ -3546,7 +3558,6 @@ class MultiSportSteamWorker:
                     row["signals"] = signals
                     row["signal"] = signals[0]
                     row["steam"] = signals[0]
-                fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or ""))
                 if fs_brain:
                     row["flashscore_brain"] = fs_brain
                 latest.append(row)
@@ -3582,6 +3593,8 @@ class MultiSportSteamWorker:
                     "score_parts": list(row.get("score_parts") or []),
                     "status_code": str(row.get("status_code") or ""),
                     "coarse_status": str(row.get("coarse_status") or ""),
+                    "match_start_ts": int(row.get("match_start_ts") or 0),
+                    "period_start_ts": int(row.get("period_start_ts") or 0),
                     "start_ts": int(row.get("start_ts") or 0),
                 }
                 for row in fs_live[:120]

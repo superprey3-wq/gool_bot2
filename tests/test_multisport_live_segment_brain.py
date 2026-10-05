@@ -267,12 +267,11 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
         "brain_state": "PASS",
         "brain_score": 82.0,
         "scope": "QUARTER_2",
-        "projected_total": 57.8,
+        # This pre-price value must not drive the bet; final projection uses
+        # the reliable 1xBet segment clock only after Brain selected the game.
+        "projected_total": 7.8,
         "current_segment_total": 31,
-        "elapsed_seconds": 310,
-        "remaining_seconds": 290,
-        "recent_score_rate": 6.2,
-        "history_points": 1,
+        "history_points": 2,
         "brain_reason": "Flashscore pace and shooting pressure",
     }
     lane = {
@@ -282,6 +281,10 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
         "over": 1.88,
         "under": 1.88,
         "probability": 0.50,
+        "clock_seconds": 310,
+        "score": [15, 16],
+        "league": "USA: NBA",
+        "live_game_stats": {"segment_stats": {"rebounds": [8, 7]}},
     }
 
     signal = price_flashscore_live_candidate(brain, lane, SPORTS["basketball"])
@@ -291,7 +294,10 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
     assert signal["direction"] == "over"
     assert signal["line"] == 53.5
     assert signal["odd"] == 1.88
-    assert signal["projected_total"] == 57.8
+    assert signal["projected_total"] > 53.5
+    assert signal["projected_total"] != 7.8
+    assert signal["elapsed_seconds"] == 310.0
+    assert signal["projection_clock_source"] == "1xbet_after_flashscore_brain"
     assert signal["flashscore_brain_score"] == 82.0
 
 
@@ -428,4 +434,41 @@ def test_flashscore_status_codes_identify_current_segment_before_score_parts():
         {"status_code": "24", "score_parts": [[20, 18], [22, 19]]},
         SPORTS["basketball"],
     ) == "QUARTER_3"
+
+def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3(monkeypatch):
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_SEGMENT_MIN_STAT_EDGE", "2.5")
+    brain = {
+        "brain_state": "PASS",
+        "brain_score": 78.0,
+        "scope": "QUARTER_3",
+        "projected_total": 7.54,
+        "current_segment_score": [2, 0],
+        "current_segment_total": 2,
+        "history_points": 3,
+        "brain_reason": "Flashscore stats selected this game first",
+    }
+    lane = {
+        "scope": "QUARTER_3",
+        "market_family": "match_total",
+        "line": 57.5,
+        "over": 1.90,
+        "under": 1.92,
+        "probability": 0.50,
+        # Real audit showed the 1xBet local Q3 clock near 45s while AO age
+        # was ~191s. The post-candidate projection must use 45s.
+        "clock_seconds": 45,
+        "score": [2, 0],
+        "league": "USA: NBA - Pre-season",
+        "live_game_stats": {"segment_stats": {"rebounds": [1, 0]}},
+    }
+
+    signal = price_flashscore_live_candidate(brain, lane, SPORTS["basketball"])
+
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert 48.0 <= signal["projected_total"] <= 54.0
+    assert signal["projected_total"] != 7.54
+    assert signal["elapsed_seconds"] == 45.0
+    assert signal["remaining_seconds"] == 675.0
+    assert signal["projection_clock_source"] == "1xbet_after_flashscore_brain"
 

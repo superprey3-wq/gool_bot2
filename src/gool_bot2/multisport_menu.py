@@ -378,7 +378,8 @@ def multisport_in_game_sections() -> list[str]:
                 continue
             if str(row.get("result") or "pending").lower() != "pending":
                 continue
-            if _row_phase(row) != "PREMATCH":
+            phase_name = _row_phase(row)
+            if phase_name not in {"PREMATCH", "LIVE"}:
                 continue
             fs_id = str(row.get("flashscore_event_id") or "")
             live = live_by_fs.get(fs_id)
@@ -405,28 +406,39 @@ def multisport_in_game_sections() -> list[str]:
                 active.append((row, live))
 
         if active:
+            # Deduplicate bets, not matches. A match may legitimately contain
+            # both a started PREMATCH pick and a new LIVE period/quarter pick.
             unique_active: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             for pick, live in active:
-                key = str(pick.get("flashscore_event_id") or live.get("flashscore_event_id") or "")
+                key = str(pick.get("entry_id") or "")
                 if not key:
-                    key = f"{norm_team(str(pick.get('home') or ''))}:{norm_team(str(pick.get('away') or ''))}"
+                    key = ":".join([
+                        str(pick.get("flashscore_event_id") or live.get("flashscore_event_id") or ""),
+                        _row_phase(pick),
+                        str(pick.get("scope") or ""),
+                        str(pick.get("market_family") or ""),
+                        str(pick.get("selection") or ""),
+                    ])
                 unique_active.setdefault(key, (pick, live))
             active = list(unique_active.values())
+            active.sort(key=lambda pair: (0 if _row_phase(pair[0]) == "LIVE" else 1, str(pair[0].get("created_at") or "")))
         if not active:
             continue
         total += len(active)
         lines = []
         for idx, (pick, live) in enumerate(active, 1):
             score = list(live.get("score") or [0, 0])
-            period = str(live.get("period") or live.get("status_code") or "LIVE")
+            period = str(live.get("period") or pick.get("period") or live.get("status_code") or "LIVE")
             selection = str(pick.get("selection") or "?")
             needed = _pick_needed_text(pick)
             strength = float(pick.get("strength") or 0)
+            phase_name = _row_phase(pick)
+            phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
             lines.append(
                 f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
                 f"сейчас {period} · {score[0]}:{score[1]}\n"
                 f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
-                f"🧠 {strength:.0f}/100 · PREMATCH\n"
+                f"🧠 {strength:.0f}/100 · {phase_badge}\n"
                 f"↳ {needed}"
             )
         sport_blocks.append("\n\n".join(lines))
@@ -621,55 +633,38 @@ def multisport_report_text() -> str:
 
 
 def sport_journal_text(sport: str | None = None, limit: int = 14, phase: str | None = None) -> str:
+    """Journal is a scoreboard, not a second list of bets.
+
+    Individual PREMATCH picks live in their dedicated prematch/singles views,
+    parlays in parlay views, and active LIVE picks in the common In Game view.
+    Finished picks are represented by their result cards; here we keep only
+    aggregate performance.
+    """
     rows = load_journal(journal_path())
     wanted_phase = str(phase or "").upper()
     if sport in SPORT_META:
         rows = [row for row in rows if str(row.get("sport") or "") == sport]
         icon, title = SPORT_META[sport]
         heading = f"📒 <b>{icon} ЖУРНАЛ · {title}</b>"
-    else:
-        heading = "📒 <b>GOOL MULTI · ЖУРНАЛ СИГНАЛОВ</b>"
-    if wanted_phase in {"PREMATCH", "LIVE"}:
-        rows = [row for row in rows if _row_phase(row) == wanted_phase]
-        heading += f" · {wanted_phase}"
-    rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
-    if not rows:
-        return heading + "\n\nПока сигналов нет."
-
-    result_icon = {"won": "✅", "lost": "❌", "void": "↩️", "pending": "⏳"}
-    lines = [heading]
-    if sport in SPORT_META:
         prematch_policy, live_policy = policy_text_ru(str(sport))
-        lines.append(f"🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}")
+        policy = f"🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}"
     else:
-        lines.append("🟡 PREMATCH · 🔴 LIVE")
+        heading = "📒 <b>GOOL MULTI · ЖУРНАЛ</b>"
+        policy = "🟡 PREMATCH · 🔴 LIVE"
 
-    for row in rows[:max(1, int(limit))]:
-        item = normalize_entry(row)
-        phase_name = str(item.get("phase") or "LIVE")
-        picon = "🟡" if phase_name == "PREMATCH" else "🔴"
-        sicon = SPORT_META.get(str(item.get("sport") or ""), ("🏟", ""))[0]
-        ricon = result_icon.get(str(item.get("result") or "pending"), "⏳")
-        scope = str(item.get("scope") or "FULL_MATCH")
-        scope_label = SCOPE_LABEL_RU.get(scope, scope)
-        if phase_name == "PREMATCH":
-            try:
-                import datetime as _dt
-                stamp = float(item.get("scheduled_start_ts") or item.get("start_ts") or 0)
-                tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
-                context = _dt.datetime.fromtimestamp(stamp, tz).strftime("%d.%m %H:%M МСК") if stamp else "до матча"
-            except Exception:
-                context = "до матча"
-        else:
-            score = item.get("match_score") or item.get("score") or [0, 0]
-            context = f"{score[0]}:{score[1]} · {item.get('period') or 'LIVE'}"
-        lines.append(
-            f"{ricon} {picon}{sicon} <b>{item.get('home','?')} — {item.get('away','?')}</b>\n"
-            f"↳ <b>{scope_label}</b> · {item.get('selection') or '?'} @ {float(item.get('odd') or 0):.2f}\n"
-            f"↳ R{float(item.get('strength') or 0):.0f} · {context}"
-        )
-    return "\n\n".join(lines)
+    prematch = [row for row in rows if _row_phase(row) == "PREMATCH"]
+    live = [row for row in rows if _row_phase(row) == "LIVE"]
 
+    if wanted_phase == "PREMATCH":
+        return f"{heading} · PREMATCH\n\n{policy}\n\n🟡 <b>PREMATCH</b>\n{_record_text(prematch)}"
+    if wanted_phase == "LIVE":
+        return f"{heading} · LIVE\n\n{policy}\n\n🔴 <b>LIVE</b>\n{_record_text(live)}"
+
+    return (
+        f"{heading}\n\n{policy}\n\n"
+        f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}\n\n"
+        f"🔴 <b>LIVE</b>\n{_record_text(live)}"
+    )
 
 def hockey_journal_text(limit: int = 16, phase: str | None = None) -> str:
     return sport_journal_text("hockey", limit=limit, phase=phase)

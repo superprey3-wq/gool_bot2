@@ -483,12 +483,23 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         recent_poss_rate = max(0.0, _num(brain.get("recent_possessions_per_min"), 0.0) or 0.0)
         recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
         if recent_poss_rate > 0:
-            poss_per_min = recent_poss_rate
+            # Flashscore stat rows can refresh in bursts. Keep the fresh delta
+            # as evidence, but do not let one slow/fast refresh window dictate
+            # the rest of the quarter.
+            poss_per_min = _clamp(
+                recent_poss_rate,
+                prior_poss_per_min * 0.60,
+                prior_poss_per_min * 1.45,
+            )
             recent_ppp = recent_score_rate / max(0.20, recent_poss_rate)
             observed_ppp_pair = recent_ppp if recent_score_rate > 0 else prior_ppp_pair
-            observed_poss = max(1.0, recent_poss_rate * max(0.5, (_num(brain.get("recent_window_seconds"), 60.0) or 60.0) / 60.0))
+            recent_window = max(
+                20.0,
+                _num(brain.get("recent_window_seconds"), 60.0) or 60.0,
+            )
+            observed_poss = max(1.0, poss_per_min * recent_window / 60.0)
             possession_source = "flashscore_recent_delta"
-            data_quality = 0.70
+            data_quality = 0.65
 
     if poss_per_min is None:
         observed_rate = current / max(0.5, elapsed / 60.0)
@@ -499,8 +510,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         posterior_ppp = prior_ppp_pair
         remaining_poss = prior_poss_per_min * remaining / 60.0
     else:
-        # Shrink possession tempo and scoring efficiency separately.
-        tempo_weight = _clamp(elapsed / duration, 0.18, 0.78)
+        # Shrink possession tempo and scoring efficiency separately. A full
+        # current-quarter sample earns more weight; a short recent-delta sample
+        # is intentionally capped because provider updates arrive in bursts.
+        if possession_source == "flashscore_recent_delta":
+            recent_window = max(
+                20.0,
+                _num(brain.get("recent_window_seconds"), 60.0) or 60.0,
+            )
+            tempo_weight = _clamp(recent_window / 180.0 * 0.55, 0.10, 0.45)
+        else:
+            tempo_weight = _clamp(elapsed / duration, 0.18, 0.78)
         posterior_poss_rate = prior_poss_per_min * (1.0 - tempo_weight) + poss_per_min * tempo_weight
         eff_n = max(1.0, observed_poss or 1.0)
         eff_weight = eff_n / (eff_n + 12.0)
@@ -511,7 +531,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
 
     projection = max(current, projection)
     sigma = max(3.2, profile["quarter_sigma"] * math.sqrt(max(0.25, remaining / duration)))
-    over_model = _normal_over(line, projection, sigma)
+    raw_over_model = _normal_over(line, projection, sigma)
+    history_points = max(0, int(brain.get("history_points") or 0))
+    probability_reliability = _clamp(
+        0.35 + data_quality * 0.55 + min(0.10, history_points * 0.02),
+        0.55,
+        0.92,
+    )
+    # Reliability shrink prevents a sparse live snapshot from claiming 99%+
+    # certainty simply because a noisy projection is far from the line.
+    over_model = 0.5 + (raw_over_model - 0.5) * probability_reliability
+    over_model = _clamp(over_model, 0.03, 0.97)
     under_model = 1.0 - over_model
     market_over = _clamp(_num(lane.get("probability"), 0.5) or 0.5, 0.01, 0.99)
     choices = [
@@ -595,6 +625,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),
         "data_quality": round(data_quality, 3),
+        "probability_reliability": round(probability_reliability, 3),
         "agreement_blocks": agreement,
         "four_factors": factors,
         "market_confirmed": edge >= 0.055,

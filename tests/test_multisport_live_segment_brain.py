@@ -187,3 +187,66 @@ def test_collect_once_runs_flashscore_brain_before_bookmaker_pricing(tmp_path, m
     assert hockey["flashscore_analysis_matches"][0]["brain_score"] == 82
     assert hockey["prematch_brain_candidates"] == 1
 
+def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "PERIOD_2",
+            "available": True,
+            "segment_stats": {
+                "shots_on_goal": [4.0, 3.0],
+                "blocked_shots": [2.0, 1.0],
+                "penalties": [1.0, 1.0],
+                "power_play_goals": [0.0, 0.0],
+            },
+        },
+    )
+    fs = {
+        "flashscore_event_id": "HFSHOT01",
+        "home": "Home",
+        "away": "Away",
+        "league": "AHL",
+        "score": [1, 2],
+        "score_parts": [[0, 1], [1, 1]],
+        "status_code": "46",
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+
+    assert result["scope"] == "PERIOD_2"
+    assert result["brain_state"] in {"PASS", "BORDERLINE"}
+    assert result["brain_score"] >= 50
+    assert "броски 7" in result["brain_reason"]
+
+
+def test_intermission_never_becomes_pricing_candidate(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_2",
+            "available": True,
+            "segment_stats": {"rebounds": [18.0, 17.0]},
+            "segment_attempts": {},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BHALF001",
+        "home": "Home",
+        "away": "Away",
+        "league": "NBA",
+        "score": [61, 59],
+        "score_parts": [[31, 29], [30, 30]],
+        "status_code": "38",
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["period"] == "Перерыв"
+    assert result["brain_state"] == "WAIT"
+

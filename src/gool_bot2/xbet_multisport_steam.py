@@ -473,39 +473,50 @@ def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str,
     return out
 
 
+def _flashscore_numeric_minute(fs: dict[str, Any]) -> int:
+    try:
+        value = int(float(str(fs.get("status_code") or "").strip()))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, value)
+
+
+def _segment_index_from_minute(fs: dict[str, Any], cfg: SportConfig) -> int:
+    minute = _flashscore_numeric_minute(fs)
+    if minute <= 0:
+        return 0
+    if cfg.key == "hockey":
+        return max(1, min(3, (minute - 1) // 20 + 1))
+    league = str(fs.get("league") or "").casefold()
+    segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
+    return max(1, min(4, (minute - 1) // segment_minutes + 1))
+
+
 def _infer_flashscore_scope(
     fs: dict[str, Any],
     cfg: SportConfig,
     section_keys: list[str] | tuple[str, ...] | None = None,
 ) -> str:
-    """Infer current segment from Flashscore minute + score-part evidence.
+    """Infer current segment with Flashscore clock/status as primary truth.
 
-    For hockey/basketball the master-feed AC value frequently behaves like a
-    whole-match minute (e.g. hockey 46 => P3, basketball 23/38 => later quarters),
-    not a universal status enum. Score-parts are used as a second authority.
+    Flashscore can expose BA/BB.. score-part placeholders for future periods.
+    Therefore score_parts length is only a fallback when AC/status_code does not
+    contain a usable whole-match minute. A live minute must never be overridden
+    by padded future score parts.
     """
     prefix = "PERIOD_" if cfg.key == "hockey" else "QUARTER_"
     maximum = 3 if cfg.key == "hockey" else 4
-    parts = [
-        row for row in (fs.get("score_parts") or [])
-        if isinstance(row, (list, tuple)) and len(row) >= 2
-    ]
-    parts_idx = max(1, min(maximum, len(parts) or 1))
 
-    minute_idx = 0
-    try:
-        minute = int(float(str(fs.get("status_code") or "").strip()))
-    except (TypeError, ValueError):
-        minute = 0
-    if minute > 0:
-        if cfg.key == "hockey":
-            minute_idx = max(1, min(3, (minute - 1) // 20 + 1))
-        else:
-            league = str(fs.get("league") or "").casefold()
-            segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
-            minute_idx = max(1, min(4, (minute - 1) // segment_minutes + 1))
+    minute_idx = _segment_index_from_minute(fs, cfg)
+    if minute_idx:
+        idx = minute_idx
+    else:
+        parts = [
+            row for row in (fs.get("score_parts") or [])
+            if isinstance(row, (list, tuple)) and len(row) >= 2
+        ]
+        idx = max(1, min(maximum, len(parts) or 1))
 
-    idx = max(parts_idx, minute_idx or 1)
     guessed = f"{prefix}{idx}"
     available = [str(value) for value in (section_keys or []) if str(value).startswith(prefix)]
     if guessed in available:
@@ -520,6 +531,53 @@ def _infer_flashscore_scope(
         return max(eligible or available, key=number)
     return guessed
 
+
+def flashscore_live_period_label(fs: dict[str, Any], sport: str) -> str:
+    cfg = SPORTS.get(str(sport or "").casefold())
+    if cfg is None:
+        return str(fs.get("period") or fs.get("status_code") or "LIVE")
+    scope = _infer_flashscore_scope(fs, cfg)
+    return _flashscore_period_label(scope, str(fs.get("status_code") or ""))
+
+
+def flashscore_scope_completed(fs: dict[str, Any], sport: str, scope: str) -> bool:
+    """Whether a segment-scoped bet is no longer active.
+
+    Full-match bets settle only at match end. Period/quarter and first-half bets
+    become settleable once Flashscore has moved into a later segment.
+    """
+    scope = str(scope or SCOPE_FULL)
+    if scope == SCOPE_FULL:
+        return str(fs.get("coarse_status") or "") == "3"
+    if str(fs.get("coarse_status") or "") == "3":
+        return True
+
+    cfg = SPORTS.get(str(sport or "").casefold())
+    if cfg is None:
+        return False
+    current_idx = _segment_index_from_minute(fs, cfg)
+    if current_idx <= 0:
+        return False
+
+    if scope.startswith("PERIOD_") and cfg.key == "hockey":
+        try:
+            target = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return False
+        return current_idx > target
+
+    if scope.startswith("QUARTER_") and cfg.key == "basketball":
+        try:
+            target = int(scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            return False
+        return current_idx > target
+
+    if scope == "FIRST_HALF" and cfg.key == "basketball":
+        return current_idx > 2
+    if scope == "SECOND_HALF" and cfg.key == "basketball":
+        return False
+    return False
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
     labels = {
@@ -3223,7 +3281,14 @@ class MultiSportSteamWorker:
             if stored_result in _FINAL_RESULTS and not repair_direction_mismatch:
                 continue
             state = states.get(str(row.get("flashscore_event_id") or ""))
-            if not state or str(state.get("coarse_status") or "") != "3":
+            if not state:
+                continue
+            scope = str(row.get("scope") or SCOPE_FULL)
+            match_finished = str(state.get("coarse_status") or "") == "3"
+            if scope == SCOPE_FULL:
+                if not match_finished:
+                    continue
+            elif not flashscore_scope_completed(state, cfg.key, scope):
                 continue
             # Legacy pending rows created before emblem metadata was journaled
             # can still render proper result cards: refresh identity assets from
@@ -3239,7 +3304,6 @@ class MultiSportSteamWorker:
                 if not str(row.get(key) or "").strip() and str(state.get(key) or "").strip():
                     row[key] = str(state.get(key) or "").strip()
             full_score = list(state.get("score") or [0, 0])
-            scope = str(row.get("scope") or SCOPE_FULL)
             if scope == SCOPE_FULL:
                 # FULL_MATCH uses the authoritative final Flashscore score.
                 # In basketball/hockey this includes overtime when the selected
@@ -3960,6 +4024,8 @@ class MultiSportSteamWorker:
                     "league": str(row.get("league") or ""),
                     "score": list(row.get("score") or [0, 0]),
                     "score_parts": list(row.get("score_parts") or []),
+                    "scope": _infer_flashscore_scope(row, cfg),
+                    "period": flashscore_live_period_label(row, cfg.key),
                     "status_code": str(row.get("status_code") or ""),
                     "coarse_status": str(row.get("coarse_status") or ""),
                     "match_start_ts": int(row.get("match_start_ts") or 0),

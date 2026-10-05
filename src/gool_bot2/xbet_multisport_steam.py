@@ -860,6 +860,77 @@ def detect_live_segment_stats(
     }
 
 
+def price_flashscore_live_candidate(
+    brain: dict[str, Any],
+    lane: dict[str, Any],
+    cfg: SportConfig,
+) -> dict[str, Any] | None:
+    """Attach the current 1xBet segment price to a Flashscore Brain candidate."""
+    if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
+        return None
+    if str(lane.get("market_family") or "") != "match_total":
+        return None
+    scope = str(brain.get("scope") or "")
+    if str(lane.get("scope") or "") != scope:
+        return None
+    try:
+        projection = float(brain.get("projected_total"))
+        line = float(lane.get("line"))
+    except (TypeError, ValueError):
+        return None
+    raw_edge = projection - line
+    direction = "over" if raw_edge > 0 else "under"
+    stat_edge = abs(raw_edge)
+    min_edge = _float_env(
+        f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
+        0.35 if cfg.key == "hockey" else 2.5,
+    )
+    if stat_edge < min_edge:
+        return None
+
+    try:
+        odd = float(lane.get(direction) or 0.0)
+        over_probability = float(lane.get("probability") or 0.5)
+    except (TypeError, ValueError):
+        return None
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+        return None
+    market_probability = over_probability if direction == "over" else 1.0 - over_probability
+    if market_probability < _float_env("GOOL_MULTISPORT_LIVE_MARKET_OPPOSITION_FLOOR", 0.42):
+        return None
+
+    brain_score = float(brain.get("brain_score") or 0.0)
+    edge_ratio = stat_edge / max(1e-6, min_edge)
+    strength = min(100.0, brain_score * 0.72 + 20.0 + min(18.0, edge_ratio * 8.0))
+    return {
+        "brain_mode": "flashscore_stat_first",
+        "direction": direction,
+        "line": line,
+        "odd": odd,
+        "fair_probability": round(market_probability, 6),
+        "metric_delta": round(stat_edge, 3),
+        "stat_edge": round(stat_edge, 3),
+        "projected_total": round(projection, 2),
+        "raw_stat_projection": round(projection, 2),
+        "current_segment_total": int(brain.get("current_segment_total") or 0),
+        "elapsed_seconds": brain.get("elapsed_seconds"),
+        "remaining_seconds": brain.get("remaining_seconds"),
+        "recent_rate_per_min": brain.get("recent_score_rate"),
+        "probability_delta_pp": 0.0,
+        "line_delta": 0.0,
+        "moves": int(brain.get("history_points") or 1) - 1,
+        "age_seconds": 0.0,
+        "strength": round(strength, 1),
+        "market_confirmed": market_probability >= 0.50,
+        "market_probability": round(market_probability, 4),
+        "flashscore_brain_score": round(brain_score, 1),
+        "flashscore_brain_state": str(brain.get("brain_state") or ""),
+        "flashscore_brain_reason": str(brain.get("brain_reason") or ""),
+        "start": {},
+        "end": dict(lane),
+    }
+
+
 def detect_steam(
     rows: list[dict[str, Any]],
     cfg: SportConfig,
@@ -1176,6 +1247,8 @@ def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
             "league": league,
             "status_code": str(fields.get("AC") or ""),
             "coarse_status": str(fields.get("AB") or ""),
+            "match_start_ts": _as_int(fields.get("AD"), 0),
+            "period_start_ts": _as_int(fields.get("AO"), 0),
             "start_ts": _as_int(fields.get("AD") or fields.get("AO"), 0),
             "home_team_id": str(fields.get("JA") or "").strip(),
             "away_team_id": str(fields.get("JB") or "").strip(),
@@ -1435,7 +1508,7 @@ class MultiSportSteamWorker:
         return out
 
     def _flashscore_live_brain(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
-        """Run a Flashscore-first LIVE Brain before any bookmaker lookup."""
+        """Analyse the LIVE game from Flashscore before any bookmaker lookup."""
         event_id = str(fs.get("flashscore_event_id") or "")
         scoped_scores = _flashscore_scoped_scores(fs, cfg)
         inferred_scope = _infer_flashscore_scope(fs, cfg)
@@ -1449,6 +1522,14 @@ class MultiSportSteamWorker:
             segment_score = (int(full[0] or 0), int(full[1] or 0))
 
         now = time.time()
+        duration = _segment_duration_seconds({"league": str(fs.get("league") or "")}, cfg)
+        period_start = float(fs.get("period_start_ts") or 0.0)
+        elapsed = now - period_start if period_start > 0 else 0.0
+        if elapsed <= 0 or elapsed > duration + 15 * 60:
+            elapsed = 0.0
+        elapsed = min(duration, elapsed) if elapsed > 0 else 0.0
+        remaining = max(0.0, duration - elapsed) if elapsed > 0 else 0.0
+
         snapshot = {
             "ts": now,
             "scope": scope,
@@ -1465,8 +1546,10 @@ class MultiSportSteamWorker:
         stats = dict(stats_payload.get("segment_stats") or {})
         current_total = int(segment_score[0]) + int(segment_score[1])
         previous_score = list(first.get("score") or [0, 0])
-        score_delta = max(0, current_total - int(previous_score[0] or 0) - int(previous_score[1] or 0))
+        first_total = int(previous_score[0] or 0) + int(previous_score[1] or 0)
+        score_delta = max(0, current_total - first_total)
         recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
+        projection: float | None = None
 
         if cfg.key == "hockey":
             shots = list(stats.get("shots_on_goal") or stats.get("shots") or [])
@@ -1481,19 +1564,30 @@ class MultiSportSteamWorker:
             penalty_total = sum(max(0.0, float(v)) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
             blocked = list(stats.get("blocked_shots") or [])
             blocked_total = sum(max(0.0, float(v)) for v in blocked[:2]) if len(blocked) >= 2 else 0.0
-            # Hockey is low-scoring, so raw goal pace alone is too sparse.
-            # Current-period shots/shot acceleration are the primary pressure
-            # signal, with goals/special teams/blocks as secondary context.
+
+            if elapsed >= 45.0:
+                overall_shot_rate = shot_total * 60.0 / max(1.0, elapsed)
+                blended_shot_rate = overall_shot_rate * 0.55 + recent_shot_rate * 0.45
+                projected_remaining_shots = max(0.0, blended_shot_rate * remaining / 60.0)
+                shot_goal_remaining = projected_remaining_shots * _float_env("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08)
+                goal_rate = current_total * 60.0 / max(1.0, elapsed)
+                goal_remaining = min(2.5, goal_rate * remaining / 60.0)
+                projection = current_total + shot_goal_remaining * 0.65 + goal_remaining * 0.35
+                projection += min(0.18, penalty_total * 0.02 + pp_total * 0.03)
+
             rating = (
-                34.0
-                + min(34.0, shot_total * 2.20)
-                + min(18.0, recent_shot_rate * 7.0)
+                30.0
+                + min(32.0, shot_total * 1.8)
+                + min(18.0, recent_shot_rate * 6.0)
                 + min(10.0, current_total * 5.0)
                 + min(6.0, pp_total * 3.0)
                 + min(4.0, penalty_total * 0.7)
                 + min(4.0, blocked_total * 0.35)
             )
-            reason = f"броски {shot_total:g}, темп бросков {recent_shot_rate:.1f}/мин, шайбы периода {current_total}"
+            reason = (
+                f"броски {shot_total:g}, темп бросков {recent_shot_rate:.1f}/мин, "
+                f"шайбы периода {current_total}"
+            )
         else:
             rebounds = list(stats.get("rebounds") or [])
             rebound_total = sum(max(0.0, float(v)) for v in rebounds[:2]) if len(rebounds) >= 2 else 0.0
@@ -1505,19 +1599,31 @@ class MultiSportSteamWorker:
                 pair = list(attempts.get(key_name) or [])
                 if len(pair) >= 2:
                     fg_attempts = max(fg_attempts, sum(max(0.0, float(v)) for v in pair[:2]))
+
+            if elapsed >= 30.0:
+                overall_rate = current_total * 60.0 / max(1.0, elapsed)
+                pace_rate = overall_rate if recent_score_rate <= 0 else overall_rate * 0.55 + recent_score_rate * 0.45
+                projection = current_total + pace_rate * remaining / 60.0
+
             rating = (
-                26.0
-                + min(32.0, current_total * 0.85)
-                + min(22.0, recent_score_rate * 2.2)
+                25.0
+                + min(32.0, current_total * 0.80)
+                + min(23.0, recent_score_rate * 2.4)
                 + min(8.0, fg_attempts * 0.18)
                 + min(7.0, rebound_total * 0.18)
                 + min(5.0, turnover_total * 0.20)
             )
-            reason = f"очки четверти {current_total}, свежий темп {recent_score_rate:.1f}/мин, подборы {rebound_total:g}"
+            reason = (
+                f"очки четверти {current_total}, свежий темп {recent_score_rate:.1f}/мин, "
+                f"подборы {rebound_total:g}"
+            )
 
         if not stats_payload.get("available"):
             rating = min(rating, 48.0)
-            reason = "Flashscore LIVE есть, статистика сегмента ещё прогревается"
+            reason = "Flashscore LIVE есть, статистика текущего сегмента ещё недоступна"
+        if elapsed <= 0:
+            rating = min(rating, 54.0)
+            reason += " · часы сегмента ещё не синхронизированы"
 
         pass_default = 62.0 if cfg.key == "hockey" else 68.0
         borderline_default = 50.0 if cfg.key == "hockey" else 56.0
@@ -1526,6 +1632,8 @@ class MultiSportSteamWorker:
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
         if str(fs.get("status_code") or "") == "38":
             state = "WAIT"
+            reason = "перерыв между сегментами — новые LIVE ставки не открываем"
+
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -1540,6 +1648,10 @@ class MultiSportSteamWorker:
             "brain_score": round(max(0.0, min(100.0, rating)), 1),
             "brain_reason": reason,
             "current_segment_score": [int(segment_score[0]), int(segment_score[1])],
+            "current_segment_total": current_total,
+            "elapsed_seconds": round(elapsed, 1),
+            "remaining_seconds": round(remaining, 1),
+            "projected_total": None if projection is None else round(float(projection), 2),
             "live_game_stats": stats_payload,
             "history_points": len(recent),
             "recent_score_rate": round(recent_score_rate, 3),
@@ -2720,7 +2832,10 @@ class MultiSportSteamWorker:
             return None, "score_mismatch"
 
         current_period = _period(game)
-        wanted_live_scopes = live_scopes_from_period(cfg.key, current_period)
+        fs_scope = _infer_flashscore_scope(fs, cfg)
+        wanted_live_scopes = set(live_scopes_from_period(cfg.key, current_period))
+        if fs_scope:
+            wanted_live_scopes.add(fs_scope)
         decoded, market_meta = self._market_tree(
             game,
             cfg,
@@ -2733,7 +2848,7 @@ class MultiSportSteamWorker:
         xbet_scoped_scores = period_scores(game, cfg.key)
         fs_scoped_scores = _flashscore_scoped_scores(fs, cfg)
         scoped_scores = {**xbet_scoped_scores, **fs_scoped_scores}
-        live_game_stats = self._flashscore_live_stats(fs, cfg, current_period=current_period)
+        live_game_stats = self._flashscore_live_stats(fs, cfg, current_period=fs_scope or current_period)
         event_scope_key = f"{cfg.key}:{event_id}"
         for scope, score in scoped_scores.items():
             self._scope_scores[event_scope_key][scope] = score
@@ -2771,7 +2886,7 @@ class MultiSportSteamWorker:
             "score": [*fs_score],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "scoped_score_source": "flashscore" if fs_scoped_scores else "1xbet_fallback",
-            "period": current_period,
+            "period": _flashscore_period_label(fs_scope, str(fs.get("status_code") or "")) if fs_scope else current_period,
             "clock_seconds": _segment_clock_seconds(
                 game,
                 cfg,

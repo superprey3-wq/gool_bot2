@@ -1213,3 +1213,121 @@ def test_hockey_settlement_sends_result_card_once(tmp_path, monkeypatch):
 
     assert worker._settle(SPORTS["hockey"], states) == 0
     assert len(sent) == 1
+
+def test_live_hockey_period_settlement_uses_entire_final_period_not_goals_after_signal(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "sport": "hockey",
+        "phase": "LIVE",
+        "event_id": "HEND-1",
+        "flashscore_event_id": "FS-HEND",
+        "home": "Henderson Silver Knights",
+        "away": "Bakersfield Condors",
+        "scope": "PERIOD_3",
+        "market_family": "match_total",
+        "selection": "3-й период: ТМ 1.5",
+        "direction": "under",
+        "line": 1.5,
+        "odd": 1.77,
+        # One P3 goal already existed when the signal was sent.
+        "score": [1, 0],
+        "result": "pending",
+        "profit_units": 0.0,
+    }])
+
+    changed = worker._settle(SPORTS["hockey"], {
+        "FS-HEND": {
+            "flashscore_event_id": "FS-HEND",
+            "coarse_status": "3",
+            "score": [1, 3],
+            # P3 finished 0:2, so total P3 = 2 and U1.5 loses.
+            "score_parts": [[0, 1], [1, 0], [0, 2]],
+        }
+    })
+
+    assert changed == 1
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["settled_score"] == [0, 2]
+    assert saved["result"] == "lost"
+    assert saved["profit_units"] == -1.0
+
+
+def test_basketball_full_match_total_settlement_includes_overtime(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "event_id": "B-OT-1",
+        "flashscore_event_id": "FS-BOT",
+        "home": "Home",
+        "away": "Away",
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "selection": "ТБ 195.5",
+        "direction": "over",
+        "line": 195.5,
+        "odd": 1.90,
+        "result": "pending",
+    }])
+
+    worker._settle(SPORTS["basketball"], {
+        "FS-BOT": {
+            "flashscore_event_id": "FS-BOT",
+            "coarse_status": "3",
+            # Regulation was 88:88; OT made it 101:98.
+            "score": [101, 98],
+            "score_parts": [[25,22],[20,25],[23,22],[20,19],[13,10]],
+        }
+    })
+
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["settled_match_score"] == [101, 98]
+    assert saved["settled_score"] == [101, 98]
+    assert saved["result"] == "won"
+
+
+def test_hockey_two_way_full_match_moneyline_uses_final_score_after_overtime(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "sport": "hockey",
+        "phase": "PREMATCH",
+        "event_id": "H-OT-1",
+        "flashscore_event_id": "FS-HOT",
+        "home": "Home",
+        "away": "Away",
+        "scope": "FULL_MATCH",
+        "market_family": "moneyline",
+        "selection": "П1",
+        "selection_side": "home",
+        "moneyline_kind": "moneyline_2way",
+        "line": 0,
+        "odd": 1.85,
+        "result": "pending",
+    }])
+
+    worker._settle(SPORTS["hockey"], {
+        "FS-HOT": {
+            "flashscore_event_id": "FS-HOT",
+            "coarse_status": "3",
+            # 2:2 after regulation, home wins in OT.
+            "score": [3, 2],
+            "score_parts": [[1,1],[1,0],[0,1],[1,0]],
+        }
+    })
+
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["settled_score"] == [3, 2]
+    assert saved["result"] == "won"
+

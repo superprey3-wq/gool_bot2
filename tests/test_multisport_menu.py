@@ -103,7 +103,7 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     assert "PREMATCH и LIVE считаются отдельно" in report
 
     journal_text = sport_journal_text()
-    assert "ЖУРНАЛ СИГНАЛОВ" in journal_text
+    assert "GOOL MULTI · ЖУРНАЛ" in journal_text
     assert "PREMATCH" in journal_text
     assert "LIVE" in journal_text
 
@@ -127,12 +127,14 @@ def test_separate_hockey_and_basketball_journal_views(tmp_path: Path, monkeypatc
     ])
     hockey = hockey_journal_text()
     basket = basketball_journal_text()
-    assert "SKA — CSKA" in hockey
+    # Dedicated journals are aggregate scoreboards only. Individual pending
+    # PREMATCH picks live in prematch views; active LIVE picks live in In Game.
+    assert "SKA — CSKA" not in hockey
     assert "Denver — Utah" not in hockey
-    assert "2-й период" in hockey
-    assert "Denver — Utah" in basket
+    assert "Denver — Utah" not in basket
     assert "SKA — CSKA" not in basket
-    assert "3-я четверть" in basket
+    assert "PREMATCH" in hockey and "LIVE" in hockey
+    assert "PREMATCH" in basket and "LIVE" in basket
 
     hreport = sport_phase_report_text("hockey")
     breport = sport_phase_report_text("basketball")
@@ -365,7 +367,7 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Piratas de Bogota — Caimanes del Llano" in text
     assert "сейчас Q2 · 21:24" in text
     assert "Ф2 +4.5 @ 1.55" in text
-    assert "100/100 · PREMATCH" in text
+    assert "100/100 · 🟡 PREMATCH" in text
     assert "может проиграть максимум в 4" in text
 
 
@@ -533,4 +535,97 @@ def test_multisport_analysis_shows_flashscore_brain_before_xbet_mapping(tmp_path
     assert "прогноз сегмента 2.4" in text
     assert "Brain уже выбрал матч" in text
     assert "46" not in text
+
+def test_live_signal_goes_directly_to_in_game_and_journal_stays_summary_only(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [{
+                    "flashscore_event_id": "H-LIVE-1",
+                    "home": "Seattle Kraken",
+                    "away": "Calgary Flames",
+                    "score": [5, 0],
+                    "period": "3-й период",
+                }],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "H-LIVE-1",
+                    "home": "Seattle Kraken",
+                    "away": "Calgary Flames",
+                    "score": [5, 0],
+                    "period": "3-й период",
+                    "coarse_status": "2",
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "entry_id": "hockey:live:1:PERIOD_3:match_total",
+        "sport": "hockey",
+        "phase": "LIVE",
+        "result": "pending",
+        "flashscore_event_id": "H-LIVE-1",
+        "home": "Seattle Kraken",
+        "away": "Calgary Flames",
+        "scope": "PERIOD_3",
+        "market_family": "match_total",
+        "selection": "3-й период: ТБ 0.5",
+        "direction": "over",
+        "line": 0.5,
+        "odd": 1.85,
+        "strength": 68,
+        "period": "3-й период",
+    }])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "H-LIVE-1",
+            "home": "Seattle Kraken",
+            "away": "Calgary Flames",
+            "score": [5, 0],
+            "period": "3-й период",
+            "coarse_status": "2",
+        }] if sport == "hockey" else []
+    ))
+
+    in_game = "\n".join(menu.multisport_in_game_sections())
+    journal_text = menu.hockey_journal_text()
+
+    assert "Seattle Kraken — Calgary Flames" in in_game
+    assert "3-й период: ТБ 0.5 @ 1.85" in in_game
+    assert "🔴 LIVE" in in_game
+    assert "Seattle Kraken — Calgary Flames" not in journal_text
+    assert "🔴 <b>LIVE</b>" in journal_text
+
+
+def test_finished_pick_is_not_listed_in_journal_or_in_game(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {"mode":"active","sports":{"hockey":{"matches":[]},"basketball":{"matches":[]}}})
+    _write(journal, [{
+        "sport": "hockey",
+        "phase": "LIVE",
+        "result": "lost",
+        "home": "Henderson Silver Knights",
+        "away": "Bakersfield Condors",
+        "selection": "3-й период: ТМ 1.5",
+        "odd": 1.77,
+        "profit_units": -1.0,
+    }])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
+
+    journal_text = menu.hockey_journal_text()
+    assert "Henderson Silver Knights" not in journal_text
+    assert "❌ 1" in journal_text
+    assert menu.multisport_in_game_sections() == []
 

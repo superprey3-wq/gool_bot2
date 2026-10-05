@@ -250,3 +250,81 @@ def test_intermission_never_becomes_pricing_candidate(tmp_path, monkeypatch):
     assert result["period"] == "Перерыв"
     assert result["brain_state"] == "WAIT"
 
+def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
+    monkeypatch.setenv("GOOL_MULTISPORT_MAX_ODD", "3.25")
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_SEGMENT_MIN_STAT_EDGE", "2.5")
+    brain = {
+        "brain_state": "PASS",
+        "brain_score": 82.0,
+        "scope": "QUARTER_2",
+        "projected_total": 57.8,
+        "current_segment_total": 31,
+        "elapsed_seconds": 310,
+        "remaining_seconds": 290,
+        "recent_score_rate": 6.2,
+        "history_points": 1,
+        "brain_reason": "Flashscore pace and shooting pressure",
+    }
+    lane = {
+        "scope": "QUARTER_2",
+        "market_family": "match_total",
+        "line": 53.5,
+        "over": 1.88,
+        "under": 1.88,
+        "probability": 0.50,
+    }
+
+    signal = price_flashscore_live_candidate(brain, lane, SPORTS["basketball"])
+
+    assert signal is not None
+    assert signal["brain_mode"] == "flashscore_stat_first"
+    assert signal["direction"] == "over"
+    assert signal["line"] == 53.5
+    assert signal["odd"] == 1.88
+    assert signal["projected_total"] == 57.8
+    assert signal["flashscore_brain_score"] == 82.0
+
+
+def test_flashscore_brain_only_prices_current_segment():
+    brain = {
+        "brain_state": "PASS",
+        "brain_score": 90.0,
+        "scope": "PERIOD_2",
+        "projected_total": 2.4,
+    }
+    wrong_period = {
+        "scope": "PERIOD_3",
+        "market_family": "match_total",
+        "line": 1.5,
+        "over": 1.85,
+        "under": 1.95,
+        "probability": 0.51,
+    }
+    full_match = {
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "line": 6.5,
+        "over": 1.85,
+        "under": 1.95,
+        "probability": 0.51,
+    }
+
+    assert price_flashscore_live_candidate(brain, wrong_period, SPORTS["hockey"]) is None
+    assert price_flashscore_live_candidate(brain, full_match, SPORTS["hockey"]) is None
+
+
+def test_flashscore_parser_keeps_period_clock_for_stat_first_brain():
+    body = (
+        "ZA÷League~"
+        "AA÷ABCDEFGH¬AE÷Home¬AF÷Away¬AB÷2¬AC÷38¬AD÷1000¬AO÷1450"
+        "¬AG÷44¬AH÷32¬BA÷21¬BB÷12¬BC÷23¬BD÷20"
+    )
+
+    rows = parse_flashscore_events(body)
+
+    assert len(rows) == 1
+    assert rows[0]["match_start_ts"] == 1000
+    assert rows[0]["period_start_ts"] == 1450
+    assert rows[0]["score_parts"] == [[21, 12], [23, 20]]
+

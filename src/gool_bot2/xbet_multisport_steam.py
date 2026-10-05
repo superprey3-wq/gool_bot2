@@ -1061,7 +1061,11 @@ def price_flashscore_live_candidate(
         "current_segment_total": current_total,
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),
-        "recent_rate_per_min": brain.get("recent_score_rate"),
+        "recent_rate_per_min": (
+            brain.get("recent_shot_rate")
+            if cfg.key == "hockey"
+            else brain.get("recent_score_rate")
+        ),
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,
         "moves": int(brain.get("history_points") or 1) - 1,
@@ -1749,6 +1753,7 @@ class MultiSportSteamWorker:
         first_total = int(previous_score[0] or 0) + int(previous_score[1] or 0)
         score_delta = max(0, current_total - first_total)
         recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
+        recent_shot_rate = 0.0
         projection: float | None = None
 
         if cfg.key == "hockey":
@@ -1880,6 +1885,7 @@ class MultiSportSteamWorker:
             "live_game_stats": stats_payload,
             "history_points": len(recent),
             "recent_score_rate": round(recent_score_rate, 3),
+            "recent_shot_rate": round(recent_shot_rate, 3),
             "direction_hint": direction_hint,
         }
 

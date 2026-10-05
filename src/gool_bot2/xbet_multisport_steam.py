@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import http.cookiejar
 import os
 import threading
@@ -818,7 +819,12 @@ def detect_live_segment_stats(
     if elapsed < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_ELAPSED_SECONDS", 75.0):
         return None
     remaining = max(0.0, duration - elapsed)
-    if remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
+    if cfg.key == "hockey":
+        if elapsed < _float_env("GOOL_HOCKEY_LIVE_MIN_SEGMENT_ELAPSED_SECONDS", 300.0):
+            return None
+        if remaining < _float_env("GOOL_HOCKEY_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 180.0):
+            return None
+    elif remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
         return None
 
     def total_score(row: dict[str, Any]) -> int:
@@ -906,7 +912,7 @@ def detect_live_segment_stats(
     stat_edge = abs(raw_edge)
     min_edge = _float_env(
         f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
-        0.35 if cfg.key == "hockey" else 2.5,
+        0.65 if cfg.key == "hockey" else 2.5,
     )
     if stat_edge < min_edge:
         return None
@@ -1049,6 +1055,45 @@ def _priced_segment_projection(
     return float(projection), float(elapsed), float(remaining)
 
 
+def _hockey_poisson_decisive_probability(
+    *,
+    current_total: int,
+    line: float,
+    projection: float,
+    direction: str,
+) -> float:
+    """Approximate chance the bet wins (push excluded) from remaining-goal mean."""
+    lam = max(0.01, float(projection) - float(current_total))
+    gap = float(line) - float(current_total)
+    if direction == "over":
+        min_add = max(0, math.floor(gap) + 1)
+        if min_add <= 0:
+            return 1.0
+        cdf = 0.0
+        term = math.exp(-lam)
+        for k in range(min_add):
+            if k == 0:
+                pk = term
+            else:
+                term *= lam / k
+                pk = term
+            cdf += pk
+        return max(0.0, min(1.0, 1.0 - cdf))
+    max_add = math.ceil(gap) - 1
+    if max_add < 0:
+        return 0.0
+    cdf = 0.0
+    term = math.exp(-lam)
+    for k in range(max_add + 1):
+        if k == 0:
+            pk = term
+        else:
+            term *= lam / k
+            pk = term
+        cdf += pk
+    return max(0.0, min(1.0, cdf))
+
+
 def price_flashscore_live_candidate(
     brain: dict[str, Any],
     lane: dict[str, Any],
@@ -1067,6 +1112,18 @@ def price_flashscore_live_candidate(
     if projected is None:
         return None
     projection, elapsed, remaining = projected
+
+    if cfg.key == "hockey":
+        # Hockey is noisier than basketball: only PASS candidates with a real
+        # fresh pressure delta are priceable.
+        if str(brain.get("brain_state") or "") != "PASS":
+            return None
+        brain_score = float(brain.get("brain_score") or 0.0)
+        if brain_score < _float_env("GOOL_HOCKEY_LIVE_MIN_BRAIN_SCORE", 70.0):
+            return None
+        if int(brain.get("history_points") or 0) < max(2, _int_env("GOOL_HOCKEY_LIVE_MIN_HISTORY_POINTS", 2)):
+            return None
+
     try:
         line = float(lane.get("line"))
     except (TypeError, ValueError):
@@ -1093,7 +1150,7 @@ def price_flashscore_live_candidate(
             return None
     min_edge = _float_env(
         f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
-        0.35 if cfg.key == "hockey" else 2.5,
+        0.65 if cfg.key == "hockey" else 2.5,
     )
     if stat_edge < min_edge:
         return None
@@ -1106,7 +1163,26 @@ def price_flashscore_live_candidate(
     if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
     market_probability = over_probability if direction == "over" else 1.0 - over_probability
-    if market_probability < _float_env("GOOL_MULTISPORT_LIVE_MARKET_OPPOSITION_FLOOR", 0.42):
+    if cfg.key == "hockey":
+        direction_hint = str(brain.get("direction_hint") or "").casefold()
+        if direction_hint not in {"over", "under"} or direction_hint != direction:
+            return None
+        if market_probability < _float_env("GOOL_HOCKEY_LIVE_MARKET_PROBABILITY_FLOOR", 0.52):
+            return None
+        score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+        try:
+            current_total_for_prob = int(score[0] or 0) + int(score[1] or 0)
+        except (TypeError, ValueError, IndexError):
+            return None
+        decisive_prob = _hockey_poisson_decisive_probability(
+            current_total=current_total_for_prob,
+            line=line,
+            projection=projection,
+            direction=direction,
+        )
+        if decisive_prob < _float_env("GOOL_HOCKEY_LIVE_MIN_MODEL_WIN_PROBABILITY", 0.58):
+            return None
+    elif market_probability < _float_env("GOOL_MULTISPORT_LIVE_MARKET_OPPOSITION_FLOOR", 0.42):
         return None
 
     brain_score = float(brain.get("brain_score") or 0.0)
@@ -1139,6 +1215,9 @@ def price_flashscore_live_candidate(
         "strength": round(strength, 1),
         "market_confirmed": market_probability >= 0.50,
         "market_probability": round(market_probability, 4),
+        "model_win_probability": (
+            round(decisive_prob, 4) if cfg.key == "hockey" else None
+        ),
         "projection_clock_source": "1xbet_after_flashscore_brain",
         "flashscore_brain_score": round(brain_score, 1),
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
@@ -1852,15 +1931,27 @@ class MultiSportSteamWorker:
                 projection = current_total + shot_goal_remaining * 0.65 + goal_remaining * 0.35
                 projection += min(0.18, penalty_total * 0.02 + pp_total * 0.03)
 
+            stats_mode = str(stats_payload.get("stats_mode") or "")
+            if stats_mode == "cumulative_through_current_segment":
+                # Do not mistake P1+P2(+P3) cumulative shots for pressure in
+                # the current period. Fresh delta is the directional evidence.
+                shot_component = min(10.0, shot_total * 0.30)
+            else:
+                shot_component = min(26.0, shot_total * 1.45)
+            recent_component = min(30.0, recent_shot_rate * 10.0)
             rating = (
-                30.0
-                + min(32.0, shot_total * 1.8)
-                + min(18.0, recent_shot_rate * 6.0)
-                + min(10.0, current_total * 5.0)
-                + min(6.0, pp_total * 3.0)
-                + min(4.0, penalty_total * 0.7)
-                + min(4.0, blocked_total * 0.35)
+                26.0
+                + shot_component
+                + recent_component
+                + min(8.0, current_total * 4.0)
+                + min(5.0, pp_total * 2.5)
+                + min(3.0, penalty_total * 0.5)
+                + min(3.0, blocked_total * 0.25)
             )
+            # One isolated snapshot is not enough to call a hockey LIVE bet.
+            # Wait for a fresh pressure delta before allowing PASS.
+            if len(recent) < 2 or age < 25.0:
+                rating = min(rating, 58.0)
             reason = (
                 f"броски {shot_total:g}, темп бросков {recent_shot_rate:.1f}/мин, "
                 f"шайбы периода {current_total}"
@@ -1929,8 +2020,8 @@ class MultiSportSteamWorker:
                         direction_hint = "over"
                         reason += f" · свежий темп бросков {recent_shot_rate:.1f}/мин высокий"
 
-        pass_default = 62.0 if cfg.key == "hockey" else 68.0
-        borderline_default = 50.0 if cfg.key == "hockey" else 56.0
+        pass_default = 70.0 if cfg.key == "hockey" else 68.0
+        borderline_default = 58.0 if cfg.key == "hockey" else 56.0
         pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
         borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
@@ -3499,6 +3590,30 @@ class MultiSportSteamWorker:
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)
         family = str(row.get("market_family") or "match_total")
+
+        if cfg.key == "hockey" and phase == "LIVE":
+            # Until the hockey model proves stable, never chase the same game
+            # across multiple periods. One LIVE bet per hockey match is the
+            # production default; it can be relaxed explicitly later.
+            wanted_identity = str(row.get("flashscore_event_id") or event_id or "")
+            max_per_match = max(1, _int_env("GOOL_HOCKEY_LIVE_MAX_BETS_PER_MATCH", 1))
+            prior_live = 0
+            for previous in load_journal(self.journal_path):
+                previous_phase = str(previous.get("phase") or "").upper()
+                previous_identity = str(previous.get("flashscore_event_id") or previous.get("event_id") or "")
+                if (
+                    str(previous.get("sport") or "") == "hockey"
+                    and previous_phase == "LIVE"
+                    and previous_identity == wanted_identity
+                ):
+                    prior_live += 1
+            if prior_live >= max_per_match:
+                print(
+                    f"GOOL_HOCKEY_LIVE_MATCH_CAP match={row.get('home')}--{row.get('away')} "
+                    f"prior={prior_live} cap={max_per_match}",
+                    flush=True,
+                )
+                return False, 0
         if self._already_seen(
             cfg.key,
             event_id,
@@ -3596,6 +3711,10 @@ class MultiSportSteamWorker:
             "overall_rate_per_min": signal.get("overall_rate_per_min"),
             "recent_rate_per_min": signal.get("recent_rate_per_min"),
             "market_confirmed": signal.get("market_confirmed"),
+            "model_win_probability": signal.get("model_win_probability"),
+            "flashscore_brain_score": signal.get("flashscore_brain_score"),
+            "flashscore_brain_state": signal.get("flashscore_brain_state"),
+            "flashscore_brain_reason": signal.get("flashscore_brain_reason"),
             "live_game_stats": row.get("live_game_stats") or {},
             "hockey_pressure": signal.get("hockey_pressure") or {},
             "mapping_score": float(row.get("flashscore_match_score") or 0.0),

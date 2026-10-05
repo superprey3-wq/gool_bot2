@@ -1384,3 +1384,52 @@ def test_scope_completion_prefers_brain_scope_over_raw_numeric_ac():
     assert multisport_scope_is_complete(fs, "hockey", "PERIOD_1") is True
     assert multisport_scope_is_complete(fs, "hockey", "PERIOD_2") is False
 
+def test_hockey_live_records_only_one_bet_per_match_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    monkeypatch.delenv("GOOL_HOCKEY_LIVE_MAX_BETS_PER_MATCH", raising=False)
+    worker = MultiSportSteamWorker(tmp_path)
+
+    row_p1 = {
+        "event_id": "XB-TOROS",
+        "flashscore_event_id": "FS-TOROS",
+        "phase": "LIVE",
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "home": "Toros Neftekamsk",
+        "away": "Kaluga",
+        "league": "VHL",
+        "score": [0, 0],
+        "line": 0.5,
+        "over": 2.01,
+        "under": 1.75,
+    }
+    signal_p1 = {
+        "brain_mode": "flashscore_stat_first",
+        "direction": "over",
+        "line": 0.5,
+        "odd": 2.01,
+        "strength": 76.0,
+        "fair_probability": 0.56,
+        "stat_edge": 0.8,
+    }
+    recorded1, _ = worker._record_signal(row_p1, signal_p1, SPORTS["hockey"])
+    assert recorded1 is True
+
+    row_p2 = {
+        **row_p1,
+        "scope": "PERIOD_2",
+        "line": 1.5,
+        "over": 1.82,
+        "under": 1.95,
+        "score": [0, 1],
+    }
+    signal_p2 = {
+        **signal_p1,
+        "line": 1.5,
+        "odd": 1.82,
+        "strength": 84.0,
+    }
+    recorded2, _ = worker._record_signal(row_p2, signal_p2, SPORTS["hockey"])
+
+    assert recorded2 is False
+

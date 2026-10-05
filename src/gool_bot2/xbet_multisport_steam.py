@@ -3797,6 +3797,7 @@ class MultiSportSteamWorker:
             "possession_source": signal.get("possession_source"),
             "four_factors": signal.get("four_factors") or {},
             "q3_rebound_assist": signal.get("q3_rebound_assist") or {},
+            "quarter_context_assist": signal.get("quarter_context_assist") or {},
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
             "line_delta": float(signal.get("line_delta") or 0.0),

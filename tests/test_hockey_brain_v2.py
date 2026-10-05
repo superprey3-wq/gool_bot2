@@ -171,3 +171,35 @@ def test_late_big_lead_p3_under_can_still_be_evaluated():
     )
     assert signal is not None
     assert signal["direction"] == "under"
+
+
+def test_live_uses_flashscore_period_clock_when_bookmaker_clock_is_cumulative():
+    brain = _live_brain(recent_shot_rate=0.5)
+    brain["elapsed_seconds"] = 600.0
+    brain["recent_window_seconds"] = 60.0
+    brain["segment_score_verified"] = True
+    lane = _live_lane(elapsed=2400, line=1.5, market_over=0.70)
+
+    signal = live_signal(brain, lane)
+
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["projection_clock_source"] == "flashscore_period"
+
+
+def test_live_uses_bookmaker_period_score_when_flashscore_parts_are_incomplete():
+    brain = _live_brain(recent_shot_rate=0.5)
+    brain["elapsed_seconds"] = 600.0
+    brain["recent_window_seconds"] = 60.0
+    brain["segment_score_verified"] = False
+    # The unverified Flashscore fallback incorrectly looks like two P3 goals,
+    # while the bookmaker subgame correctly says 0:0.
+    brain["current_segment_score"] = [2, 0]
+    lane = _live_lane(elapsed=600, line=1.5, market_over=0.70)
+    lane["score"] = [0, 0]
+
+    signal = live_signal(brain, lane)
+
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["segment_score_source"] == "1xbet_subgame_fallback"

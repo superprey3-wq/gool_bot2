@@ -3155,6 +3155,7 @@ class MultiSportSteamWorker:
         cfg: SportConfig,
         fs_today: list[dict[str, Any]],
         xbet_prematch_prefetched: list[dict[str, Any]] | None = None,
+        fs_price_candidates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if not _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
             return {"enabled": False, "matches": []}
@@ -3166,12 +3167,15 @@ class MultiSportSteamWorker:
             and float(row.get("start_ts") or 0.0) > now
             and float(row.get("start_ts") or 0.0) - now <= horizon
         ]
+        price_targets = fs_upcoming if fs_price_candidates is None else [dict(row) for row in fs_price_candidates]
         xbet_prematch = (
             [dict(row) for row in xbet_prematch_prefetched]
             if xbet_prematch_prefetched is not None
-            else self._xbet_prematch_index(cfg)
+            else (self._xbet_prematch_index(cfg) if price_targets else [])
         )
-        mapped_all = map_xbet_to_flashscore(xbet_prematch, fs_upcoming)
+        # Flashscore history/Brain selects the fixtures first. 1xBet is only
+        # asked to price that shortlist, matching the football V4 architecture.
+        mapped_all = map_xbet_to_flashscore(xbet_prematch, price_targets)
         mapped, mapped_total = self._prematch_batch(cfg, mapped_all)
         decoded = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
@@ -3279,6 +3283,7 @@ class MultiSportSteamWorker:
         return {
             "enabled": True,
             "flashscore_prematch": len(fs_upcoming),
+            "prematch_brain_candidates": len(price_targets),
             "xbet_prematch": len(xbet_prematch),
             "prematch_mapped": mapped_total,
             "prematch_scanned": len(mapped),
@@ -3291,25 +3296,82 @@ class MultiSportSteamWorker:
             "matches": visible,
         }
 
+    def _prepare_flashscore_sport(self, cfg: SportConfig) -> dict[str, Any]:
+        """Stage 1: analyse Flashscore first, before any 1xBet request."""
+        fs_today = self._flashscore_today(cfg)
+        fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
+        live_analysis = self._flashscore_live_analysis(fs_live, cfg)
+        live_price_max = max(1, min(80, _int_env("GOOL_MULTISPORT_LIVE_PRICE_MAX_PER_SPORT", 24)))
+        live_candidates = [
+            row for row in live_analysis
+            if str(row.get("brain_state") or "") in {"PASS", "BORDERLINE"}
+        ][:live_price_max]
+
+        now = time.time()
+        horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 30 * 60 * 60.0))
+        fs_upcoming = [
+            row for row in fs_today
+            if str(row.get("coarse_status") or "") == "1"
+            and float(row.get("start_ts") or 0.0) > now
+            and float(row.get("start_ts") or 0.0) - now <= horizon
+        ]
+        prematch_candidates = (
+            self._flashscore_prematch_shortlist(fs_upcoming, cfg)
+            if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True)
+            else []
+        )
+        return {
+            "fs_today": fs_today,
+            "fs_live": fs_live,
+            "live_analysis": live_analysis,
+            "live_candidates": live_candidates,
+            "prematch_candidates": prematch_candidates,
+        }
+
     def _scan_sport(
         self,
         cfg: SportConfig,
         *,
+        prepared: dict[str, Any] | None = None,
         xbet_live_prefetched: list[dict[str, Any]] | None = None,
         xbet_prematch_prefetched: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        fs_today = self._flashscore_today(cfg)
+        prepared = dict(prepared or self._prepare_flashscore_sport(cfg))
+        fs_today = [dict(row) for row in (prepared.get("fs_today") or [])]
         states = {str(row["flashscore_event_id"]): row for row in fs_today}
         settled = self._settle(cfg, states)
-        prematch = self._scan_prematch(cfg, fs_today, xbet_prematch_prefetched=xbet_prematch_prefetched)
+        prematch_candidates = [dict(row) for row in (prepared.get("prematch_candidates") or [])]
+        prematch = self._scan_prematch(
+            cfg,
+            fs_today,
+            xbet_prematch_prefetched=xbet_prematch_prefetched,
+            fs_price_candidates=prematch_candidates,
+        )
         prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
-        fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
+        fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]
+        live_analysis = [dict(row) for row in (prepared.get("live_analysis") or [])]
+        live_candidates = [dict(row) for row in (prepared.get("live_candidates") or [])]
+        candidate_ids = {
+            str(row.get("flashscore_event_id") or "") for row in live_candidates
+            if str(row.get("flashscore_event_id") or "")
+        }
+        fs_to_price = [
+            row for row in fs_live
+            if str(row.get("flashscore_event_id") or "") in candidate_ids
+        ]
         xbet_live = (
             [dict(row) for row in xbet_live_prefetched]
             if xbet_live_prefetched is not None
-            else self._xbet_index(cfg)
+            else (self._xbet_index(cfg) if fs_to_price else [])
         )
-        mapped = map_xbet_to_flashscore(xbet_live, fs_live)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
+        # Price only Flashscore Brain candidates; non-candidates still remain
+        # visible in analysis and continue building stat history.
+        mapped = map_xbet_to_flashscore(xbet_live, fs_to_price)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
+        analysis_by_fs = {
+            str(row.get("flashscore_event_id") or ""): row
+            for row in live_analysis
+            if str(row.get("flashscore_event_id") or "")
+        }
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
         latest: list[dict[str, Any]] = []
@@ -3359,6 +3421,9 @@ class MultiSportSteamWorker:
                     row["signals"] = signals
                     row["signal"] = signals[0]
                     row["steam"] = signals[0]
+                fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or ""))
+                if fs_brain:
+                    row["flashscore_brain"] = fs_brain
                 latest.append(row)
 
         return {
@@ -3366,6 +3431,7 @@ class MultiSportSteamWorker:
             "settled": settled,
             "prematch": prematch,
             "flashscore_prematch": int(prematch.get("flashscore_prematch") or 0),
+            "prematch_brain_candidates": int(prematch.get("prematch_brain_candidates") or 0),
             "xbet_prematch": int(prematch.get("xbet_prematch") or 0),
             "prematch_mapped": int(prematch.get("prematch_mapped") or 0),
             "prematch_decoded": int(prematch.get("prematch_decoded") or 0),
@@ -3376,6 +3442,8 @@ class MultiSportSteamWorker:
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,
             "flashscore_live": len(fs_live),
+            "live_brain_candidates": len(live_candidates),
+            "flashscore_analysis_matches": live_analysis[:120],
             # Authoritative LIVE identity/status from Flashscore. Keep this
             # independently from 1xBet mapping so PREMATCH picks move to
             # "In Game" immediately even when bookmaker matching is delayed.
@@ -3411,18 +3479,49 @@ class MultiSportSteamWorker:
         sports: dict[str, Any] = {}
         enabled = [(key, cfg) for key, cfg in SPORTS.items() if _sport_enabled(key)]
 
-        # IMPORTANT: fetch lightweight indexes for BOTH sports first. Hydrating
-        # hockey games/subgames can trigger 1xBet throttling and previously left
-        # basketball with an empty LiveFeed even while Flashscore had 40-50 games.
+        # Stage 1 mirrors football V4: Flashscore data/Brain decides which
+        # matches deserve bookmaker pricing. This happens for BOTH sports before
+        # any 1xBet request, so a bookmaker mismatch can never suppress analysis.
+        prepared: dict[str, dict[str, Any]] = {}
+        prep_workers = max(1, min(4, len(enabled) or 1))
+        with ThreadPoolExecutor(max_workers=prep_workers) as pool:
+            jobs = {pool.submit(self._prepare_flashscore_sport, cfg): key for key, cfg in enabled}
+            for future in as_completed(jobs):
+                key = jobs[future]
+                try:
+                    prepared[key] = dict(future.result(timeout=90) or {})
+                except Exception as exc:
+                    prepared[key] = {"fs_today": [], "fs_live": [], "live_analysis": [], "live_candidates": [], "prematch_candidates": []}
+                    print(f"GOOL_{key.upper()}_FS_BRAIN_ERROR {type(exc).__name__}:{exc}", flush=True)
+
+        print(
+            "GOOL_MULTISPORT_FS_BRAIN "
+            + " ".join(
+                f"{key}:live={len((prepared.get(key) or {}).get('fs_live') or [])}"
+                f"/cand={len((prepared.get(key) or {}).get('live_candidates') or [])},"
+                f"pre_cand={len((prepared.get(key) or {}).get('prematch_candidates') or [])}"
+                for key, _cfg in enabled
+            ),
+            flush=True,
+        )
+
+        # Stage 2: fetch bookmaker indexes concurrently, but only when the
+        # Flashscore Brain produced something worth pricing.
         prefetched_live: dict[str, list[dict[str, Any]]] = {}
         prefetched_prematch: dict[str, list[dict[str, Any]]] = {}
         index_workers = max(1, min(4, _int_env("GOOL_MULTISPORT_INDEX_PREFETCH_WORKERS", len(enabled) * 2 or 1)))
         with ThreadPoolExecutor(max_workers=index_workers) as pool:
             jobs = {}
             for key, cfg in enabled:
-                jobs[pool.submit(self._xbet_index, cfg)] = ("live", key)
-                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True):
+                prep = prepared.get(key) or {}
+                if prep.get("live_candidates"):
+                    jobs[pool.submit(self._xbet_index, cfg)] = ("live", key)
+                else:
+                    prefetched_live[key] = []
+                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True) and prep.get("prematch_candidates"):
                     jobs[pool.submit(self._xbet_prematch_index, cfg)] = ("prematch", key)
+                else:
+                    prefetched_prematch[key] = []
             for future in as_completed(jobs):
                 phase, key = jobs[future]
                 try:
@@ -3435,7 +3534,7 @@ class MultiSportSteamWorker:
                     prefetched_prematch[key] = list(rows or [])
 
         print(
-            "GOOL_MULTISPORT_PREFETCH "
+            "GOOL_MULTISPORT_PRICE_FETCH "
             + " ".join(
                 f"{key}:live={len(prefetched_live.get(key) or [])},pre={len(prefetched_prematch.get(key) or [])}"
                 for key, _cfg in enabled
@@ -3449,12 +3548,14 @@ class MultiSportSteamWorker:
                 continue
             stats = self._scan_sport(
                 cfg,
+                prepared=prepared.get(key),
                 xbet_live_prefetched=prefetched_live.get(key),
                 xbet_prematch_prefetched=prefetched_prematch.get(key),
             )
             sports[key] = stats
             print(
-                f"GOOL_{key.upper()} fs={stats['flashscore_live']} xbet={stats['xbet_live']} mapped={stats['mapped']} "
+                f"GOOL_{key.upper()} fs={stats['flashscore_live']} brain_cand={stats.get('live_brain_candidates',0)} "
+                f"xbet={stats['xbet_live']} mapped={stats['mapped']} "
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "

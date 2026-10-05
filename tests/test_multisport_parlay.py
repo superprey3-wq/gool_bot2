@@ -121,3 +121,15 @@ def test_parlay_logo_metadata_is_enriched_from_flashscore(tmp_path):
     assert enriched[0]["home_team_id"] == "HOME1"
     assert enriched[0]["away_team_id"] == "AWAY1"
 
+def test_two_leg_parlay_card_has_footer_below_second_leg():
+    from io import BytesIO
+    from PIL import Image
+
+    parlay = build_sport_parlays([_row("1"), _row("2", odd=1.8, strength=84)], "basketball")[0]
+    png = render_multisport_parlay_card(parlay, "basketball")
+    image = Image.open(BytesIO(png))
+
+    # Old renderer was 700px high and the footer overlapped leg #2.
+    assert image.height >= 800
+    assert image.width == 1080
+

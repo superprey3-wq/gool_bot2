@@ -482,3 +482,55 @@ def test_multisport_analysis_shows_flashscore_brain_before_xbet_match(tmp_path: 
     assert "кандидат выбран Brain" in text
     assert "рынок 1xBet ещё не синхронизирован" not in text
 
+def test_multisport_analysis_shows_flashscore_brain_before_xbet_mapping(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_analysis_matches": [{
+                    "flashscore_event_id": "H-LIVE",
+                    "home": "Oshawa Generals",
+                    "away": "Sarnia Sting",
+                    "score": [0, 1],
+                    "period": "3-й период",
+                    "scope": "PERIOD_3",
+                    "brain_state": "PASS",
+                    "brain_score": 78,
+                    "projected_total": 2.4,
+                    "brain_reason": "броски 19, темп бросков 2.8/мин, шайбы периода 1",
+                    "live_game_stats": {
+                        "segment_stats": {"shots_on_goal": [10, 9]}
+                    },
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_analysis_matches": []},
+        },
+    })
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "H-LIVE",
+            "home": "Oshawa Generals",
+            "away": "Sarnia Sting",
+            "score": [0, 1],
+            "status_code": "46",
+            "coarse_status": "2",
+        }]
+        if sport == "hockey" else []
+    ))
+
+    text = "\n".join(menu.multisport_analysis_sections())
+
+    assert "Oshawa Generals — Sarnia Sting" in text
+    assert "3-й период" in text
+    assert "броски в створ 10:9" in text
+    assert "PASS" in text
+    assert "R78" in text
+    assert "прогноз сегмента 2.4" in text
+    assert "Brain уже выбрал матч" in text
+    assert "46" not in text
+

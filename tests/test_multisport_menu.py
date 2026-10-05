@@ -367,7 +367,7 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "Piratas de Bogota — Caimanes del Llano" in text
     assert "сейчас Q2 · 21:24" in text
     assert "Ф2 +4.5 @ 1.55" in text
-    assert "100/100 · PREMATCH" in text
+    assert "100/100 · 🟡 PREMATCH" in text
     assert "может проиграть максимум в 4" in text
 
 

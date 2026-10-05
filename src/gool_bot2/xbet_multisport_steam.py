@@ -3664,6 +3664,7 @@ class MultiSportSteamWorker:
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
             "push_probability": signal.get("push_probability"),
+            "push_confidence_penalty": signal.get("push_confidence_penalty"),
             "edge": signal.get("edge"),
             "lambda_home": signal.get("lambda_home"),
             "lambda_away": signal.get("lambda_away"),

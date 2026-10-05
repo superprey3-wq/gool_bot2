@@ -247,7 +247,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🔗 хоккей экспресс","🔗 баскет экспресс","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -284,12 +284,18 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text=="/sportjournal":
     from .multisport_menu import sport_journal_text
     replies=[sport_journal_text()]
-   elif text in {"/hockeyjournal","📒 хоккей"}:
+   elif text=="/hockeyjournal":
     from .multisport_menu import hockey_journal_text
     replies=[hockey_journal_text()]
-   elif text in {"/basketjournal","📒 баскет"}:
+   elif text=="/basketjournal":
     from .multisport_menu import basketball_journal_text
     replies=[basketball_journal_text()]
+   elif text in {"/hockeyprematch","📒 хоккей","🟡 хоккей pre"}:
+    from .multisport_menu import sport_prematch_picks_sections
+    replies=sport_prematch_picks_sections("hockey")
+   elif text in {"/basketprematch","📒 баскет","🟡 баскет pre"}:
+    from .multisport_menu import sport_prematch_picks_sections
+    replies=sport_prematch_picks_sections("basketball")
    elif text=="/hockeyreport":
     from .multisport_menu import sport_phase_report_text
     replies=[sport_phase_report_text("hockey")]
@@ -303,11 +309,11 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     from .multisport_menu import sport_parlay_text
     replies=[sport_parlay_text("basketball")]
    elif text=="🏒 хоккей":
-    from .multisport_menu import sport_overview_text
-    replies=[sport_overview_text("hockey")]
+    from .multisport_menu import hockey_journal_text
+    replies=[hockey_journal_text()]
    elif text=="🏀 баскетбол":
-    from .multisport_menu import sport_overview_text
-    replies=[sport_overview_text("basketball")]
+    from .multisport_menu import basketball_journal_text
+    replies=[basketball_journal_text()]
    elif text=="🎟 ординары":
     replies=prematch_singles_sections(journal_path)
    elif text=="🔗 экспрессы":

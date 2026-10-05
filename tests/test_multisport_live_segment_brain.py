@@ -365,7 +365,7 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
     signal = price_flashscore_live_candidate(brain, lane, SPORTS["basketball"])
 
     assert signal is not None
-    assert signal["brain_mode"] == "flashscore_stat_first"
+    assert signal["brain_mode"] == "basketball_live_v2"
     assert signal["direction"] == "over"
     assert signal["line"] == 53.5
     assert signal["odd"] == 1.88

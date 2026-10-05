@@ -116,3 +116,67 @@ def test_startup_repair_prefers_latest_settlement_not_old_delivered_result(tmp_p
     assert row["result_notification_pending"] is False
     assert row["result_notification_suppressed"] is True
     assert row["result_notification_suppression_reason"] == "startup_repair_conflicting_delivered_result"
+
+def test_public_report_is_unified_across_football_hockey_and_basketball(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.journal_report import production_report_text
+
+    football = tmp_path / "football.json"
+    multisport = tmp_path / "multisport.json"
+    now = datetime.now(timezone.utc).isoformat()
+
+    football.write_text(json.dumps([{
+        "created_at": now,
+        "mode": "active",
+        "telegram_sent": True,
+        "result": "won",
+        "profit_units": 0.80,
+        "odd": 1.80,
+        "origin": "prematch",
+        "strategy": "prematch",
+    }]), encoding="utf-8")
+    multisport.write_text(json.dumps([
+        {
+            "created_at": now,
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "telegram_sent": True,
+            "result": "lost",
+            "profit_units": -1.0,
+            "odd": 1.90,
+        },
+        {
+            "created_at": now,
+            "sport": "basketball",
+            "phase": "LIVE",
+            "telegram_sent": True,
+            "result": "won",
+            "profit_units": 0.70,
+            "odd": 1.70,
+        },
+        {
+            "created_at": now,
+            "sport": "basketball",
+            "phase": "PREMATCH",
+            "telegram_sent": False,
+            "result": "won",
+            "profit_units": 5.0,
+            "odd": 6.0,
+        },
+    ]), encoding="utf-8")
+
+    monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(football))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(multisport))
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+
+    text = production_report_text()
+
+    assert "ОБЩИЙ ЖУРНАЛ" in text
+    assert "СЕГОДНЯ · ВСЕ ВИДЫ СПОРТА" in text
+    assert "⚽ <b>ФУТБОЛ</b>" in text
+    assert "🏒 <b>ХОККЕЙ</b>" in text
+    assert "🏀 <b>БАСКЕТБОЛ</b>" in text
+    assert "ЗА ВСЁ ВРЕМЯ" in text
+    # Unsent multisport row must not pollute the public totals.
+    assert "6.00" not in text
+

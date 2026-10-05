@@ -21,13 +21,13 @@ def _label(row:dict[str,Any],signal:dict[str,Any])->str:
 
 
 def _team_badges(im,draw,row,home:str,away:str,accent)->None:
-    sc._badge(im,draw,125,252,sc._logo(row,"home"),home,accent)
-    sc._badge(im,draw,925,252,sc._logo(row,"away"),away,accent)
+    sc._badge(im,draw,120,262,sc._logo(row,"home"),home,accent)
+    sc._badge(im,draw,960,262,sc._logo(row,"away"),away,accent)
 
 
 def _header(draw,title:str,phase:str)->None:
     draw.rounded_rectangle((28,24,1052,100),22,fill=PANEL,outline=ICE,width=2)
-    draw.text((52,44),f"🏒 GOOL HOCKEY • {phase}",font=sc._font(25,True),fill=TEXT)
+    draw.text((52,44),f"GOOL HOCKEY • {phase}",font=sc._font(25,True),fill=TEXT)
     draw.text((770,48),title,font=sc._fit(draw,title,245,18,True),fill=ICE)
 
 
@@ -99,17 +99,23 @@ def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
     home,away=str(row.get("home") or "?"),str(row.get("away") or "?")
     league=str(row.get("league") or "PREMATCH")
     d.text((50,122),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
-    d.rounded_rectangle((42,158,1038,344),28,fill=PANEL,outline=BLUE,width=2)
+    d.rounded_rectangle((42,158,1038,354),28,fill=PANEL,outline=BLUE,width=2)
     _team_badges(im,d,row,home,away,ICE)
-    d.text((205,195),home,font=sc._fit(d,home,300,25,True),fill=TEXT)
-    d.text((560,195),away,font=sc._fit(d,away,300,25,True),fill=TEXT)
+
+    def center_region(text:str,cx:int,y:int,width:int,size:int,fill)->None:
+        font=sc._fit(d,text,width,size,True)
+        box=d.textbbox((0,0),text,font=font)
+        d.text((cx-(box[2]-box[0])/2,y),text,font=font,fill=fill)
+
+    center_region(home,315,190,220,25,TEXT)
+    center_region(away,765,190,220,25,TEXT)
     ts=float(row.get("start_ts") or 0)
     try: tz=ZoneInfo("Europe/Moscow")
     except Exception: tz=timezone.utc
     kickoff=datetime.fromtimestamp(ts,tz).strftime("%d.%m • %H:%M МСК") if ts else "ВРЕМЯ ?"
-    d.rounded_rectangle((720,210,1000,302),16,fill=(8,24,31),outline=ICE,width=2)
-    d.text((745,226),"СТАРТ",font=sc._font(13,True),fill=MUTED)
-    d.text((745,260),kickoff,font=sc._fit(d,kickoff,225,19,True),fill=ICE)
+    d.rounded_rectangle((425,242,655,320),16,fill=(8,24,31),outline=ICE,width=2)
+    center_region("СТАРТ",540,252,190,12,MUTED)
+    center_region(kickoff,540,282,195,17,ICE)
 
     scope=str(row.get("scope") or signal.get("scope") or SCOPE_FULL)
     scope_label=SCOPE_LABEL_RU.get(scope,scope)
@@ -138,7 +144,8 @@ def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)-
     d.text((68,628),move,font=sc._fit(d,move,920,28,True),fill=ICE)
     d.rounded_rectangle((42,720,1038,810),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,740),"PREMATCH POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,773),"Все PREMATCH рынки: тоталы/ИТ/форы/исходы + периоды",font=sc._fit(d,"Матч + ИТ команд + тоталы всех 1/2/3 периодов",900,22,True),fill=GREEN)
+    policy_text="Все PREMATCH рынки: тоталы/ИТ/форы/исходы + периоды"
+    d.text((68,773),policy_text,font=sc._fit(d,policy_text,900,22,True),fill=GREEN)
     d.rounded_rectangle((280,830,800,880),15,fill=ICE)
     sc._center(d,"HOCKEY PREMATCH • СИГНАЛ",840,sc._font(20,True),BG)
     return sc._save(im)

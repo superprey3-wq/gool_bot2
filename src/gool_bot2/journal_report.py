@@ -7,6 +7,7 @@ from typing import Any
 from .journal import load_signal_journal
 from .multi_delivery import was_publicly_sent
 from .multi_public_metrics import strategy_bucket
+from .multisport_journal import load_journal as load_multisport_journal
 
 
 def _layer(row: dict[str, Any]) -> str:
@@ -25,50 +26,71 @@ def _today(rows: list[dict[str, Any]], tz: Any, day: Any) -> list[dict[str, Any]
 
 
 def production_report_text(_: Path | None = None, experiment_path: Path | None = None) -> str:
-    """GOOL Bot 4 public journal: only entries that were actually sent to Telegram."""
+    """Unified public journal for football + hockey + basketball."""
     del experiment_path
     from . import multi_menu
+    from . import multisport_menu
 
-    all_rows = load_signal_journal(multi_menu.journal_path())
-    rows = [row for row in all_rows if was_publicly_sent(row) and not bool(row.get("public_duplicate"))]
     tz = multi_menu._tz()
     today = datetime.now(tz).date()
-    today_rows = _today(rows, tz, today)
 
-    first_half = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "goal_before_ht"]
-    another_goal = [row for row in today_rows if strategy_bucket(row.get("strategy")) == "another_goal"]
-    prematch_singles = [row for row in today_rows if str(row.get("origin") or "") == "prematch"]
-    prematch_values = [row for row in today_rows if str(row.get("origin") or "") == "prematch_value"]
-    parlays = [row for row in today_rows if str(row.get("origin") or "") == "prematch_parlay"]
-    steam = [row for row in today_rows if _layer(row) == "STEAM"]
+    football_all = [
+        row for row in load_signal_journal(multi_menu.journal_path())
+        if was_publicly_sent(row) and not bool(row.get("public_duplicate"))
+    ]
+    football_today = _today(football_all, tz, today)
 
-    total_profit, total_missing = multi_menu._profit_info(today_rows)
-    total_pl = f"{total_profit:+.2f}u" + ("*" if total_missing else "")
-    settled = [row for row in today_rows if str(row.get("result") or "").lower() in {"won", "lost"}]
+    multi_all_raw = load_multisport_journal(multisport_menu.journal_path())
+    # Multisport journal may contain shadow/audit rows. The public combined
+    # journal must mirror what the user actually received in Telegram.
+    multi_all = [
+        row for row in multi_all_raw
+        if bool(row.get("telegram_sent"))
+    ]
+    multi_today = _today(multi_all, tz, today)
+
+    hockey_all = [row for row in multi_all if str(row.get("sport") or "") == "hockey"]
+    basketball_all = [row for row in multi_all if str(row.get("sport") or "") == "basketball"]
+    hockey_today = [row for row in multi_today if str(row.get("sport") or "") == "hockey"]
+    basketball_today = [row for row in multi_today if str(row.get("sport") or "") == "basketball"]
+
+    today_all = [*football_today, *hockey_today, *basketball_today]
+    lifetime_all = [*football_all, *hockey_all, *basketball_all]
+
+    first_half = [row for row in football_today if strategy_bucket(row.get("strategy")) == "goal_before_ht"]
+    another_goal = [row for row in football_today if strategy_bucket(row.get("strategy")) == "another_goal"]
+    prematch_singles = [row for row in football_today if str(row.get("origin") or "") == "prematch"]
+    prematch_values = [row for row in football_today if str(row.get("origin") or "") == "prematch_value"]
+    football_parlays = [row for row in football_today if str(row.get("origin") or "") == "prematch_parlay"]
+
     parts = [
-        "📊 <b>GOOL BOT 4 · ОТЧЁТ СЕГОДНЯ</b>",
-        f"📅 {today.strftime('%d.%m.%Y')} · только реально отправленные ставки",
-        "",
-        f"🟡 <b>Гол в 1-м тайме</b>\n{multi_menu._stats_line(first_half)}",
-        "",
-        f"⚽ <b>Ещё гол</b>\n{multi_menu._stats_line(another_goal)}",
-        "",
-        f"🎟 <b>PREMATCH ординары</b>\n{multi_menu._stats_line(prematch_singles)}",
-        "",
-        f"🔥 <b>VALUE HUNTER</b>\n{multi_menu._stats_line(prematch_values)}",
-        "",
-        f"🔗 <b>Экспрессы</b>\n{multi_menu._stats_line(parlays)}",
-        "",
-        f"🔥 <b>Прогрузы 1xBet</b>\n{multi_menu._stats_line(steam)}",
+        "📊 <b>GOOL BOT 4 · ОБЩИЙ ЖУРНАЛ</b>",
+        f"📅 <b>{today.strftime('%d.%m.%Y')}</b> · только реально отправленные ставки",
         "",
         "━━━━━━━━━━━━━━",
-        f"📦 <b>ИТОГО ДНЯ</b> · отправлено <b>{len(today_rows)}</b> · рассчитано <b>{len(settled)}</b>",
-        f"{multi_menu._stats_line(today_rows)}",
-        f"💰 Итоговый P/L: <b>{total_pl}</b>",
+        "📅 <b>СЕГОДНЯ · ВСЕ ВИДЫ СПОРТА</b>",
+        f"🌐 <b>ОБЩИЙ</b>\n{multi_menu._stats_line(today_all)}",
+        "",
+        f"⚽ <b>ФУТБОЛ</b>\n{multi_menu._stats_line(football_today)}",
+        f"🏒 <b>ХОККЕЙ</b>\n{multi_menu._stats_line(hockey_today)}",
+        f"🏀 <b>БАСКЕТБОЛ</b>\n{multi_menu._stats_line(basketball_today)}",
+        "",
+        "━━━━━━━━━━━━━━",
+        "📚 <b>ЗА ВСЁ ВРЕМЯ</b>",
+        f"🌐 <b>ОБЩИЙ</b>\n{multi_menu._stats_line(lifetime_all)}",
+        f"⚽ <b>ФУТБОЛ</b>\n{multi_menu._stats_line(football_all)}",
+        f"🏒 <b>ХОККЕЙ</b>\n{multi_menu._stats_line(hockey_all)}",
+        f"🏀 <b>БАСКЕТБОЛ</b>\n{multi_menu._stats_line(basketball_all)}",
+        "",
+        "━━━━━━━━━━━━━━",
+        "⚽ <b>ФУТБОЛ · ДЕТАЛИ СЕГОДНЯ</b>",
+        f"🟡 Гол в 1-м тайме\n{multi_menu._stats_line(first_half)}",
+        f"⚽ Ещё гол\n{multi_menu._stats_line(another_goal)}",
+        f"🎟 PREMATCH ординары\n{multi_menu._stats_line(prematch_singles)}",
+        f"🔥 VALUE HUNTER\n{multi_menu._stats_line(prematch_values)}",
+        f"🔗 Экспрессы\n{multi_menu._stats_line(football_parlays)}",
     ]
-    if total_missing:
-        parts += ["<i>* P/L/ROI неполные: у части старых выигрышных записей не сохранён взятый коэффициент.</i>"]
-    return "\n".join(parts)
+    return "\n\n".join(parts)
 
 
 __all__ = ["production_report_text"]

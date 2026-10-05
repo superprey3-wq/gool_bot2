@@ -1,4 +1,9 @@
-from gool_bot2.xbet_multisport_steam import SPORTS, detect_live_segment_stats
+from gool_bot2.xbet_multisport_steam import (
+    MultiSportSteamWorker,
+    SPORTS,
+    _infer_flashscore_scope,
+    detect_live_segment_stats,
+)
 
 
 def _row(ts, clock, total, line, over=1.82, under=1.98, probability=0.52, sport="basketball"):
@@ -88,3 +93,97 @@ def test_hockey_shots_and_special_teams_feed_projection(monkeypatch):
     assert signal["hockey_pressure"]["shots_on_goal"] == [14, 13]
     assert signal["hockey_pressure"]["recent_shots_per_min"] > 0
     assert signal["hockey_pressure"]["special_teams_boost"] > 0
+
+def test_flashscore_scope_is_inferred_without_1xbet_period():
+    assert _infer_flashscore_scope(
+        {"score_parts": [[20, 18], [14, 12]]},
+        SPORTS["basketball"],
+        ["FULL_MATCH", "QUARTER_1", "QUARTER_2"],
+    ) == "QUARTER_2"
+    assert _infer_flashscore_scope(
+        {"score_parts": [[0, 1], [1, 0]]},
+        SPORTS["hockey"],
+        ["FULL_MATCH", "PERIOD_1", "PERIOD_2"],
+    ) == "PERIOD_2"
+
+
+def test_collect_once_runs_flashscore_brain_before_bookmaker_pricing(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_ENABLED", "1")
+    worker = MultiSportSteamWorker(tmp_path)
+    order = []
+
+    def fake_today(cfg):
+        if cfg.key != "hockey":
+            return []
+        return [
+            {
+                "flashscore_event_id": "LIVEH001",
+                "home": "Live Home",
+                "away": "Live Away",
+                "league": "League",
+                "score": [1, 1],
+                "score_parts": [[0, 1], [1, 0]],
+                "status_code": "46",
+                "coarse_status": "2",
+                "start_ts": 1,
+            },
+            {
+                "flashscore_event_id": "PREH0001",
+                "home": "Pre Home",
+                "away": "Pre Away",
+                "league": "League",
+                "score": [0, 0],
+                "score_parts": [],
+                "status_code": "",
+                "coarse_status": "1",
+                "start_ts": __import__("time").time() + 3600,
+            },
+        ]
+
+    def fake_live_analysis(rows, cfg):
+        if rows:
+            order.append("live_brain")
+            return [{
+                "flashscore_event_id": "LIVEH001",
+                "home": "Live Home",
+                "away": "Live Away",
+                "score": [1, 1],
+                "period": "2-й период",
+                "brain_state": "PASS",
+                "brain_score": 82,
+                "brain_reason": "pressure",
+                "live_game_stats": {"segment_stats": {"shots_on_goal": [12, 10]}},
+            }]
+        return []
+
+    def fake_pre_shortlist(rows, cfg):
+        if rows:
+            order.append("prematch_brain")
+            return [{**rows[0], "prematch_brain": {"state": "PASS", "score": 80}}]
+        return []
+
+    def fake_live_index(cfg):
+        order.append("live_xbet")
+        return []
+
+    def fake_pre_index(cfg):
+        order.append("prematch_xbet")
+        return []
+
+    monkeypatch.setattr(worker, "_flashscore_today", fake_today)
+    monkeypatch.setattr(worker, "_flashscore_live_analysis", fake_live_analysis)
+    monkeypatch.setattr(worker, "_flashscore_prematch_shortlist", fake_pre_shortlist)
+    monkeypatch.setattr(worker, "_xbet_index", fake_live_index)
+    monkeypatch.setattr(worker, "_xbet_prematch_index", fake_pre_index)
+
+    state = worker.collect_once()
+
+    assert order.index("live_brain") < order.index("live_xbet")
+    assert order.index("prematch_brain") < order.index("prematch_xbet")
+    hockey = state["sports"]["hockey"]
+    assert hockey["flashscore_live"] == 1
+    assert hockey["live_brain_candidates"] == 1
+    assert hockey["mapped"] == 0
+    assert hockey["flashscore_analysis_matches"][0]["brain_score"] == 82
+    assert hockey["prematch_brain_candidates"] == 1
+

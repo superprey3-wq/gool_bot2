@@ -638,27 +638,27 @@ def test_sport_prematch_picks_only_issued_pending_future_and_sorted(tmp_path: Pa
     now = time.time()
     _write(journal, [
         {
-            "sport":"hockey","phase":"PREMATCH","result":"pending",
+            "sport":"hockey","phase":"PREMATCH","result":"pending","event_id":"H-LATER",
             "home":"Later","away":"Away","league":"KHL","start_ts":now+7200,
             "selection":"Ф1 +1.5","odd":1.80,"strength":90,"scope":"FULL_MATCH",
         },
         {
-            "sport":"hockey","phase":"PREMATCH","result":"pending",
+            "sport":"hockey","phase":"PREMATCH","result":"pending","event_id":"H-SOONER",
             "home":"Sooner","away":"Away","league":"KHL","start_ts":now+1800,
             "selection":"ТБ 5.5","odd":1.60,"strength":85,"scope":"FULL_MATCH",
         },
         {
-            "sport":"hockey","phase":"PREMATCH","result":"lost",
+            "sport":"hockey","phase":"PREMATCH","result":"lost","event_id":"H-FINISHED",
             "home":"Finished","away":"Away","league":"KHL","start_ts":now+3600,
             "selection":"ТМ 5.5","odd":1.90,"strength":80,"scope":"FULL_MATCH",
         },
         {
-            "sport":"hockey","phase":"PREMATCH","result":"pending",
+            "sport":"hockey","phase":"PREMATCH","result":"pending","event_id":"H-STARTED",
             "home":"Already Started","away":"Away","league":"KHL","start_ts":now-60,
             "selection":"ТБ 4.5","odd":1.70,"strength":75,"scope":"FULL_MATCH",
         },
         {
-            "sport":"basketball","phase":"PREMATCH","result":"pending",
+            "sport":"basketball","phase":"PREMATCH","result":"pending","event_id":"B-OTHER",
             "home":"Other Sport","away":"Away","league":"NBA","start_ts":now+900,
             "selection":"ТБ 210.5","odd":1.75,"strength":88,"scope":"FULL_MATCH",
         },
@@ -679,9 +679,9 @@ def test_journal_shows_average_odds_for_each_phase(tmp_path: Path, monkeypatch):
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
     _write(journal, [
-        {"sport":"basketball","phase":"PREMATCH","result":"won","odd":1.50,"profit_units":0.50},
-        {"sport":"basketball","phase":"PREMATCH","result":"lost","odd":2.00,"profit_units":-1.00},
-        {"sport":"basketball","phase":"LIVE","result":"pending","odd":1.80,"profit_units":0.0},
+        {"sport":"basketball","phase":"PREMATCH","event_id":"B1","result":"won","odd":1.50,"profit_units":0.50},
+        {"sport":"basketball","phase":"PREMATCH","event_id":"B2","result":"lost","odd":2.00,"profit_units":-1.00},
+        {"sport":"basketball","phase":"LIVE","event_id":"B3","result":"pending","odd":1.80,"profit_units":0.0},
     ])
 
     text = basketball_journal_text()

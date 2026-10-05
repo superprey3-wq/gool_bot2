@@ -55,10 +55,10 @@ def main() -> None:
             would_live = _n(row.get("detected"))
             print(
                 f"{sport.upper()} "
-                f"PRE fs={_n(row.get('flashscore_prematch'))} xb={_n(row.get('xbet_prematch'))} "
+                f"PRE fs={_n(row.get('flashscore_prematch'))} brain={_n(row.get('prematch_brain_candidates'))} xb={_n(row.get('xbet_prematch'))} "
                 f"mapped={_n(row.get('prematch_mapped'))} scanned={_n(row.get('prematch_scanned'))} decoded={_n(row.get('prematch_decoded'))} "
                 f"signals={_n(row.get('prematch_detected'))} decode_fail={_n(row.get('prematch_market_decode_failed'))} | "
-                f"LIVE fs={_n(row.get('flashscore_live'))} xb={_n(row.get('xbet_live'))} "
+                f"LIVE fs={_n(row.get('flashscore_live'))} brain={_n(row.get('live_brain_candidates'))} xb={_n(row.get('xbet_live'))} "
                 f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))} "
                 f"signals={would_live} mismatch={_n(row.get('score_mismatch'))} "
                 f"decode_fail={_n(row.get('market_decode_failed'))} policy_skip={_n(row.get('policy_blocked'))}"
@@ -122,7 +122,8 @@ def main() -> None:
             "",
             "### PREMATCH",
             f"- Flashscore upcoming: **{_n(row.get('flashscore_prematch'))}**",
-            f"- 1xBet prematch index: **{_n(row.get('xbet_prematch'))}**",
+            f"- Flashscore Brain shortlist before pricing: **{_n(row.get('prematch_brain_candidates'))}**",
+            f"- 1xBet prematch index (queried only for shortlist): **{_n(row.get('xbet_prematch'))}**",
             f"- Mapped total: **{_n(row.get('prematch_mapped'))}**",
             f"- Scanned this cycle: **{_n(row.get('prematch_scanned'))}**",
             f"- Decoded market trees this cycle: **{_n(row.get('prematch_decoded'))}**",
@@ -141,7 +142,9 @@ def main() -> None:
             "",
             "### LIVE",
             f"- Flashscore live: **{_n(row.get('flashscore_live'))}**",
-            f"- 1xBet live index: **{_n(row.get('xbet_live'))}**",
+            f"- Flashscore Brain candidates before pricing: **{_n(row.get('live_brain_candidates'))}**",
+            f"- Flashscore matches analysed by Brain: **{len(row.get('flashscore_analysis_matches') or [])}**",
+            f"- 1xBet live index (queried only after Brain candidate): **{_n(row.get('xbet_live'))}**",
             f"- Mapped: **{_n(row.get('mapped'))}**",
             f"- Decoded main totals: **{_n(row.get('decoded'))}**",
             f"- Signals this snapshot: **{_n(row.get('detected'))}**",
@@ -186,6 +189,21 @@ def main() -> None:
                     f"O {float(x.get('over') or 0):.2f} / U {float(x.get('under') or 0):.2f}{signal}"
                 )
             lines.append("")
+        brain_rows = [x for x in (row.get("flashscore_analysis_matches") or []) if isinstance(x, dict)]
+        if brain_rows:
+            lines += ["#### Flashscore-first Brain sample", ""]
+            for x in brain_rows[:10]:
+                stats = dict((x.get("live_game_stats") or {}).get("segment_stats") or {})
+                stat_keys = ",".join(list(stats)[:5]) or "none"
+                projected = x.get("projected_total")
+                projected_text = "?" if projected is None else f"{float(projected):.2f}"
+                lines.append(
+                    f"- {x.get('home')} — {x.get('away')} | {x.get('period')} | "
+                    f"Brain {x.get('brain_state')} R{float(x.get('brain_score') or 0):.0f} | "
+                    f"scope={x.get('scope')} projection={projected_text} | stats={stat_keys}"
+                )
+            lines.append("")
+
         if lives:
             lines += ["#### LIVE sample", ""]
             for x in lives[:10]:

@@ -351,7 +351,12 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if elapsed < 120.0 or remaining < 75.0:
         return None
 
-    score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+    if bool(brain.get("segment_score_verified")):
+        score = list(brain.get("current_segment_score") or [0, 0])
+        score_source = "flashscore_verified"
+    else:
+        score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+        score_source = "1xbet_subgame_fallback"
     try:
         current = int(score[0] or 0) + int(score[1] or 0)
     except (TypeError, ValueError, IndexError):
@@ -466,6 +471,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),
         "projection_clock_source": clock_source,
+        "segment_score_source": score_source,
         "recent_window_seconds": round(recent_window, 1),
         "start": {},
         "end": dict(lane),

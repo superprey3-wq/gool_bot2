@@ -1331,3 +1331,44 @@ def test_hockey_two_way_full_match_moneyline_uses_final_score_after_overtime(tmp
     assert saved["settled_score"] == [3, 2]
     assert saved["result"] == "won"
 
+def test_hockey_first_period_bet_settles_when_second_period_has_started(tmp_path, monkeypatch):
+    import json
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [{
+        "entry_id": "hockey:live:H1:PERIOD_1:match_total",
+        "sport": "hockey",
+        "phase": "LIVE",
+        "event_id": "H1",
+        "flashscore_event_id": "FSH1",
+        "home": "Belye Medvedi",
+        "away": "Omskie Yastreby",
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "selection": "1-й период: ТБ 1.5",
+        "direction": "over",
+        "line": 1.5,
+        "odd": 1.75,
+        "result": "pending",
+        "profit_units": 0.0,
+    }])
+
+    changed = worker._settle(SPORTS["hockey"], {
+        "FSH1": {
+            "flashscore_event_id": "FSH1",
+            "coarse_status": "2",
+            "status_code": "27",
+            "league": "RUSSIA: MHL",
+            "score": [1, 1],
+            "score_parts": [[0, 1], [1, 0]],
+        }
+    })
+
+    assert changed == 1
+    saved = json.loads(worker.journal_path.read_text("utf-8"))[0]
+    assert saved["settled_score"] == [0, 1]
+    assert saved["result"] == "lost"
+    assert saved["profit_units"] == -1.0
+

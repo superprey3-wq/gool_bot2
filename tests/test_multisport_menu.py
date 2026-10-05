@@ -689,3 +689,44 @@ def test_journal_shows_average_odds_for_each_phase(tmp_path: Path, monkeypatch):
     assert "ср. кэф 1.75" in text
     assert "ср. кэф 1.80" in text
 
+def test_in_game_hides_pending_live_pick_after_its_period_is_over(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {"mode":"active","sports":{"hockey":{"matches":[]},"basketball":{"matches":[]}}})
+    _write(journal, [{
+        "entry_id": "hockey:live:H1:PERIOD_1:match_total",
+        "sport": "hockey",
+        "phase": "LIVE",
+        "result": "pending",
+        "flashscore_event_id": "FSH1",
+        "home": "Belye Medvedi",
+        "away": "Omskie Yastreby",
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "selection": "1-й период: ТБ 1.5",
+        "direction": "over",
+        "line": 1.5,
+        "odd": 1.75,
+        "strength": 68,
+    }])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id":"FSH1",
+            "home":"Belye Medvedi",
+            "away":"Omskie Yastreby",
+            "league":"RUSSIA: MHL",
+            "score":[1,1],
+            "score_parts":[[0,1],[1,0]],
+            "status_code":"27",
+            "coarse_status":"2",
+        }] if sport == "hockey" else []
+    ))
+
+    text = "\n".join(menu.multisport_in_game_sections())
+
+    assert "1-й период: ТБ 1.5" not in text
+

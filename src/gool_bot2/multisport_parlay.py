@@ -122,12 +122,21 @@ def build_sport_parlays(rows: list[dict[str, Any]], sport: str) -> list[dict[str
     candidates.sort(key=lambda row: float(row["score"]), reverse=True)
     out: list[dict[str, Any]] = []
     used_signatures: set[tuple[str, ...]] = set()
+    used_events: set[str] = set()
+    allow_event_reuse = max(1, _int_env("GOOL_MULTISPORT_PARLAY_MAX_EVENT_REUSE", 1))
+    event_use_count: dict[str, int] = {}
     for row in candidates:
         signature = tuple(sorted(str(leg["event_id"]) for leg in row["legs"]))
         if signature in used_signatures:
             continue
+        event_ids = [str(leg["event_id"]) for leg in row["legs"]]
+        if any(event_use_count.get(event_id, 0) >= allow_event_reuse for event_id in event_ids):
+            continue
         used_signatures.add(signature)
         out.append(row)
+        for event_id in event_ids:
+            used_events.add(event_id)
+            event_use_count[event_id] = event_use_count.get(event_id, 0) + 1
         if len(out) >= max_results:
             break
     return out

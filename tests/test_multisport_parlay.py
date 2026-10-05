@@ -76,3 +76,63 @@ def test_multisport_parlay_card_is_delivered_once_and_persists_across_restart(tm
     assert restarted._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 0
     assert len(sent) == 1
 
+def test_three_multisport_parlays_do_not_reuse_same_match(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_RESULTS", "3")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_EVENT_REUSE", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MIN_COMBINED_ODD", "2.20")
+    rows = [
+        _row(str(idx), odd=1.55 + idx * 0.01, strength=100 - idx, probability=0.66 - idx * 0.005)
+        for idx in range(1, 7)
+    ]
+
+    parlays = build_sport_parlays(rows, "hockey")
+
+    assert len(parlays) == 3
+    all_ids = [leg["event_id"] for parlay in parlays for leg in parlay["legs"]]
+    assert len(all_ids) == len(set(all_ids))
+
+
+def test_parlay_logo_metadata_is_enriched_from_flashscore(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    row = {
+        **_row("1"),
+        "flashscore_event_id": "FSLOGO01",
+        "home_logo_file": "",
+        "away_logo_file": "",
+        "home_team_id": "",
+        "away_team_id": "",
+    }
+    fs = [{
+        "flashscore_event_id": "FSLOGO01",
+        "home": row["home"],
+        "away": row["away"],
+        "home_logo_file": "home-logo.png",
+        "away_logo_file": "away-logo.png",
+        "home_team_id": "HOME1",
+        "away_team_id": "AWAY1",
+        "home_team_slug": "home-one",
+        "away_team_slug": "away-one",
+    }]
+
+    enriched = worker._enrich_parlay_source_rows([row], fs, SPORTS["hockey"])
+
+    assert enriched[0]["home_logo_file"] == "home-logo.png"
+    assert enriched[0]["away_logo_file"] == "away-logo.png"
+    assert enriched[0]["home_team_id"] == "HOME1"
+    assert enriched[0]["away_team_id"] == "AWAY1"
+
+def test_two_leg_parlay_card_has_footer_below_second_leg():
+    from io import BytesIO
+    from PIL import Image
+
+    parlay = build_sport_parlays([
+        _row("1", sport="basketball"),
+        _row("2", odd=1.8, strength=84, sport="basketball"),
+    ], "basketball")[0]
+    png = render_multisport_parlay_card(parlay, "basketball")
+    image = Image.open(BytesIO(png))
+
+    # Old renderer was 700px high and the footer overlapped leg #2.
+    assert image.height >= 800
+    assert image.width == 1080
+

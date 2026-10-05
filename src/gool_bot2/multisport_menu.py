@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from .multisport_journal import load_journal, normalize_entry, stat_line, stats
 from .multisport_parlay import parlay_text
 from .providers.flashscore import FlashscoreProvider
-from .xbet_multisport_steam import parse_flashscore_events
+from .xbet_multisport_steam import multisport_scope_is_complete, parse_flashscore_events
 from .providers.common import norm_team
 from .xbet_multisport_markets import SCOPE_LABEL_RU, policy_text_ru
 
@@ -403,6 +403,9 @@ def multisport_in_game_sections() -> list[str]:
                         break
 
             if live is not None:
+                scope = str(row.get("scope") or "FULL_MATCH")
+                if scope != "FULL_MATCH" and multisport_scope_is_complete(live, sport, scope):
+                    continue
                 active.append((row, live))
 
         if active:

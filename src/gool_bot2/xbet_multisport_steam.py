@@ -1014,10 +1014,8 @@ def price_flashscore_live_candidate(
     # sharply increasing goal / empty-net risk. Do not issue a late UNDER when
     # the match is within two goals. OVER is not auto-blocked by this rule.
     if cfg.key == "hockey" and str(brain.get("scope") or "") == "PERIOD_3" and direction == "under":
-        try:
-            remaining = float(brain.get("remaining_seconds") or lane.get("remaining_seconds") or 0.0)
-        except (TypeError, ValueError):
-            remaining = 0.0
+        # Use the pricing clock calculated above; it comes from the matched
+        # 1xBet game only after Flashscore Brain has selected the candidate.
         match_score = list(lane.get("match_score") or brain.get("score") or [0, 0])
         try:
             margin = abs(int(match_score[0]) - int(match_score[1]))

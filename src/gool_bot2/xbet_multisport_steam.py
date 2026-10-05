@@ -1802,6 +1802,7 @@ class MultiSportSteamWorker:
         if scope == SCOPE_FULL:
             scope = inferred_scope
         segment_score = scoped_scores.get(scope)
+        segment_score_verified = segment_score is not None
         if segment_score is None:
             full = list(fs.get("score") or [0, 0])
             segment_score = (int(full[0] or 0), int(full[1] or 0))
@@ -1979,6 +1980,7 @@ class MultiSportSteamWorker:
             "brain_score": round(max(0.0, min(100.0, rating)), 1),
             "brain_reason": reason,
             "current_segment_score": [int(segment_score[0]), int(segment_score[1])],
+            "segment_score_verified": bool(segment_score_verified),
             "current_segment_total": current_total,
             "elapsed_seconds": round(elapsed, 1),
             "remaining_seconds": round(remaining, 1),

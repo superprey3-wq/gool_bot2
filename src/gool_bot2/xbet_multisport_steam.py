@@ -24,6 +24,7 @@ from .providers.flashscore import FlashscoreProvider, _as_int, _fields
 from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
+from .multisport_parlay_card import render_multisport_parlay_card
 from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
 from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
 from .xbet_multisport_markets import (
@@ -1520,6 +1521,12 @@ class MultiSportSteamWorker:
         self.state_path = _runtime_path("GOOL_MULTISPORT_STATE", "XBET_MULTISPORT_STATE", runtime, "gool_multisport_state.json")
         self.history_path = _runtime_path("GOOL_MULTISPORT_HISTORY", "XBET_MULTISPORT_HISTORY", runtime, "gool_multisport_history.jsonl")
         self.journal_path = _runtime_path("GOOL_MULTISPORT_JOURNAL", "XBET_MULTISPORT_JOURNAL", runtime, "gool_multisport_signals.json")
+        self.parlay_delivery_path = _runtime_path(
+            "GOOL_MULTISPORT_PARLAY_DELIVERY_STATE",
+            "XBET_MULTISPORT_PARLAY_DELIVERY_STATE",
+            runtime,
+            "gool_multisport_parlays_sent.json",
+        )
         self._stop = threading.Event()
         self._history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=50))
         self._prematch_history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=180))
@@ -3739,6 +3746,80 @@ class MultiSportSteamWorker:
             "prematch_candidates": prematch_candidates,
         }
 
+    @staticmethod
+    def _parlay_signature(parlay: dict[str, Any], sport: str) -> str:
+        legs = []
+        for leg in parlay.get("legs") or []:
+            legs.append(
+                str(
+                    leg.get("entry_id")
+                    or f"{leg.get('event_id')}:{leg.get('scope')}:{leg.get('market_family')}:{leg.get('selection')}"
+                )
+            )
+        return f"{sport}|" + "|".join(sorted(legs))
+
+    def _sent_parlay_signatures(self) -> set[str]:
+        try:
+            payload = json.loads(self.parlay_delivery_path.read_text("utf-8"))
+        except Exception:
+            return set()
+        if isinstance(payload, dict):
+            payload = payload.get("signatures") or []
+        return {str(value) for value in payload if str(value)} if isinstance(payload, list) else set()
+
+    def _save_sent_parlay_signatures(self, signatures: set[str]) -> None:
+        self.parlay_delivery_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.parlay_delivery_path.with_suffix(".tmp")
+        values = sorted(signatures)[-500:]
+        tmp.write_text(json.dumps({"signatures": values}, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        tmp.replace(self.parlay_delivery_path)
+
+    def _deliver_new_parlays(
+        self,
+        cfg: SportConfig,
+        parlays: list[dict[str, Any]],
+    ) -> int:
+        if _mode() != "active":
+            return 0
+        if not _truthy("XBET_MULTISPORT_TELEGRAM_ENABLED", True):
+            return 0
+        if not _truthy("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", True):
+            return 0
+
+        sent_signatures = self._sent_parlay_signatures()
+        delivered = 0
+        changed = False
+        for parlay in parlays:
+            signature = self._parlay_signature(parlay, cfg.key)
+            if not signature or signature in sent_signatures:
+                continue
+            try:
+                png = render_multisport_parlay_card(parlay, cfg.key)
+                sent = int(telegram.broadcast_photo(png, caption="") or 0)
+            except Exception as exc:
+                print(
+                    f"GOOL_{cfg.key.upper()}_PARLAY_CARD_ERROR {type(exc).__name__}:{exc}",
+                    flush=True,
+                )
+                continue
+            if sent <= 0:
+                print(
+                    f"GOOL_{cfg.key.upper()}_PARLAY_CARD_SEND_FAILED signature={signature}",
+                    flush=True,
+                )
+                continue
+            sent_signatures.add(signature)
+            changed = True
+            delivered += sent
+            print(
+                f"GOOL_{cfg.key.upper()}_PARLAY_CARD_SENT legs={len(parlay.get('legs') or [])} "
+                f"odd={float(parlay.get('combined_odd') or 0):.2f}",
+                flush=True,
+            )
+        if changed:
+            self._save_sent_parlay_signatures(sent_signatures)
+        return delivered
+
     def _scan_sport(
         self,
         cfg: SportConfig,
@@ -3759,6 +3840,7 @@ class MultiSportSteamWorker:
             fs_price_candidates=prematch_candidates,
         )
         prematch_parlays = build_sport_parlays(load_journal(self.journal_path), cfg.key)
+        parlay_delivered = self._deliver_new_parlays(cfg, prematch_parlays)
         fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]
         live_analysis = [dict(row) for row in (prepared.get("live_analysis") or [])]
         live_candidates = [dict(row) for row in (prepared.get("live_candidates") or [])]
@@ -3863,6 +3945,7 @@ class MultiSportSteamWorker:
             "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,
+            "prematch_parlay_delivered": parlay_delivered,
             "flashscore_live": len(fs_live),
             "live_brain_candidates": len(live_candidates),
             "flashscore_analysis_matches": live_analysis[:120],

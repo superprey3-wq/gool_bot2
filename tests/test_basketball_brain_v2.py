@@ -252,6 +252,8 @@ def test_cumulative_box_score_is_not_treated_as_current_quarter_possessions():
     assert signal is not None
     assert signal["direction"] == "under"
     assert signal["possession_source"] == "flashscore_recent_delta"
+    assert signal["model_probability"] < 0.97
+    assert signal["probability_reliability"] < 0.90
 
 
 def test_late_close_q4_under_is_blocked_for_intentional_foul_risk():

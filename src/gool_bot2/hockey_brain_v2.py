@@ -102,6 +102,16 @@ def _decisive(win: float, push: float, loss: float) -> float:
     return 0.5 if decisive <= 1e-9 else win / decisive
 
 
+def _scope_goal_share(scope: str) -> float:
+    """Regulation scoring share for a hockey market scope."""
+    scope = str(scope or "FULL_MATCH").upper()
+    if scope == "PERIOD_1":
+        return 0.34
+    if scope in {"PERIOD_2", "PERIOD_3"}:
+        return 0.33
+    return 1.0
+
+
 def prematch_lambdas(features: dict[str, Any], league: str) -> tuple[float, float, float]:
     """Independent team scoring means from form/venue/rest with league shrinkage."""
     baseline = league_goal_baseline(league)
@@ -181,22 +191,25 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     # Data completeness is a gate, not a reason to bet. A perfectly populated
     # history with no real separation must remain WAIT instead of becoming the
     # old 21/22-style automatic shortlist.
-    score = _clamp(44.0 + quality * 10.0 + evidence * 31.0, 0.0, 89.0)
-    if quality < 0.46:
+    score = _clamp(42.0 + quality * 8.0 + evidence * 42.0, 0.0, 87.0)
+    # Completeness only permits evaluation. Shortlisting itself requires real
+    # separation from the league prior / opponent / rest context.
+    if quality < 0.55 or evidence < 0.50:
         state = "WAIT"
-    elif score >= 69.0:
+    elif evidence >= 0.62:
         state = "PASS"
-    elif score >= 61.0:
-        state = "BORDERLINE"
     else:
-        state = "WAIT"
+        state = "BORDERLINE"
     return {
         "state": state,
         "score": round(score, 1),
         "data_quality": round(quality, 3),
         "lambda_home": round(lam_home, 3),
         "lambda_away": round(lam_away, 3),
-        "league_baseline": round(baseline, 3),
+        "full_match_lambda_home": round(full_lam_home, 3),
+        "full_match_lambda_away": round(full_lam_away, 3),
+        "scope_goal_share": round(scope_share, 3),
+        "league_baseline": round(scoped_baseline, 3),
         "model_separation": round(side_gap, 3),
         "total_deviation": round(total_gap, 3),
     }
@@ -204,7 +217,12 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
 
 def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
-    lam_home, lam_away, baseline = prematch_lambdas(features, league)
+    full_lam_home, full_lam_away, baseline = prematch_lambdas(features, league)
+    scope = str(lane.get("scope") or "FULL_MATCH")
+    scope_share = _scope_goal_share(scope)
+    lam_home = full_lam_home * scope_share
+    lam_away = full_lam_away * scope_share
+    scoped_baseline = baseline * scope_share
     quality = _data_quality(features)
     if quality < 0.46:
         return None
@@ -254,7 +272,9 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         return None
 
     agreement = 1
-    if abs(lam_home - lam_away) >= 0.30 or abs((lam_home + lam_away) - baseline) >= 0.35:
+    side_threshold = 0.30 * max(0.33, scope_share)
+    total_threshold = 0.35 * max(0.33, scope_share)
+    if abs(lam_home - lam_away) >= side_threshold or abs((lam_home + lam_away) - scoped_baseline) >= total_threshold:
         agreement += 1
     rest_adv = _num(features.get("rest_advantage_days"), 0.0) or 0.0
     if family in {"moneyline", "handicap"}:
@@ -262,12 +282,21 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
             agreement += 1
     else:
         recent_total = _num(features.get("recent_total_avg"))
-        if recent_total is not None and ((direction == "over" and recent_total > line) or (direction == "under" and recent_total < line)):
+        scoped_recent_total = recent_total * scope_share if recent_total is not None else None
+        if scoped_recent_total is not None and ((direction == "over" and scoped_recent_total > line) or (direction == "under" and scoped_recent_total < line)):
             agreement += 1
     if agreement < 2:
         return None
 
-    strength = _clamp(47.0 + quality * 20.0 + (model_probability - 0.5) * 55.0 + edge * 180.0 + (agreement - 1) * 4.0, 0.0, 89.0)
+    strength = _clamp(
+        45.0
+        + quality * 10.0
+        + (model_probability - 0.5) * 35.0
+        + edge * 70.0
+        + (agreement - 1) * 3.0,
+        0.0,
+        87.0,
+    )
     return {
         "phase": "PREMATCH",
         "brain_mode": "hockey_prematch_v2",
@@ -368,17 +397,21 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     base_remaining = period_lambda * remaining / 1200.0
 
     recent_shot_rate = max(0.0, _num(brain.get("recent_shot_rate"), 0.0) or 0.0)
+    recent_blocked_rate = max(0.0, _num(brain.get("recent_blocked_rate"), 0.0) or 0.0)
+    recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+    pressure_window_ready = recent_window >= 60.0
     shot_factor = 1.0
-    if recent_shot_rate > 0:
-        shot_factor = _clamp(1.0 + (recent_shot_rate - 1.65) * 0.18, 0.76, 1.28)
+    if pressure_window_ready:
+        shot_factor = _clamp(
+            1.0 + (recent_shot_rate - 1.65) * 0.18 + recent_blocked_rate * 0.025,
+            0.76,
+            1.28,
+        )
 
     stats_payload = dict(brain.get("live_game_stats") or {})
-    stats = dict(stats_payload.get("segment_stats") or {})
-    penalties = list(stats.get("penalties_2m") or stats.get("penalties") or [])
-    pp = list(stats.get("powerplay_goals") or stats.get("power_play_goals") or [])
-    penalty_total = sum(max(0.0, _num(v, 0.0) or 0.0) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
-    pp_total = sum(max(0.0, _num(v, 0.0) or 0.0) for v in pp[:2]) if len(pp) >= 2 else 0.0
-    special_factor = _clamp(1.0 + penalty_total * 0.018 + pp_total * 0.025, 1.0, 1.16)
+    recent_penalty_delta = max(0.0, _num(brain.get("recent_penalty_delta"), 0.0) or 0.0)
+    recent_pp_goal_delta = max(0.0, _num(brain.get("recent_pp_goal_delta"), 0.0) or 0.0)
+    special_factor = _clamp(1.0 + recent_penalty_delta * 0.055 + recent_pp_goal_delta * 0.08, 1.0, 1.18)
 
     match_score = list(lane.get("match_score") or brain.get("score") or [0, 0])
     try:
@@ -419,24 +452,31 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     agreements = 1
-    recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
-    if direction == "over" and recent_shot_rate >= 1.90:
+    if direction == "over" and pressure_window_ready and recent_shot_rate >= 1.90:
         agreements += 1
-    elif direction == "under" and recent_shot_rate <= 1.10 and recent_window >= 20.0:
-        # Zero fresh SOG over a real multi-snapshot window is meaningful slow
-        # pressure; zero from a single/unavailable snapshot is not.
+    elif direction == "under" and pressure_window_ready and recent_shot_rate <= 1.10:
+        # Use a genuine 60–180 second window; a quiet 20–30 second slice is too
+        # noisy to justify an UNDER in hockey.
         agreements += 1
-    if direction == "over" and special_factor >= 1.04:
+    if direction == "over" and recent_penalty_delta > 0:
         agreements += 1
     if scope == "PERIOD_3" and direction == "over" and margin <= 2 and remaining <= 420:
         agreements += 1
-    if direction == "under" and scope != "PERIOD_3" and current == 0 and elapsed >= 360 and recent_shot_rate <= 1.15:
+    if direction == "under" and scope != "PERIOD_3" and current == 0 and elapsed >= 360 and pressure_window_ready and recent_shot_rate <= 1.15:
         agreements += 1
     if agreements < 2:
         return None
 
     quality = _clamp(0.45 + min(0.25, int(brain.get("history_points") or 0) * 0.06) + (0.15 if stats_payload.get("current_segment_available") else 0.0), 0.0, 0.9)
-    strength = _clamp(48.0 + quality * 18.0 + (model_probability - 0.5) * 55.0 + edge * 185.0 + (agreements - 1) * 4.0, 0.0, 89.0)
+    strength = _clamp(
+        45.0
+        + quality * 10.0
+        + (model_probability - 0.5) * 35.0
+        + edge * 70.0
+        + (agreements - 1) * 3.0,
+        0.0,
+        87.0,
+    )
     return {
         "brain_mode": "hockey_live_v2",
         "direction": direction,
@@ -455,6 +495,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),
         "recent_rate_per_min": round(recent_shot_rate, 3),
+        "recent_blocked_rate_per_min": round(recent_blocked_rate, 3),
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,
         "moves": max(0, int(brain.get("history_points") or 1) - 1),
@@ -467,6 +508,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "score_state_factor": round(score_factor, 3),
         "shot_factor": round(shot_factor, 3),
         "special_teams_factor": round(special_factor, 3),
+        "recent_penalty_delta": round(recent_penalty_delta, 3),
+        "recent_pp_goal_delta": round(recent_pp_goal_delta, 3),
         "flashscore_brain_score": float(brain.get("brain_score") or 0.0),
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),

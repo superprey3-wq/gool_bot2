@@ -206,10 +206,7 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
         "data_quality": round(quality, 3),
         "lambda_home": round(lam_home, 3),
         "lambda_away": round(lam_away, 3),
-        "full_match_lambda_home": round(full_lam_home, 3),
-        "full_match_lambda_away": round(full_lam_away, 3),
-        "scope_goal_share": round(scope_share, 3),
-        "league_baseline": round(scoped_baseline, 3),
+        "league_baseline": round(baseline, 3),
         "model_separation": round(side_gap, 3),
         "total_deviation": round(total_gap, 3),
     }
@@ -224,7 +221,7 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     lam_away = full_lam_away * scope_share
     scoped_baseline = baseline * scope_share
     quality = _data_quality(features)
-    if quality < 0.46:
+    if quality < 0.55:
         return None
     market_over = _clamp(_num(lane.get("probability"), 0.5) or 0.5, 0.01, 0.99)
     try:
@@ -313,7 +310,10 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         "strength": round(strength, 1),
         "lambda_home": round(lam_home, 3),
         "lambda_away": round(lam_away, 3),
-        "league_baseline": round(baseline, 3),
+        "full_match_lambda_home": round(full_lam_home, 3),
+        "full_match_lambda_away": round(full_lam_away, 3),
+        "scope_goal_share": round(scope_share, 3),
+        "league_baseline": round(scoped_baseline, 3),
         "data_quality": round(quality, 3),
         "agreement_blocks": agreement,
         "market_confirmed": edge >= min_edge,

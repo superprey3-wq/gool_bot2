@@ -477,8 +477,6 @@ def _infer_flashscore_scope(
 
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
-    if str(status_code or "") == "38":
-        return "Перерыв"
     labels = {
         "PERIOD_1": "1-й период",
         "PERIOD_2": "2-й период",
@@ -1630,10 +1628,6 @@ class MultiSportSteamWorker:
         pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
         borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
-        if str(fs.get("status_code") or "") == "38":
-            state = "WAIT"
-            reason = "перерыв между сегментами — новые LIVE ставки не открываем"
-
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),

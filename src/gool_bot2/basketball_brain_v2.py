@@ -399,6 +399,103 @@ def recent_possession_metrics(
     }
 
 
+def q3_rebound_assist(
+    brain: dict[str, Any],
+    *,
+    elapsed_seconds: float | None = None,
+    current_segment_score: list[int] | tuple[int, int] | None = None,
+) -> dict[str, Any]:
+    """Soft Q3 context layer; never creates a signal by itself.
+
+    It detects the pattern seen in the daily audit: one team lost both Q1 and
+    Q2, especially by a meaningful halftime deficit, then becomes much more
+    competitive in Q3. The layer may add one agreement block to an already
+    valid OVER model when live pace independently agrees.
+    """
+    out: dict[str, Any] = {
+        "active": False,
+        "applied": False,
+        "stage": "none",
+        "trailing_side": None,
+        "q1_loss": 0.0,
+        "q2_loss": 0.0,
+        "halftime_deficit": 0.0,
+        "q3_margin": None,
+        "margin_improvement": 0.0,
+        "audit_prior": {
+            "same_winner_q1_q2_then_other_q3": "5/20",
+            "halftime_deficit_10plus_then_q3_within3_or_better": "7/16",
+        },
+    }
+    if str(brain.get("scope") or "") != "QUARTER_3":
+        return out
+
+    parts = [
+        row for row in (brain.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    if len(parts) < 2:
+        return out
+
+    try:
+        q1h, q1a = float(parts[0][0]), float(parts[0][1])
+        q2h, q2a = float(parts[1][0]), float(parts[1][1])
+    except (TypeError, ValueError, IndexError):
+        return out
+
+    q1_home_margin = q1h - q1a
+    q2_home_margin = q2h - q2a
+    if q1_home_margin < 0 and q2_home_margin < 0:
+        trailing_side = "home"
+        q1_loss, q2_loss = -q1_home_margin, -q2_home_margin
+    elif q1_home_margin > 0 and q2_home_margin > 0:
+        trailing_side = "away"
+        q1_loss, q2_loss = q1_home_margin, q2_home_margin
+    else:
+        return out
+
+    halftime_deficit = q1_loss + q2_loss
+    average_quarter_loss = (q1_loss + q2_loss) / 2.0
+    severe = halftime_deficit >= 10.0 or (q1_loss >= 5.0 and q2_loss >= 5.0)
+    if not severe:
+        return out
+
+    q3_score = current_segment_score
+    if q3_score is None and len(parts) >= 3:
+        q3_score = parts[2]
+    try:
+        q3h, q3a = float(q3_score[0]), float(q3_score[1])  # type: ignore[index]
+    except (TypeError, ValueError, IndexError):
+        q3h = q3a = 0.0
+
+    q3_margin = (q3h - q3a) if trailing_side == "home" else (q3a - q3h)
+    improvement = q3_margin + average_quarter_loss
+    elapsed = max(0.0, float(elapsed_seconds or brain.get("elapsed_seconds") or 0.0))
+
+    if elapsed < 90.0:
+        stage = "watch"
+    elif q3_margin > 0.0 and improvement >= 5.0:
+        stage = "reversal"
+    elif q3_margin >= -3.0 and improvement >= 5.0:
+        stage = "close"
+    elif improvement >= 5.0:
+        stage = "improving"
+    else:
+        stage = "watch"
+
+    return {
+        **out,
+        "active": True,
+        "stage": stage,
+        "trailing_side": trailing_side,
+        "q1_loss": round(q1_loss, 2),
+        "q2_loss": round(q2_loss, 2),
+        "halftime_deficit": round(halftime_deficit, 2),
+        "q3_margin": round(q3_margin, 2),
+        "margin_improvement": round(improvement, 2),
+    }
+
+
 def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     stats_payload = dict(brain.get("live_game_stats") or {})
     available = bool(stats_payload.get("current_segment_available"))
@@ -556,6 +653,11 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     scope = str(brain.get("scope") or "")
+    q3_assist = q3_rebound_assist(
+        brain,
+        elapsed_seconds=elapsed,
+        current_segment_score=score,
+    )
     match_score = list(lane.get("match_score") or brain.get("score") or [0, 0])
     try:
         match_margin = abs(int(match_score[0]) - int(match_score[1]))
@@ -587,6 +689,20 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             agreement += 1
     if abs(projection - line) >= 3.0:
         agreement += 1
+
+    # Q3 comeback context is deliberately only an assistant. It cannot create
+    # a pick; it contributes one extra agreement block only when the live
+    # possession/pace model is already independently leaning OVER.
+    if (
+        direction == "over"
+        and bool(q3_assist.get("active"))
+        and str(q3_assist.get("stage") or "") in {"close", "reversal"}
+        and projection > line
+        and poss_per_min >= prior_poss_per_min * 0.92
+    ):
+        agreement += 1
+        q3_assist["applied"] = True
+
     if agreement < 2:
         return None
 
@@ -628,6 +744,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "probability_reliability": round(probability_reliability, 3),
         "agreement_blocks": agreement,
         "four_factors": factors,
+        "q3_rebound_assist": q3_assist,
         "market_confirmed": edge >= 0.055,
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,

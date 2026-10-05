@@ -27,6 +27,13 @@ from .multisport_parlay import build_sport_parlays
 from .multisport_parlay_card import render_multisport_parlay_card
 from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
 from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
+from .hockey_brain_v2 import (
+    live_candidate_gate as hockey_live_candidate_gate,
+    live_signal as hockey_live_v2_signal,
+    prematch_candidate as hockey_prematch_candidate,
+    prematch_lambdas as hockey_prematch_lambdas,
+    prematch_signal as hockey_prematch_v2_signal,
+)
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -570,6 +577,16 @@ def _infer_flashscore_scope(
             segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
             minute_idx = max(1, min(4, (minute - 1) // segment_minutes + 1))
 
+            # Flashscore AC is not consistently a whole-match minute during
+            # quarter breaks. In that state it can jump far enough to look like
+            # Q4 even though only Q1+Q2 score parts exist. Never allow a raw AC
+            # value to skip over an unobserved basketball quarter. During live
+            # play the current quarter is already present in score_parts, so
+            # this clamp leaves normal Q2/Q3/Q4 detection unchanged.
+            if parts:
+                next_possible_quarter = min(4, len(parts) + 1)
+                minute_idx = min(minute_idx, next_possible_quarter)
+
     idx = max(parts_idx, minute_idx or 1)
     guessed = f"{prefix}{idx}"
     available = [str(value) for value in (section_keys or []) if str(value).startswith(prefix)]
@@ -584,6 +601,50 @@ def _infer_flashscore_scope(
         eligible = [value for value in available if number(value) <= idx]
         return max(eligible or available, key=number)
     return guessed
+
+
+def _flashscore_break_transition(fs: dict[str, Any], cfg: SportConfig) -> bool:
+    """True while Flashscore is between basketball quarters.
+
+    Two production variants exist:
+    1) AC numerically jumps too far (for example Q2 -> apparent Q4);
+    2) AC already points to the next quarter, but score_parts still contains
+       only completed quarters and the full score has no unassigned points.
+
+    In either case AO/period_start_ts is transition/break time, not elapsed
+    gameplay in the next quarter.
+    """
+    if cfg.key != "basketball":
+        return False
+    parts = [
+        row for row in (fs.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    if not parts or len(parts) >= 4:
+        return False
+
+    raw_idx = _numeric_live_segment_index(fs, cfg)
+    next_possible = min(4, len(parts) + 1)
+    inferred_idx = max(1, min(next_possible, raw_idx or len(parts)))
+
+    # Impossible raw skip is always transition evidence.
+    if raw_idx > next_possible:
+        return True
+
+    # If Flashscore points to a quarter that has no score-part row yet and the
+    # full score is exactly the sum of completed quarters, the next quarter has
+    # not produced observable game state yet. Wait instead of treating the
+    # break clock as quarter elapsed time.
+    if inferred_idx > len(parts):
+        try:
+            full = list(fs.get("score") or [0, 0])
+            completed_home = sum(int(row[0] or 0) for row in parts)
+            completed_away = sum(int(row[1] or 0) for row in parts)
+            if int(full[0] or 0) == completed_home and int(full[1] or 0) == completed_away:
+                return True
+        except (TypeError, ValueError, IndexError):
+            pass
+    return False
 
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
@@ -1055,6 +1116,8 @@ def price_flashscore_live_candidate(
     cfg: SportConfig,
 ) -> dict[str, Any] | None:
     """Attach current 1xBet segment price after Flashscore Brain selection."""
+    if cfg.key == "hockey":
+        return hockey_live_v2_signal(brain, lane)
     if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
         return None
     if str(lane.get("market_family") or "") != "match_total":
@@ -1793,6 +1856,7 @@ class MultiSportSteamWorker:
         if scope == SCOPE_FULL:
             scope = inferred_scope
         segment_score = scoped_scores.get(scope)
+        segment_score_verified = segment_score is not None
         if segment_score is None:
             full = list(fs.get("score") or [0, 0])
             segment_score = (int(full[0] or 0), int(full[1] or 0))
@@ -1800,11 +1864,12 @@ class MultiSportSteamWorker:
         now = time.time()
         duration = _segment_duration_seconds({"league": str(fs.get("league") or "")}, cfg)
         period_start = float(fs.get("period_start_ts") or 0.0)
-        elapsed = now - period_start if period_start > 0 else 0.0
+        break_transition = _flashscore_break_transition(fs, cfg)
+        elapsed = now - period_start if period_start > 0 and not break_transition else 0.0
         if elapsed <= 0 or elapsed > duration + 15 * 60:
             elapsed = 0.0
         elapsed = min(duration, elapsed) if elapsed > 0 else 0.0
-        remaining = max(0.0, duration - elapsed) if elapsed > 0 else 0.0
+        remaining = max(0.0, duration - elapsed) if elapsed > 0 else duration
 
         snapshot = {
             "ts": now,
@@ -1826,6 +1891,9 @@ class MultiSportSteamWorker:
         score_delta = max(0, current_total - first_total)
         recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
         recent_shot_rate = 0.0
+        recent_blocked_rate = 0.0
+        recent_penalty_delta = 0.0
+        recent_pp_goal_delta = 0.0
         projection: float | None = None
 
         if cfg.key == "hockey":
@@ -1841,6 +1909,26 @@ class MultiSportSteamWorker:
             penalty_total = sum(max(0.0, float(v)) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
             blocked = list(stats.get("blocked_shots") or [])
             blocked_total = sum(max(0.0, float(v)) for v in blocked[:2]) if len(blocked) >= 2 else 0.0
+
+            first_blocked = list(first_stats.get("blocked_shots") or [])
+            first_blocked_total = (
+                sum(max(0.0, float(v)) for v in first_blocked[:2])
+                if len(first_blocked) >= 2 else blocked_total
+            )
+            first_penalties = list(first_stats.get("penalties_2m") or first_stats.get("penalties") or [])
+            first_penalty_total = (
+                sum(max(0.0, float(v)) for v in first_penalties[:2])
+                if len(first_penalties) >= 2 else penalty_total
+            )
+            first_pp = list(first_stats.get("powerplay_goals") or first_stats.get("power_play_goals") or [])
+            first_pp_total = (
+                sum(max(0.0, float(v)) for v in first_pp[:2])
+                if len(first_pp) >= 2 else pp_total
+            )
+            if len(recent) >= 2:
+                recent_blocked_rate = max(0.0, blocked_total - first_blocked_total) * 60.0 / age
+                recent_penalty_delta = max(0.0, penalty_total - first_penalty_total)
+                recent_pp_goal_delta = max(0.0, pp_total - first_pp_total)
 
             if elapsed >= 45.0:
                 overall_shot_rate = shot_total * 60.0 / max(1.0, elapsed)
@@ -1929,13 +2017,39 @@ class MultiSportSteamWorker:
                         direction_hint = "over"
                         reason += f" · свежий темп бросков {recent_shot_rate:.1f}/мин высокий"
 
-        pass_default = 62.0 if cfg.key == "hockey" else 68.0
-        borderline_default = 50.0 if cfg.key == "hockey" else 56.0
-        pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
-        borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
-        state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
-        if not stats_payload.get("current_segment_available"):
-            state = "WAIT"
+        prematch_match_lambda: float | None = None
+        if cfg.key == "hockey":
+            try:
+                live_context = self._flashscore_prematch_context(fs, cfg)
+                live_features = self._sport_context_features(live_context, fs, cfg)
+                lam_home, lam_away, _ = hockey_prematch_lambdas(
+                    live_features,
+                    str(fs.get("league") or ""),
+                )
+                prematch_match_lambda = float(lam_home + lam_away)
+            except Exception:
+                prematch_match_lambda = None
+            gate = hockey_live_candidate_gate({
+                "live_game_stats": stats_payload,
+                "history_points": len(recent),
+                "recent_shot_rate": recent_shot_rate,
+            })
+            rating = float(gate.get("score") or 0.0)
+            state = str(gate.get("state") or "WAIT")
+        else:
+            pass_default = 68.0
+            borderline_default = 56.0
+            pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
+            borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
+            state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+            if not stats_payload.get("current_segment_available"):
+                state = "WAIT"
+            if break_transition:
+                # Do not interpret the break timer as elapsed time in the next
+                # quarter. The live quarter model resumes as soon as Flashscore
+                # exposes a non-skipping current-quarter state.
+                state = "WAIT"
+                reason += " · пауза между четвертями: ждём фактический старт"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -1950,15 +2064,26 @@ class MultiSportSteamWorker:
             "brain_score": round(max(0.0, min(100.0, rating)), 1),
             "brain_reason": reason,
             "current_segment_score": [int(segment_score[0]), int(segment_score[1])],
+            "segment_score_verified": bool(segment_score_verified),
             "current_segment_total": current_total,
+            "break_transition": bool(break_transition),
             "elapsed_seconds": round(elapsed, 1),
             "remaining_seconds": round(remaining, 1),
             "projected_total": None,
             "live_game_stats": stats_payload,
             "history_points": len(recent),
+            "recent_window_seconds": round(age, 1),
             "recent_score_rate": round(recent_score_rate, 3),
             "recent_shot_rate": round(recent_shot_rate, 3),
+            "recent_blocked_rate": round(recent_blocked_rate, 3),
+            "recent_penalty_delta": round(recent_penalty_delta, 3),
+            "recent_pp_goal_delta": round(recent_pp_goal_delta, 3),
             "direction_hint": direction_hint,
+            "prematch_match_lambda": (
+                round(float(prematch_match_lambda), 4)
+                if prematch_match_lambda is not None
+                else None
+            ),
         }
 
     def _flashscore_live_analysis(
@@ -1987,6 +2112,16 @@ class MultiSportSteamWorker:
     def _flashscore_prematch_candidate(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
         context = self._flashscore_prematch_context(fs, cfg)
         features = self._sport_context_features(context, fs, cfg)
+        if cfg.key == "hockey":
+            v2 = hockey_prematch_candidate(features, str(fs.get("league") or ""))
+            return {
+                **dict(fs),
+                "prematch_brain": {
+                    **v2,
+                    "brain_mode": "hockey_prematch_v2",
+                    "features": features,
+                },
+            }
         home_n = int(features.get("home_recent_n") or 0)
         away_n = int(features.get("away_recent_n") or 0)
         h2h_n = int(features.get("h2h_n") or 0)
@@ -2038,7 +2173,8 @@ class MultiSportSteamWorker:
         cfg: SportConfig,
     ) -> list[dict[str, Any]]:
         scan_max = max(1, min(160, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_SCAN_MAX", 64)))
-        price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", 32)))
+        price_default = 10 if cfg.key == "hockey" else 32
+        price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", price_default)))
         rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
         if not rows:
             return []
@@ -2181,6 +2317,10 @@ class MultiSportSteamWorker:
             "away_win_pct": win_pct(aw),
             "home_venue_win_pct": win_pct(vhw),
             "away_venue_win_pct": win_pct(vaw),
+            "home_venue_gf_avg": avg(vhgf),
+            "home_venue_ga_avg": avg(vhga),
+            "away_venue_gf_avg": avg(vagf),
+            "away_venue_ga_avg": avg(vaga),
             "recent_total_avg": recent_total,
             "venue_total_avg": venue_total,
             "h2h_total_avg": h2h_total,
@@ -3537,7 +3677,9 @@ class MultiSportSteamWorker:
             "phase": phase,
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
             "signal_type": (
-                "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
+                "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
+                else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
+                else "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
                 else f"{phase.lower()}_{family}_movement"
             ),
             "market_family": family,
@@ -3581,6 +3723,17 @@ class MultiSportSteamWorker:
                 if phase == "PREMATCH" else None
             ),
             "fair_probability": float(signal.get("fair_probability") or 0.0),
+            "model_probability": signal.get("model_probability"),
+            "market_probability": signal.get("market_probability"),
+            "push_probability": signal.get("push_probability"),
+            "push_confidence_penalty": signal.get("push_confidence_penalty"),
+            "edge": signal.get("edge"),
+            "lambda_home": signal.get("lambda_home"),
+            "lambda_away": signal.get("lambda_away"),
+            "lambda_remaining": signal.get("lambda_remaining"),
+            "prematch_match_lambda": signal.get("prematch_match_lambda"),
+            "data_quality": signal.get("data_quality"),
+            "agreement_blocks": signal.get("agreement_blocks"),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
             "line_delta": float(signal.get("line_delta") or 0.0),
@@ -3595,6 +3748,10 @@ class MultiSportSteamWorker:
             "remaining_seconds": signal.get("remaining_seconds"),
             "overall_rate_per_min": signal.get("overall_rate_per_min"),
             "recent_rate_per_min": signal.get("recent_rate_per_min"),
+            "recent_blocked_rate_per_min": signal.get("recent_blocked_rate_per_min"),
+            "recent_window_seconds": signal.get("recent_window_seconds"),
+            "recent_penalty_delta": signal.get("recent_penalty_delta"),
+            "recent_pp_goal_delta": signal.get("recent_pp_goal_delta"),
             "market_confirmed": signal.get("market_confirmed"),
             "live_game_stats": row.get("live_game_stats") or {},
             "hockey_pressure": signal.get("hockey_pressure") or {},
@@ -3695,6 +3852,30 @@ class MultiSportSteamWorker:
                         continue
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
+                    if cfg.key == "hockey":
+                        signal = hockey_prematch_v2_signal(
+                            lane_row,
+                            dict(row.get("sport_context") or {}),
+                            str(row.get("league") or ""),
+                        )
+                        if signal is None:
+                            continue
+                        signal = {
+                            **signal,
+                            "scope": lane_row.get("scope"),
+                            "market_family": lane_row.get("market_family"),
+                            "selection": str(
+                                signal.get("selection")
+                                or lane_row.get("selection")
+                                or selection_label(
+                                    lane_row,
+                                    str(signal.get("direction") or "over"),
+                                    float(signal.get("line") or 0.0),
+                                )
+                            ),
+                        }
+                        candidates.append((lane_row, signal))
+                        continue
                     signal = (
                         detect_prematch_choice(history, cfg, now=float(lane_row["ts"]))
                         if lane_row.get("choice_key")

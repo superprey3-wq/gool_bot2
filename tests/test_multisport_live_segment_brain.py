@@ -221,12 +221,16 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
         "period_start_ts": __import__("time").time() - 420,
     }
 
-    result = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    first = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    second = worker._flashscore_live_brain(fs, SPORTS["hockey"])
 
-    assert result["scope"] == "PERIOD_2"
-    assert result["brain_state"] in {"PASS", "BORDERLINE"}
-    assert result["brain_score"] >= 50
-    assert "броски 7" in result["brain_reason"]
+    assert first["scope"] == "PERIOD_2"
+    assert first["brain_state"] == "WAIT"
+    assert first["history_points"] == 1
+    assert second["brain_state"] in {"PASS", "BORDERLINE"}
+    assert second["history_points"] == 2
+    assert second["brain_score"] >= 50
+    assert "броски 7" in second["brain_reason"]
 
 
 def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monkeypatch):
@@ -258,6 +262,77 @@ def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monke
 
     assert result["period"] == "4-я четверть"
     assert result["scope"] == "QUARTER_4"
+
+def test_basketball_halftime_status_cannot_skip_from_q2_to_q4(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_3",
+            "available": True,
+            "current_segment_available": True,
+            "segment_stats": {"rebounds": [0.0, 0.0], "turnovers": [0.0, 0.0]},
+            "segment_attempts": {},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BHALF001",
+        "home": "Besiktas",
+        "away": "Trabzonspor",
+        "league": "TURKEY: Super Lig",
+        "score": [46, 46],
+        "score_parts": [[24, 17], [22, 29]],
+        # This is the problematic break snapshot: interpreting AC=38 as a
+        # normal match minute would jump directly to Q4.
+        "status_code": "38",
+        "period_start_ts": __import__("time").time() - 30,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_3"
+    assert result["period"] == "3-я четверть"
+    assert result["break_transition"] is True
+    assert result["elapsed_seconds"] == 0.0
+    assert result["brain_state"] == "WAIT"
+
+
+def test_basketball_halftime_q3_label_without_q3_score_part_is_still_break(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_3",
+            "available": True,
+            "current_segment_available": True,
+            "segment_stats": {"rebounds": [7.0, 8.0], "turnovers": [2.0, 2.0]},
+            "segment_attempts": {},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BHALF002",
+        "home": "Home",
+        "away": "Away",
+        "league": "ISRAEL: League Cup",
+        "score": [33, 40],
+        "score_parts": [[19, 27], [14, 13]],
+        # AC already maps to Q3, but there is still no Q3 score-part row and
+        # the full score is exactly Q1+Q2.
+        "status_code": "23",
+        "period_start_ts": __import__("time").time() - 600,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_3"
+    assert result["break_transition"] is True
+    assert result["elapsed_seconds"] == 0.0
+    assert result["brain_state"] == "WAIT"
+
 
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
@@ -616,6 +691,7 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
         "score": [1, 4],
         "current_segment_score": [1, 0],
         "history_points": 3,
+        "recent_window_seconds": 60.0,
         "recent_shot_rate": 1.1,
         "live_game_stats": {
             "stats_mode": "cumulative_through_current_segment",

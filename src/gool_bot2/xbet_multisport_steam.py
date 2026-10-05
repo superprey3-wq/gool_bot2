@@ -603,6 +603,27 @@ def _infer_flashscore_scope(
     return guessed
 
 
+def _flashscore_break_transition(fs: dict[str, Any], cfg: SportConfig) -> bool:
+    """True when raw Flashscore AC tries to skip an unobserved basketball quarter.
+
+    This is the halftime/quarter-break failure mode seen in production: only
+    Q1+Q2 score parts exist, while AC numerically looks like a late Q4 minute.
+    In that state AO/period_start_ts belongs to the break transition and must
+    not be used as elapsed time for the next quarter.
+    """
+    if cfg.key != "basketball":
+        return False
+    parts = [
+        row for row in (fs.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    if not parts or len(parts) >= 4:
+        return False
+    raw_idx = _numeric_live_segment_index(fs, cfg)
+    next_possible = min(4, len(parts) + 1)
+    return raw_idx > next_possible
+
+
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
     labels = {
         "PERIOD_1": "1-й период",
@@ -1820,11 +1841,12 @@ class MultiSportSteamWorker:
         now = time.time()
         duration = _segment_duration_seconds({"league": str(fs.get("league") or "")}, cfg)
         period_start = float(fs.get("period_start_ts") or 0.0)
-        elapsed = now - period_start if period_start > 0 else 0.0
+        break_transition = _flashscore_break_transition(fs, cfg)
+        elapsed = now - period_start if period_start > 0 and not break_transition else 0.0
         if elapsed <= 0 or elapsed > duration + 15 * 60:
             elapsed = 0.0
         elapsed = min(duration, elapsed) if elapsed > 0 else 0.0
-        remaining = max(0.0, duration - elapsed) if elapsed > 0 else 0.0
+        remaining = max(0.0, duration - elapsed) if elapsed > 0 else duration
 
         snapshot = {
             "ts": now,
@@ -1999,6 +2021,12 @@ class MultiSportSteamWorker:
             state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
             if not stats_payload.get("current_segment_available"):
                 state = "WAIT"
+            if break_transition:
+                # Do not interpret the break timer as elapsed time in the next
+                # quarter. The live quarter model resumes as soon as Flashscore
+                # exposes a non-skipping current-quarter state.
+                state = "WAIT"
+                reason += " · пауза между четвертями: ждём фактический старт"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -2015,6 +2043,7 @@ class MultiSportSteamWorker:
             "current_segment_score": [int(segment_score[0]), int(segment_score[1])],
             "segment_score_verified": bool(segment_score_verified),
             "current_segment_total": current_total,
+            "break_transition": bool(break_transition),
             "elapsed_seconds": round(elapsed, 1),
             "remaining_seconds": round(remaining, 1),
             "projected_total": None,

@@ -2082,7 +2082,7 @@ class MultiSportSteamWorker:
         cfg: SportConfig,
     ) -> list[dict[str, Any]]:
         scan_max = max(1, min(160, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_SCAN_MAX", 64)))
-        price_default = 14 if cfg.key == "hockey" else 32
+        price_default = 10 if cfg.key == "hockey" else 32
         price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", price_default)))
         rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
         if not rows:

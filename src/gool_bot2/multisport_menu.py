@@ -632,6 +632,93 @@ def multisport_report_text() -> str:
 
 
 
+def sport_prematch_picks_sections(sport: str, limit: int = 24) -> list[str]:
+    """Only pending PREMATCH bets already issued by GOOL, nearest start first."""
+    if sport not in SPORT_META:
+        return ["🟡 <b>PREMATCH</b>\n\nНеизвестный вид спорта."]
+
+    import datetime as _dt
+    import time as _time
+
+    icon, title = SPORT_META[sport]
+    now = _time.time()
+    rows: list[dict[str, Any]] = []
+    for raw in _sport_rows(sport, "PREMATCH"):
+        row = normalize_entry(raw)
+        if str(row.get("result") or "pending").lower() != "pending":
+            continue
+        try:
+            start_ts = float(row.get("scheduled_start_ts") or row.get("start_ts") or 0.0)
+        except (TypeError, ValueError):
+            start_ts = 0.0
+        # Started matches belong to the common In Game view, not PREMATCH.
+        if start_ts > 0 and start_ts <= now:
+            continue
+        row["_menu_start_ts"] = start_ts
+        rows.append(row)
+
+    rows.sort(key=lambda row: (
+        float(row.get("_menu_start_ts") or 0.0) <= 0.0,
+        float(row.get("_menu_start_ts") or 0.0) if float(row.get("_menu_start_ts") or 0.0) > 0 else float("inf"),
+        str(row.get("home") or ""),
+    ))
+    rows = rows[: max(1, int(limit))]
+
+    if not rows:
+        return [f"🟡 <b>{icon} {title} · PREMATCH</b>\n\nСейчас нет выданных ботом ставок, которые ещё не начались."]
+
+    try:
+        tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+    except Exception:
+        tz = _dt.timezone.utc
+
+    valid_odds = []
+    for row in rows:
+        try:
+            odd = float(row.get("odd") or 0.0)
+        except (TypeError, ValueError):
+            odd = 0.0
+        if odd > 1.0:
+            valid_odds.append(odd)
+    avg_odd = (sum(valid_odds) / len(valid_odds)) if valid_odds else 0.0
+
+    header = (
+        f"🟡 <b>{icon} {title} · PREMATCH СТАВКИ</b>\n"
+        f"Выдано и ещё не началось: <b>{len(rows)}</b> · ср. кэф <b>{avg_odd:.2f}</b>"
+    )
+    blocks: list[str] = [header]
+    for idx, row in enumerate(rows, 1):
+        start_ts = float(row.get("_menu_start_ts") or 0.0)
+        start_label = (
+            _dt.datetime.fromtimestamp(start_ts, tz).strftime("%d.%m %H:%M МСК")
+            if start_ts > 0 else "время ?"
+        )
+        selection = str(row.get("selection") or "?")
+        odd = float(row.get("odd") or 0.0)
+        strength = float(row.get("strength") or 0.0)
+        scope = str(row.get("scope") or "FULL_MATCH")
+        scope_label = SCOPE_LABEL_RU.get(scope, scope)
+        blocks.append(
+            f"<b>{idx}. {row.get('home','?')} — {row.get('away','?')}</b>\n"
+            f"🏆 {row.get('league') or '?'}\n"
+            f"🕐 {start_label}\n"
+            f"🎯 {scope_label} · <b>{selection} @ {odd:.2f}</b>\n"
+            f"🧠 R{strength:.0f}"
+        )
+
+    messages: list[str] = []
+    current = blocks[0]
+    for block in blocks[1:]:
+        candidate = current + "\n\n" + block
+        if len(candidate) > 3800:
+            messages.append(current)
+            current = f"🟡 <b>{icon} {title} · PREMATCH · продолжение</b>\n\n{block}"
+        else:
+            current = candidate
+    messages.append(current)
+    return messages
+
+
 def sport_journal_text(sport: str | None = None, limit: int = 14, phase: str | None = None) -> str:
     """Journal is a scoreboard, not a second list of bets.
 

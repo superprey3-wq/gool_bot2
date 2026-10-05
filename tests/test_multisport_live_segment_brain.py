@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,

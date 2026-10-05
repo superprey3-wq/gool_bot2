@@ -1475,17 +1475,23 @@ class MultiSportSteamWorker:
             first_shots = list(first_stats.get("shots_on_goal") or first_stats.get("shots") or [])
             first_shot_total = sum(max(0.0, float(v)) for v in first_shots[:2]) if len(first_shots) >= 2 else shot_total
             recent_shot_rate = max(0.0, shot_total - first_shot_total) * 60.0 / age if len(recent) >= 2 else 0.0
-            pp = list(stats.get("powerplay_goals") or [])
+            pp = list(stats.get("powerplay_goals") or stats.get("power_play_goals") or [])
             pp_total = sum(max(0.0, float(v)) for v in pp[:2]) if len(pp) >= 2 else 0.0
             penalties = list(stats.get("penalties_2m") or stats.get("penalties") or [])
             penalty_total = sum(max(0.0, float(v)) for v in penalties[:2]) if len(penalties) >= 2 else 0.0
+            blocked = list(stats.get("blocked_shots") or [])
+            blocked_total = sum(max(0.0, float(v)) for v in blocked[:2]) if len(blocked) >= 2 else 0.0
+            # Hockey is low-scoring, so raw goal pace alone is too sparse.
+            # Current-period shots/shot acceleration are the primary pressure
+            # signal, with goals/special teams/blocks as secondary context.
             rating = (
-                28.0
-                + min(30.0, shot_total * 1.45)
-                + min(18.0, recent_shot_rate * 6.0)
-                + min(12.0, current_total * 5.0)
-                + min(7.0, pp_total * 3.5)
-                + min(5.0, penalty_total * 0.8)
+                34.0
+                + min(34.0, shot_total * 2.20)
+                + min(18.0, recent_shot_rate * 7.0)
+                + min(10.0, current_total * 5.0)
+                + min(6.0, pp_total * 3.0)
+                + min(4.0, penalty_total * 0.7)
+                + min(4.0, blocked_total * 0.35)
             )
             reason = f"броски {shot_total:g}, темп бросков {recent_shot_rate:.1f}/мин, шайбы периода {current_total}"
         else:
@@ -1513,9 +1519,13 @@ class MultiSportSteamWorker:
             rating = min(rating, 48.0)
             reason = "Flashscore LIVE есть, статистика сегмента ещё прогревается"
 
-        pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", 68.0)
-        borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", 56.0)
+        pass_default = 62.0 if cfg.key == "hockey" else 68.0
+        borderline_default = 50.0 if cfg.key == "hockey" else 56.0
+        pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
+        borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+        if str(fs.get("status_code") or "") == "38":
+            state = "WAIT"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),

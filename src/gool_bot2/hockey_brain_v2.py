@@ -296,13 +296,15 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         return None
 
     push_confidence_penalty = min(0.45, max(0.0, push)) * 10.0
-    strength = _clamp(
+    raw_strength = (
         45.0
         + quality * 10.0
         + (model_probability - 0.5) * 35.0
         + edge * 70.0
         + (agreement - 1) * 3.0
-        - push_confidence_penalty,
+    )
+    strength = _clamp(
+        _clamp(raw_strength, 0.0, 87.0) - push_confidence_penalty,
         0.0,
         87.0,
     )
@@ -484,13 +486,15 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
 
     quality = _clamp(0.45 + min(0.25, int(brain.get("history_points") or 0) * 0.06) + (0.15 if stats_payload.get("current_segment_available") else 0.0), 0.0, 0.9)
     push_confidence_penalty = min(0.45, max(0.0, push)) * 12.0
-    strength = _clamp(
+    raw_strength = (
         45.0
         + quality * 10.0
         + (model_probability - 0.5) * 35.0
         + edge * 70.0
         + (agreements - 1) * 3.0
-        - push_confidence_penalty,
+    )
+    strength = _clamp(
+        _clamp(raw_strength, 0.0, 87.0) - push_confidence_penalty,
         0.0,
         87.0,
     )

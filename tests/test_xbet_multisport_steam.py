@@ -264,6 +264,20 @@ def test_collect_prefetches_both_live_indexes_before_sport_scans(tmp_path, monke
     worker = MultiSportSteamWorker(tmp_path)
     calls = []
 
+    def fake_prepare(cfg):
+        calls.append(("brain", cfg.key))
+        return {
+            "fs_today": [],
+            "fs_live": [{"flashscore_event_id": f"{cfg.key}-fs"}],
+            "live_analysis": [{
+                "flashscore_event_id": f"{cfg.key}-fs",
+                "brain_state": "PASS",
+                "brain_score": 80,
+            }],
+            "live_candidates": [{"flashscore_event_id": f"{cfg.key}-fs"}],
+            "prematch_candidates": [],
+        }
+
     def fake_index(cfg):
         calls.append(("index", cfg.key))
         return [{"I": f"{cfg.key}-1", "O1": "A", "O2": "B"}]
@@ -272,21 +286,28 @@ def test_collect_prefetches_both_live_indexes_before_sport_scans(tmp_path, monke
         calls.append(("pre", cfg.key))
         return []
 
-    def fake_scan(cfg, *, xbet_live_prefetched=None, xbet_prematch_prefetched=None):
+    def fake_scan(cfg, *, prepared=None, xbet_live_prefetched=None, xbet_prematch_prefetched=None):
         calls.append(("scan", cfg.key, len(xbet_live_prefetched or [])))
         return {
-            "flashscore_live": 0, "xbet_live": len(xbet_live_prefetched or []), "mapped": 0,
+            "flashscore_live": len((prepared or {}).get("fs_live") or []),
+            "live_brain_candidates": len((prepared or {}).get("live_candidates") or []),
+            "xbet_live": len(xbet_live_prefetched or []), "mapped": 0,
             "decoded": 0, "score_mismatch": 0, "market_decode_failed": 0,
             "detected": 0, "prematch_detected": 0, "flashscore_prematch": 0,
-            "prematch_decoded": 0, "delivered": 0, "prematch_delivered": 0,
-            "settled": 0, "xbet_diag": {"ok": True},
+            "prematch_brain_candidates": 0, "prematch_decoded": 0,
+            "delivered": 0, "prematch_delivered": 0, "settled": 0,
+            "xbet_diag": {"ok": True},
         }
 
+    monkeypatch.setattr(worker, "_prepare_flashscore_sport", fake_prepare)
     monkeypatch.setattr(worker, "_xbet_index", fake_index)
     monkeypatch.setattr(worker, "_xbet_prematch_index", fake_pre)
     monkeypatch.setattr(worker, "_scan_sport", fake_scan)
     worker.collect_once()
 
+    first_index = next(i for i, row in enumerate(calls) if row[0] == "index")
+    assert ("brain", "hockey") in calls[:first_index]
+    assert ("brain", "basketball") in calls[:first_index]
     first_scan = next(i for i, row in enumerate(calls) if row[0] == "scan")
     assert ("index", "hockey") in calls[:first_scan]
     assert ("index", "basketball") in calls[:first_scan]

@@ -605,7 +605,7 @@ def test_hockey_late_third_period_under_is_blocked_when_empty_net_risk_is_high(m
     assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
 
 
-def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatch):
+def test_hockey_late_third_period_is_blocked_even_with_big_lead(monkeypatch):
     monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_SECONDS", "300")
     monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_MARGIN", "2")
     monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
@@ -636,7 +636,84 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
         "live_game_stats": brain["live_game_stats"],
     }
 
+    # New production policy: no hockey LIVE bet with under 3:00 left,
+    # regardless of score margin.
+    assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
+
+def _strong_hockey_brain(direction_hint="over", score=82.0):
+    return {
+        "brain_state": "PASS",
+        "brain_score": score,
+        "scope": "PERIOD_2",
+        "score": [1, 1],
+        "current_segment_score": [0, 0],
+        "history_points": 3,
+        "recent_shot_rate": 2.6 if direction_hint == "over" else 0.5,
+        "direction_hint": direction_hint,
+        "live_game_stats": {
+            "stats_mode": "direct_segment",
+            "segment_stats": {"shots_on_goal": [15, 15]},
+        },
+    }
+
+
+def _hockey_price_lane(probability=0.56, line=1.5, clock=600, shots=(15, 15)):
+    return {
+        "scope": "PERIOD_2",
+        "market_family": "match_total",
+        "line": line,
+        "over": 1.78,
+        "under": 2.02,
+        "probability": probability,
+        "clock_seconds": clock,
+        "score": [0, 0],
+        "match_score": [1, 1],
+        "league": "KHL",
+        "live_game_stats": {
+            "stats_mode": "direct_segment",
+            "segment_stats": {"shots_on_goal": list(shots)},
+        },
+    }
+
+
+def test_hockey_live_rejects_old_r68_quality_signal(monkeypatch):
+    monkeypatch.delenv("GOOL_HOCKEY_LIVE_MIN_BRAIN_SCORE", raising=False)
+    brain = _strong_hockey_brain("over", score=68.0)
+    lane = _hockey_price_lane()
+
+    assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
+
+
+def test_hockey_live_rejects_direction_that_conflicts_with_fresh_shot_pressure(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_MIN_MODEL_WIN_PROBABILITY", "0.50")
+    brain = _strong_hockey_brain("under", score=82.0)
+    lane = _hockey_price_lane(probability=0.60)
+
+    # Pricing projection points OVER, while fresh Flashscore pressure says UNDER.
+    assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
+
+
+def test_hockey_live_rejects_market_that_does_not_confirm_stat_side(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_MIN_MODEL_WIN_PROBABILITY", "0.50")
+    brain = _strong_hockey_brain("over", score=82.0)
+    lane = _hockey_price_lane(probability=0.49)
+
+    assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
+
+
+def test_hockey_live_strong_fresh_pressure_can_still_emit(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.60")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_MIN_MODEL_WIN_PROBABILITY", "0.58")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_MARKET_PROBABILITY_FLOOR", "0.52")
+    brain = _strong_hockey_brain("over", score=82.0)
+    lane = _hockey_price_lane(probability=0.56)
+
     signal = price_flashscore_live_candidate(brain, lane, SPORTS["hockey"])
+
     assert signal is not None
-    assert signal["direction"] == "under"
+    assert signal["direction"] == "over"
+    assert signal["strength"] >= 70
+    assert signal["model_win_probability"] >= 0.58
 

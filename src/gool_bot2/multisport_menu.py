@@ -328,6 +328,7 @@ def multisport_in_game_sections() -> list[str]:
 
     messages: list[str] = []
     total = 0
+    match_total = 0
     sport_blocks: list[str] = []
 
     for sport in ("hockey", "basketball"):
@@ -478,6 +479,7 @@ def multisport_in_game_sections() -> list[str]:
                 group["live"] = live
 
         total += len(active)
+        match_total += len(grouped)
         lines = []
         for idx, group in enumerate(grouped.values(), 1):
             live = dict(group["live"])
@@ -501,7 +503,8 @@ def multisport_in_game_sections() -> list[str]:
                 phase_name = _row_phase(pick)
                 phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
                 block.extend([
-                    f"{phase_badge} · 🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b> · R{strength:.0f}",
+                    f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>",
+                    f"🧠 {strength:.0f}/100 · {phase_badge}",
                     f"↳ {needed}",
                 ])
             lines.append("\n".join(block))
@@ -509,13 +512,9 @@ def multisport_in_game_sections() -> list[str]:
 
     if not sport_blocks:
         return []
-    # total is number of active bets; report both bets and visually grouped matches.
-    grouped_matches = sum(
-        part.count("\nсейчас <b>") for part in sport_blocks
-    )
     messages.append(
         f"🟢 <b>GOOL MULTI · В ИГРЕ</b>\n"
-        f"Матчей: <b>{grouped_matches}</b> · ставок: <b>{total}</b>"
+        f"Матчей: <b>{match_total}</b> · ставок: <b>{total}</b>"
     )
     messages.extend(sport_blocks)
     return messages

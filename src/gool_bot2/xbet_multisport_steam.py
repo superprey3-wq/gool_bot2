@@ -34,6 +34,13 @@ from .hockey_brain_v2 import (
     prematch_lambdas as hockey_prematch_lambdas,
     prematch_signal as hockey_prematch_v2_signal,
 )
+from .basketball_brain_v2 import (
+    live_candidate_gate as basketball_live_candidate_gate,
+    live_signal as basketball_live_v2_signal,
+    prematch_candidate as basketball_prematch_candidate,
+    prematch_signal as basketball_prematch_v2_signal,
+    recent_possession_metrics as basketball_recent_possession_metrics,
+)
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -1118,6 +1125,8 @@ def price_flashscore_live_candidate(
     """Attach current 1xBet segment price after Flashscore Brain selection."""
     if cfg.key == "hockey":
         return hockey_live_v2_signal(brain, lane)
+    if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
+        return basketball_live_v2_signal(brain, lane)
     if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
         return None
     if str(lane.get("market_family") or "") != "match_total":
@@ -1894,6 +1903,7 @@ class MultiSportSteamWorker:
         recent_blocked_rate = 0.0
         recent_penalty_delta = 0.0
         recent_pp_goal_delta = 0.0
+        recent_possessions_per_min = 0.0
         projection: float | None = None
 
         if cfg.key == "hockey":
@@ -1983,6 +1993,16 @@ class MultiSportSteamWorker:
                 f"подборы {rebound_total:g}"
             )
 
+        if cfg.key == "basketball" and len(recent) >= 2:
+            possession_metrics = basketball_recent_possession_metrics(
+                dict(first.get("live_game_stats") or {}),
+                stats_payload,
+                age,
+            )
+            recent_possessions_per_min = float(
+                possession_metrics.get("recent_possessions_per_min") or 0.0
+            )
+
         if not stats_payload.get("current_segment_available"):
             rating = min(rating, 48.0)
             reason = "Flashscore LIVE есть, статистика именно текущего периода/четверти ещё недоступна"
@@ -2036,6 +2056,24 @@ class MultiSportSteamWorker:
             })
             rating = float(gate.get("score") or 0.0)
             state = str(gate.get("state") or "WAIT")
+        elif cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
+            gate = basketball_live_candidate_gate({
+                "live_game_stats": stats_payload,
+                "history_points": len(recent),
+                "recent_window_seconds": age,
+                "recent_score_rate": recent_score_rate,
+                "recent_possessions_per_min": recent_possessions_per_min,
+                "break_transition": break_transition,
+            })
+            rating = float(gate.get("score") or 0.0)
+            state = str(gate.get("state") or "WAIT")
+            reason = (
+                f"Basketball v2 · очки четверти {current_total}, "
+                f"свежий темп {recent_score_rate:.1f} оч/мин, "
+                f"владения {recent_possessions_per_min:.2f}/мин"
+            )
+            if break_transition:
+                reason += " · пауза между четвертями: ждём фактический старт"
         else:
             pass_default = 68.0
             borderline_default = 56.0
@@ -2074,6 +2112,7 @@ class MultiSportSteamWorker:
             "history_points": len(recent),
             "recent_window_seconds": round(age, 1),
             "recent_score_rate": round(recent_score_rate, 3),
+            "recent_possessions_per_min": round(recent_possessions_per_min, 3),
             "recent_shot_rate": round(recent_shot_rate, 3),
             "recent_blocked_rate": round(recent_blocked_rate, 3),
             "recent_penalty_delta": round(recent_penalty_delta, 3),
@@ -2119,6 +2158,15 @@ class MultiSportSteamWorker:
                 "prematch_brain": {
                     **v2,
                     "brain_mode": "hockey_prematch_v2",
+                    "features": features,
+                },
+            }
+        if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
+            v2 = basketball_prematch_candidate(features, str(fs.get("league") or ""))
+            return {
+                **dict(fs),
+                "prematch_brain": {
+                    **v2,
                     "features": features,
                 },
             }
@@ -2173,7 +2221,11 @@ class MultiSportSteamWorker:
         cfg: SportConfig,
     ) -> list[dict[str, Any]]:
         scan_max = max(1, min(160, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_SCAN_MAX", 64)))
-        price_default = 10 if cfg.key == "hockey" else 32
+        price_default = (
+            10 if cfg.key == "hockey"
+            else 16 if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True)
+            else 32
+        )
         price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", price_default)))
         rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
         if not rows:
@@ -3854,6 +3906,30 @@ class MultiSportSteamWorker:
                     history = self._append_prematch_history(lane_row, cfg)
                     if cfg.key == "hockey":
                         signal = hockey_prematch_v2_signal(
+                            lane_row,
+                            dict(row.get("sport_context") or {}),
+                            str(row.get("league") or ""),
+                        )
+                        if signal is None:
+                            continue
+                        signal = {
+                            **signal,
+                            "scope": lane_row.get("scope"),
+                            "market_family": lane_row.get("market_family"),
+                            "selection": str(
+                                signal.get("selection")
+                                or lane_row.get("selection")
+                                or selection_label(
+                                    lane_row,
+                                    str(signal.get("direction") or "over"),
+                                    float(signal.get("line") or 0.0),
+                                )
+                            ),
+                        }
+                        candidates.append((lane_row, signal))
+                        continue
+                    if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
+                        signal = basketball_prematch_v2_signal(
                             lane_row,
                             dict(row.get("sport_context") or {}),
                             str(row.get("league") or ""),

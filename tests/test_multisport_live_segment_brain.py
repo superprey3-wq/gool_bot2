@@ -513,3 +513,61 @@ def test_flashscore_derives_new_segment_score_when_score_parts_lag():
     )
     assert basket["QUARTER_3"] == (3, 4)
 
+def test_empty_current_period_section_falls_back_to_full_match_delta(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    snapshots = [
+        {
+            "sections": {
+                "PERIOD_3": {"key": "PERIOD_3", "label": "3rd period", "stats": {}, "raw": []},
+                "FULL_MATCH": {
+                    "key": "FULL_MATCH",
+                    "label": "Full match",
+                    "stats": {
+                        "shots_on_goal": {"home": 26, "away": 24},
+                        "blocked_shots": {"home": 11, "away": 8},
+                        "penalties": {"home": 4, "away": 3},
+                    },
+                    "raw": [],
+                },
+            }
+        },
+        {
+            "sections": {
+                "PERIOD_3": {"key": "PERIOD_3", "label": "3rd period", "stats": {}, "raw": []},
+                "FULL_MATCH": {
+                    "key": "FULL_MATCH",
+                    "label": "Full match",
+                    "stats": {
+                        "shots_on_goal": {"home": 30, "away": 27},
+                        "blocked_shots": {"home": 13, "away": 9},
+                        "penalties": {"home": 5, "away": 3},
+                    },
+                    "raw": [],
+                },
+            }
+        },
+    ]
+    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: snapshots.pop(0))
+    fs = {
+        "flashscore_event_id": "EMPTY-P3",
+        "home": "Anaheim Ducks",
+        "away": "Florida Panthers",
+        "league": "NHL",
+        "score": [2, 1],
+        "score_parts": [[1, 0], [1, 1], [0, 0]],
+        "status_code": "46",
+    }
+
+    first = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_3")
+    worker._fs_live_stats_cache.clear()
+    second = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_3")
+
+    assert first["stats_mode"] == "full_match_delta_baseline"
+    assert first["current_segment_available"] is False
+    assert second["stats_mode"] == "full_match_delta"
+    assert second["scope"] == "PERIOD_3"
+    assert second["current_segment_available"] is True
+    assert second["segment_stats"]["shots_on_goal"] == [4.0, 3.0]
+    assert second["segment_stats"]["blocked_shots"] == [2.0, 1.0]
+    assert second["segment_stats"]["penalties"] == [1.0, 0.0]
+

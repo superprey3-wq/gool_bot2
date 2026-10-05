@@ -221,12 +221,16 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
         "period_start_ts": __import__("time").time() - 420,
     }
 
-    result = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    first = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    second = worker._flashscore_live_brain(fs, SPORTS["hockey"])
 
-    assert result["scope"] == "PERIOD_2"
-    assert result["brain_state"] in {"PASS", "BORDERLINE"}
-    assert result["brain_score"] >= 50
-    assert "броски 7" in result["brain_reason"]
+    assert first["scope"] == "PERIOD_2"
+    assert first["brain_state"] == "WAIT"
+    assert first["history_points"] == 1
+    assert second["brain_state"] in {"PASS", "BORDERLINE"}
+    assert second["history_points"] == 2
+    assert second["brain_score"] >= 50
+    assert "броски 7" in second["brain_reason"]
 
 
 def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monkeypatch):

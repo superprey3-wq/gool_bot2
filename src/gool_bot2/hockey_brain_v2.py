@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any
 
 
@@ -15,6 +16,13 @@ def _num(value: Any, default: float | None = None) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def league_goal_baseline(league: str) -> float:
@@ -261,7 +269,9 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     else:
         return None
 
-    if not (1.20 < odd < 6.0):
+    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.45)
+    max_odd = _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)
+    if not (min_odd <= odd <= max_odd):
         return None
     edge = model_probability - market_probability
     min_edge = 0.055 if family in {"match_total", "home_total", "away_total"} else 0.060
@@ -444,7 +454,9 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_probability, push, market_probability, odd = max(choices, key=lambda x: x[0])
 
-    if not (1.20 < odd < 6.0):
+    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.45)
+    max_odd = _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)
+    if not (min_odd <= odd <= max_odd):
         return None
     if edge < 0.055 or model_probability < 0.565:
         return None

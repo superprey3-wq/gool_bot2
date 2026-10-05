@@ -489,16 +489,38 @@ def _numeric_live_segment_index(fs: dict[str, Any], cfg: SportConfig) -> int:
 
 
 def multisport_scope_is_complete(fs: dict[str, Any], sport: str, scope: str) -> bool:
-    """True once a scoped market's segment has definitely ended."""
+    """True once a scoped market's segment has definitely ended.
+
+    Prefer the Flashscore Brain's decoded current scope when present. Raw AC
+    can be only an elapsed minute within the current period on some feeds, so
+    using it alone can incorrectly keep P1/Q1 bets open after the next segment
+    has already started.
+    """
     cfg = SPORTS.get(str(sport or "").casefold())
     if cfg is None:
         return False
     scope = str(scope or SCOPE_FULL)
     if str(fs.get("coarse_status") or "") == "3":
         return True
-    current = _numeric_live_segment_index(fs, cfg)
+
+    current_scope = str(fs.get("scope") or "").upper()
+    current = 0
+    if cfg.key == "hockey" and current_scope.startswith("PERIOD_"):
+        try:
+            current = int(current_scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            current = 0
+    elif cfg.key == "basketball" and current_scope.startswith("QUARTER_"):
+        try:
+            current = int(current_scope.rsplit("_", 1)[1])
+        except (TypeError, ValueError, IndexError):
+            current = 0
+
+    if current <= 0:
+        current = _numeric_live_segment_index(fs, cfg)
     if current <= 0:
         return False
+
     if cfg.key == "hockey" and scope.startswith("PERIOD_"):
         try:
             target = int(scope.rsplit("_", 1)[1])
@@ -3923,7 +3945,15 @@ class MultiSportSteamWorker:
     ) -> dict[str, Any]:
         prepared = dict(prepared or self._prepare_flashscore_sport(cfg))
         fs_today = [dict(row) for row in (prepared.get("fs_today") or [])]
+        live_analysis = [dict(row) for row in (prepared.get("live_analysis") or [])]
         states = {str(row["flashscore_event_id"]): row for row in fs_today}
+        # Keep settlement on the exact same decoded period/quarter truth that
+        # the Flashscore-first Brain uses. Fresh raw feed rows supply score and
+        # status; analysis rows supply authoritative scope/period.
+        for analysis in live_analysis:
+            fs_id = str(analysis.get("flashscore_event_id") or "")
+            if fs_id and fs_id in states:
+                states[fs_id] = {**states[fs_id], **analysis}
         settled = self._settle(cfg, states)
         prematch_candidates = [dict(row) for row in (prepared.get("prematch_candidates") or [])]
         prematch = self._scan_prematch(
@@ -3936,7 +3966,6 @@ class MultiSportSteamWorker:
         prematch_parlays = build_sport_parlays(parlay_source, cfg.key)
         parlay_delivered = self._deliver_new_parlays(cfg, prematch_parlays)
         fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]
-        live_analysis = [dict(row) for row in (prepared.get("live_analysis") or [])]
         live_candidates = [dict(row) for row in (prepared.get("live_candidates") or [])]
         candidate_ids = {
             str(row.get("flashscore_event_id") or "") for row in live_candidates
@@ -4054,6 +4083,8 @@ class MultiSportSteamWorker:
                     "league": str(row.get("league") or ""),
                     "score": list(row.get("score") or [0, 0]),
                     "score_parts": list(row.get("score_parts") or []),
+                    "scope": str((analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}).get("scope") or ""),
+                    "period": str((analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}).get("period") or ""),
                     "status_code": str(row.get("status_code") or ""),
                     "coarse_status": str(row.get("coarse_status") or ""),
                     "match_start_ts": int(row.get("match_start_ts") or 0),

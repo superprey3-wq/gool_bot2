@@ -730,3 +730,161 @@ def test_in_game_hides_pending_live_pick_after_its_period_is_over(tmp_path: Path
 
     assert "1-й период: ТБ 1.5" not in text
 
+def test_in_game_uses_brain_period_over_raw_numeric_status_and_drops_old_period_pick(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "FSMAG001",
+                    "home": "Magnitogorsk",
+                    "away": "Vladivostok",
+                    "score": [0, 1],
+                    "status_code": "15",
+                    "coarse_status": "2",
+                }],
+                "flashscore_analysis_matches": [{
+                    "flashscore_event_id": "FSMAG001",
+                    "home": "Magnitogorsk",
+                    "away": "Vladivostok",
+                    "score": [0, 1],
+                    "scope": "PERIOD_2",
+                    "period": "2-й период",
+                    "brain_state": "WAIT",
+                    "brain_score": 32,
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_live_matches": [], "flashscore_analysis_matches": []},
+        },
+    })
+    _write(journal, [
+        {
+            "entry_id": "hockey:live:H1:PERIOD_1:match_total",
+            "sport": "hockey",
+            "phase": "LIVE",
+            "result": "pending",
+            "flashscore_event_id": "FSMAG001",
+            "home": "Magnitogorsk",
+            "away": "Vladivostok",
+            "scope": "PERIOD_1",
+            "market_family": "match_total",
+            "selection": "1-й период: ТБ 1",
+            "direction": "over",
+            "line": 1.0,
+            "odd": 1.72,
+            "strength": 66,
+        },
+        {
+            "entry_id": "hockey:prematch:FSMAG001",
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "result": "pending",
+            "flashscore_event_id": "FSMAG001",
+            "home": "Magnitogorsk",
+            "away": "Vladivostok",
+            "scope": "FULL_MATCH",
+            "market_family": "handicap",
+            "selection": "Ф2 +2",
+            "selection_side": "away",
+            "line": 2.0,
+            "odd": 1.73,
+            "strength": 100,
+        },
+    ])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "FSMAG001",
+            "home": "Magnitogorsk",
+            "away": "Vladivostok",
+            "score": [0, 1],
+            "status_code": "15",
+            "coarse_status": "2",
+        }] if sport == "hockey" else []
+    ))
+
+    text = "\n".join(menu.multisport_in_game_sections())
+
+    assert "сейчас 2-й период · 0:1" in text
+    assert "сейчас 15" not in text
+    assert "1-й период: ТБ 1 @ 1.72" not in text
+    assert "Ф2 +2 @ 1.73" in text
+
+
+def test_in_game_groups_live_and_prematch_bets_under_one_match(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "FSKR001",
+                    "home": "Kristall Saratov",
+                    "away": "Metallurg Novokuznetsk",
+                    "score": [0, 0],
+                    "coarse_status": "2",
+                }],
+                "flashscore_analysis_matches": [{
+                    "flashscore_event_id": "FSKR001",
+                    "home": "Kristall Saratov",
+                    "away": "Metallurg Novokuznetsk",
+                    "score": [0, 0],
+                    "scope": "PERIOD_1",
+                    "period": "1-й период",
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_live_matches": [], "flashscore_analysis_matches": []},
+        },
+    })
+    _write(journal, [
+        {
+            "entry_id": "hockey:live:K1:PERIOD_1:match_total",
+            "sport": "hockey","phase": "LIVE","result": "pending",
+            "flashscore_event_id": "FSKR001",
+            "home": "Kristall Saratov","away": "Metallurg Novokuznetsk",
+            "scope": "PERIOD_1","market_family": "match_total",
+            "selection": "1-й период: ТБ 1","direction": "over","line": 1.0,
+            "odd": 1.78,"strength": 67,
+        },
+        {
+            "entry_id": "hockey:prematch:FSKR001",
+            "sport": "hockey","phase": "PREMATCH","result": "pending",
+            "flashscore_event_id": "FSKR001",
+            "home": "Kristall Saratov","away": "Metallurg Novokuznetsk",
+            "scope": "FULL_MATCH","market_family": "handicap",
+            "selection": "Ф1 +1.5","selection_side": "home","line": 1.5,
+            "odd": 1.61,"strength": 100,
+        },
+    ])
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "FSKR001",
+            "home": "Kristall Saratov",
+            "away": "Metallurg Novokuznetsk",
+            "score": [0, 0],
+            "status_code": "15",
+            "coarse_status": "2",
+        }] if sport == "hockey" else []
+    ))
+
+    text = "\n".join(menu.multisport_in_game_sections())
+
+    assert text.count("Kristall Saratov — Metallurg Novokuznetsk") == 1
+    assert "🎯 <b>1-й период: ТБ 1 @ 1.78</b>" in text
+    assert "🧠 67/100 · 🔴 LIVE" in text
+    assert "🎯 <b>Ф1 +1.5 @ 1.61</b>" in text
+    assert "🧠 100/100 · 🟡 PREMATCH" in text
+    assert "Матчей: <b>1</b> · ставок: <b>2</b>" in text
+

@@ -20,6 +20,7 @@ from gool_bot2.xbet_multisport_steam import (
     detect_prematch_steam,
     detect_steam,
     settle_multisport_pick,
+    multisport_scope_is_complete,
 )
 
 
@@ -1371,4 +1372,15 @@ def test_hockey_first_period_bet_settles_when_second_period_has_started(tmp_path
     assert saved["settled_score"] == [0, 1]
     assert saved["result"] == "lost"
     assert saved["profit_units"] == -1.0
+
+def test_scope_completion_prefers_brain_scope_over_raw_numeric_ac():
+    fs = {
+        "coarse_status": "2",
+        "status_code": "15",
+        "scope": "PERIOD_2",
+        "period": "2-й период",
+    }
+
+    assert multisport_scope_is_complete(fs, "hockey", "PERIOD_1") is True
+    assert multisport_scope_is_complete(fs, "hockey", "PERIOD_2") is False
 

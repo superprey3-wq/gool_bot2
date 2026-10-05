@@ -1460,13 +1460,14 @@ class MultiSportSteamWorker:
 
         sections = dict(detailed.get("sections") or {})
         wanted = live_scopes_from_period(cfg.key, current_period)
-        scope = next(iter(wanted), "")
-        if not scope:
-            scope = _infer_flashscore_scope(fs, cfg, list(sections))
+        requested_scope = next(iter(wanted), "")
+        if not requested_scope:
+            requested_scope = _infer_flashscore_scope(fs, cfg, list(sections))
+        scope = requested_scope
         selected = dict(sections.get(scope) or {})
         if not selected:
             selected = dict(sections.get("FULL_MATCH") or {})
-            scope = "FULL_MATCH" if selected else scope
+            scope = "FULL_MATCH" if selected else requested_scope
         stats = dict(selected.get("stats") or {})
         segment_stats: dict[str, list[float]] = {}
         segment_attempts: dict[str, list[float]] = {}
@@ -1492,6 +1493,8 @@ class MultiSportSteamWorker:
             "segment_stats": segment_stats,
             "segment_attempts": segment_attempts,
             "available": bool(segment_stats),
+            "requested_scope": requested_scope or None,
+            "current_segment_available": bool(segment_stats) and scope == requested_scope,
             "section_keys": list(sections),
         }
         if cfg.key == "hockey":
@@ -1616,9 +1619,9 @@ class MultiSportSteamWorker:
                 f"подборы {rebound_total:g}"
             )
 
-        if not stats_payload.get("available"):
+        if not stats_payload.get("current_segment_available"):
             rating = min(rating, 48.0)
-            reason = "Flashscore LIVE есть, статистика текущего сегмента ещё недоступна"
+            reason = "Flashscore LIVE есть, статистика именно текущего периода/четверти ещё недоступна"
         if elapsed <= 0:
             rating = min(rating, 54.0)
             reason += " · часы сегмента ещё не синхронизированы"

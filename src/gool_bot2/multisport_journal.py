@@ -107,6 +107,14 @@ def stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
     void = sum(1 for row in settled if row.get("result") == "void")
     pending = sum(1 for row in rows if str(row.get("result") or "pending") == "pending")
     profit = sum(float(row.get("profit_units") or 0.0) for row in settled)
+    odds: list[float] = []
+    for row in rows:
+        try:
+            odd = float(row.get("odd") or 0.0)
+        except (TypeError, ValueError):
+            odd = 0.0
+        if odd > 1.0:
+            odds.append(odd)
     graded = won + lost
     return {
         "total": len(rows),
@@ -116,6 +124,7 @@ def stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "void": void,
         "pending": pending,
         "hit_rate": (won / graded * 100.0) if graded else 0.0,
+        "avg_odd": (sum(odds) / len(odds)) if odds else 0.0,
         "profit_units": profit,
         "roi": (profit / len(settled) * 100.0) if settled else 0.0,
     }
@@ -146,5 +155,6 @@ def stat_line(value: dict[str, Any]) -> str:
         f"✅ {int(value.get('won') or 0)} · ❌ {int(value.get('lost') or 0)} · "
         f"↩️ {int(value.get('void') or 0)} · ⏳ {int(value.get('pending') or 0)} · "
         f"проход {float(value.get('hit_rate') or 0):.1f}% · "
+        f"ср. кэф {float(value.get('avg_odd') or 0):.2f} · "
         f"P/L {float(value.get('profit_units') or 0):+.2f}u · ROI {float(value.get('roi') or 0):+.1f}%"
     )

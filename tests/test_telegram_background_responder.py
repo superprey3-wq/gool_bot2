@@ -77,7 +77,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "📒 Хоккей", "📒 Баскет", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -112,7 +112,8 @@ def test_production_multisport_menu_buttons_are_handled(tmp_path: Path, monkeypa
         lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
     )
     import gool_bot2.multisport_menu as multisport_menu
-    monkeypatch.setattr(multisport_menu, "sport_overview_text", lambda sport: f"SPORT:{sport}")
+    monkeypatch.setattr(multisport_menu, "hockey_journal_text", lambda: "H_JOURNAL")
+    monkeypatch.setattr(multisport_menu, "basketball_journal_text", lambda: "B_JOURNAL")
 
     journal = tmp_path / "signal_journal.json"
     a = worker._handle_direct_telegram_update(
@@ -124,7 +125,7 @@ def test_production_multisport_menu_buttons_are_handled(tmp_path: Path, monkeypa
         {"update_id": 15, "message": {"chat": {"id": 123}, "text": "🏀 Баскетбол"}},
     )
     assert (a, b) == (1, 1)
-    assert sent == ["SPORT:hockey", "SPORT:basketball"]
+    assert sent == ["H_JOURNAL", "B_JOURNAL"]
 
 def test_prematch_menu_hides_settled_and_started_rows(tmp_path):
     import json, time
@@ -225,7 +226,7 @@ def test_production_valuehunter_command_is_routed(tmp_path: Path, monkeypatch):
 
 
 
-def test_production_separate_sport_journal_buttons_are_handled(tmp_path: Path, monkeypatch):
+def test_production_sport_prematch_buttons_are_handled(tmp_path: Path, monkeypatch):
     sent = []
     monkeypatch.setattr(
         worker,
@@ -233,20 +234,46 @@ def test_production_separate_sport_journal_buttons_are_handled(tmp_path: Path, m
         lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
     )
     import gool_bot2.multisport_menu as multisport_menu
-    monkeypatch.setattr(multisport_menu, "hockey_journal_text", lambda: "H_JOURNAL")
-    monkeypatch.setattr(multisport_menu, "basketball_journal_text", lambda: "B_JOURNAL")
+    monkeypatch.setattr(
+        multisport_menu,
+        "sport_prematch_picks_sections",
+        lambda sport: [f"PRE:{sport}"],
+    )
 
     journal = tmp_path / "signal_journal.json"
     a = worker._handle_direct_telegram_update(
         "test-credential", journal,
-        {"update_id": 18, "message": {"chat": {"id": 123}, "text": "📒 Хоккей"}},
+        {"update_id": 18, "message": {"chat": {"id": 123}, "text": "🟡 Хоккей PRE"}},
     )
     b = worker._handle_direct_telegram_update(
         "test-credential", journal,
-        {"update_id": 19, "message": {"chat": {"id": 123}, "text": "📒 Баскет"}},
+        {"update_id": 19, "message": {"chat": {"id": 123}, "text": "🟡 Баскет PRE"}},
     )
     assert (a, b) == (1, 1)
-    assert sent == ["H_JOURNAL", "B_JOURNAL"]
+    assert sent == ["PRE:hockey", "PRE:basketball"]
+
+
+def test_legacy_book_buttons_also_open_prematch_lists(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append(text) or True,
+    )
+    import gool_bot2.multisport_menu as multisport_menu
+    monkeypatch.setattr(multisport_menu, "sport_prematch_picks_sections", lambda sport: [f"PRE:{sport}"])
+    journal = tmp_path / "signal_journal.json"
+
+    worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 20, "message": {"chat": {"id": 123}, "text": "📒 Хоккей"}},
+    )
+    worker._handle_direct_telegram_update(
+        "test-credential", journal,
+        {"update_id": 21, "message": {"chat": {"id": 123}, "text": "📒 Баскет"}},
+    )
+
+    assert sent == ["PRE:hockey", "PRE:basketball"]
 
 
 

@@ -1,4 +1,6 @@
 from gool_bot2.multisport_parlay import build_sport_parlays, eligible_prematch_legs
+from gool_bot2.multisport_parlay_card import render_multisport_parlay_card
+from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS
 
 
 def _row(event_id, odd=1.7, strength=80, probability=0.64, sport="hockey", family="match_total"):
@@ -42,3 +44,35 @@ def test_parlay_uses_prematch_only_and_distinct_events(monkeypatch):
 
 def test_parlay_requires_two_confirmed_legs():
     assert build_sport_parlays([_row("1")], "hockey") == []
+
+def test_multisport_parlay_card_renders_png():
+    rows = [_row("1"), _row("2", odd=1.8, strength=84)]
+    parlay = build_sport_parlays(rows, "hockey")[0]
+
+    png = render_multisport_parlay_card(parlay, "hockey")
+
+    assert png.startswith(b"\x89PNG")
+    assert len(png) > 1000
+
+
+def test_multisport_parlay_card_is_delivered_once_and_persists_across_restart(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    sent = []
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append((png, caption)) or 1)
+
+    parlay = build_sport_parlays([_row("1"), _row("2", odd=1.8, strength=84)], "hockey")[0]
+    worker = MultiSportSteamWorker(tmp_path)
+
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 1
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 0
+    assert len(sent) == 1
+    assert sent[0][0].startswith(b"\x89PNG")
+
+    restarted = MultiSportSteamWorker(tmp_path)
+    assert restarted._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 0
+    assert len(sent) == 1
+

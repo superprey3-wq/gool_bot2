@@ -328,3 +328,33 @@ def test_flashscore_parser_keeps_period_clock_for_stat_first_brain():
     assert rows[0]["period_start_ts"] == 1450
     assert rows[0]["score_parts"] == [[21, 12], [23, 20]]
 
+def test_collect_once_does_not_query_xbet_when_flashscore_brain_has_no_candidates(tmp_path: Path, monkeypatch):
+    from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker
+
+    worker = MultiSportSteamWorker(tmp_path)
+    empty_prepared = {
+        "fs_today": [],
+        "fs_live": [],
+        "live_analysis": [],
+        "live_candidates": [],
+        "prematch_candidates": [],
+    }
+    monkeypatch.setattr(worker, "_prepare_flashscore_sport", lambda _cfg: dict(empty_prepared))
+    monkeypatch.setattr(
+        worker,
+        "_xbet_index",
+        lambda _cfg: (_ for _ in ()).throw(AssertionError("LIVE 1xBet must not run before Brain candidate")),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_xbet_prematch_index",
+        lambda _cfg: (_ for _ in ()).throw(AssertionError("PREMATCH 1xBet must not run before Brain shortlist")),
+    )
+
+    state = worker.collect_once()
+
+    assert state["sports"]["hockey"]["xbet_live"] == 0
+    assert state["sports"]["basketball"]["xbet_live"] == 0
+    assert state["sports"]["hockey"]["prematch_brain_candidates"] == 0
+    assert state["sports"]["basketball"]["prematch_brain_candidates"] == 0
+

@@ -571,3 +571,72 @@ def test_basketball_q3_uses_cumulative_q1_q2_q3_stats_when_only_full_match_exist
     assert stats["segment_stats"]["turnovers"] == [7.0, 8.0]
     assert stats["segment_attempts"]["field_goals"] == [40.0, 43.0]
 
+def test_hockey_late_third_period_under_is_blocked_when_empty_net_risk_is_high(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_SECONDS", "300")
+    monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_MARGIN", "2")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    brain = {
+        "brain_state": "PASS",
+        "brain_score": 78.0,
+        "scope": "PERIOD_3",
+        "score": [1, 2],
+        "current_segment_score": [1, 0],
+        "history_points": 3,
+        "recent_shot_rate": 1.1,
+        "live_game_stats": {
+            "stats_mode": "cumulative_through_current_segment",
+            "segment_stats": {"shots_on_goal": [22, 24]},
+        },
+    }
+    lane = {
+        "scope": "PERIOD_3",
+        "market_family": "match_total",
+        "line": 2.5,
+        "over": 2.05,
+        "under": 1.77,
+        "probability": 0.47,
+        "clock_seconds": 1050,  # 2:30 left in P3
+        "score": [1, 0],
+        "match_score": [1, 2],
+        "league": "AHL",
+        "live_game_stats": brain["live_game_stats"],
+    }
+
+    assert price_flashscore_live_candidate(brain, lane, SPORTS["hockey"]) is None
+
+
+def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatch):
+    monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_SECONDS", "300")
+    monkeypatch.setenv("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_MARGIN", "2")
+    monkeypatch.setenv("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", "0.2")
+    brain = {
+        "brain_state": "PASS",
+        "brain_score": 78.0,
+        "scope": "PERIOD_3",
+        "score": [1, 4],
+        "current_segment_score": [1, 0],
+        "history_points": 3,
+        "recent_shot_rate": 1.1,
+        "live_game_stats": {
+            "stats_mode": "cumulative_through_current_segment",
+            "segment_stats": {"shots_on_goal": [22, 24]},
+        },
+    }
+    lane = {
+        "scope": "PERIOD_3",
+        "market_family": "match_total",
+        "line": 2.5,
+        "over": 2.05,
+        "under": 1.77,
+        "probability": 0.47,
+        "clock_seconds": 1050,
+        "score": [1, 0],
+        "match_score": [1, 4],
+        "league": "AHL",
+        "live_game_stats": brain["live_game_stats"],
+    }
+
+    signal = price_flashscore_live_candidate(brain, lane, SPORTS["hockey"])
+    assert signal is not None
+    assert signal["direction"] == "under"
+

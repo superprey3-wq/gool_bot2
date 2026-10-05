@@ -228,36 +228,35 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
     assert "броски 7" in result["brain_reason"]
 
 
-def test_basketball_halftime_status_is_sport_aware_and_not_priced(tmp_path, monkeypatch):
+def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monkeypatch):
     worker = MultiSportSteamWorker(tmp_path)
     monkeypatch.setattr(
         worker,
         "_flashscore_live_stats",
         lambda fs, cfg, current_period="": {
             "source": "flashscore",
-            "scope": "QUARTER_2",
+            "scope": "QUARTER_4",
             "available": True,
             "current_segment_available": True,
-            "segment_stats": {"rebounds": [18.0, 17.0], "turnovers": [5.0, 6.0]},
+            "segment_stats": {"rebounds": [6.0, 5.0], "turnovers": [2.0, 1.0]},
             "segment_attempts": {},
         },
     )
     fs = {
-        "flashscore_event_id": "BHALF001",
+        "flashscore_event_id": "BQ400001",
         "home": "Home",
         "away": "Away",
-        "league": "NBA",
-        "score": [61, 59],
-        "score_parts": [[31, 29], [30, 30]],
+        "league": "Chile",
+        "score": [70, 67],
+        "score_parts": [[20, 18], [18, 17], [17, 18], [15, 14]],
         "status_code": "38",
         "period_start_ts": __import__("time").time() - 300,
     }
 
     result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
 
-    assert result["period"] == "Перерыв"
-    assert result["scope"] == "QUARTER_2"
-    assert result["brain_state"] == "WAIT"
+    assert result["period"] == "4-я четверть"
+    assert result["scope"] == "QUARTER_4"
 
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
@@ -425,15 +424,27 @@ def test_full_match_stats_are_reconstructed_as_current_hockey_period_delta(tmp_p
     assert second["segment_stats"]["penalties"] == [1.0, 0.0]
 
 
-def test_flashscore_status_codes_identify_current_segment_before_score_parts():
+def test_flashscore_numeric_status_is_match_minute_with_score_parts_crosscheck():
     assert _infer_flashscore_scope(
-        {"status_code": "15", "score_parts": [[0, 0]]},
+        {"status_code": "15", "score_parts": [[0, 1]], "league": "OHL"},
         SPORTS["hockey"],
-    ) == "PERIOD_2"
+    ) == "PERIOD_1"
     assert _infer_flashscore_scope(
-        {"status_code": "24", "score_parts": [[20, 18], [22, 19]]},
+        {"status_code": "46", "score_parts": [[0, 1], [1, 0], [0, 0]], "league": "AHL"},
+        SPORTS["hockey"],
+    ) == "PERIOD_3"
+    assert _infer_flashscore_scope(
+        {"status_code": "23", "score_parts": [[31, 29], [30, 30]], "league": "USA: NBA"},
+        SPORTS["basketball"],
+    ) == "QUARTER_2"
+    assert _infer_flashscore_scope(
+        {"status_code": "23", "score_parts": [[20, 18], [18, 17], [2, 3]], "league": "Chile"},
         SPORTS["basketball"],
     ) == "QUARTER_3"
+    assert _infer_flashscore_scope(
+        {"status_code": "38", "score_parts": [[20, 18], [18, 17], [17, 18], [8, 7]], "league": "Chile"},
+        SPORTS["basketball"],
+    ) == "QUARTER_4"
 
 def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3(monkeypatch):
     monkeypatch.setenv("GOOL_BASKETBALL_LIVE_SEGMENT_MIN_STAT_EDGE", "2.5")
@@ -471,4 +482,10 @@ def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3
     assert signal["elapsed_seconds"] == 45.0
     assert signal["remaining_seconds"] == 675.0
     assert signal["projection_clock_source"] == "1xbet_after_flashscore_brain"
+
+def test_live_scopes_accept_canonical_scope_names():
+    from gool_bot2.xbet_multisport_markets import live_scopes_from_period
+
+    assert live_scopes_from_period("hockey", "PERIOD_2") == {"PERIOD_2"}
+    assert live_scopes_from_period("basketball", "QUARTER_3") == {"QUARTER_3"}
 

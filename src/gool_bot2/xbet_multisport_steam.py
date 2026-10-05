@@ -3538,6 +3538,7 @@ class MultiSportSteamWorker:
         live_candidates = [
             row for row in live_analysis
             if str(row.get("brain_state") or "") in {"PASS", "BORDERLINE"}
+            and row.get("projected_total") is not None
         ][:live_price_max]
 
         now = time.time()

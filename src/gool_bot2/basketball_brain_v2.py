@@ -155,6 +155,7 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
         "score": round(score, 1),
         "brain_mode": "basketball_prematch_v2",
         "data_quality": round(quality, 3),
+        "scope_factor": factor,
         "mu_home": round(mu_home, 2),
         "mu_away": round(mu_away, 2),
         "mu_total": round(mu_home + mu_away, 2),
@@ -163,9 +164,24 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     }
 
 
+def _scope_factor(scope: str) -> float:
+    raw = str(scope or "FULL_MATCH")
+    if raw.startswith("QUARTER_"):
+        return 0.25
+    if raw in {"FIRST_HALF", "SECOND_HALF"}:
+        return 0.50
+    return 1.0
+
+
 def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
-    mu_home, mu_away, profile = prematch_means(features, league)
+    scope = str(lane.get("scope") or "FULL_MATCH")
+    factor = _scope_factor(scope)
+    mu_home_full, mu_away_full, profile = prematch_means(features, league)
+    mu_home, mu_away = mu_home_full * factor, mu_away_full * factor
+    variance_inflation = 1.12 if factor == 0.25 else (1.06 if factor == 0.50 else 1.0)
+    sigma_total = profile["sigma_total"] * math.sqrt(factor) * variance_inflation
+    sigma_margin = profile["sigma_margin"] * math.sqrt(factor) * variance_inflation
     quality = _data_quality(features)
     if quality < 0.45:
         return None
@@ -180,7 +196,7 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     model_p = 0.5
     odd = 0.0
     if family == "match_total":
-        over_p = _normal_over(line, mu_home + mu_away, profile["sigma_total"])
+        over_p = _normal_over(line, mu_home + mu_away, sigma_total)
         under_p = 1.0 - over_p
         candidates = [
             (over_p - market_p, "over", over_p, market_p, _num(lane.get("over"), 0.0) or 0.0),
@@ -189,7 +205,7 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         _, direction, model_p, market_p, odd = max(candidates, key=lambda x: x[0])
     elif family in {"home_total", "away_total"}:
         mu = mu_home if family == "home_total" else mu_away
-        sd = profile["sigma_total"] / math.sqrt(2.0)
+        sd = sigma_total / math.sqrt(2.0)
         over_p = _normal_over(line, mu, sd)
         under_p = 1.0 - over_p
         candidates = [
@@ -198,16 +214,16 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         ]
         _, direction, model_p, market_p, odd = max(candidates, key=lambda x: x[0])
     elif family == "moneyline" and selection_side in {"home", "away"}:
-        home_p = _normal_over(0.0, mu_home - mu_away, profile["sigma_margin"])
+        home_p = _normal_over(0.0, mu_home - mu_away, sigma_margin)
         model_p = home_p if selection_side == "home" else 1.0 - home_p
         direction = selection_side
         odd = _num(lane.get("odd"), 0.0) or 0.0
     elif family == "handicap" and selection_side in {"home", "away"}:
         margin = mu_home - mu_away
         if selection_side == "home":
-            model_p = _normal_over(0.0, margin + line, profile["sigma_margin"])
+            model_p = _normal_over(0.0, margin + line, sigma_margin)
         else:
-            model_p = _normal_over(0.0, -margin + line, profile["sigma_margin"])
+            model_p = _normal_over(0.0, -margin + line, sigma_margin)
         direction = selection_side
         odd = _num(lane.get("odd"), 0.0) or 0.0
     else:
@@ -223,10 +239,12 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     recent_total = _num(features.get("recent_total_avg"))
     if family in {"match_total", "home_total", "away_total"}:
         model_mean = mu_home + mu_away if family == "match_total" else (mu_home if family == "home_total" else mu_away)
-        if recent_total is not None and family == "match_total":
-            if (direction == "over" and recent_total > line) or (direction == "under" and recent_total < line):
+        scoped_recent_total = recent_total * factor if recent_total is not None else None
+        if scoped_recent_total is not None and family == "match_total":
+            if (direction == "over" and scoped_recent_total > line) or (direction == "under" and scoped_recent_total < line):
                 agreement += 1
-        if abs(model_mean - line) >= (7.0 if family == "match_total" else 4.0):
+        gap_floor = (7.0 if family == "match_total" else 4.0) * math.sqrt(factor)
+        if abs(model_mean - line) >= gap_floor:
             agreement += 1
     else:
         margin = mu_home - mu_away
@@ -409,6 +427,8 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
 
 
 def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] | None:
+    if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
+        return None
     if str(lane.get("market_family") or "") != "match_total":
         return None
     if str(lane.get("scope") or "") != str(brain.get("scope") or ""):

@@ -144,7 +144,7 @@ def test_prematch_fair_probability_is_model_not_bookmaker():
     lane = {
         "scope": "FULL_MATCH",
         "market_family": "match_total",
-        "line": 181.5,
+        "line": 164.5,
         "probability": 0.52,
         "over": 1.82,
         "under": 2.02,
@@ -162,7 +162,7 @@ def test_prematch_quarter_scope_scales_game_mean_before_pricing():
     lane = {
         "scope": "QUARTER_1",
         "market_family": "match_total",
-        "line": 45.5,
+        "line": 40.5,
         "probability": 0.50,
         "over": 1.90,
         "under": 1.90,

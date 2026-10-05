@@ -1009,6 +1009,24 @@ def price_flashscore_live_candidate(
     raw_edge = projection - line
     direction = "over" if raw_edge > 0 else "under"
     stat_edge = abs(raw_edge)
+
+    # Hockey P3 UNDER protection: a trailing team may pull the goalie late,
+    # sharply increasing goal / empty-net risk. Do not issue a late UNDER when
+    # the match is within two goals. OVER is not auto-blocked by this rule.
+    if cfg.key == "hockey" and str(brain.get("scope") or "") == "PERIOD_3" and direction == "under":
+        try:
+            remaining = float(brain.get("remaining_seconds") or lane.get("remaining_seconds") or 0.0)
+        except (TypeError, ValueError):
+            remaining = 0.0
+        match_score = list(lane.get("match_score") or brain.get("score") or [0, 0])
+        try:
+            margin = abs(int(match_score[0]) - int(match_score[1]))
+        except (TypeError, ValueError, IndexError):
+            margin = 99
+        guard_seconds = _float_env("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_SECONDS", 300.0)
+        guard_margin = max(1, _int_env("GOOL_HOCKEY_EMPTY_NET_UNDER_GUARD_MARGIN", 2))
+        if 0 < remaining <= guard_seconds and 1 <= margin <= guard_margin:
+            return None
     min_edge = _float_env(
         f"GOOL_{cfg.key.upper()}_LIVE_SEGMENT_MIN_STAT_EDGE",
         0.35 if cfg.key == "hockey" else 2.5,
@@ -3102,6 +3120,7 @@ class MultiSportSteamWorker:
             "home_logo_file": str(fs.get("home_logo_file") or ""),
             "away_logo_file": str(fs.get("away_logo_file") or ""),
             "score": [*fs_score],
+            "score_parts": [list(part) for part in (fs.get("score_parts") or []) if isinstance(part, (list, tuple)) and len(part) >= 2],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "scoped_score_source": "flashscore" if fs_scoped_scores else "1xbet_fallback",
             "period": _flashscore_period_label(fs_scope, str(fs.get("status_code") or "")) if fs_scope else current_period,
@@ -3211,9 +3230,18 @@ class MultiSportSteamWorker:
             full_score = list(state.get("score") or [0, 0])
             scope = str(row.get("scope") or SCOPE_FULL)
             if scope == SCOPE_FULL:
+                # FULL_MATCH uses the authoritative final Flashscore score.
+                # In basketball/hockey this includes overtime when the selected
+                # 1xBet market itself is the full-match/2-way market.
                 score = (int(full_score[0]), int(full_score[1]))
             else:
-                score = self._scope_scores.get(f"{cfg.key}:{row.get('event_id')}", {}).get(scope)
+                # Segment bets are settled on the ENTIRE final period/quarter,
+                # not only on scoring after the signal was sent. This matters
+                # for e.g. P3 U1.5 when one goal already existed at entry time.
+                final_scoped = _flashscore_scoped_scores(state, cfg)
+                score = final_scoped.get(scope)
+                if score is None:
+                    score = self._scope_scores.get(f"{cfg.key}:{row.get('event_id')}", {}).get(scope)
                 if score is None:
                     continue
             if repair_direction_mismatch and displayed_direction:
@@ -3451,6 +3479,7 @@ class MultiSportSteamWorker:
             "away_logo_file": str(row.get("away_logo_file") or ""),
             "score": list(row.get("score") or [0, 0]) if phase == "LIVE" else None,
             "match_score": list(row.get("match_score") or row.get("score") or [0, 0]) if phase == "LIVE" else None,
+            "score_parts": list(row.get("score_parts") or []) if phase == "LIVE" else None,
             "period": row.get("period") if phase == "LIVE" else None,
             "start_ts": float(row.get("start_ts") or 0.0),
             "scheduled_start_ts": float(row.get("start_ts") or 0.0),

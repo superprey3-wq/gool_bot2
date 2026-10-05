@@ -1,5 +1,6 @@
 from gool_bot2.basketball_brain_v2 import (
     live_candidate_gate,
+    live_quarter_context_assist,
     live_signal,
     prematch_candidate,
     prematch_signal,
@@ -335,3 +336,83 @@ def test_q3_assist_is_soft_and_only_adds_context_to_valid_signal():
     assert assist["active"] is True
     assert assist["stage"] == "close"
     assert assist["applied"] is True
+
+
+def test_q4_context_uses_lower_baseline_and_close_game_relief():
+    profile = {"quarter_total": 41.5}
+    close = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_4",
+            "score_parts": [[20, 18], [19, 21], [18, 17]],
+        },
+        profile,
+    )
+    comfortable = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_4",
+            "score_parts": [[25, 15], [23, 17], [22, 18]],
+        },
+        profile,
+    )
+    assert close["q4_baseline_adjustment"] < 0
+    assert close["game_state_adjustment"] > 0
+    assert comfortable["game_state_adjustment"] < 0
+    assert close["adjusted_prior_total"] > comfortable["adjusted_prior_total"]
+
+
+def test_hot_previous_quarter_softly_lowers_next_quarter_prior():
+    profile = {"quarter_total": 41.5}
+    context = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_3",
+            "score_parts": [[20, 20], [27, 25]],
+        },
+        profile,
+    )
+    assert context["previous_quarter_total"] == 52.0
+    assert context["mean_reversion_adjustment"] < 0
+    assert context["adjusted_prior_total"] < 41.5
+
+
+def test_cold_previous_quarter_softly_raises_next_quarter_prior():
+    profile = {"quarter_total": 41.5}
+    context = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_3",
+            "score_parts": [[20, 20], [17, 16]],
+        },
+        profile,
+    )
+    assert context["previous_quarter_total"] == 33.0
+    assert context["mean_reversion_adjustment"] > 0
+    assert context["adjusted_prior_total"] > 41.5
+
+
+def test_split_q1_q2_winner_pattern_is_diagnostic_only():
+    profile = {"quarter_total": 41.5}
+    context = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_3",
+            "score_parts": [[24, 18], [17, 22]],
+        },
+        profile,
+    )
+    diag = context["diagnostic_q3_split_winners"]
+    assert diag["active"] is True
+    assert diag["q1_winner"] == "home"
+    assert diag["q2_winner"] == "away"
+    assert diag["watch_side"] == "home"
+    assert context["prior_adjustment"] == 0.0
+
+
+def test_quarter_context_is_bounded_and_cannot_overpower_live_model():
+    profile = {"quarter_total": 41.5}
+    context = live_quarter_context_assist(
+        {
+            "scope": "QUARTER_4",
+            "score_parts": [[40, 40], [40, 40], [60, 60]],
+        },
+        profile,
+    )
+    assert abs(context["prior_adjustment"]) <= 4.0
+    assert 35.0 < context["adjusted_prior_total"] < 46.0

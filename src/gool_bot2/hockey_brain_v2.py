@@ -178,7 +178,10 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     total_gap = abs((lam_home + lam_away) - baseline)
     rest = abs(_num(features.get("rest_advantage_days"), 0.0) or 0.0)
     evidence = min(1.0, side_gap / 1.15) * 0.50 + min(1.0, total_gap / 1.00) * 0.35 + min(1.0, rest / 2.0) * 0.15
-    score = _clamp(36.0 + quality * 34.0 + evidence * 26.0, 0.0, 89.0)
+    # Data completeness is a gate, not a reason to bet. A perfectly populated
+    # history with no real separation must remain WAIT instead of becoming the
+    # old 21/22-style automatic shortlist.
+    score = _clamp(44.0 + quality * 10.0 + evidence * 31.0, 0.0, 89.0)
     if quality < 0.46:
         state = "WAIT"
     elif score >= 69.0:

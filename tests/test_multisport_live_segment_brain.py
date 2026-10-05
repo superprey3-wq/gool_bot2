@@ -228,7 +228,7 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
     assert "броски 7" in result["brain_reason"]
 
 
-def test_basketball_numeric_status_code_does_not_override_quarter_scope(tmp_path, monkeypatch):
+def test_basketball_halftime_status_is_sport_aware_and_not_priced(tmp_path, monkeypatch):
     worker = MultiSportSteamWorker(tmp_path)
     monkeypatch.setattr(
         worker,
@@ -243,7 +243,7 @@ def test_basketball_numeric_status_code_does_not_override_quarter_scope(tmp_path
         },
     )
     fs = {
-        "flashscore_event_id": "BQ200001",
+        "flashscore_event_id": "BHALF001",
         "home": "Home",
         "away": "Away",
         "league": "NBA",
@@ -255,9 +255,9 @@ def test_basketball_numeric_status_code_does_not_override_quarter_scope(tmp_path
 
     result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
 
-    assert result["period"] == "2-я четверть"
+    assert result["period"] == "Перерыв"
     assert result["scope"] == "QUARTER_2"
-    assert result["projected_total"] is not None
+    assert result["brain_state"] == "WAIT"
 
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.45")
@@ -366,4 +366,66 @@ def test_collect_once_does_not_query_xbet_when_flashscore_brain_has_no_candidate
     assert state["sports"]["basketball"]["xbet_live"] == 0
     assert state["sports"]["hockey"]["prematch_brain_candidates"] == 0
     assert state["sports"]["basketball"]["prematch_brain_candidates"] == 0
+
+def test_full_match_stats_are_reconstructed_as_current_hockey_period_delta(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setenv("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", "4")
+    snapshots = [
+        {
+            "sections": {
+                "FULL_MATCH": {
+                    "stats": {
+                        "shots_on_goal": {"home": 20, "away": 18},
+                        "blocked_shots": {"home": 8, "away": 7},
+                        "penalties": {"home": 3, "away": 2},
+                    }
+                }
+            }
+        },
+        {
+            "sections": {
+                "FULL_MATCH": {
+                    "stats": {
+                        "shots_on_goal": {"home": 24, "away": 21},
+                        "blocked_shots": {"home": 9, "away": 9},
+                        "penalties": {"home": 4, "away": 2},
+                    }
+                }
+            }
+        },
+    ]
+    monkeypatch.setattr(worker._flashscore, "fetch_stats_detailed", lambda _event_id: snapshots.pop(0))
+    fs = {
+        "flashscore_event_id": "HDELTA01",
+        "home": "Home",
+        "away": "Away",
+        "league": "AHL",
+        "score": [2, 1],
+        "score_parts": [[1, 0], [1, 1]],
+        "status_code": "15",
+    }
+
+    first = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_2")
+    worker._fs_live_stats_cache.clear()
+    second = worker._flashscore_live_stats(fs, SPORTS["hockey"], current_period="PERIOD_2")
+
+    assert first["current_segment_available"] is False
+    assert first["stats_mode"] == "full_match_delta_baseline"
+    assert second["current_segment_available"] is True
+    assert second["scope"] == "PERIOD_2"
+    assert second["stats_mode"] == "full_match_delta"
+    assert second["segment_stats"]["shots_on_goal"] == [4.0, 3.0]
+    assert second["segment_stats"]["blocked_shots"] == [1.0, 2.0]
+    assert second["segment_stats"]["penalties"] == [1.0, 0.0]
+
+
+def test_flashscore_status_codes_identify_current_segment_before_score_parts():
+    assert _infer_flashscore_scope(
+        {"status_code": "15", "score_parts": [[0, 0]]},
+        SPORTS["hockey"],
+    ) == "PERIOD_2"
+    assert _infer_flashscore_scope(
+        {"status_code": "24", "score_parts": [[20, 18], [22, 19]]},
+        SPORTS["basketball"],
+    ) == "QUARTER_3"
 

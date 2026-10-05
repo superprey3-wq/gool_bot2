@@ -276,6 +276,13 @@ def test_multisport_in_game_uses_raw_flashscore_live_even_when_xbet_mapping_is_z
 
 
 def test_multisport_in_game_recovers_legacy_pick_by_team_names(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    # Keep this unit test deterministic. The menu intentionally refreshes from
+    # real Flashscore in production; without this stub a currently LIVE match
+    # with the same teams can overwrite the fixture score during pytest.
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
+
     state = tmp_path / "state.json"
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))

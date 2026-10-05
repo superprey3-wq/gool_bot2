@@ -640,3 +640,21 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
     assert signal is not None
     assert signal["direction"] == "under"
 
+def test_flashscore_minute_wins_over_padded_future_hockey_score_parts():
+    fs = {
+        "status_code": "27",
+        "league": "RUSSIA: MHL",
+        # Flashscore may expose placeholders for all regulation periods.
+        "score_parts": [[0, 1], [0, 0], [0, 0]],
+    }
+    assert _infer_flashscore_scope(fs, SPORTS["hockey"]) == "PERIOD_2"
+
+
+def test_flashscore_minute_wins_over_padded_future_basketball_score_parts():
+    fs = {
+        "status_code": "23",
+        "league": "CHILE: LNB",
+        "score_parts": [[18, 17], [10, 12], [0, 0], [0, 0]],
+    }
+    assert _infer_flashscore_scope(fs, SPORTS["basketball"]) == "QUARTER_3"
+

@@ -4,6 +4,7 @@ from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
     _infer_flashscore_scope,
+    _flashscore_scoped_scores,
     detect_live_segment_stats,
     parse_flashscore_events,
     price_flashscore_live_candidate,
@@ -488,4 +489,27 @@ def test_live_scopes_accept_canonical_scope_names():
 
     assert live_scopes_from_period("hockey", "PERIOD_2") == {"PERIOD_2"}
     assert live_scopes_from_period("basketball", "QUARTER_3") == {"QUARTER_3"}
+
+def test_flashscore_derives_new_segment_score_when_score_parts_lag():
+    hockey = _flashscore_scoped_scores(
+        {
+            "status_code": "46",
+            "league": "AHL",
+            "score": [3, 2],
+            "score_parts": [[1, 1], [2, 1]],
+        },
+        SPORTS["hockey"],
+    )
+    assert hockey["PERIOD_3"] == (0, 0)
+
+    basket = _flashscore_scoped_scores(
+        {
+            "status_code": "23",
+            "league": "Chile",
+            "score": [45, 41],
+            "score_parts": [[20, 18], [22, 19]],
+        },
+        SPORTS["basketball"],
+    )
+    assert basket["QUARTER_3"] == (3, 4)
 

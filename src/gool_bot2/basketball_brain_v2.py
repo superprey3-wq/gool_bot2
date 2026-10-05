@@ -353,6 +353,34 @@ def _four_factors(stats: dict[str, Any], attempts: dict[str, Any]) -> dict[str, 
     return out
 
 
+def recent_possession_metrics(
+    first_payload: dict[str, Any],
+    current_payload: dict[str, Any],
+    age_seconds: float,
+) -> dict[str, float]:
+    """Estimate fresh possession tempo from two Flashscore stat snapshots."""
+    age = max(1.0, float(age_seconds or 0.0))
+    first_mode = str(first_payload.get("stats_mode") or "")
+    current_mode = str(current_payload.get("stats_mode") or "")
+    if first_mode and current_mode and first_mode != current_mode:
+        return {}
+
+    first_stats = dict(first_payload.get("segment_stats") or {})
+    first_attempts = dict(first_payload.get("segment_attempts") or {})
+    current_stats = dict(current_payload.get("segment_stats") or {})
+    current_attempts = dict(current_payload.get("segment_attempts") or {})
+    first_poss = _possessions_from(first_stats, first_attempts)
+    current_poss = _possessions_from(current_stats, current_attempts)
+    if first_poss is None or current_poss is None:
+        return {}
+
+    delta = max(0.0, current_poss[0] - first_poss[0])
+    return {
+        "recent_possessions": round(delta, 4),
+        "recent_possessions_per_min": round(delta * 60.0 / age, 4),
+    }
+
+
 def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     stats_payload = dict(brain.get("live_game_stats") or {})
     available = bool(stats_payload.get("current_segment_available"))

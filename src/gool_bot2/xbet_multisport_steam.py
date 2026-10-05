@@ -3208,7 +3208,18 @@ class MultiSportSteamWorker:
         changed = 0
         now = datetime.now(timezone.utc).isoformat()
         for row in rows:
-            if row.get("sport") != cfg.key or str(row.get("result") or "pending") in _FINAL_RESULTS:
+            if row.get("sport") != cfg.key:
+                continue
+            stored_result = str(row.get("result") or "pending")
+            displayed_direction = _displayed_total_direction(row)
+            technical_direction = str(row.get("direction") or "").casefold()
+            repair_direction_mismatch = bool(
+                stored_result in _FINAL_RESULTS
+                and displayed_direction in {"over", "under"}
+                and technical_direction in {"over", "under"}
+                and displayed_direction != technical_direction
+            )
+            if stored_result in _FINAL_RESULTS and not repair_direction_mismatch:
                 continue
             state = states.get(str(row.get("flashscore_event_id") or ""))
             if not state or str(state.get("coarse_status") or "") != "3":
@@ -3234,6 +3245,13 @@ class MultiSportSteamWorker:
                 score = self._scope_scores.get(f"{cfg.key}:{row.get('event_id')}", {}).get(scope)
                 if score is None:
                     continue
+            if repair_direction_mismatch and displayed_direction:
+                # The user-facing signal is the contract we must settle.
+                # Repair legacy rows where the displayed ТБ/ТМ disagreed with
+                # the technical direction saved before this invariant existed.
+                row["direction"] = displayed_direction
+                row["settlement_corrected_at"] = now
+                row["settlement_correction"] = "displayed_selection_direction_mismatch"
             result = settle_multisport_pick(row, int(score[0]), int(score[1]))
             profit = 0.0 if result == "void" else (float(row.get("odd") or 0.0) - 1.0 if result == "won" else -1.0)
             row.update({
@@ -3246,6 +3264,7 @@ class MultiSportSteamWorker:
             if (
                 _mode() == "active"
                 and _truthy("XBET_MULTISPORT_CARDS_ENABLED", True)
+                and not repair_direction_mismatch
                 and not row.get("result_card_sent_at")
             ):
                 try:
@@ -3275,6 +3294,13 @@ class MultiSportSteamWorker:
                         f"{type(exc).__name__}:{exc}",
                         flush=True,
                     )
+            if repair_direction_mismatch:
+                print(
+                    f"GOOL_{cfg.key.upper()}_SETTLEMENT_CORRECTED "
+                    f"match={row.get('home')}--{row.get('away')} selection={row.get('selection')} "
+                    f"old_direction={technical_direction} direction={row.get('direction')} result={result}",
+                    flush=True,
+                )
             changed += 1
         if changed:
             save_journal(self.journal_path, rows)

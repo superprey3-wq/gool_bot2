@@ -39,44 +39,59 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
     league=str(row.get("league") or "LIVE")
     period=str(row.get("period") or "LIVE")
     clock=row.get("clock_seconds")
+
+    def center_region(text:str,cx:int,y:int,width:int,size:int,fill)->None:
+        font=sc._fit(d,text,width,size,True)
+        box=d.textbbox((0,0),text,font=font)
+        d.text((cx-(box[2]-box[0])/2,y),text,font=font,fill=fill)
+
+    d.rounded_rectangle((42,116,1038,160),14,fill=PANEL,outline=LINE,width=2)
+    d.text((62,126),"🏆",font=sc._font(20,True),fill=GOLD)
+    d.text((98,124),league,font=sc._fit(d,league,900,23,True),fill=TEXT)
+
+    d.rounded_rectangle((42,180,1038,390),28,fill=PANEL,outline=BLUE,width=2)
+    sc._badge(im,d,120,285,sc._logo(row,"home"),home,ICE)
+    sc._badge(im,d,960,285,sc._logo(row,"away"),away,ICE)
+    center_region(home,285,216,270,24,TEXT)
+    center_region(away,795,216,270,24,TEXT)
+
+    d.rounded_rectangle((430,205,650,303),18,fill=(8,24,31),outline=ICE,width=3)
+    center_region(f"{int(score[0])}:{int(score[1])}",540,230,185,43,TEXT)
+
+    period_text=period
     if clock is not None:
-        sec=max(0,int(clock)); period=f"{period} • {sec//60:02d}:{sec%60:02d}"
-    d.text((50,122),league,font=sc._fit(d,league,980,19,False),fill=MUTED)
-    d.rounded_rectangle((42,158,1038,350),28,fill=PANEL,outline=BLUE,width=2)
-    _team_badges(im,d,row,home,away,ICE)
-    d.text((205,194),home,font=sc._fit(d,home,245,25,True),fill=TEXT)
-    d.text((630,194),away,font=sc._fit(d,away,245,25,True),fill=TEXT)
-    d.ellipse((480,190,610,320),outline=ICE,width=4)
-    sc._center(d,f"{int(score[0])}:{int(score[1])}",216,sc._font(42,True),TEXT)
-    d.text((690,215),period,font=sc._fit(d,period,300,23,True),fill=ICE)
+        sec=max(0,int(clock))
+        period_text=f"{period} · сыграно {sec//60:02d}:{sec%60:02d}"
+    d.rounded_rectangle((345,320,735,365),14,fill=(8,24,31),outline=LINE,width=2)
+    center_region(period_text,540,330,350,20,ICE)
 
     scope=str(row.get("scope") or signal.get("scope") or SCOPE_FULL)
     scope_label=SCOPE_LABEL_RU.get(scope,scope)
     pick=_label(row,signal); odd=float(signal.get("odd") or 0)
-    d.rounded_rectangle((42,390,1038,540),24,fill=(8,24,31),outline=GOLD,width=3)
-    d.text((70,414),f"{scope_label.upper()} • CURRENT ICE MARKET",font=sc._fit(d,f"{scope_label.upper()} • CURRENT ICE MARKET",600,16,True),fill=MUTED)
-    d.text((70,460),pick,font=sc._fit(d,pick,590,39,True),fill=GOLD)
-    d.text((735,420),"КЭФ",font=sc._font(15,True),fill=MUTED)
-    d.text((735,458),f"{odd:.2f}",font=sc._font(44,True),fill=TEXT)
+    d.rounded_rectangle((42,420,1038,565),24,fill=(8,24,31),outline=GOLD,width=3)
+    d.text((70,442),f"{scope_label.upper()} • CURRENT ICE MARKET",font=sc._fit(d,f"{scope_label.upper()} • CURRENT ICE MARKET",600,16,True),fill=MUTED)
+    d.text((70,488),pick,font=sc._fit(d,pick,590,39,True),fill=GOLD)
+    d.text((735,448),"КЭФ",font=sc._font(15,True),fill=MUTED)
+    d.text((735,486),f"{odd:.2f}",font=sc._font(44,True),fill=TEXT)
 
     vals=[
         ("СИЛА",f"{float(signal.get('strength') or 0):.0f}/100"),
         ("ПРОГНОЗ",f"{float(signal.get('projected_total') or signal.get('line') or 0):.2f}"),
         ("STAT EDGE",f"{float(signal.get('stat_edge') or 0):+.2f}"),
-        ("ТЕМП/МИН",f"{float(signal.get('recent_rate_per_min') or 0):.2f}"),
+        ("БРОСКИ/МИН",f"{float(signal.get('recent_rate_per_min') or 0):.2f}"),
     ]
     for i,(t,v) in enumerate(vals):
         x=42+i*249
-        d.rounded_rectangle((x,575,x+230,685),18,fill=PANEL,outline=LINE,width=2)
-        d.text((x+16,593),t,font=sc._font(14,True),fill=MUTED)
-        d.text((x+16,630),v,font=sc._fit(d,v,195,25,True),fill=ICE if i!=1 else GOLD)
-    d.rounded_rectangle((42,720,1038,826),18,fill=PANEL,outline=LINE,width=2)
-    d.text((68,742),"LIVE POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,777),"Только ТБ/ТМ текущего периода • Brain = статистика сегмента",font=sc._fit(d,"Общий матч + ИТ команд + только текущий период",900,22,True),fill=GREEN)
-    d.rounded_rectangle((300,850,780,900),15,fill=ICE)
-    sc._center(d,"HOCKEY LIVE • СИГНАЛ",860,sc._font(20,True),BG)
-    return sc._save(im)
+        d.rounded_rectangle((x,600,x+230,710),18,fill=PANEL,outline=LINE,width=2)
+        d.text((x+16,618),t,font=sc._font(14,True),fill=MUTED)
+        d.text((x+16,655),v,font=sc._fit(d,v,195,25,True),fill=ICE if i!=1 else GOLD)
 
+    d.rounded_rectangle((42,742,1038,832),18,fill=PANEL,outline=LINE,width=2)
+    d.text((68,760),"LIVE POLICY",font=sc._font(14,True),fill=MUTED)
+    d.text((68,792),"Только ТБ/ТМ текущего периода • Brain = Flashscore статистика",font=sc._fit(d,"Только ТБ/ТМ текущего периода • Brain = Flashscore статистика",900,21,True),fill=GREEN)
+    d.rounded_rectangle((300,852,780,902),15,fill=ICE)
+    sc._center(d,"HOCKEY LIVE • СИГНАЛ",862,sc._font(20,True),BG)
+    return sc._save(im)
 
 def render_hockey_prematch_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->bytes:
     im=Image.new("RGBA",(1080,900),BG+(255,)); d=ImageDraw.Draw(im)

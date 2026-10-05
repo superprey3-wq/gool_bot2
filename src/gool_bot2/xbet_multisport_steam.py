@@ -3731,6 +3731,8 @@ class MultiSportSteamWorker:
             "signal_type": (
                 "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
                 else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
+                else "basketball_live_v2" if str(signal.get("brain_mode") or "") == "basketball_live_v2"
+                else "basketball_prematch_v2" if str(signal.get("brain_mode") or "") == "basketball_prematch_v2"
                 else "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
                 else f"{phase.lower()}_{family}_movement"
             ),
@@ -3786,6 +3788,14 @@ class MultiSportSteamWorker:
             "prematch_match_lambda": signal.get("prematch_match_lambda"),
             "data_quality": signal.get("data_quality"),
             "agreement_blocks": signal.get("agreement_blocks"),
+            "mu_home": signal.get("mu_home"),
+            "mu_away": signal.get("mu_away"),
+            "mu_total": signal.get("mu_total"),
+            "possessions_per_min": signal.get("possessions_per_min"),
+            "projected_remaining_possessions": signal.get("projected_remaining_possessions"),
+            "posterior_ppp_pair": signal.get("posterior_ppp_pair"),
+            "possession_source": signal.get("possession_source"),
+            "four_factors": signal.get("four_factors") or {},
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
             "line_delta": float(signal.get("line_delta") or 0.0),

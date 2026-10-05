@@ -620,6 +620,7 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
         "score": [1, 4],
         "current_segment_score": [1, 0],
         "history_points": 3,
+        "recent_window_seconds": 60.0,
         "recent_shot_rate": 1.1,
         "live_game_stats": {
             "stats_mode": "cumulative_through_current_segment",

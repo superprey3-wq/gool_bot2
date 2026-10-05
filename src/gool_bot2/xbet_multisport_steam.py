@@ -453,7 +453,15 @@ def _infer_flashscore_scope(
     cfg: SportConfig,
     section_keys: list[str] | tuple[str, ...] | None = None,
 ) -> str:
-    """Infer the current hockey period / basketball quarter from Flashscore itself."""
+    """Infer current segment from sport-specific Flashscore status first."""
+    status = str(fs.get("status_code") or "").strip()
+    if cfg.key == "hockey":
+        direct = {"14": "PERIOD_1", "15": "PERIOD_2", "16": "PERIOD_3"}
+    else:
+        direct = {"22": "QUARTER_1", "23": "QUARTER_2", "24": "QUARTER_3", "25": "QUARTER_4"}
+    if status in direct:
+        return direct[status]
+
     prefix = "PERIOD_" if cfg.key == "hockey" else "QUARTER_"
     maximum = 3 if cfg.key == "hockey" else 4
     parts = [
@@ -477,6 +485,8 @@ def _infer_flashscore_scope(
 
 
 def _flashscore_period_label(scope: str, status_code: str = "") -> str:
+    if str(status_code or "") == "38" and str(scope or "").startswith("QUARTER_"):
+        return "Перерыв"
     labels = {
         "PERIOD_1": "1-й период",
         "PERIOD_2": "2-й период",
@@ -1365,6 +1375,8 @@ class MultiSportSteamWorker:
         self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
         self._fs_live_stats_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._fs_scope_stat_baseline: dict[str, dict[str, Any]] = {}
+        self._fs_scope_stat_samples: dict[str, int] = defaultdict(int)
         self._fs_history_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._restore_history()
 
@@ -1447,7 +1459,7 @@ class MultiSportSteamWorker:
         if not event_id:
             return {}
         now = time.monotonic()
-        ttl = max(5.0, _float_env("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", 20.0))
+        ttl = max(4.0, _float_env("GOOL_MULTISPORT_FS_STATS_CACHE_SECONDS", 8.0))
         cache_key = f"{event_id}:{current_period}"
         cached_at, cached = self._fs_live_stats_cache.get(cache_key, (0.0, {}))
         if cached and now - cached_at <= ttl:
@@ -1487,6 +1499,76 @@ class MultiSportSteamWorker:
                 except (TypeError, ValueError):
                     pass
 
+        stats_mode = "direct_segment"
+        current_segment_available = bool(segment_stats) and scope == requested_scope
+        if scope == "FULL_MATCH" and requested_scope and requested_scope != "FULL_MATCH":
+            # Flashscore often exposes hockey/basketball LIVE stats only as
+            # cumulative FULL_MATCH. In the first segment cumulative == segment.
+            # From segment 2 onward, subtract the first cumulative snapshot seen
+            # in that segment to reconstruct its own shots/attempts/rebounds/etc.
+            first_segment = requested_scope.endswith("_1")
+            if first_segment:
+                scope = requested_scope
+                current_segment_available = bool(segment_stats)
+                stats_mode = "full_match_first_segment"
+            else:
+                baseline_key = f"{cfg.key}:{event_id}:{requested_scope}"
+                baseline = self._fs_scope_stat_baseline.get(baseline_key)
+                self._fs_scope_stat_samples[baseline_key] += 1
+                if baseline is None:
+                    self._fs_scope_stat_baseline[baseline_key] = {
+                        "stats": {k: list(v) for k, v in segment_stats.items()},
+                        "attempts": {k: list(v) for k, v in segment_attempts.items()},
+                        "at": time.time(),
+                    }
+                    segment_stats = {}
+                    segment_attempts = {}
+                    current_segment_available = False
+                    stats_mode = "full_match_delta_baseline"
+                else:
+                    base_stats = dict(baseline.get("stats") or {})
+                    base_attempts = dict(baseline.get("attempts") or {})
+                    percentage_keys = {
+                        "field_goals",
+                        "2_point_field_goals",
+                        "3_point_field_goals",
+                        "free_throws",
+                    }
+                    delta_stats: dict[str, list[float]] = {}
+                    for key, pair in segment_stats.items():
+                        if key in percentage_keys:
+                            continue
+                        base = list(base_stats.get(key) or [])
+                        if len(pair) >= 2 and len(base) >= 2:
+                            delta_stats[key] = [
+                                max(0.0, float(pair[0]) - float(base[0])),
+                                max(0.0, float(pair[1]) - float(base[1])),
+                            ]
+                    delta_attempts: dict[str, list[float]] = {}
+                    for key, pair in segment_attempts.items():
+                        base = list(base_attempts.get(key) or [])
+                        if len(pair) >= 2 and len(base) >= 2:
+                            delta_attempts[key] = [
+                                max(0.0, float(pair[0]) - float(base[0])),
+                                max(0.0, float(pair[1]) - float(base[1])),
+                            ]
+
+                    # Rebuild shooting percentages from made/attempt deltas.
+                    for prefix in ("field_goals", "2_point_field_goals", "3_point_field_goals", "free_throws"):
+                        made = delta_stats.get(f"{prefix}_made")
+                        attempts_pair = delta_stats.get(f"{prefix}_attempts")
+                        if made and attempts_pair:
+                            delta_stats[prefix] = [
+                                0.0 if attempts_pair[0] <= 0 else 100.0 * made[0] / attempts_pair[0],
+                                0.0 if attempts_pair[1] <= 0 else 100.0 * made[1] / attempts_pair[1],
+                            ]
+
+                    segment_stats = delta_stats
+                    segment_attempts = delta_attempts
+                    scope = requested_scope
+                    current_segment_available = self._fs_scope_stat_samples[baseline_key] >= 2
+                    stats_mode = "full_match_delta"
+
         out: dict[str, Any] = {
             "source": "flashscore",
             "scope": scope or None,
@@ -1494,7 +1576,8 @@ class MultiSportSteamWorker:
             "segment_attempts": segment_attempts,
             "available": bool(segment_stats),
             "requested_scope": requested_scope or None,
-            "current_segment_available": bool(segment_stats) and scope == requested_scope,
+            "current_segment_available": bool(current_segment_available),
+            "stats_mode": stats_mode,
             "section_keys": list(sections),
         }
         if cfg.key == "hockey":
@@ -1626,11 +1709,36 @@ class MultiSportSteamWorker:
             rating = min(rating, 54.0)
             reason += " · часы сегмента ещё не синхронизированы"
 
+        direction_hint = ""
+        if projection is not None and elapsed >= (75.0 if cfg.key == "hockey" else 90.0):
+            if cfg.key == "hockey":
+                expected_segment = _float_env("GOOL_HOCKEY_LIVE_EXPECTED_PERIOD_TOTAL", 1.90)
+                deviation_scale = max(0.10, _float_env("GOOL_HOCKEY_LIVE_INTEREST_SCALE", 0.35))
+            else:
+                league = str(fs.get("league") or "").casefold()
+                expected_segment = (
+                    _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_NBA_QUARTER_TOTAL", 56.0)
+                    if ("nba" in league or "g league" in league) and "wnba" not in league
+                    else _float_env("GOOL_BASKETBALL_LIVE_EXPECTED_QUARTER_TOTAL", 48.0)
+                )
+                deviation_scale = max(1.0, _float_env("GOOL_BASKETBALL_LIVE_INTEREST_SCALE", 5.0))
+            deviation = abs(float(projection) - expected_segment)
+            projection_interest = min(98.0, 48.0 + (deviation / deviation_scale) * 12.0)
+            rating = max(rating, projection_interest)
+            direction_hint = "over" if float(projection) > expected_segment else "under"
+            reason += f" · прогноз {float(projection):.1f} vs база {expected_segment:.1f} ({direction_hint.upper()})"
+
         pass_default = 62.0 if cfg.key == "hockey" else 68.0
         borderline_default = 50.0 if cfg.key == "hockey" else 56.0
         pass_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_PASS", pass_default)
         borderline_floor = _float_env(f"GOOL_{cfg.key.upper()}_LIVE_FS_BRAIN_BORDERLINE", borderline_default)
         state = "PASS" if rating >= pass_floor else ("BORDERLINE" if rating >= borderline_floor else "WAIT")
+        if cfg.key == "basketball" and str(fs.get("status_code") or "") == "38":
+            state = "WAIT"
+            reason = "перерыв между половинами — LIVE ставку не открываем"
+        if remaining > 0 and remaining < _float_env("GOOL_MULTISPORT_LIVE_MIN_SEGMENT_REMAINING_SECONDS", 45.0):
+            state = "WAIT"
+            reason = "сегмент почти закончился — новую LIVE ставку не открываем"
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -1652,6 +1760,7 @@ class MultiSportSteamWorker:
             "live_game_stats": stats_payload,
             "history_points": len(recent),
             "recent_score_rate": round(recent_score_rate, 3),
+            "direction_hint": direction_hint,
         }
 
     def _flashscore_live_analysis(

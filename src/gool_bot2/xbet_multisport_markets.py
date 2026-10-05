@@ -468,6 +468,13 @@ def live_scopes_from_period(sport: str, period: str | None) -> set[str]:
     if not raw:
         return set()
 
+    canonical_hockey = re.fullmatch(r"period[_ ]([1-3])", raw)
+    canonical_basket = re.fullmatch(r"quarter[_ ]([1-4])", raw)
+    if str(sport).casefold() == "hockey" and canonical_hockey:
+        return {f"PERIOD_{canonical_hockey.group(1)}"}
+    if str(sport).casefold() != "hockey" and canonical_basket:
+        return {f"QUARTER_{canonical_basket.group(1)}"}
+
     if str(sport).casefold() == "hockey":
         for idx in (1, 2, 3):
             ordinal = {1: "1st", 2: "2nd", 3: "3rd"}[idx]

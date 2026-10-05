@@ -450,7 +450,7 @@ def multisport_in_game_sections() -> list[str]:
             phase_badge = "🔴 LIVE" if phase_name == "LIVE" else "🟡 PREMATCH"
             lines.append(
                 f"<b>{idx}. {icon} {pick.get('home','?')} — {pick.get('away','?')}</b>\n"
-                f"сейчас <b>{current_period}</b> · {score[0]}:{score[1]}\n"
+                f"сейчас {current_period} · {score[0]}:{score[1]}\n"
                 f"🎯 <b>{selection} @ {float(pick.get('odd') or 0):.2f}</b>\n"
                 f"📌 рынок ставки: {pick_scope_label}\n"
                 f"🧠 {strength:.0f}/100 · {phase_badge}\n"

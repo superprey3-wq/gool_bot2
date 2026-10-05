@@ -439,6 +439,30 @@ def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str,
     else:
         for idx, score in enumerate(parts[:4], 1):
             out[f"QUARTER_{idx}"] = (int(score[0]), int(score[1]))
+
+    # At a segment transition Flashscore can expose the new match minute before
+    # BA/BB/BC... contains a row for the new period/quarter. Recover the current
+    # segment score as full score minus all completed segment parts.
+    current_scope = _infer_flashscore_scope(fs, cfg)
+    if current_scope and current_scope not in out:
+        try:
+            idx = int(current_scope.rsplit("_", 1)[1])
+            full = list(fs.get("score") or [0, 0])
+            completed = [
+                out.get(f"{'PERIOD' if cfg.key == 'hockey' else 'QUARTER'}_{part_idx}")
+                for part_idx in range(1, idx)
+            ]
+            known = [score for score in completed if score is not None]
+            if len(known) == max(0, idx - 1):
+                derived = (
+                    max(0, int(full[0]) - sum(int(score[0]) for score in known)),
+                    max(0, int(full[1]) - sum(int(score[1]) for score in known)),
+                )
+                out[current_scope] = derived
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    if cfg.key == "basketball":
         q1, q2 = out.get("QUARTER_1"), out.get("QUARTER_2")
         q3, q4 = out.get("QUARTER_3"), out.get("QUARTER_4")
         if q1 and q2:

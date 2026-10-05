@@ -294,6 +294,9 @@ def test_basketball_halftime_status_cannot_skip_from_q2_to_q4(tmp_path, monkeypa
 
     assert result["scope"] == "QUARTER_3"
     assert result["period"] == "3-я четверть"
+    assert result["break_transition"] is True
+    assert result["elapsed_seconds"] == 0.0
+    assert result["brain_state"] == "WAIT"
 
 
 def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(monkeypatch):

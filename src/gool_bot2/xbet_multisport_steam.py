@@ -1415,6 +1415,25 @@ def map_xbet_to_flashscore(
     return out
 
 
+def _displayed_total_direction(row: dict[str, Any]) -> str | None:
+    """Return the total direction the user actually saw on the signal card."""
+    family = str(row.get("market_family") or "")
+    if family not in {"match_total", "home_total", "away_total"}:
+        return None
+    text = str(row.get("selection") or "").strip().casefold()
+    # Russian labels emitted by selection_label().
+    if "итб" in text or text.startswith("тб") or ": тб" in text:
+        return "over"
+    if "итм" in text or text.startswith("тм") or ": тм" in text:
+        return "under"
+    # Defensive support for legacy/English journal rows.
+    if " over " in f" {text} " or text.startswith("over"):
+        return "over"
+    if " under " in f" {text} " or text.startswith("under"):
+        return "under"
+    return None
+
+
 def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int) -> str:
     family = str(row.get("market_family") or "match_total")
     side = str(row.get("selection_side") or row.get("direction") or "").lower()
@@ -1443,7 +1462,11 @@ def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int
         total = int(home_score) + int(away_score)
     if abs(total - line) < 1e-9:
         return "void"
-    if str(row.get("direction") or "over") == "under":
+    # Settlement must grade the exact bet shown to the user. Older PREMATCH
+    # rows could contain selection="ТБ ..." while direction="under" because the
+    # display label was prebuilt before Brain chose a side.
+    direction = _displayed_total_direction(row) or str(row.get("direction") or "over").casefold()
+    if direction == "under":
         return "won" if total < line else "lost"
     return "won" if total > line else "lost"
 
@@ -2981,7 +3004,9 @@ class MultiSportSteamWorker:
                 lane["metric"] = float(lane.get("probability") or 0.0) * 100.0
             else:
                 lane["metric"] = _metric(lane, (0, 0), cfg)
-                lane["selection"] = selection_label(lane, "over")
+                # Do not prebuild a fake OVER label. The final label must be
+                # created only after Brain has chosen over/under.
+                lane.pop("selection", None)
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
             return None, "prematch_market_decode"
@@ -3379,11 +3404,20 @@ class MultiSportSteamWorker:
             return False, 0
         mode = _mode()
         direction = str(signal.get("direction") or "over")
-        pick_label = str(
-            signal.get("selection")
-            or row.get("selection")
-            or selection_label(row, direction, float(signal.get("line") or row.get("line") or 0.0))
-        )
+        if family in {"match_total", "home_total", "away_total"}:
+            # Canonical invariant: the visible ТБ/ТМ or ИТБ/ИТМ label and the
+            # technical direction used by settlement can never disagree.
+            pick_label = selection_label(
+                row,
+                direction,
+                float(signal.get("line") or row.get("line") or 0.0),
+            )
+        else:
+            pick_label = str(
+                signal.get("selection")
+                or row.get("selection")
+                or selection_label(row, direction, float(signal.get("line") or row.get("line") or 0.0))
+            )
         row_for_delivery = {**row, "selection": pick_label, "scope": scope, "market_family": family}
         sent = self._deliver(row_for_delivery, signal, cfg) if mode == "active" else 0
         entry = {

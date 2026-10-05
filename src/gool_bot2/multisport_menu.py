@@ -483,6 +483,15 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
             for row in mapped
             if str(row.get("flashscore_event_id") or "")
         }
+        brain_rows = [
+            dict(row) for row in (current.get("flashscore_analysis_matches") or [])
+            if isinstance(row, dict)
+        ]
+        brain_by_fs = {
+            str(row.get("flashscore_event_id") or ""): row
+            for row in brain_rows
+            if str(row.get("flashscore_event_id") or "")
+        }
         live = _direct_flashscore_live(sport)
         if not live:
             continue
@@ -501,9 +510,21 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
                     ),
                     None,
                 )
-            score = list(fs.get("score") or (row or {}).get("score") or [0, 0])
-            period = str((row or {}).get("period") or fs.get("status_code") or "LIVE")
-            stats_payload = dict((row or {}).get("live_game_stats") or {})
+            brain = brain_by_fs.get(fs_id)
+            if brain is None:
+                brain = next(
+                    (
+                        candidate for candidate in brain_rows
+                        if _teams_match(
+                            str(fs.get("home") or ""), str(fs.get("away") or ""),
+                            str(candidate.get("home") or ""), str(candidate.get("away") or ""),
+                        )
+                    ),
+                    None,
+                )
+            score = list(fs.get("score") or (row or {}).get("score") or (brain or {}).get("score") or [0, 0])
+            period = str((row or {}).get("period") or (brain or {}).get("period") or fs.get("status_code") or "LIVE")
+            stats_payload = dict((row or {}).get("live_game_stats") or (brain or {}).get("live_game_stats") or {})
             if not stats_payload and fs_id:
                 try:
                     detailed = provider.fetch_stats_detailed(fs_id)
@@ -533,8 +554,24 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
                     f"🔥 <b>SIGNAL</b> · {signal.get('selection') or '?'} "
                     f"@ {float(signal.get('odd') or 0):.2f} · R{float(signal.get('strength') or 0):.0f}"
                 )
+            elif brain:
+                brain_state = str(brain.get("brain_state") or "WAIT").upper()
+                brain_score = float(brain.get("brain_score") or 0.0)
+                brain_reason = str(brain.get("brain_reason") or "Flashscore статистика анализируется")
+                if row is None and brain_state in {"PASS", "BORDERLINE"}:
+                    decision = (
+                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f} · {brain_reason}\n"
+                        f"💰 1xBet: кандидат выбран Brain, ждём/ищем цену текущего периода/четверти"
+                    )
+                elif row is not None and brain_state in {"PASS", "BORDERLINE"}:
+                    decision = (
+                        f"🧠 <b>{brain_state}</b> · R{brain_score:.0f} · {brain_reason}\n"
+                        f"💰 1xBet найден, но линия/цена ещё не прошла финальные фильтры ставки"
+                    )
+                else:
+                    decision = f"⏳ <b>WAIT</b> · Brain R{brain_score:.0f} · {brain_reason}"
             elif row is None:
-                decision = "⏳ <b>WAIT</b> · Flashscore LIVE есть, рынок 1xBet ещё не синхронизирован"
+                decision = "⏳ <b>WAIT</b> · Flashscore LIVE есть, Brain ещё прогревает статистику"
             else:
                 decision = "⏳ <b>WAIT</b> · текущий период/четверть не прошёл пороги Brain"
 

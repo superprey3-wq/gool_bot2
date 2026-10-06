@@ -234,8 +234,9 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         title = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "push": "ВОЗВРАТ", "void": "ВОЗВРАТ"}.get(final, "РЕЗУЛЬТАТ")
         accent = ACCENT if final == "won" else RED if final == "lost" else NEUTRAL
     else:
-        title = "SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС"
-        accent = GOLD if kind == "SUPER" else ACCENT
+        is_super = kind in {"SUPER", "GLOBAL_SUPER"}
+        title = "SUPER 10 · 3 SPORTS" if kind == "GLOBAL_SUPER" else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС")
+        accent = GOLD if is_super else ACCENT
 
     row_h = 152
     height = max(780, 260 + len(legs) * row_h + 120)
@@ -243,12 +244,13 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
     draw = ImageDraw.Draw(img)
     draw.rounded_rectangle((18, 18, 1062, height - 18), 30, outline=accent, width=5)
     draw.rounded_rectangle((28, 22, 1052, 100), 22, fill=PANEL, outline=accent, width=2)
-    draw.text((52, 42), "GOOL V4", font=sc._font(29, True), fill=TEXT)
-    draw.text((190, 43), "PREMATCH · ЭКСПРЕСС", font=sc._font(23, True), fill=accent)
+    draw.text((52, 42), "GOOL", font=sc._font(29, True), fill=TEXT)
+    header_sub = "PREMATCH · GLOBAL SUPER" if kind == "GLOBAL_SUPER" else "V4 · PREMATCH · ЭКСПРЕСС"
+    draw.text((165, 43), header_sub, font=_fit(draw, header_sub, 560, 23, True), fill=accent)
     _center_in_box(draw, title, (760, 34, 1025, 88), sc._font(18, True), accent)
 
     odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
-    headline = "ИТОГ ЭКСПРЕССА" if result else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС")
+    headline = "ИТОГ ЭКСПРЕССА" if result else ("GLOBAL SUPER 10" if kind == "GLOBAL_SUPER" else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС"))
     _center(draw, headline, 125, sc._font(31, True), TEXT)
     _center(draw, f"Общий коэффициент · {odd:.2f}", 168, sc._font(22, True), accent)
 
@@ -272,7 +274,9 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
 
         teams = f"{home} — {away}"
         draw.text((245, y + 13), teams, font=_fit(draw, teams, 520, 20, True), fill=TEXT)
-        tournament = f"ТУРНИР · {league}"
+        sport = str(leg.get("sport") or "football").casefold()
+        sport_icon = {"football": "⚽", "hockey": "🏒", "basketball": "🏀"}.get(sport, "•")
+        tournament = f"{sport_icon} ТУРНИР · {league}"
         draw.text((245, y + 45), tournament, font=_fit(draw, tournament, 585, 14, True), fill=MUTED)
         timing = f"СТАРТ · {kickoff}"
         draw.text((245, y + 72), timing, font=_fit(draw, timing, 400, 14, True), fill=MUTED)
@@ -289,6 +293,10 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
 
     footer_top = height - 92
     draw.rounded_rectangle((235, footer_top, 845, height - 35), 18, fill=accent)
-    footer = "РЕЗУЛЬТАТ ЭКСПРЕССА ПОДТВЕРЖДЁН" if result else "PREMATCH · ВСЕ НОГИ ЗАФИКСИРОВАНЫ"
+    footer = (
+        "РЕЗУЛЬТАТ ЭКСПРЕССА ПОДТВЕРЖДЁН"
+        if result
+        else ("⚽ ФУТБОЛ · 🏒 ХОККЕЙ · 🏀 БАСКЕТБОЛ" if kind == "GLOBAL_SUPER" else "PREMATCH · ВСЕ НОГИ ЗАФИКСИРОВАНЫ")
+    )
     _center_in_box(draw, footer, (235, footer_top, 845, height - 35), _fit(draw, footer, 560, 15, True), BG)
     return sc._save(img)

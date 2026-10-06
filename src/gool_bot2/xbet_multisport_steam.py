@@ -2275,7 +2275,37 @@ class MultiSportSteamWorker:
             ),
             reverse=True,
         )
-        return interesting[:price_max]
+        selected = interesting[:price_max]
+
+        # Warm the expensive Q/P history before kickoff for the strongest
+        # PREMATCH candidates. The same cache is then reused by LIVE during
+        # quarter/period breaks instead of starting the historical analysis
+        # from scratch.
+        prefetch_max = max(
+            0,
+            min(
+                len(selected),
+                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 3),
+            ),
+        )
+        if prefetch_max:
+            with ThreadPoolExecutor(max_workers=min(3, prefetch_max)) as pool:
+                futures = {
+                    pool.submit(self._flashscore_segment_memory, row, cfg): idx
+                    for idx, row in enumerate(selected[:prefetch_max])
+                }
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        memory = dict(future.result(timeout=35) or {})
+                    except Exception:
+                        memory = {}
+                    brain = dict(selected[idx].get("prematch_brain") or {})
+                    brain["segment_memory_ready"] = bool(memory.get("usable_scopes"))
+                    brain["segment_memory_quality"] = float(memory.get("quality") or 0.0)
+                    brain["segment_history_events"] = int(memory.get("history_events") or 0)
+                    selected[idx]["prematch_brain"] = brain
+        return selected
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
         """Recent form + H2H from Flashscore, analogous to the football collector."""

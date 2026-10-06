@@ -3,7 +3,7 @@ from gool_bot2.multisport_parlay_card import render_multisport_parlay_card
 from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS
 
 
-def _row(event_id, odd=1.7, strength=80, probability=0.64, sport="hockey", family="match_total"):
+def _row(event_id, odd=1.65, strength=80, probability=0.72, sport="hockey", family="match_total"):
     return {
         "entry_id": f"{sport}:{event_id}:{family}",
         "event_id": event_id,
@@ -16,6 +16,7 @@ def _row(event_id, odd=1.7, strength=80, probability=0.64, sport="hockey", famil
         "odd": odd,
         "strength": strength,
         "fair_probability": probability,
+        "edge": 0.08,
         "market_family": family,
         "scope": "FULL_MATCH",
     }
@@ -136,3 +137,51 @@ def test_two_leg_parlay_card_has_footer_below_second_leg():
     assert image.height >= 800
     assert image.width == 1080
 
+
+
+def test_parlay_drops_started_and_imminent_matches(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", "180")
+    now = 1_800_000_000.0
+    rows = [
+        {**_row("started"), "start_ts": now - 30},
+        {**_row("soon"), "start_ts": now + 120},
+        {**_row("future1"), "start_ts": now + 600},
+        {**_row("future2"), "start_ts": now + 900},
+    ]
+
+    legs = eligible_prematch_legs(rows, "hockey", now_ts=now)
+
+    assert {leg["event_id"] for leg in legs} == {"future1", "future2"}
+    parlays = build_sport_parlays(rows, "hockey", now_ts=now)
+    assert parlays
+    assert all(
+        leg["event_id"] not in {"started", "soon"}
+        for parlay in parlays
+        for leg in parlay["legs"]
+    )
+
+
+def test_parlay_prefers_safer_alternative_over_higher_odd_single(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_ODD", "1.90")
+    rows = [
+        {
+            **_row("1", odd=1.83, probability=0.70, strength=87),
+            "entry_id": "single-1",
+            "selection": "1-я половина: ТМ 118.5",
+            "parlay_safe": False,
+        },
+        {
+            **_row("1", odd=1.55, probability=0.79, strength=84),
+            "entry_id": "safe-1",
+            "selection": "1-я половина: ТМ 122.5",
+            "parlay_safe": True,
+        },
+        _row("2", odd=1.60, probability=0.76, strength=83),
+    ]
+
+    legs = eligible_prematch_legs(rows, "hockey", now_ts=0)
+
+    first = next(leg for leg in legs if leg["event_id"] == "1")
+    assert first["entry_id"] == "safe-1"
+    assert first["selection"] == "1-я половина: ТМ 122.5"
+    assert first["odd"] == 1.55

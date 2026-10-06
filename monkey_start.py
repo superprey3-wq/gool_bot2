@@ -181,7 +181,7 @@ def find_model(filename: str) -> Path:
 
 
 def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
-    """Return the only processes allowed in the public two-system product."""
+    """Return production signal workers plus read-only market radar collectors."""
     commands = {
         "live": [
             sys.executable,
@@ -200,6 +200,14 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
+    if _truthy("GOOL_MATCHBOOK_RADAR_ENABLED", True):
+        commands["matchbook_radar"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.matchbook_market_worker",
+            "--interval",
+            os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15"),
+        ]
     if browser_enabled:
         commands["browser"] = [
             sys.executable,
@@ -231,6 +239,9 @@ def main() -> None:
     prematch_cache = Path(os.environ.get("PREMATCH_CACHE_DIR", str(runtime / "live" / "prematch_cache")))
     xbet_state = Path(os.environ.get("XBET_MARKET_STATE", str(runtime / "live" / "xbet_market_state.json")))
     xbet_history = Path(os.environ.get("XBET_MARKET_HISTORY", str(runtime / "live" / "xbet_market_history.jsonl")))
+    matchbook_state = Path(
+        os.environ.get("MATCHBOOK_MARKET_STATE", str(runtime / "live" / "matchbook_market_state.json"))
+    )
     multi_journal = Path(os.environ.get("GOOL_MULTI_JOURNAL_PATH", str(runtime / "live" / "gool_multi_journal.json")))
 
     os.environ["RUNTIME_DATA_DIR"] = str(runtime)
@@ -245,6 +256,7 @@ def main() -> None:
     os.environ["PREMATCH_CACHE_DIR"] = str(prematch_cache)
     os.environ["XBET_MARKET_STATE"] = str(xbet_state)
     os.environ["XBET_MARKET_HISTORY"] = str(xbet_history)
+    os.environ["MATCHBOOK_MARKET_STATE"] = str(matchbook_state)
     os.environ["GOOL_MULTI_JOURNAL_PATH"] = str(multi_journal)
     os.environ.setdefault("TELEGRAM_SUBSCRIBERS_FILE", str(runtime / "telegram_subscribers.json"))
     os.environ.setdefault("GOOL_BROWSER_CONTEXT_PATH", str(runtime / "live" / "browser_context.json"))
@@ -252,6 +264,11 @@ def main() -> None:
     os.environ.setdefault("SIGNAL_WORKER_SLEEP", "5")
     os.environ.setdefault("SHADOW_MARKET_SLEEP", "5")
     os.environ.setdefault("XBET_MARKET_INTERVAL_SECONDS", "15")
+    os.environ.setdefault("GOOL_MATCHBOOK_RADAR_ENABLED", "1")
+    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "15")
+    os.environ.setdefault("MATCHBOOK_MAX_PAGES", "6")
+    os.environ.setdefault("MATCHBOOK_EVENTS_PER_PAGE", "100")
+    os.environ.setdefault("MATCHBOOK_FLOW_HISTORY_SNAPSHOTS", "72")
     os.environ.setdefault("GOOL_MULTISPORT_ENABLED", "1")
     os.environ.setdefault("GOOL_MULTISPORT_MODE", "shadow")
     os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
@@ -283,8 +300,9 @@ def main() -> None:
     os.environ["GOOL_LIVE_V4_MODE"] = "active"
     os.environ.setdefault("GOOL_LIVE_MULTI_ALL_MARKETS_SHADOW", "1")
 
-    # Hard production kill-switches for every exchange-money lane. Values from an
-    # old gool.env cannot re-enable them accidentally after this deployment.
+    # Hard production kill-switches keep exchange money out of public betting
+    # signals. The Matchbook collector is allowed to run read-only for the Money
+    # Radar/menu and does not bypass these signal-lane switches.
     os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"
     os.environ["BETDAQ_SELECTION_PUSH_ENABLED"] = "0"
     os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"
@@ -306,6 +324,7 @@ def main() -> None:
     shadow_cards.mkdir(parents=True, exist_ok=True)
     prematch_cache.mkdir(parents=True, exist_ok=True)
     xbet_state.parent.mkdir(parents=True, exist_ok=True)
+    matchbook_state.parent.mkdir(parents=True, exist_ok=True)
     multi_journal.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
@@ -333,10 +352,12 @@ def main() -> None:
         )
     print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
+    matchbook_radar_mode = "on" if _truthy("GOOL_MATCHBOOK_RADAR_ENABLED", True) else "off"
     print(
-        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
+        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} "
+        f"exchange_money=radar_only matchbook_radar={matchbook_radar_mode} "
         "prematch_full_market=active live_consensus=2of3 "
-        "matchbook_worker=off betdaq_worker=off sx_board=off",
+        "betdaq_worker=off sx_board=off",
         flush=True,
     )
     if browser_enabled:

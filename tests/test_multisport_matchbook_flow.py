@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from gool_bot2 import matchbook_auth, matchbook_pagination
 from gool_bot2.matchbook_exchange import decode_event
-from gool_bot2.multisport_matchbook_flow import matchbook_money_flow
+from gool_bot2.multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 
 
 def _market(name: str, line: float, *, volume: float = 900.0):
@@ -249,3 +249,31 @@ def test_money_flow_ignores_player_prop_even_when_its_line_is_closer():
     assert result["market_id"] == "market1"
     assert result["market_name"] == "3rd Quarter Total"
     assert result["line_gap"] == 1.0
+
+
+def test_matchbook_confirmation_never_flips_and_strong_opposition_blocks():
+    base = {"direction": "over", "strength": 82.0, "line": 180.5}
+    agreeing = {
+        "available": True,
+        "confirmed": True,
+        "strong": True,
+        "agrees": True,
+        "direction": "over",
+        "matched_volume_delta": 180.0,
+        "fair_over_delta_pp": 3.5,
+    }
+    boosted, blocked = apply_matchbook_confirmation(base, agreeing)
+    assert blocked is False
+    assert boosted["direction"] == "over"
+    assert boosted["strength"] == 89.0
+
+    opposite = {
+        **agreeing,
+        "agrees": False,
+        "direction": "under",
+        "fair_over_delta_pp": -3.5,
+    }
+    weakened, blocked = apply_matchbook_confirmation(base, opposite)
+    assert blocked is True
+    assert weakened["direction"] == "over"
+    assert weakened["strength"] == 72.0

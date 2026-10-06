@@ -49,7 +49,7 @@ from .basketball_brain_v2 import (
     recent_possession_metrics as basketball_recent_possession_metrics,
 )
 from .segment_memory import build_segment_memory, segment_prior
-from .multisport_matchbook_flow import matchbook_money_flow
+from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -4849,43 +4849,11 @@ class MultiSportSteamWorker:
                             line=float(signal.get("line") or lane_row.get("line") or 0.0),
                             direction=str(signal.get("direction") or ""),
                         )
-                        if bool(matchbook_flow.get("available")):
-                            confirmed = bool(matchbook_flow.get("confirmed"))
-                            agrees = matchbook_flow.get("agrees")
-                            strong_flow = bool(matchbook_flow.get("strong"))
-                            adjustment = 0.0
-                            if confirmed and agrees is True:
-                                adjustment = 7.0 if strong_flow else 4.0
-                            elif confirmed and agrees is False:
-                                adjustment = -10.0 if strong_flow else -6.0
-                            signal = {
-                                **signal,
-                                "matchbook_money_flow": dict(matchbook_flow),
-                                "matchbook_money_flow_agrees": agrees,
-                                "matchbook_matched_volume_delta": float(
-                                    matchbook_flow.get("matched_volume_delta") or 0.0
-                                ),
-                                "matchbook_fair_delta_pp": float(
-                                    matchbook_flow.get("fair_over_delta_pp") or 0.0
-                                ),
-                                "strength": round(
-                                    max(
-                                        0.0,
-                                        min(92.0, float(signal.get("strength") or 0.0) + adjustment),
-                                    ),
-                                    1,
-                                ),
-                            }
+                        signal, matchbook_blocked = apply_matchbook_confirmation(signal, matchbook_flow)
+                        if matchbook_blocked:
                             # Strong, genuinely matched money moving the opposite
                             # way is a WAIT. Do not automatically flip direction.
-                            if confirmed and agrees is False and strong_flow:
-                                continue
-                        else:
-                            signal = {
-                                **signal,
-                                "matchbook_money_flow": dict(matchbook_flow),
-                                "matchbook_money_flow_agrees": None,
-                            }
+                            continue
                     else:
                         signal = {
                             **signal,

@@ -6,6 +6,7 @@ import signal
 from pathlib import Path
 
 from . import matchbook_exchange as exchange
+from .matchbook_auth import install_matchbook_auth
 from .matchbook_pagination import fetch_events_paginated
 
 
@@ -23,9 +24,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Production covers the whole football board through the shared authenticated
-    # paginated client. Keep Matchbook independent from the BETDAQ anonymous AAPI
-    # worker so the two exchange histories cannot overwrite each other's state.
+    # Install the auth guard first, then keep the paginated fetcher as the actual
+    # whole-board source. This writes an explicit unavailable state on 401/403
+    # instead of leaving a stale radar snapshot behind.
+    install_matchbook_auth()
     exchange._fetch_events = fetch_events_paginated
     collector = exchange.MatchbookExchangeCollector(Path(args.state))
     signal.signal(signal.SIGINT, collector.stop)

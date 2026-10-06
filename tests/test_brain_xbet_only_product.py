@@ -16,25 +16,34 @@ def _monkey_start_module():
     return module
 
 
-def test_production_supervisor_starts_no_exchange_workers(monkeypatch):
+def test_production_supervisor_runs_matchbook_only_as_radar_support(monkeypatch):
     monkeypatch.setenv("LIVE_INTERVAL_SECONDS", "60")
     monkeypatch.setenv("XBET_MARKET_INTERVAL_SECONDS", "15")
+    monkeypatch.setenv("GOOL_MATCHBOOK_RADAR_ENABLED", "1")
     monkey_start = _monkey_start_module()
 
     commands = monkey_start._production_commands(False)
 
-    assert set(commands) == {"live", "xbet", "worker", "prematch"}
+    assert set(commands) == {"live", "xbet", "worker", "prematch", "matchbook_radar"}
     assert commands["prematch"][-1] == "gool_bot2.v4_prematch_daemon"
+    assert "gool_bot2.matchbook_market_worker" in commands["matchbook_radar"]
     joined = " ".join(" ".join(command) for command in commands.values()).lower()
-    assert "matchbook" not in joined
     assert "betdaq" not in joined
     assert "sxbet" not in joined
 
 
-def test_browser_is_support_process_not_signal_system():
+def test_matchbook_radar_support_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("GOOL_MATCHBOOK_RADAR_ENABLED", "0")
+    monkey_start = _monkey_start_module()
+    commands = monkey_start._production_commands(False)
+    assert set(commands) == {"live", "xbet", "worker", "prematch"}
+
+
+def test_browser_is_support_process_not_signal_system(monkeypatch):
+    monkeypatch.setenv("GOOL_MATCHBOOK_RADAR_ENABLED", "1")
     monkey_start = _monkey_start_module()
     commands = monkey_start._production_commands(True)
-    assert set(commands) == {"live", "xbet", "worker", "prematch", "browser"}
+    assert set(commands) == {"live", "xbet", "worker", "prematch", "matchbook_radar", "browser"}
 
 
 def test_public_menu_has_v4_report_in_game_analysis_and_match_search(tmp_path, monkeypatch):

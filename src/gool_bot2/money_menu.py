@@ -7,6 +7,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .betdaq_exchange import load_betdaq_state
+from .matchbook_exchange import load_matchbook_state
+from .matchbook_money_radar import build_money_radar
 
 
 BUTTON_TEXT = "💰 Деньги"
@@ -314,8 +316,71 @@ def _sxbet_fallback_text() -> str:
     return "\n\n".join(parts)
 
 
+def _matchbook_radar_text() -> str:
+    state = load_matchbook_state()
+    captured = _parse_dt(state.get("captured_at")) if state else None
+    parts = [
+        f"💹 <b>MATCHBOOK MONEY RADAR</b> · весь футбольный борд · GBP{_state_age(captured)}",
+        (
+            "<i>ТБ/ТМ matched показывает распределение проторгованного объёма по selections. "
+            "Направление GOOL берёт не из большей суммы само по себе, а из движения fair probability/цены и устойчивости потока.</i>"
+        ),
+    ]
+    if not state:
+        parts.append("⏳ Matchbook state ещё не создан — радар ждёт первый снимок.")
+        return "\n".join(parts)
+    if not bool(state.get("available", True)):
+        parts.append(
+            "⚠️ Matchbook сейчас недоступен.\n"
+            f"Причина: <code>{_h(state.get('error') or 'matchbook_unavailable')}</code>"
+        )
+        return "\n".join(parts)
+
+    events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
+    total_markets = sum(
+        len([m for m in (event.get("totals") or {}).values() if isinstance(m, dict)])
+        for event in events
+    )
+    radar = build_money_radar(state, limit=5)
+    parts.append(f"📡 Просканировано: <b>{len(events)}</b> матчей · <b>{total_markets}</b> рынков тоталов")
+    if not radar:
+        parts.append("✅ Явных аномалий объёма сейчас нет. Радар продолжает сравнивать весь борд.")
+        return "\n".join(parts)
+
+    for index, row in enumerate(radar, 1):
+        level = str(row.get("level") or "BIG_VOLUME")
+        icon = "🚨" if level == "EXTREME_VOLUME" else "🔥" if level == "ACCUMULATION" else "💰"
+        country = str(row.get("country") or "").strip()
+        league = str(row.get("league") or "").strip()
+        league_label = " · ".join([x for x in (country, league) if x]) or "Matchbook football"
+        live_label = "🔴 LIVE" if bool(row.get("in_running")) else "🕒 PREMATCH"
+        direction = str(row.get("direction") or "WAIT")
+        direction_text = {"TB": "ТБ", "TM": "ТМ"}.get(direction, "ЖДЁМ")
+        line = _number(row.get("line"))
+        window = str(row.get("window") or "")
+        window_label = {"300s": "5 мин", "120s": "2 мин", "60s": "60 сек", "30s": "30 сек"}.get(window, window or "прогрев")
+        old_odd = _number(row.get("old_over_odd"))
+        new_odd = _number(row.get("new_over_odd"))
+        price_text = ""
+        if old_odd > 1.0 and new_odd > 1.0:
+            price_text = f" · цена ТБ {old_odd:.2f}→{new_odd:.2f}"
+        parts.append(
+            f"<b>{index}. {icon} {_h(league_label)}</b>\n"
+            f"<b>{_h(row.get('name') or '?')}</b> · {live_label}\n"
+            f"⚽ Тотал <b>{line:g}</b> · matched рынка <b>{_money(row.get('market_volume'))}</b>\n"
+            f"💰 ТМ {_money(row.get('under_matched'))} ({_number(row.get('under_share_pct')):.0f}%) · "
+            f"ТБ {_money(row.get('over_matched'))} ({_number(row.get('over_share_pct')):.0f}%)\n"
+            f"⏱ {window_label}: +{_money(row.get('volume_delta'))} "
+            f"({_number(row.get('relative_pct')):+.1f}%) · fair Over {_number(row.get('fair_delta_pp')):+.2f} п.п.{price_text}\n"
+            f"🎯 Давление: <b>{direction_text}</b> · {level} · "
+            f"x{_number(row.get('volume_multiple')):.1f} к базе · score {_number(row.get('score')):.0f}/100"
+        )
+    return "\n\n".join(parts)
+
+
 def money_text() -> str:
     state = load_betdaq_state()
+    matchbook_radar = _matchbook_radar_text()
     captured = _parse_dt(state.get("captured_at"))
     today = datetime.now(_tz()).date()
     parts = [
@@ -329,6 +394,7 @@ def money_text() -> str:
     if not state:
         parts.append("⚠️ BETDAQ state ещё не создан. Биржевой collector только запускается.")
         parts.append(_sxbet_fallback_text())
+        parts.append(matchbook_radar)
         return "\n\n".join(parts)
     if not bool(state.get("available", True)):
         error = str(state.get("error") or "BETDAQ stream unavailable").strip()
@@ -338,6 +404,7 @@ def money_text() -> str:
             "GOOL Brain и 1xBet STEAM продолжают работать независимо."
         )
         parts.append(_sxbet_fallback_text())
+        parts.append(matchbook_radar)
         return "\n\n".join(parts)
 
     raw_events = [row for row in (state.get("events") or []) if isinstance(row, dict)]
@@ -348,6 +415,7 @@ def money_text() -> str:
         parts.append(f"BETDAQ видит <b>{len(events)}</b> футбольных матчей на сегодня, но Match Odds matched пока не прогрузился.")
         parts.append(_coverage_text(state))
         parts.append(_sxbet_fallback_text())
+        parts.append(matchbook_radar)
         return "\n\n".join(parts)
 
     for index, event in enumerate(top, 1):
@@ -364,6 +432,7 @@ def money_text() -> str:
         parts.append(card)
 
     parts.append(_coverage_text(state))
+    parts.append(matchbook_radar)
     return "\n\n".join(parts)
 
 

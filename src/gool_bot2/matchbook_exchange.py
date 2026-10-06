@@ -175,6 +175,30 @@ def _event_teams(event: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
+def _event_country_league(event: dict[str, Any]) -> tuple[str, str]:
+    """Extract country/competition labels from Matchbook meta-tags when available."""
+    tags = [row for row in (event.get("meta-tags") or []) if isinstance(row, dict)]
+    country = ""
+    league = ""
+    fallback: list[str] = []
+    for row in tags:
+        name = str(row.get("name") or "").strip()
+        tag_type = str(row.get("type") or "").strip().upper()
+        if not name:
+            continue
+        if tag_type == "COUNTRY" and not country:
+            country = name
+            continue
+        if tag_type in {"COMPETITION", "LEAGUE", "TOURNAMENT", "CUP"}:
+            league = name
+            continue
+        if tag_type not in {"SPORT", "COUNTRY", "OTHER"}:
+            fallback.append(name)
+    if not league and fallback:
+        league = fallback[-1]
+    return country, league
+
+
 def decode_event(event: dict[str, Any]) -> dict[str, Any] | None:
     home, away = _event_teams(event)
     if not home or not away:
@@ -212,6 +236,9 @@ def decode_event(event: dict[str, Any]) -> dict[str, Any] | None:
             if not over or not under:
                 continue
             key = f"{period}:{line:g}"
+            over_matched = float(_number(over.get("volume")) or 0.0)
+            under_matched = float(_number(under.get("volume")) or 0.0)
+            selection_total = over_matched + under_matched
             totals[key] = {
                 **base,
                 "period": period,
@@ -219,12 +246,19 @@ def decode_event(event: dict[str, Any]) -> dict[str, Any] | None:
                 "over": over,
                 "under": under,
                 "fair_over": _fair_over(over, under),
+                "over_matched": over_matched,
+                "under_matched": under_matched,
+                "over_share_pct": round(over_matched / selection_total * 100.0, 2) if selection_total > 0.0 else 0.0,
+                "under_share_pct": round(under_matched / selection_total * 100.0, 2) if selection_total > 0.0 else 0.0,
             }
+    country, league = _event_country_league(event)
     return {
         "event_id": str(event.get("id") or ""),
         "name": str(event.get("name") or ""),
         "home": home,
         "away": away,
+        "country": country,
+        "league": league,
         "start": event.get("start"),
         "status": str(event.get("status") or ""),
         "in_running": bool(event.get("in-running-flag")),
@@ -279,7 +313,14 @@ class MatchbookExchangeCollector:
     def __init__(self, state_path: Path) -> None:
         self.state_path = state_path
         self._stop = threading.Event()
-        self._history: dict[str, deque[dict[str, float]]] = defaultdict(lambda: deque(maxlen=12))
+        try:
+            history_size = int(os.getenv("MATCHBOOK_FLOW_HISTORY_SNAPSHOTS", "72"))
+        except (TypeError, ValueError):
+            history_size = 72
+        history_size = max(48, min(180, history_size))
+        self._history: dict[str, deque[dict[str, float]]] = defaultdict(
+            lambda: deque(maxlen=history_size)
+        )
 
     def stop(self, *_: object) -> None:
         self._stop.set()
@@ -306,7 +347,13 @@ class MatchbookExchangeCollector:
 
         out: dict[str, Any] = {}
         ready: dict[str, bool] = {}
-        for seconds, label in ((15.0, "15s"), (30.0, "30s"), (60.0, "60s")):
+        for seconds, label in (
+            (15.0, "15s"),
+            (30.0, "30s"),
+            (60.0, "60s"),
+            (120.0, "120s"),
+            (300.0, "300s"),
+        ):
             old = prior(seconds)
             ready[label] = old is not None
             out[f"window_ready_{label}"] = ready[label]
@@ -316,6 +363,8 @@ class MatchbookExchangeCollector:
                 out[f"back_depth_delta_{label}"] = 0.0
                 out[f"lay_depth_delta_{label}"] = 0.0
                 out[f"orderflow_imbalance_{label}"] = 0.0
+                out[f"over_back_old_{label}"] = 0.0
+                out[f"over_back_delta_{label}"] = 0.0
                 continue
             out[f"volume_delta_{label}"] = round(max(0.0, volume - float(old["volume"])), 4)
             old_fair = float(old["fair"])
@@ -332,6 +381,12 @@ class MatchbookExchangeCollector:
             out[f"back_depth_delta_{label}"] = round(back_delta, 4)
             out[f"lay_depth_delta_{label}"] = round(lay_delta, 4)
             out[f"orderflow_imbalance_{label}"] = round(max(-1.0, min(1.0, ofi)), 4)
+            old_back = float(old.get("best_back") or 0.0)
+            new_back = float(book.get("best_back") or 0.0)
+            out[f"over_back_old_{label}"] = round(old_back, 4)
+            out[f"over_back_delta_{label}"] = (
+                round(new_back - old_back, 4) if old_back > 1.0 and new_back > 1.0 else 0.0
+            )
 
         wom_min = max(0.5, min(0.95, _env_float("MATCHBOOK_FLOW_WOM_MIN", 0.54)))
         samples = [*hist, current]
@@ -368,6 +423,24 @@ class MatchbookExchangeCollector:
                 and pulled >= spike_abs
                 and matched_15s < pulled * matched_ratio
             )
+
+        long_samples = [
+            row
+            for row in samples
+            if now - float(row.get("ts") or 0.0) <= 300.0
+            and not math.isnan(float(row.get("fair") or math.nan))
+        ]
+        fair_changes = [
+            float(curr["fair"]) - float(prev["fair"])
+            for prev, curr in zip(long_samples, long_samples[1:])
+            if not math.isnan(float(prev["fair"])) and not math.isnan(float(curr["fair"]))
+        ]
+        meaningful = [delta for delta in fair_changes if abs(delta) >= 0.0005]
+        if meaningful:
+            over_consistency = sum(1 for delta in meaningful if delta > 0.0) / len(meaningful)
+            under_consistency = sum(1 for delta in meaningful if delta < 0.0) / len(meaningful)
+        else:
+            over_consistency = under_consistency = 0.5
 
         hist.append(current)
 
@@ -433,6 +506,10 @@ class MatchbookExchangeCollector:
                 "transient_liquidity_spike": transient_spike,
                 "liquidity_pull": liquidity_pull,
                 "orderbook_confirmations": confirmations,
+                "over_back_new": round(float(book.get("best_back") or 0.0), 4),
+                "long_over_consistency": round(over_consistency, 4),
+                "long_under_consistency": round(under_consistency, 4),
+                "long_direction_consistency": round(over_consistency, 4),
             }
         )
         return out

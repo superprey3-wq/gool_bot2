@@ -77,7 +77,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "📄 Полный отчёт", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -352,3 +352,28 @@ def test_production_super10_refresh_callback(tmp_path: Path, monkeypatch):
     assert actions == 1
     assert sent[0][0] == "REFRESHED"
     assert answered == ["SUPER 10 обновлён"]
+
+
+
+def test_production_fullreport_button_sends_document(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        "gool_bot2.full_report_export.build_full_report",
+        lambda: ("GOOL_FULL_REPORT.html", b"<html>ok</html>", "FULL REPORT"),
+    )
+    monkeypatch.setattr(
+        worker.telegram_mod,
+        "send_document",
+        lambda chat_id, filename, data, **kwargs: sent.append(
+            (chat_id, filename, data, kwargs.get("caption"), kwargs.get("token_override"))
+        ) or True,
+    )
+
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 40, "message": {"chat": {"id": 123}, "text": "📄 Полный отчёт"}},
+    )
+
+    assert actions == 1
+    assert sent == [(123, "GOOL_FULL_REPORT.html", b"<html>ok</html>", "FULL REPORT", "test-credential")]

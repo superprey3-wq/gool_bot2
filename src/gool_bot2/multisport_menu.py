@@ -344,7 +344,18 @@ def super10_text() -> str:
     else:
         lines.append("✅ Пул достаточный для сборки SUPER 10.")
 
-    if isinstance(sent, dict) and sent.get("sent") and isinstance(sent.get("ticket"), dict):
+    try:
+        report_tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+    except Exception:
+        report_tz = timezone.utc
+    today = datetime.now(report_tz).strftime("%Y-%m-%d")
+    sent_today = (
+        isinstance(sent, dict)
+        and sent.get("sent")
+        and str(sent.get("day") or "") == today
+        and isinstance(sent.get("ticket"), dict)
+    )
+    if sent_today:
         ticket = dict(sent["ticket"])
         lines.extend([
             "",

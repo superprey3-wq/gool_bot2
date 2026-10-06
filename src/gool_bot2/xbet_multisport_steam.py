@@ -3428,7 +3428,7 @@ class MultiSportSteamWorker:
         compact = {
             key: value
             for key, value in row.items()
-            if key not in {"market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
+            if key not in {"market_lanes", "parlay_market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
         }
         if row.get("score") is not None:
             compact["match_score"] = list(row.get("score") or [0, 0])
@@ -4203,7 +4203,27 @@ class MultiSportSteamWorker:
         sent_signatures = self._sent_parlay_signatures()
         delivered = 0
         changed = False
+        min_lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
         for parlay in parlays:
+            # Re-check immediately before Telegram delivery. A match can start
+            # between the PREMATCH scan and card rendering.
+            now = time.time()
+            stale = False
+            for leg in parlay.get("legs") or []:
+                try:
+                    start_ts = float(leg.get("start_ts") or 0.0)
+                except (TypeError, ValueError):
+                    start_ts = 0.0
+                if start_ts > 0.0 and start_ts <= now + min_lead:
+                    stale = True
+                    break
+            if stale:
+                print(
+                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_STARTED_OR_IMMINENT",
+                    flush=True,
+                )
+                continue
+
             signature = self._parlay_signature(parlay, cfg.key)
             if not signature or signature in sent_signatures:
                 continue

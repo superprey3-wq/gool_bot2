@@ -23,7 +23,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Production covers the whole football board through the shared authenticated
+    # Production covers football, basketball and ice-hockey boards through the shared authenticated
     # paginated client. Keep Matchbook independent from the BETDAQ anonymous AAPI
     # worker so the two exchange histories cannot overwrite each other's state.
     exchange._fetch_events = fetch_events_paginated

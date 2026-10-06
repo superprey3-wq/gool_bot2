@@ -4,6 +4,8 @@ import math
 import os
 from typing import Any
 
+from .segment_memory import remaining_match_projection, segment_prior
+
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(value)))
@@ -683,9 +685,16 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
 def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] | None:
     if str(brain.get("brain_state") or "") not in {"PASS", "BORDERLINE"}:
         return None
-    if str(lane.get("market_family") or "") != "match_total":
+    family = str(lane.get("market_family") or "")
+    lane_scope = str(lane.get("scope") or "")
+    current_scope = str(brain.get("scope") or "")
+    segment_market = family == "match_total" and lane_scope == current_scope
+    full_market = lane_scope == "FULL_MATCH" and family in {"match_total", "home_total", "away_total"}
+    if not (segment_market or full_market):
         return None
-    if str(lane.get("scope") or "") != str(brain.get("scope") or ""):
+    segment_memory = dict(brain.get("segment_memory") or {})
+    memory_quality = _clamp(_num(segment_memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
+    if full_market and memory_quality < _env_float("GOOL_BASKETBALL_LIVE_FULL_MIN_MEMORY_QUALITY", 0.45):
         return None
     min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
     min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
@@ -707,7 +716,13 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if elapsed < 45.0 or remaining < 35.0:
         return None
 
-    score = list(lane.get("score") or brain.get("current_segment_score") or [0, 0])
+    # FULL_MATCH lanes carry the full scoreboard, but the pace model below
+    # must always model the CURRENT quarter first.
+    score = list(
+        brain.get("current_segment_score")
+        if full_market
+        else (lane.get("score") or brain.get("current_segment_score") or [0, 0])
+    )
     try:
         current = max(0.0, float(score[0])) + max(0.0, float(score[1]))
     except (TypeError, ValueError, IndexError):
@@ -717,6 +732,15 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     profile = league_profile(league)
     quarter_context = live_quarter_context_assist(brain, profile)
     prior_total = float(quarter_context.get("adjusted_prior_total") or profile["quarter_total"])
+    historical_segment = segment_prior(segment_memory, current_scope)
+    historical_total = _num(historical_segment.get("expected_total"))
+    if historical_total is not None and memory_quality >= 0.25:
+        # Team/H2H quarter history is the specific prior; league context remains
+        # the shrinkage anchor so small samples cannot take over the model.
+        history_weight = _clamp(0.22 + memory_quality * 0.43, 0.22, 0.65)
+        prior_total = prior_total * (1.0 - history_weight) + float(historical_total) * history_weight
+    else:
+        history_weight = 0.0
     prior_possessions = profile["quarter_possessions"]
     prior_ppp_pair = prior_total / max(1.0, prior_possessions)
     prior_poss_per_min = prior_possessions / (duration / 60.0)
@@ -791,8 +815,39 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         projection = current + remaining_poss * posterior_ppp
 
     projection = max(current, projection)
-    sigma = max(3.2, profile["quarter_sigma"] * math.sqrt(max(0.25, remaining / duration)))
-    raw_over_model = _normal_over(line, projection, sigma)
+
+    remaining_projection: dict[str, Any] | None = None
+    target_projection = projection
+    if full_market:
+        remaining_projection = remaining_match_projection(
+            segment_memory,
+            scope=current_scope,
+            match_score=list(brain.get("score") or lane.get("match_score") or [0, 0]),
+            current_segment_score=list(brain.get("current_segment_score") or [0, 0]),
+            current_segment_projection=projection,
+        )
+        if remaining_projection is None:
+            return None
+        if family == "home_total":
+            target_projection = float(remaining_projection["home"])
+        elif family == "away_total":
+            target_projection = float(remaining_projection["away"])
+        else:
+            target_projection = float(remaining_projection["total"])
+
+        order = ("QUARTER_1", "QUARTER_2", "QUARTER_3", "QUARTER_4")
+        try:
+            idx = order.index(current_scope)
+        except ValueError:
+            return None
+        fraction_current_left = _clamp(remaining / duration, 0.0, 1.0)
+        remaining_fraction = (fraction_current_left + max(0, 3 - idx)) / 4.0
+        base_sigma = profile["sigma_total"] if family == "match_total" else profile["sigma_total"] / math.sqrt(2.0)
+        sigma = max(5.0 if family == "match_total" else 3.8, base_sigma * math.sqrt(max(0.18, remaining_fraction)))
+    else:
+        sigma = max(3.2, profile["quarter_sigma"] * math.sqrt(max(0.25, remaining / duration)))
+
+    raw_over_model = _normal_over(line, target_projection, sigma)
     history_points = max(0, int(brain.get("history_points") or 0))
     probability_reliability = _clamp(
         0.35 + data_quality * 0.55 + min(0.10, history_points * 0.02),
@@ -815,6 +870,16 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
     if edge < 0.055 or model_p < 0.56:
         return None
+    stat_edge = abs(target_projection - line)
+    if full_market:
+        min_stat_edge = _env_float(
+            "GOOL_BASKETBALL_LIVE_FULL_MIN_STAT_EDGE"
+            if family == "match_total"
+            else "GOOL_BASKETBALL_LIVE_TEAM_MIN_STAT_EDGE",
+            5.5 if family == "match_total" else 3.5,
+        )
+        if stat_edge < min_stat_edge:
+            return None
 
     scope = str(brain.get("scope") or "")
     q3_assist = q3_rebound_assist(
@@ -863,10 +928,22 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if abs(projection - line) >= 3.0:
         agreement += 1
 
-    # A line/prior mismatch is not a LIVE observation. Without an independent
-    # pace/efficiency confirmation, wait instead of turning every quarter into
-    # another UNDER just because the posterior prior sits below the market.
-    if not directional_confirmation:
+    # Current-quarter bets still require an independent LIVE pace/efficiency
+    # confirmation. FULL_MATCH/IT may also be confirmed by a sufficiently deep
+    # team+H2H segment profile: that is exactly how we can catch a team that
+    # scored 60 by halftime but historically slows sharply in Q3/Q4.
+    historical_confirmation = bool(
+        full_market
+        and memory_quality >= 0.55
+        and stat_edge >= (
+            _env_float("GOOL_BASKETBALL_LIVE_FULL_HISTORY_EDGE", 7.0)
+            if family == "match_total"
+            else _env_float("GOOL_BASKETBALL_LIVE_TEAM_HISTORY_EDGE", 4.5)
+        )
+    )
+    if historical_confirmation:
+        agreement += 1
+    if not directional_confirmation and not historical_confirmation:
         return None
 
     # Q3 comeback context is deliberately only an assistant. It cannot create
@@ -904,9 +981,21 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "market_probability": round(market_p, 6),
         "edge": round(edge, 6),
         "strength": round(strength, 1),
-        "projected_total": round(projection, 2),
-        "raw_stat_projection": round(projection, 2),
-        "stat_edge": round(abs(projection - line), 2),
+        "projected_total": round(target_projection, 2),
+        "current_segment_projection": round(projection, 2),
+        "raw_stat_projection": round(target_projection, 2),
+        "stat_edge": round(stat_edge, 2),
+        "segment_memory_quality": round(memory_quality, 3),
+        "segment_prior_total": None if historical_total is None else round(float(historical_total), 2),
+        "segment_history_weight": round(history_weight, 3),
+        "segment_h2h_total": (
+            None
+            if historical_segment.get("h2h_home_for") is None or historical_segment.get("h2h_away_for") is None
+            else round(float(historical_segment["h2h_home_for"]) + float(historical_segment["h2h_away_for"]), 2)
+        ),
+        "segment_h2h_n": int(historical_segment.get("h2h_n") or 0),
+        "remaining_match_projection": remaining_projection or {},
+        "historical_confirmation": historical_confirmation,
         "current_segment_total": round(current, 1),
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),

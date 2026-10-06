@@ -153,7 +153,36 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 replies = [telegram_mod.START_TEXT]
             elif text in {"📊 отчёт", "📊 отчет"}:
                 telegram_mod._force_reconcile_pending(journal_path)
-                replies = [telegram_mod.report_text(journal_path)]
+                summary_sent = _direct_send_message(
+                    token,
+                    chat_id,
+                    telegram_mod.report_text(journal_path),
+                    reply_markup=_bot_menu.MENU_KEYBOARD,
+                )
+                try:
+                    from .full_report_export import build_full_report
+                    filename, data, caption = build_full_report()
+                    file_sent = telegram_mod.send_document(
+                        chat_id,
+                        filename,
+                        data,
+                        caption=caption,
+                        content_type="text/html; charset=utf-8",
+                        token_override=token,
+                    )
+                except Exception as exc:
+                    print(
+                        f"GOOL_DAY_REPORT_FILE_ERROR {type(exc).__name__}:{exc}",
+                        flush=True,
+                    )
+                    file_sent = False
+                    _direct_send_message(
+                        token,
+                        chat_id,
+                        "⚠️ Сводка готова, но файл полного отчёта за день отправить не удалось.",
+                        reply_markup=_bot_menu.MENU_KEYBOARD,
+                    )
+                return int(bool(summary_sent)) + int(bool(file_sent))
             elif text == "/prematchaudit":
                 from .prematch_day_audit import prematch_day_audit_text
                 prematch_journal = Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)

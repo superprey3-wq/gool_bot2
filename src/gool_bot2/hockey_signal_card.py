@@ -67,9 +67,10 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
 
     scope=str(row.get("scope") or signal.get("scope") or SCOPE_FULL)
     scope_label=SCOPE_LABEL_RU.get(scope,scope)
+    market_caption="CURRENT ICE MARKET" if scope != SCOPE_FULL else "MATCH PROJECTION"
     pick=_label(row,signal); odd=float(signal.get("odd") or 0)
     d.rounded_rectangle((42,420,1038,565),24,fill=(8,24,31),outline=GOLD,width=3)
-    d.text((70,442),f"{scope_label.upper()} • CURRENT ICE MARKET",font=sc._fit(d,f"{scope_label.upper()} • CURRENT ICE MARKET",600,16,True),fill=MUTED)
+    d.text((70,442),f"{scope_label.upper()} • {market_caption}",font=sc._fit(d,f"{scope_label.upper()} • {market_caption}",600,16,True),fill=MUTED)
     d.text((70,488),pick,font=sc._fit(d,pick,590,39,True),fill=GOLD)
     d.text((735,448),"КЭФ",font=sc._font(15,True),fill=MUTED)
     d.text((735,486),f"{odd:.2f}",font=sc._font(44,True),fill=TEXT)
@@ -88,7 +89,7 @@ def render_hockey_live_card(row:dict[str,Any],signal:dict[str,Any],cfg:Any)->byt
 
     d.rounded_rectangle((42,742,1038,832),18,fill=PANEL,outline=LINE,width=2)
     d.text((68,760),"LIVE POLICY",font=sc._font(14,True),fill=MUTED)
-    d.text((68,792),"Только ТБ/ТМ текущего периода • Brain = Flashscore статистика",font=sc._fit(d,"Только ТБ/ТМ текущего периода • Brain = Flashscore статистика",900,21,True),fill=GREEN)
+    d.text((68,792),"P тотал + LIVE тотал/ИТ матча • Segment Memory + Flashscore",font=sc._fit(d,"P тотал + LIVE тотал/ИТ матча • Segment Memory + Flashscore",900,21,True),fill=GREEN)
     d.rounded_rectangle((300,852,780,902),15,fill=ICE)
     sc._center(d,"HOCKEY LIVE • СИГНАЛ",862,sc._font(20,True),BG)
     return sc._save(im)

@@ -48,6 +48,7 @@ from .basketball_brain_v2 import (
     prematch_signal as basketball_prematch_v2_signal,
     recent_possession_metrics as basketball_recent_possession_metrics,
 )
+from .segment_memory import build_segment_memory, segment_prior
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -1696,6 +1697,7 @@ class MultiSportSteamWorker:
         self._fs_scope_stat_baseline: dict[str, dict[str, Any]] = {}
         self._fs_scope_stat_samples: dict[str, int] = defaultdict(int)
         self._fs_history_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._fs_segment_memory_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._restore_history()
 
     def stop(self) -> None:
@@ -1872,6 +1874,8 @@ class MultiSportSteamWorker:
         scope = str(stats_payload.get("scope") or inferred_scope)
         if scope == SCOPE_FULL:
             scope = inferred_scope
+        segment_memory: dict[str, Any] = {}
+        current_segment_prior: dict[str, Any] = {}
         segment_score = scoped_scores.get(scope)
         segment_score_verified = segment_score is not None
         if segment_score is None:
@@ -2097,6 +2101,13 @@ class MultiSportSteamWorker:
                 # exposes a non-skipping current-quarter state.
                 state = "WAIT"
                 reason += " · пауза между четвертями: ждём фактический старт"
+
+        # Historical Q/P line scores are much more expensive than the live box
+        # score. Fetch them lazily only after the cheap Flashscore gate says the
+        # match is worth bookmaker pricing. The cache then survives every scan.
+        if state in {"PASS", "BORDERLINE"}:
+            segment_memory = self._flashscore_segment_memory(fs, cfg)
+            current_segment_prior = segment_prior(segment_memory, scope)
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),
@@ -2127,6 +2138,9 @@ class MultiSportSteamWorker:
             "recent_penalty_delta": round(recent_penalty_delta, 3),
             "recent_pp_goal_delta": round(recent_pp_goal_delta, 3),
             "direction_hint": direction_hint,
+            "segment_memory": segment_memory,
+            "segment_prior": current_segment_prior,
+            "segment_memory_quality": float(segment_memory.get("quality") or 0.0),
             "prematch_match_lambda": (
                 round(float(prematch_match_lambda), 4)
                 if prematch_match_lambda is not None
@@ -2261,7 +2275,37 @@ class MultiSportSteamWorker:
             ),
             reverse=True,
         )
-        return interesting[:price_max]
+        selected = interesting[:price_max]
+
+        # Warm the expensive Q/P history before kickoff for the strongest
+        # PREMATCH candidates. The same cache is then reused by LIVE during
+        # quarter/period breaks instead of starting the historical analysis
+        # from scratch.
+        prefetch_max = max(
+            0,
+            min(
+                len(selected),
+                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 3),
+            ),
+        )
+        if prefetch_max:
+            with ThreadPoolExecutor(max_workers=min(3, prefetch_max)) as pool:
+                futures = {
+                    pool.submit(self._flashscore_segment_memory, row, cfg): idx
+                    for idx, row in enumerate(selected[:prefetch_max])
+                }
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        memory = dict(future.result(timeout=35) or {})
+                    except Exception:
+                        memory = {}
+                    brain = dict(selected[idx].get("prematch_brain") or {})
+                    brain["segment_memory_ready"] = bool(memory.get("usable_scopes"))
+                    brain["segment_memory_quality"] = float(memory.get("quality") or 0.0)
+                    brain["segment_history_events"] = int(memory.get("history_events") or 0)
+                    selected[idx]["prematch_brain"] = brain
+        return selected
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
         """Recent form + H2H from Flashscore, analogous to the football collector."""
@@ -2285,6 +2329,57 @@ class MultiSportSteamWorker:
             ctx = {}
         self._fs_history_cache[event_id] = (now, dict(ctx))
         return ctx
+
+    def _flashscore_segment_memory(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
+        """Historical Q/P scoring profile for the exact teams and their H2H.
+
+        The expensive df_sui history enrichment is cached independently from
+        the regular final-score history because segment line scores are static
+        once a past match is finished.
+        """
+        event_id = str(fs.get("flashscore_event_id") or "").strip()
+        if not event_id:
+            return {}
+        cache_key = f"{cfg.key}:{event_id}"
+        now = time.monotonic()
+        ttl = max(15 * 60.0, _float_env("GOOL_MULTISPORT_SEGMENT_MEMORY_CACHE_SECONDS", 6 * 60 * 60.0))
+        cached_at, cached = self._fs_segment_memory_cache.get(cache_key, (0.0, {}))
+        if cached and now - cached_at <= ttl:
+            return dict(cached)
+        base = self._flashscore_prematch_context(fs, cfg)
+        try:
+            enriched = self._flashscore.enrich_match_history_segments(
+                base,
+                cfg.key,
+                recent_limit=max(3, min(12, _int_env("GOOL_MULTISPORT_SEGMENT_RECENT_GAMES", 10))),
+                h2h_limit=max(1, min(8, _int_env("GOOL_MULTISPORT_SEGMENT_H2H_GAMES", 6))),
+            )
+            memory = build_segment_memory(
+                enriched,
+                str(fs.get("home") or ""),
+                str(fs.get("away") or ""),
+                cfg.key,
+            )
+            memory["history_events"] = int(enriched.get("segment_history_events") or 0)
+            memory["history_requested"] = int(enriched.get("segment_history_requested") or 0)
+        except Exception as exc:
+            print(
+                f"GOOL_{cfg.key.upper()}_SEGMENT_MEMORY_ERROR event={event_id} "
+                f"{type(exc).__name__}:{exc}",
+                flush=True,
+            )
+            memory = {}
+        self._fs_segment_memory_cache[cache_key] = (now, dict(memory))
+        if memory:
+            print(
+                f"GOOL_{cfg.key.upper()}_SEGMENT_MEMORY event={event_id} "
+                f"usable={int(memory.get('usable_scopes') or 0)} "
+                f"history={int(memory.get('history_events') or 0)}/"
+                f"{int(memory.get('history_requested') or 0)} "
+                f"quality={float(memory.get('quality') or 0.0):.3f}",
+                flush=True,
+            )
+        return memory
 
     @staticmethod
     def _sport_context_features(context: dict[str, Any], fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
@@ -3890,6 +3985,17 @@ class MultiSportSteamWorker:
             "four_factors": signal.get("four_factors") or {},
             "q3_rebound_assist": signal.get("q3_rebound_assist") or {},
             "quarter_context_assist": signal.get("quarter_context_assist") or {},
+            "segment_memory_quality": signal.get("segment_memory_quality"),
+            "segment_memory": signal.get("segment_memory") or {},
+            "segment_prior_total": signal.get("segment_prior_total"),
+            "segment_history_weight": signal.get("segment_history_weight"),
+            "segment_h2h_total": signal.get("segment_h2h_total"),
+            "segment_h2h_n": signal.get("segment_h2h_n"),
+            "remaining_match_projection": signal.get("remaining_match_projection") or {},
+            "historical_confirmation": bool(signal.get("historical_confirmation")),
+            "market_steam": signal.get("market_steam") or {},
+            "market_steam_agrees": signal.get("market_steam_agrees"),
+            "current_segment_projection": signal.get("current_segment_projection"),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
             "line_delta": float(signal.get("line_delta") or 0.0),
@@ -4658,21 +4764,69 @@ class MultiSportSteamWorker:
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
-                    # Product contract: LIVE pricing is only the current
-                    # Flashscore period/quarter total. The Brain has already
-                    # selected the game before this 1xBet market is considered.
-                    if (
-                        str(lane.get("market_family") or "") != "match_total"
-                        or not target_scope
-                        or str(lane.get("scope") or "") != target_scope
-                    ):
+                    # LIVE now prices two tightly controlled lanes:
+                    # - current period/quarter match total;
+                    # - FULL_MATCH match/team totals from Segment Memory.
+                    # Handicaps/moneyline and non-current segment markets stay blocked.
+                    lane_scope = str(lane.get("scope") or "")
+                    lane_family = str(lane.get("market_family") or "")
+                    is_current_segment = bool(
+                        target_scope
+                        and lane_scope == target_scope
+                        and lane_family == "match_total"
+                    )
+                    is_full_projection = bool(
+                        lane_scope == SCOPE_FULL
+                        and lane_family in {"match_total", "home_total", "away_total"}
+                    )
+                    if not (is_current_segment or is_full_projection):
                         policy_blocked += 1
                         continue
-                    lane_row = self._lane_row(row, {**lane, "phase_policy": "flashscore_brain_current_segment"})
-                    self._append_history(lane_row, cfg)
+                    policy_reason = (
+                        "flashscore_brain_current_segment"
+                        if is_current_segment
+                        else "segment_memory_full_match_total"
+                    )
+                    lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
+                    history, score_changed_at = self._append_history(lane_row, cfg)
+                    market_steam = detect_steam(
+                        history,
+                        cfg,
+                        now=float(lane_row["ts"]),
+                        score_changed_at=score_changed_at,
+                    )
                     signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
                     if signal is None:
                         continue
+                    if market_steam is not None:
+                        same_direction = str(market_steam.get("direction") or "") == str(signal.get("direction") or "")
+                        signal = {
+                            **signal,
+                            "market_steam": dict(market_steam),
+                            "market_steam_agrees": same_direction,
+                            "line_delta": float(market_steam.get("line_delta") or 0.0),
+                            "probability_delta_pp": float(market_steam.get("probability_delta_pp") or 0.0),
+                            "moves": int(market_steam.get("moves") or signal.get("moves") or 0),
+                            "strength": round(
+                                max(
+                                    0.0,
+                                    min(
+                                        90.0,
+                                        float(signal.get("strength") or 0.0)
+                                        + (4.0 if same_direction else -6.0),
+                                    ),
+                                ),
+                                1,
+                            ),
+                        }
+                        # A strong market move directly against a marginal model
+                        # is a WAIT, not a reason to force the opposite bet.
+                        if (
+                            not same_direction
+                            and float(market_steam.get("strength") or 0.0) >= 82.0
+                            and float(signal.get("strength") or 0.0) < 84.0
+                        ):
+                            continue
                     signal = {
                         **signal,
                         "scope": lane_row.get("scope"),

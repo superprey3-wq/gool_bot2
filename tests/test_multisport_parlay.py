@@ -7,12 +7,15 @@ def _row(event_id, odd=1.65, strength=80, probability=0.72, sport="hockey", fami
     return {
         "entry_id": f"{sport}:{event_id}:{family}",
         "event_id": event_id,
+        "flashscore_event_id": event_id,
         "sport": sport,
         "phase": "PREMATCH",
         "result": "pending",
         "home": f"H{event_id}",
         "away": f"A{event_id}",
         "selection": "ТБ 5.5",
+        "direction": "over",
+        "line": 5.5,
         "odd": odd,
         "strength": strength,
         "fair_probability": probability,
@@ -185,3 +188,116 @@ def test_parlay_prefers_safer_alternative_over_higher_odd_single(monkeypatch):
     assert first["entry_id"] == "safe-1"
     assert first["selection"] == "1-я половина: ТМ 122.5"
     assert first["odd"] == 1.55
+
+
+
+def test_parlay_delivery_rejects_same_match_when_market_changes_across_restart(tmp_path, monkeypatch):
+    import copy
+    import gool_bot2.xbet_multisport_steam as steam
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", "3")
+    sent = []
+    monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append((png, caption)) or 1)
+
+    first = build_sport_parlays([_row("FS1"), _row("FS2", odd=1.60)], "hockey")[0]
+    worker = MultiSportSteamWorker(tmp_path)
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [first]) == 1
+
+    changed = copy.deepcopy(first)
+    changed["legs"][0]["entry_id"] = "hockey:parlay-safe:FS1:FULL_MATCH:home_total:ИТМ1 2.5"
+    changed["legs"][0]["market_family"] = "home_total"
+    changed["legs"][0]["selection"] = "ИТМ1 2.5"
+    changed["legs"][0]["direction"] = "under"
+    changed["legs"][0]["line"] = 2.5
+    changed["legs"][1]["event_id"] = "FS3"
+    changed["legs"][1]["flashscore_event_id"] = "FS3"
+    changed["legs"][1]["entry_id"] = "hockey:parlay-safe:FS3:FULL_MATCH:match_total:ТМ 6.5"
+    changed["legs"][1]["home"] = "HFS3"
+    changed["legs"][1]["away"] = "AFS3"
+
+    restarted = MultiSportSteamWorker(tmp_path)
+    assert restarted._deliver_new_parlays(SPORTS["hockey"], [changed]) == 0
+    assert len(sent) == 1
+
+
+def test_parlay_delivery_migrates_old_signature_only_state_and_blocks_reused_fixture(tmp_path, monkeypatch):
+    import json
+    import gool_bot2.xbet_multisport_steam as steam
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", "3")
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.parlay_delivery_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.parlay_delivery_path.write_text(json.dumps({
+        "signatures": [
+            "hockey|hockey:parlay-safe:FSOLD1:FULL_MATCH:match_total:ТМ 5.5|"
+            "hockey:parlay-safe:FSOLD2:FULL_MATCH:match_total:ТБ 4.5"
+        ]
+    }, ensure_ascii=False), encoding="utf-8")
+
+    sent = []
+    monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append(1) or 1)
+
+    candidate = build_sport_parlays([_row("FSOLD1"), _row("FSNEW")], "hockey")[0]
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [candidate]) == 0
+    assert sent == []
+
+
+def test_parlay_delivery_has_daily_per_sport_cap(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", "1")
+    sent = []
+    monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append(1) or 1)
+
+    worker = MultiSportSteamWorker(tmp_path)
+    first = build_sport_parlays([_row("A"), _row("B", odd=1.60)], "hockey")[0]
+    second = build_sport_parlays([_row("C"), _row("D", odd=1.60)], "hockey")[0]
+
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [first]) == 1
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [second]) == 0
+    assert len(sent) == 1
+
+
+def test_delivered_parlay_is_journaled_and_settled(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+    from gool_bot2.multisport_journal import load_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", "1")
+    monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": 1)
+
+    worker = MultiSportSteamWorker(tmp_path)
+    parlay = build_sport_parlays([_row("SET1"), _row("SET2", odd=1.60)], "hockey")[0]
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 1
+
+    rows = load_journal(worker.journal_path)
+    parents = [row for row in rows if row.get("origin") == "multisport_parlay"]
+    assert len(parents) == 1
+    assert parents[0]["result"] == "pending"
+    assert len(parents[0]["legs"]) == 2
+
+    states = {
+        "SET1": {"coarse_status": "3", "score": [4, 2]},
+        "SET2": {"coarse_status": "3", "score": [3, 3]},
+    }
+    assert worker._settle(SPORTS["hockey"], states) == 1
+
+    settled = next(row for row in load_journal(worker.journal_path) if row.get("origin") == "multisport_parlay")
+    assert settled["result"] == "won"
+    assert settled["profit_units"] > 0
+    assert all(leg.get("result") == "won" for leg in settled["legs"])

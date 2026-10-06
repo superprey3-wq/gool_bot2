@@ -280,6 +280,25 @@ def multisport_status_text() -> str:
             f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · mapped {int(row.get('prematch_mapped') or 0)} · scan {int(row.get('prematch_scanned') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
             f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · 1xBet {int(row.get('xbet_live') or 0)} · mapped {int(row.get('mapped') or 0)} · decoded {int(row.get('decoded') or 0)} · mismatch {int(row.get('score_mismatch') or 0)} · decode_fail {int(row.get('market_decode_failed') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
+
+    super10 = (state or {}).get("global_super10") if isinstance(state, dict) else {}
+    if isinstance(super10, dict):
+        status = str(super10.get("status") or "нет данных")
+        target = int(super10.get("target") or 10)
+        available = int(super10.get("available") or 0)
+        strict = int(super10.get("strict") or 0)
+        reserve = int(super10.get("reserve_extra") or 0)
+        by_sport = super10.get("available_by_sport") or {}
+        missing = [str(x) for x in (super10.get("missing_sports") or []) if str(x)]
+        detail = (
+            f"🌐 <b>SUPER 10</b> · {status}\n"
+            f"├ готово {available}/{target} · strict {strict} · reserve +{reserve}\n"
+            f"└ ⚽ {int(by_sport.get('football') or 0)} · 🏒 {int(by_sport.get('hockey') or 0)} · "
+            f"🏀 {int(by_sport.get('basketball') or 0)}"
+        )
+        if missing:
+            detail += "\n⚠️ нет подходящих ног: " + ", ".join(missing)
+        lines.append(detail)
     return "\n".join(lines)
 
 

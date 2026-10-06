@@ -1874,8 +1874,8 @@ class MultiSportSteamWorker:
         scope = str(stats_payload.get("scope") or inferred_scope)
         if scope == SCOPE_FULL:
             scope = inferred_scope
-        segment_memory = self._flashscore_segment_memory(fs, cfg)
-        current_segment_prior = segment_prior(segment_memory, scope)
+        segment_memory: dict[str, Any] = {}
+        current_segment_prior: dict[str, Any] = {}
         segment_score = scoped_scores.get(scope)
         segment_score_verified = segment_score is not None
         if segment_score is None:
@@ -2101,6 +2101,13 @@ class MultiSportSteamWorker:
                 # exposes a non-skipping current-quarter state.
                 state = "WAIT"
                 reason += " · пауза между четвертями: ждём фактический старт"
+
+        # Historical Q/P line scores are much more expensive than the live box
+        # score. Fetch them lazily only after the cheap Flashscore gate says the
+        # match is worth bookmaker pricing. The cache then survives every scan.
+        if state in {"PASS", "BORDERLINE"}:
+            segment_memory = self._flashscore_segment_memory(fs, cfg)
+            current_segment_prior = segment_prior(segment_memory, scope)
         return {
             "flashscore_event_id": event_id,
             "home": str(fs.get("home") or ""),

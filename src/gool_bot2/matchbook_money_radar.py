@@ -194,7 +194,11 @@ def build_money_radar(state: dict[str, Any], *, limit: int = 5) -> list[dict[str
             baseline_scope = "fixed"
 
         baseline_multiple = max(1.5, _env("MATCHBOOK_RADAR_BASELINE_MULTIPLE", 3.0))
-        threshold = max(fixed, baseline * baseline_multiple)
+        threshold = (
+            fixed
+            if baseline_scope == "fixed"
+            else max(fixed, baseline * baseline_multiple)
+        )
         volume_multiple = volume / max(1.0, baseline)
 
         flow = _flow_snapshot(market)

@@ -4381,7 +4381,7 @@ class MultiSportSteamWorker:
         used_event_ids = {
             str(event_id)
             for row in today_rows
-            for event_id in (row.get("event_ids") or [])
+            for event_id in [*(row.get("event_ids") or []), *(row.get("event_aliases") or [])]
             if str(event_id)
         }
         # The old ledger had signatures only. Recover its fixture ids so today's
@@ -4400,6 +4400,7 @@ class MultiSportSteamWorker:
             now = time.time()
             stale = False
             event_ids: list[str] = []
+            event_aliases: set[str] = set()
             for leg in parlay.get("legs") or []:
                 try:
                     start_ts = float(leg.get("start_ts") or 0.0)
@@ -4411,15 +4412,21 @@ class MultiSportSteamWorker:
                 identity = str(leg.get("flashscore_event_id") or leg.get("event_id") or "")
                 if identity:
                     event_ids.append(identity)
+                    event_aliases.add(identity)
+                for alias_key in ("book_event_id", "event_id", "flashscore_event_id"):
+                    alias = str(leg.get(alias_key) or "")
+                    if alias:
+                        event_aliases.add(alias)
             if stale:
                 print(f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_STARTED_OR_IMMINENT", flush=True)
                 continue
             if not event_ids or len(event_ids) != len(set(event_ids)):
                 print(f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_DUPLICATE_MATCH_INSIDE", flush=True)
                 continue
-            if any(event_id in used_event_ids for event_id in event_ids):
+            reused = sorted(event_aliases & used_event_ids)
+            if reused:
                 print(
-                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_EVENT_REUSE events={','.join(event_ids)}",
+                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_EVENT_REUSE events={','.join(reused)}",
                     flush=True,
                 )
                 continue
@@ -4444,12 +4451,13 @@ class MultiSportSteamWorker:
                 continue
 
             sent_signatures.add(signature)
-            used_event_ids.update(event_ids)
+            used_event_ids.update(event_aliases)
             record = {
                 "day": day,
                 "sport": cfg.key,
                 "signature": signature,
                 "event_ids": list(event_ids),
+                "event_aliases": sorted(event_aliases),
                 "sent_at": datetime.now(timezone.utc).isoformat(),
             }
             history.append(record)

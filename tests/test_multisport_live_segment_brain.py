@@ -353,7 +353,16 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
         # the reliable 1xBet segment clock only after Brain selected the game.
         "projected_total": 7.8,
         "current_segment_total": 31,
-        "history_points": 2,
+        "history_points": 3,
+        "recent_window_seconds": 60.0,
+        "recent_possessions_per_min": 2.4,
+        "recent_score_rate": 5.0,
+        "live_game_stats": {
+            "current_segment_available": True,
+            "stats_mode": "cumulative_through_current_segment",
+            "segment_stats": {"rebounds": [8, 7]},
+            "segment_attempts": {},
+        },
         "brain_reason": "Flashscore pace and shooting pressure",
     }
     lane = {
@@ -520,6 +529,15 @@ def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3
         "current_segment_score": [2, 0],
         "current_segment_total": 2,
         "history_points": 3,
+        "recent_window_seconds": 60.0,
+        "recent_possessions_per_min": 1.5,
+        "recent_score_rate": 1.0,
+        "live_game_stats": {
+            "current_segment_available": True,
+            "stats_mode": "cumulative_through_current_segment",
+            "segment_stats": {"rebounds": [1, 0]},
+            "segment_attempts": {},
+        },
         "brain_reason": "Flashscore stats selected this game first",
     }
     lane = {

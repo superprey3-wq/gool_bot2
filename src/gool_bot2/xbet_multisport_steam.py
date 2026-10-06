@@ -2060,6 +2060,7 @@ class MultiSportSteamWorker:
             gate = hockey_live_candidate_gate({
                 "live_game_stats": stats_payload,
                 "history_points": len(recent),
+                "recent_window_seconds": age,
                 "recent_shot_rate": recent_shot_rate,
             })
             rating = float(gate.get("score") or 0.0)

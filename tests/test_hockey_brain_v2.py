@@ -106,20 +106,30 @@ def test_integer_total_tracks_push_separately():
     assert abs((win + push + loss) - 1.0) < 1e-9
 
 
-def test_live_gate_requires_fresh_second_snapshot():
+def test_live_gate_requires_fresh_segment_window_not_just_two_snapshots():
     first = live_candidate_gate({
         "live_game_stats": {"current_segment_available": True},
         "history_points": 1,
+        "recent_window_seconds": 0.0,
         "recent_shot_rate": 4.0,
     })
     assert first["state"] == "WAIT"
 
-    second = live_candidate_gate({
+    too_early = live_candidate_gate({
         "live_game_stats": {"current_segment_available": True},
         "history_points": 2,
+        "recent_window_seconds": 25.0,
         "recent_shot_rate": 2.6,
     })
-    assert second["state"] in {"PASS", "BORDERLINE"}
+    assert too_early["state"] == "WAIT"
+
+    fresh = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": True},
+        "history_points": 3,
+        "recent_window_seconds": 60.0,
+        "recent_shot_rate": 1.1,
+    })
+    assert fresh["state"] in {"PASS", "BORDERLINE"}
 
 
 def test_live_fast_recent_pressure_can_emit_over_without_using_cumulative_shot_total():
@@ -132,6 +142,16 @@ def test_live_fast_recent_pressure_can_emit_over_without_using_cumulative_shot_t
     assert signal["brain_mode"] == "hockey_live_v2"
     assert signal["edge"] > 0.055
     assert signal["strength"] <= 89.0
+
+
+def test_normal_combined_sog_pace_does_not_auto_create_an_under():
+    # KHL baseline is roughly around this combined SOG/min range in the model.
+    # A normal pace should be neutral evidence, not an automatic UNDER trigger.
+    signal = live_signal(
+        _live_brain(recent_shot_rate=1.05),
+        _live_lane(line=1.5, market_over=0.50),
+    )
+    assert signal is None
 
 
 def test_huge_cumulative_shots_do_not_force_over_when_recent_pressure_is_low():

@@ -343,25 +343,38 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
 
 
 def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
-    """Broad Flashscore-only gate; actual bet direction is decided after pricing."""
+    """Flashscore-only freshness gate; direction is decided only after pricing.
+
+    A new period starts with a clean history key. Do not let two very close
+    snapshots turn every period into an automatic candidate.
+    """
     stats_payload = dict(brain.get("live_game_stats") or {})
     available = bool(stats_payload.get("current_segment_available"))
     points = int(brain.get("history_points") or 0)
-    rate = max(0.0, _num(brain.get("recent_shot_rate"), 0.0) or 0.0)
+    window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+    min_points = max(2, int(_env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
+    min_window = max(30.0, _env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
+
     score = 38.0
     if available:
         score += 12.0
-    if points >= 2:
-        score += 12.0
-    if points >= 3:
-        score += 5.0
-    if rate >= 2.0 or (0.0 < rate <= 1.0):
+    if points >= min_points:
+        score += 14.0
+    elif points >= 2:
+        score += 6.0
+    if window >= min_window:
         score += 8.0
+
     score = _clamp(score, 0.0, 78.0)
-    state = "PASS" if score >= 65.0 else ("BORDERLINE" if score >= 56.0 else "WAIT")
-    if not available or points < 2:
+    state = "PASS" if score >= 68.0 else ("BORDERLINE" if score >= 60.0 else "WAIT")
+    if not available or points < min_points or window < min_window:
         state = "WAIT"
-    return {"state": state, "score": round(score, 1)}
+    return {
+        "state": state,
+        "score": round(score, 1),
+        "required_snapshots": min_points,
+        "required_window_seconds": round(min_window, 1),
+    }
 
 
 def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] | None:
@@ -369,7 +382,11 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
     if str(lane.get("scope") or "") != str(brain.get("scope") or ""):
         return None
-    if int(brain.get("history_points") or 0) < 2:
+    min_points = max(2, int(_env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
+    min_window = max(30.0, _env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
+    if int(brain.get("history_points") or 0) < min_points:
+        return None
+    if max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0) < min_window:
         return None
 
     try:
@@ -414,13 +431,25 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     recent_shot_rate = max(0.0, _num(brain.get("recent_shot_rate"), 0.0) or 0.0)
     recent_blocked_rate = max(0.0, _num(brain.get("recent_blocked_rate"), 0.0) or 0.0)
     recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
-    pressure_window_ready = recent_window >= 60.0
+    pressure_window_ready = recent_window >= min_window
+
+    # recent_shot_rate is COMBINED shots-on-goal per minute. The old fixed
+    # 1.65 baseline was too high for normal hockey and therefore pushed the
+    # posterior toward UNDER in ordinary games. Anchor the pace threshold to
+    # the same goal/shot assumption used by the projection instead.
+    goal_per_shot = _clamp(_env_float("GOOL_HOCKEY_LIVE_GOAL_PER_SHOT", 0.08), 0.05, 0.16)
+    expected_shots_per_min = _clamp(period_lambda / max(0.2, goal_per_shot * 20.0), 0.72, 1.40)
+    fast_shot_rate = expected_shots_per_min * 1.18
+    slow_shot_rate = expected_shots_per_min * 0.82
+
     shot_factor = 1.0
     if pressure_window_ready:
         shot_factor = _clamp(
-            1.0 + (recent_shot_rate - 1.65) * 0.18 + recent_blocked_rate * 0.025,
-            0.76,
-            1.28,
+            1.0
+            + (recent_shot_rate - expected_shots_per_min) * 0.28
+            + recent_blocked_rate * 0.018,
+            0.80,
+            1.25,
         )
 
     stats_payload = dict(brain.get("live_game_stats") or {})
@@ -469,17 +498,24 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
 
     agreements = 1
-    if direction == "over" and pressure_window_ready and recent_shot_rate >= 1.90:
+    if direction == "over" and pressure_window_ready and recent_shot_rate >= fast_shot_rate:
         agreements += 1
-    elif direction == "under" and pressure_window_ready and recent_shot_rate <= 1.10:
-        # Use a genuine 60–180 second window; a quiet 20–30 second slice is too
-        # noisy to justify an UNDER in hockey.
+    elif direction == "under" and pressure_window_ready and recent_shot_rate <= slow_shot_rate:
+        # Require genuinely slow pace relative to the league/match scoring
+        # baseline, not merely a pace below the old fixed 1.65 SOG/min number.
         agreements += 1
     if direction == "over" and recent_penalty_delta > 0:
         agreements += 1
     if scope == "PERIOD_3" and direction == "over" and margin <= 2 and remaining <= 420:
         agreements += 1
-    if direction == "under" and scope != "PERIOD_3" and current == 0 and elapsed >= 360 and pressure_window_ready and recent_shot_rate <= 1.15:
+    if (
+        direction == "under"
+        and scope != "PERIOD_3"
+        and current == 0
+        and elapsed >= 360
+        and pressure_window_ready
+        and recent_shot_rate <= slow_shot_rate * 0.95
+    ):
         agreements += 1
     if agreements < 2:
         return None
@@ -517,6 +553,9 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),
         "recent_rate_per_min": round(recent_shot_rate, 3),
+        "expected_shots_per_min": round(expected_shots_per_min, 3),
+        "fast_shot_rate": round(fast_shot_rate, 3),
+        "slow_shot_rate": round(slow_shot_rate, 3),
         "recent_blocked_rate_per_min": round(recent_blocked_rate, 3),
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,

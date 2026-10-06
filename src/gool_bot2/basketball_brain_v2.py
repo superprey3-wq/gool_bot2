@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any
 
 
@@ -15,6 +16,13 @@ def _num(value: Any, default: float | None = None) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def _normal_cdf(x: float, mean: float, sd: float) -> float:
@@ -639,24 +647,37 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
     recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
     recent_poss_rate = max(0.0, _num(brain.get("recent_possessions_per_min"), 0.0) or 0.0)
+    min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
+    min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
 
     score = 40.0
     if available:
         score += 12.0
-    if points >= 2:
-        score += 9.0
-    if points >= 3:
-        score += 4.0
-    if window >= 25.0:
+    if points >= min_points:
+        score += 13.0
+    elif points >= 2:
         score += 5.0
+    if window >= min_window:
+        score += 7.0
     if recent_poss_rate > 0:
         score += 7.0
     elif recent_score_rate > 0:
         score += 4.0
-    state = "PASS" if score >= 69.0 else ("BORDERLINE" if score >= 60.0 else "WAIT")
-    if not available or points < 2 or bool(brain.get("break_transition")):
+
+    state = "PASS" if score >= 72.0 else ("BORDERLINE" if score >= 64.0 else "WAIT")
+    if (
+        not available
+        or points < min_points
+        or window < min_window
+        or bool(brain.get("break_transition"))
+    ):
         state = "WAIT"
-    return {"state": state, "score": round(_clamp(score, 0.0, 82.0), 1)}
+    return {
+        "state": state,
+        "score": round(_clamp(score, 0.0, 82.0), 1),
+        "required_snapshots": min_points,
+        "required_window_seconds": round(min_window, 1),
+    }
 
 
 def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] | None:
@@ -666,7 +687,13 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
     if str(lane.get("scope") or "") != str(brain.get("scope") or ""):
         return None
-    if bool(brain.get("break_transition")) or int(brain.get("history_points") or 0) < 2:
+    min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
+    min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
+    if bool(brain.get("break_transition")):
+        return None
+    if int(brain.get("history_points") or 0) < min_points:
+        return None
+    if max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0) < min_window:
         return None
     try:
         elapsed = float(lane.get("clock_seconds"))
@@ -811,21 +838,36 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             return None
 
     agreement = 1
+    directional_confirmation = False
     if possession_source != "points_clock_fallback":
-        if direction == "over" and poss_per_min >= prior_poss_per_min * 1.06:
+        # Provider deltas arrive in bursts, so demand a stronger pace move when
+        # the evidence comes from a short delta rather than a full quarter box.
+        pace_up = 1.12 if possession_source == "flashscore_recent_delta" else 1.06
+        pace_down = 0.88 if possession_source == "flashscore_recent_delta" else 0.94
+        if direction == "over" and poss_per_min >= prior_poss_per_min * pace_up:
             agreement += 1
-        elif direction == "under" and poss_per_min <= prior_poss_per_min * 0.94:
+            directional_confirmation = True
+        elif direction == "under" and poss_per_min <= prior_poss_per_min * pace_down:
             agreement += 1
+            directional_confirmation = True
     if factors:
         efg = factors.get("efg")
         ft_rate = factors.get("ft_rate")
         tov_rate = factors.get("tov_rate")
         if direction == "over" and ((efg is not None and efg >= 0.56) or (ft_rate is not None and ft_rate >= 0.30)):
             agreement += 1
+            directional_confirmation = True
         if direction == "under" and ((efg is not None and efg <= 0.47) or (tov_rate is not None and tov_rate >= 0.16)):
             agreement += 1
+            directional_confirmation = True
     if abs(projection - line) >= 3.0:
         agreement += 1
+
+    # A line/prior mismatch is not a LIVE observation. Without an independent
+    # pace/efficiency confirmation, wait instead of turning every quarter into
+    # another UNDER just because the posterior prior sits below the market.
+    if not directional_confirmation:
+        return None
 
     # Q3 comeback context is deliberately only an assistant. It cannot create
     # a pick; it contributes one extra agreement block only when the live
@@ -880,6 +922,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "data_quality": round(data_quality, 3),
         "probability_reliability": round(probability_reliability, 3),
         "agreement_blocks": agreement,
+        "directional_confirmation": directional_confirmation,
         "four_factors": factors,
         "q3_rebound_assist": q3_assist,
         "quarter_context_assist": quarter_context,

@@ -77,7 +77,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -297,3 +297,58 @@ def test_production_sport_parlay_buttons_are_handled(tmp_path: Path, monkeypatch
     )
     assert (a, b) == (1, 1)
     assert sent == ["PARLAY:hockey", "PARLAY:basketball"]
+
+
+
+def test_production_super10_button_uses_interactive_keyboard(tmp_path: Path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append((text, reply_markup)) or True,
+    )
+    monkeypatch.setattr("gool_bot2.multisport_menu.super10_text", lambda: "SUPER10 STATUS")
+
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 21, "message": {"chat": {"id": 123}, "text": "🌐 SUPER 10"}},
+    )
+
+    assert actions >= 1
+    assert sent[0][0] == "SUPER10 STATUS"
+    callbacks = {
+        button["callback_data"]
+        for row in sent[0][1]["inline_keyboard"]
+        for button in row
+    }
+    assert callbacks == {"s10:refresh", "s10:history"}
+
+
+def test_production_super10_refresh_callback(tmp_path: Path, monkeypatch):
+    sent = []
+    answered = []
+    monkeypatch.setattr(
+        worker,
+        "_direct_send_message",
+        lambda credential, chat_id, text, reply_markup=None: sent.append((text, reply_markup)) or True,
+    )
+    monkeypatch.setattr(worker, "_direct_answer_callback", lambda token, callback_id, text: answered.append(text) or True)
+    monkeypatch.setattr("gool_bot2.multisport_menu.super10_text", lambda: "REFRESHED")
+
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {
+            "update_id": 22,
+            "callback_query": {
+                "id": "cb-1",
+                "data": "s10:refresh",
+                "message": {"chat": {"id": 123}, "message_id": 5},
+            },
+        },
+    )
+
+    assert actions == 1
+    assert sent[0][0] == "REFRESHED"
+    assert answered == ["SUPER 10 обновлён"]

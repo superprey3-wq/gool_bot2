@@ -46,3 +46,19 @@ def test_inline_telegram_poll_failure_never_breaks_match_processing(tmp_path: Pa
 
     assert worker_var._poll_inline_telegram(force=True) == 0
     assert worker_var._INLINE_TELEGRAM_OFFSET == 0
+
+
+
+def test_super10_is_on_main_keyboard_and_has_inline_actions():
+    from gool_bot2.bot_menu import MENU_KEYBOARD
+    from gool_bot2.telegram import super10_keyboard
+
+    texts = [
+        button["text"]
+        for row in MENU_KEYBOARD["keyboard"]
+        for button in row
+    ]
+    assert "🌐 SUPER 10" in texts
+
+    inline = super10_keyboard()["inline_keyboard"][0]
+    assert {button["callback_data"] for button in inline} == {"s10:refresh", "s10:history"}

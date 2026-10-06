@@ -15,6 +15,8 @@ from gool_bot2.multisport_menu import (
     sport_prematch_picks_sections,
     sport_overview_text,
     sport_phase_report_text,
+    super10_history_text,
+    super10_text,
 )
 
 
@@ -1143,3 +1145,63 @@ def test_multisport_status_shows_super10_readiness(tmp_path: Path, monkeypatch):
     assert "strict 5" in text
     assert "reserve +2" in text
     assert "⚽ 3 · 🏒 2 · 🏀 2" in text
+
+
+
+def test_super10_interactive_text_shows_readiness_and_sent_ticket(tmp_path: Path, monkeypatch):
+    import gool_bot2.global_super10 as gs
+
+    sent = tmp_path / "super10_sent.json"
+    history = tmp_path / "super10_history.json"
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_SENT_PATH", str(sent))
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_HISTORY_PATH", str(history))
+    monkeypatch.setattr(
+        gs,
+        "readiness_snapshot",
+        lambda: {
+            "target": 10,
+            "strict": 6,
+            "reserve_extra": 4,
+            "available": 10,
+            "available_by_sport": {"football": 4, "hockey": 3, "basketball": 3},
+            "missing_sports": [],
+            "need_more": 0,
+        },
+    )
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d")
+    _write(sent, {
+        "day": today,
+        "sent": True,
+        "ticket": {
+            "combined_odds": 31.5,
+            "legs": [
+                {
+                    "sport": "football",
+                    "home": "A",
+                    "away": "B",
+                    "selection": "ТБ 1.5",
+                    "odd": 1.50,
+                    "super_tier": "strict",
+                }
+            ],
+        },
+    })
+    _write(history, [
+        {
+            "day": "2026-10-06",
+            "combined_odds": 31.5,
+            "sport_counts": {"football": 4, "hockey": 3, "basketball": 3},
+        }
+    ])
+
+    current = super10_text()
+    archive = super10_history_text()
+
+    assert "Готово: <b>10/10</b>" in current
+    assert "СЕГОДНЯ SUPER 10 УЖЕ ОТПРАВЛЕН" in current
+    assert "A — B" in current
+    assert "ТБ 1.5 @ 1.50" in current
+    assert "2026-10-06" in archive
+    assert "31.50" in archive

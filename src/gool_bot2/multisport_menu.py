@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import math
 import os
@@ -22,6 +23,10 @@ SPORT_META = {
     "hockey": ("🏒", "ХОККЕЙ"),
     "basketball": ("🏀", "БАСКЕТБОЛ"),
 }
+
+
+def _h(value: Any) -> str:
+    return html.escape(str(value or ""), quote=False)
 
 
 def _runtime() -> Path:
@@ -300,6 +305,99 @@ def multisport_status_text() -> str:
             detail += "\n⚠️ нет подходящих ног: " + ", ".join(missing)
         lines.append(detail)
     return "\n".join(lines)
+
+
+def super10_text() -> str:
+    """Interactive current GLOBAL SUPER 10 view."""
+    try:
+        from .global_super10 import readiness_snapshot, sent_path
+        readiness = readiness_snapshot()
+        sent = _load_json(sent_path(), {})
+    except Exception as exc:
+        return f"🌐 <b>SUPER 10</b>\n⚠️ Не удалось прочитать состояние: <code>{_h(type(exc).__name__)}</code>"
+
+    target = int(readiness.get("target") or 10)
+    available = int(readiness.get("available") or 0)
+    strict = int(readiness.get("strict") or 0)
+    reserve = int(readiness.get("reserve_extra") or 0)
+    by_sport = readiness.get("available_by_sport") or {}
+    missing = [str(x) for x in (readiness.get("missing_sports") or []) if str(x)]
+
+    lines = [
+        "🌐 <b>SUPER 10 · ФУТБОЛ + ХОККЕЙ + БАСКЕТБОЛ</b>",
+        (
+            f"Готово: <b>{available}/{target}</b> · strict <b>{strict}</b> · "
+            f"reserve +<b>{reserve}</b>"
+        ),
+        (
+            f"⚽ {int(by_sport.get('football') or 0)} · "
+            f"🏒 {int(by_sport.get('hockey') or 0)} · "
+            f"🏀 {int(by_sport.get('basketball') or 0)}"
+        ),
+    ]
+    if missing:
+        names = {"football": "футбол", "hockey": "хоккей", "basketball": "баскетбол"}
+        lines.append("⚠️ Нет подходящих ног: " + ", ".join(names.get(x, x) for x in missing))
+    need_more = int(readiness.get("need_more") or 0)
+    if need_more > 0:
+        lines.append(f"⏳ До сборки не хватает: <b>{need_more}</b>")
+    else:
+        lines.append("✅ Пул достаточный для сборки SUPER 10.")
+
+    try:
+        report_tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+    except Exception:
+        report_tz = timezone.utc
+    today = datetime.now(report_tz).strftime("%Y-%m-%d")
+    sent_today = (
+        isinstance(sent, dict)
+        and sent.get("sent")
+        and str(sent.get("day") or "") == today
+        and isinstance(sent.get("ticket"), dict)
+    )
+    if sent_today:
+        ticket = dict(sent["ticket"])
+        lines.extend([
+            "",
+            f"✅ <b>СЕГОДНЯ SUPER 10 УЖЕ ОТПРАВЛЕН</b>",
+            f"Общий кэф: <b>{float(ticket.get('combined_odds') or ticket.get('odd') or 0):.2f}</b>",
+        ])
+        for idx, leg in enumerate(ticket.get("legs") or [], 1):
+            if not isinstance(leg, dict):
+                continue
+            icon = {"football": "⚽", "hockey": "🏒", "basketball": "🏀"}.get(str(leg.get("sport") or ""), "•")
+            tier = str(leg.get("super_tier") or "strict")
+            tier_mark = "S" if tier == "strict" else "R"
+            lines.append(
+                f"{idx}. {icon} {_h(leg.get('home') or '?')} — {_h(leg.get('away') or '?')}\n"
+                f"   {_h(leg.get('selection') or '?')} @ {float(leg.get('odd') or 0):.2f} · {tier_mark}"
+            )
+    else:
+        lines.extend([
+            "",
+            "📌 <i>Когда наберутся 10 допустимых разных матчей из всех трёх видов спорта, бот отправит карточку автоматически.</i>",
+        ])
+    return "\n".join(lines)
+
+
+def super10_history_text(limit: int = 5) -> str:
+    try:
+        from .global_super10 import history_path
+        rows = _load_json(history_path(), [])
+    except Exception as exc:
+        return f"🌐 <b>SUPER 10 · ИСТОРИЯ</b>\n⚠️ Ошибка: <code>{_h(type(exc).__name__)}</code>"
+    rows = [dict(row) for row in rows if isinstance(row, dict)]
+    if not rows:
+        return "🌐 <b>SUPER 10 · ИСТОРИЯ</b>\nПока нет отправленных SUPER 10."
+    out = ["🌐 <b>SUPER 10 · ИСТОРИЯ</b>"]
+    for row in rows[-max(1, int(limit)):][::-1]:
+        counts = row.get("sport_counts") or {}
+        out.append(
+            f"📅 <b>{_h(row.get('day') or '?')}</b> · кэф <b>{float(row.get('combined_odds') or row.get('odd') or 0):.2f}</b>\n"
+            f"⚽ {int(counts.get('football') or 0)} · 🏒 {int(counts.get('hockey') or 0)} · "
+            f"🏀 {int(counts.get('basketball') or 0)}"
+        )
+    return "\n\n".join(out)
 
 
 def sport_overview_text(sport: str) -> str:

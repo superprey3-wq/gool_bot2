@@ -145,7 +145,8 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🧠 анализ", "🔎 найти матч"}:
+        reply_markup = _bot_menu.MENU_KEYBOARD
         try:
             if text == "/start":
                 telegram_mod.subscribe(chat_id)
@@ -203,6 +204,10 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"/basketparlay", "🔗 баскет экспресс"}:
                 from .multisport_menu import sport_parlay_text
                 replies = [sport_parlay_text("basketball")]
+            elif text in {"/super10", "🌐 super 10"}:
+                from .multisport_menu import super10_text
+                replies = [super10_text()]
+                reply_markup = telegram_mod.super10_keyboard()
             elif text == "🏒 хоккей":
                 from .multisport_menu import hockey_journal_text
                 replies = [hockey_journal_text()]
@@ -248,7 +253,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             # Read the canonical keyboard at send time. Product installers may
             # mutate telegram_mod globals during import/runtime; bot_menu is the
             # single source of truth for the production reply keyboard.
-            if _direct_send_message(token, chat_id, reply, reply_markup=_bot_menu.MENU_KEYBOARD):
+            if _direct_send_message(token, chat_id, reply, reply_markup=reply_markup):
                 changed += 1
         return changed
 
@@ -272,6 +277,30 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
 
     callback = update.get("callback_query") or {}
     data = str(callback.get("data") or "")
+    if data.startswith("s10:"):
+        callback_message = callback.get("message") or {}
+        callback_chat_id = (callback_message.get("chat") or {}).get("id")
+        callback_id = str(callback.get("id") or "")
+        action = data.split(":", 1)[1]
+        try:
+            from .multisport_menu import super10_history_text, super10_text
+            body = super10_history_text() if action == "history" else super10_text()
+            if callback_chat_id is not None:
+                changed += int(bool(_direct_send_message(
+                    token,
+                    callback_chat_id,
+                    body,
+                    reply_markup=telegram_mod.super10_keyboard(),
+                )))
+            _direct_answer_callback(
+                token,
+                callback_id,
+                "История SUPER 10" if action == "history" else "SUPER 10 обновлён",
+            )
+        except Exception as exc:
+            print(f"GOOL_SUPER10_CALLBACK_ERROR action={action!r} error={type(exc).__name__}:{exc}", flush=True)
+            _direct_answer_callback(token, callback_id, "Не удалось обновить SUPER 10")
+        return changed
     if data.startswith("ma:"):
         callback_message = callback.get("message") or {}
         callback_chat_id = (callback_message.get("chat") or {}).get("id")

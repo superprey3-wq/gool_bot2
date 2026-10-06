@@ -77,8 +77,8 @@ def _api_call(method:str,payload:dict[str,Any],timeout:int=15)->dict[str,Any]|No
    body=json.loads(response.read().decode("utf-8"));return body if isinstance(body,dict) else None
  except Exception as exc:
   print(f"telegram_api_error method={method} error={type(exc).__name__}:{exc}",flush=True);return None
-def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int=25)->dict[str,Any]|None:
- token=_token()
+def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,file_bytes:bytes,content_type:str="image/png",timeout:int=25,token_override:str|None=None)->dict[str,Any]|None:
+ token=(token_override or "").strip() or _token()
  if not token:return None
  boundary=f"----GOOL{uuid.uuid4().hex}";body=bytearray()
  for key,value in fields.items():
@@ -129,6 +129,12 @@ def broadcast_photo(png:bytes,caption:str="",reply_markup:dict[str,Any]|None=Non
  if sent==0 and caption.startswith(("✅ <b>ЗАШЁЛ","❌ <b>НЕ ЗАШЁЛ")):
   return broadcast(caption)
  return sent
+def send_document(chat_id:str|int,filename:str,data:bytes,caption:str="",content_type:str="application/octet-stream",reply_markup:dict[str,Any]|None=None,token_override:str|None=None)->bool:
+ fields={"chat_id":str(chat_id)}
+ if caption:fields.update({"caption":caption,"parse_mode":"HTML"})
+ if reply_markup:fields["reply_markup"]=json.dumps(reply_markup,ensure_ascii=False,separators=(",",":"))
+ result=_multipart_call("sendDocument",fields,"document",filename,data,content_type=content_type,timeout=35,token_override=token_override)
+ return bool(result and result.get("ok"))
 def send_startup_status()->int:return broadcast("🚀 <b>GOOL Bot 4 · V4 ACTIVE запущен</b>\nLIVE Brain V4: ✅\nГол до перерыва: ✅\nЕщё гол: ✅\n1xBet odds + VALUE: ✅\nLIVE collector: ✅\nSignal worker: ✅\nTelegram: ✅\n\n🧠 Кнопка «Анализ» — текущие матчи и решения V4.",reply_markup=MENU_KEYBOARD)
 def edit_message_reply_markup(chat_id:str|int,message_id:int,reply_markup:dict[str,Any])->bool:
  r=_api_call("editMessageReplyMarkup",{"chat_id":str(chat_id),"message_id":int(message_id),"reply_markup":reply_markup});return bool(r and r.get("ok"))
@@ -253,7 +259,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","/fullreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","📄 полный отчёт","📄 полный отчет","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -314,6 +320,13 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text in {"/basketparlay","🔗 баскет экспресс"}:
     from .multisport_menu import sport_parlay_text
     replies=[sport_parlay_text("basketball")]
+   elif text in {"/fullreport","📄 полный отчёт","📄 полный отчет"}:
+    from .full_report_export import build_full_report
+    filename,data,caption=build_full_report()
+    if send_document(chat_id,filename,data,caption=caption,content_type="text/html; charset=utf-8",reply_markup=MENU_KEYBOARD):changed+=1
+    else:
+     if send_message(chat_id,"⚠️ Не удалось отправить файл полного отчёта.",reply_markup=MENU_KEYBOARD):changed+=1
+    continue
    elif text in {"/super10","🌐 super 10"}:
     from .multisport_menu import super10_text
     if send_message(chat_id,super10_text(),reply_markup=super10_keyboard()):changed+=1

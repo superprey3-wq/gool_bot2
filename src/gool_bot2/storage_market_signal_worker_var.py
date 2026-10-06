@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "📄 отчёт за день", "📄 отчет за день", "📄 полный отчёт", "📄 полный отчет", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🧠 анализ", "🔎 найти матч"}:
         reply_markup = _bot_menu.MENU_KEYBOARD
         try:
             if text == "/start":
@@ -153,36 +153,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 replies = [telegram_mod.START_TEXT]
             elif text in {"📊 отчёт", "📊 отчет"}:
                 telegram_mod._force_reconcile_pending(journal_path)
-                summary_sent = _direct_send_message(
-                    token,
-                    chat_id,
-                    telegram_mod.report_text(journal_path),
-                    reply_markup=_bot_menu.MENU_KEYBOARD,
-                )
-                try:
-                    from .full_report_export import build_full_report
-                    filename, data, caption = build_full_report()
-                    file_sent = telegram_mod.send_document(
-                        chat_id,
-                        filename,
-                        data,
-                        caption=caption,
-                        content_type="text/html; charset=utf-8",
-                        token_override=token,
-                    )
-                except Exception as exc:
-                    print(
-                        f"GOOL_DAY_REPORT_FILE_ERROR {type(exc).__name__}:{exc}",
-                        flush=True,
-                    )
-                    file_sent = False
-                    _direct_send_message(
-                        token,
-                        chat_id,
-                        "⚠️ Сводка готова, но файл полного отчёта за день отправить не удалось.",
-                        reply_markup=_bot_menu.MENU_KEYBOARD,
-                    )
-                return int(bool(summary_sent)) + int(bool(file_sent))
+                replies = [telegram_mod.report_text(journal_path)]
             elif text == "/prematchaudit":
                 from .prematch_day_audit import prematch_day_audit_text
                 prematch_journal = Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)
@@ -233,7 +204,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"/basketparlay", "🔗 баскет экспресс"}:
                 from .multisport_menu import sport_parlay_text
                 replies = [sport_parlay_text("basketball")]
-            elif text in {"/fullreport", "/dayreport", "📄 отчёт за день", "📄 отчет за день", "📄 полный отчёт", "📄 полный отчет"}:
+            elif text in {"/fullreport", "/dayreport"}:
                 from .full_report_export import build_full_report
                 filename, data, caption = build_full_report()
                 sent = telegram_mod.send_document(

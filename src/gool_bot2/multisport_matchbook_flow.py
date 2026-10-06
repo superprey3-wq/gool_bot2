@@ -77,10 +77,38 @@ def _best_event(
     return (best, best_score) if best is not None and best_score >= floor else (None, best_score)
 
 
+def _is_match_total_market(market: dict[str, Any]) -> bool:
+    name = str(market.get("name") or "").casefold()
+    if not name:
+        return False
+    # Do not let a player prop or a team total at a numerically similar line
+    # masquerade as the game's total-money flow.
+    reject = (
+        "player",
+        "shots on goal",
+        "player shots",
+        "assists",
+        "rebounds",
+        "three pointers",
+        "3 pointers",
+        "team total",
+        "home total",
+        "away total",
+        "individual total",
+        "total points by",
+        "total goals by",
+    )
+    if any(token in name for token in reject):
+        return False
+    return "total" in name or "over/under" in name or "o/u" in name
+
+
 def _closest_market(event: dict[str, Any], period: str, line: float, sport: str) -> dict[str, Any] | None:
     candidates: list[tuple[float, dict[str, Any]]] = []
     for raw in (event.get("totals") or {}).values():
         if not isinstance(raw, dict) or str(raw.get("period") or "") != period:
+            continue
+        if not _is_match_total_market(raw):
             continue
         try:
             market_line = float(raw.get("line"))

@@ -460,7 +460,7 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     if not enabled():
         return {"status": "disabled"}
     if not delivery_enabled:
-        return {"status": "shadow"}
+        return {"status": "shadow", **readiness_snapshot()}
 
     path = sent_path()
     with _locked(path):

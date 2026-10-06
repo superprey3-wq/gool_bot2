@@ -49,6 +49,7 @@ from .basketball_brain_v2 import (
     recent_possession_metrics as basketball_recent_possession_metrics,
 )
 from .segment_memory import build_segment_memory, segment_prior
+from .multisport_matchbook_flow import matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
     balanced_total as sport_balanced_total,
@@ -3995,6 +3996,10 @@ class MultiSportSteamWorker:
             "historical_confirmation": bool(signal.get("historical_confirmation")),
             "market_steam": signal.get("market_steam") or {},
             "market_steam_agrees": signal.get("market_steam_agrees"),
+            "matchbook_money_flow": signal.get("matchbook_money_flow") or {},
+            "matchbook_money_flow_agrees": signal.get("matchbook_money_flow_agrees"),
+            "matchbook_matched_volume_delta": signal.get("matchbook_matched_volume_delta"),
+            "matchbook_fair_delta_pp": signal.get("matchbook_fair_delta_pp"),
             "current_segment_projection": signal.get("current_segment_projection"),
             "metric_delta": float(signal.get("metric_delta") or 0.0),
             "probability_delta_pp": float(signal.get("probability_delta_pp") or 0.0),
@@ -4827,6 +4832,70 @@ class MultiSportSteamWorker:
                             and float(signal.get("strength") or 0.0) < 84.0
                         ):
                             continue
+
+                    # Matchbook contributes actual matched-volume flow. It never
+                    # creates a candidate by itself: model + Flashscore must have
+                    # already produced the signal above. For now we intentionally
+                    # apply the exchange confirmation only to match totals; team
+                    # totals remain confirmed by the 1xBet market until Matchbook
+                    # team-total names have their own collision-safe classifier.
+                    matchbook_flow: dict[str, Any] = {}
+                    if lane_family == "match_total":
+                        matchbook_flow = matchbook_money_flow(
+                            sport=cfg.key,
+                            home=str(lane_row.get("home") or ""),
+                            away=str(lane_row.get("away") or ""),
+                            scope=lane_scope,
+                            line=float(signal.get("line") or lane_row.get("line") or 0.0),
+                            direction=str(signal.get("direction") or ""),
+                        )
+                        if bool(matchbook_flow.get("available")):
+                            confirmed = bool(matchbook_flow.get("confirmed"))
+                            agrees = matchbook_flow.get("agrees")
+                            strong_flow = bool(matchbook_flow.get("strong"))
+                            adjustment = 0.0
+                            if confirmed and agrees is True:
+                                adjustment = 7.0 if strong_flow else 4.0
+                            elif confirmed and agrees is False:
+                                adjustment = -10.0 if strong_flow else -6.0
+                            signal = {
+                                **signal,
+                                "matchbook_money_flow": dict(matchbook_flow),
+                                "matchbook_money_flow_agrees": agrees,
+                                "matchbook_matched_volume_delta": float(
+                                    matchbook_flow.get("matched_volume_delta") or 0.0
+                                ),
+                                "matchbook_fair_delta_pp": float(
+                                    matchbook_flow.get("fair_over_delta_pp") or 0.0
+                                ),
+                                "strength": round(
+                                    max(
+                                        0.0,
+                                        min(92.0, float(signal.get("strength") or 0.0) + adjustment),
+                                    ),
+                                    1,
+                                ),
+                            }
+                            # Strong, genuinely matched money moving the opposite
+                            # way is a WAIT. Do not automatically flip direction.
+                            if confirmed and agrees is False and strong_flow:
+                                continue
+                        else:
+                            signal = {
+                                **signal,
+                                "matchbook_money_flow": dict(matchbook_flow),
+                                "matchbook_money_flow_agrees": None,
+                            }
+                    else:
+                        signal = {
+                            **signal,
+                            "matchbook_money_flow": {
+                                "available": False,
+                                "reason": "team_total_classifier_not_enabled",
+                            },
+                            "matchbook_money_flow_agrees": None,
+                        }
+
                     signal = {
                         **signal,
                         "scope": lane_row.get("scope"),

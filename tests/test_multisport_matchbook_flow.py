@@ -219,3 +219,33 @@ def test_multisport_money_flow_rejects_wrong_sport_and_stale_state():
     )
     assert result["available"] is False
     assert result["reason"] == "matchbook_state_stale"
+
+
+def test_money_flow_ignores_player_prop_even_when_its_line_is_closer():
+    state = _flow_state(sport="basketball", period="QUARTER_3", line=45.5, pp=3.2, delta=120.0)
+    event = state["events"][0]
+    total = event["totals"].pop("QUARTER_3:45.5")
+    total["line"] = 44.5
+    total["name"] = "3rd Quarter Total"
+    event["totals"]["QUARTER_3:44.5"] = total
+    event["totals"]["QUARTER_3:45.5"] = {
+        **total,
+        "id": "player-prop",
+        "name": "Player Points Total",
+        "line": 45.5,
+    }
+
+    result = matchbook_money_flow(
+        sport="basketball",
+        home="Alpha",
+        away="Beta",
+        scope="QUARTER_3",
+        line=45.5,
+        direction="over",
+        state=state,
+        now=datetime(2026, 10, 7, 0, 1, 0, tzinfo=timezone.utc),
+    )
+    assert result["available"] is True
+    assert result["market_id"] == "market1"
+    assert result["market_name"] == "3rd Quarter Total"
+    assert result["line_gap"] == 1.0

@@ -21,6 +21,11 @@ def _event() -> dict:
             {"participant-name": "Alpha FC"},
             {"participant-name": "Beta United"},
         ],
+        "meta-tags": [
+            {"name": "Soccer", "type": "SPORT", "url-name": "soccer"},
+            {"name": "Greece", "type": "COUNTRY", "url-name": "greece"},
+            {"name": "Super League 2", "type": "COMPETITION", "url-name": "super-league-2"},
+        ],
         "markets": [
             {
                 "id": 201,
@@ -114,12 +119,18 @@ def test_decode_matchbook_totals_and_orderbook() -> None:
     event = decode_event(_event())
     assert event is not None
     assert event["home"] == "Alpha FC"
+    assert event["country"] == "Greece"
+    assert event["league"] == "Super League 2"
     assert "FT:2.5" in event["totals"]
     assert "1H:1.5" in event["totals"]
     total = event["totals"]["FT:2.5"]
     assert total["volume"] == 240.0
     assert total["over"]["best_back"]["odds"] == 1.80
     assert total["over"]["best_lay"]["odds"] == 1.84
+    assert total["over_matched"] == 140.0
+    assert total["under_matched"] == 100.0
+    assert round(total["over_share_pct"], 1) == 58.3
+    assert round(total["under_share_pct"], 1) == 41.7
     assert 0.50 < total["fair_over"] < 0.60
 
 
@@ -177,6 +188,19 @@ def test_flow_waits_for_real_30_and_60_second_windows() -> None:
 
     fourth = collector._flow("1", "FT:2.5", {"fair_over": 0.56, "volume": 230.0}, 161.0)
     assert fourth["window_ready_60s"] is True
+    assert fourth["window_ready_120s"] is False
+    assert fourth["window_ready_300s"] is False
+
+    fifth = collector._flow("1", "FT:2.5", {"fair_over": 0.57, "volume": 400.0}, 221.0)
+    assert fifth["window_ready_120s"] is True
+    assert fifth["volume_delta_120s"] == 300.0
+    assert fifth["fair_over_delta_pp_120s"] == 7.0
+
+    sixth = collector._flow("1", "FT:2.5", {"fair_over": 0.58, "volume": 900.0}, 401.0)
+    assert sixth["window_ready_300s"] is True
+    assert sixth["volume_delta_300s"] == 800.0
+    assert sixth["fair_over_delta_pp_300s"] == 8.0
+    assert sixth["long_over_consistency"] > 0.9
 
 
 def test_orderbook_confirmation_requires_persistent_pressure() -> None:

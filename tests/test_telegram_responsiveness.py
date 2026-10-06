@@ -59,6 +59,36 @@ def test_super10_is_on_main_keyboard_and_has_inline_actions():
         for button in row
     ]
     assert "🌐 SUPER 10" in texts
+    assert "📄 Полный отчёт" in texts
 
     inline = super10_keyboard()["inline_keyboard"][0]
     assert {button["callback_data"] for button in inline} == {"s10:refresh", "s10:history"}
+
+
+
+def test_send_document_uses_telegram_multipart(monkeypatch):
+    from gool_bot2 import telegram
+
+    calls = []
+    monkeypatch.setattr(
+        telegram,
+        "_multipart_call",
+        lambda method, fields, file_field, filename, file_bytes, content_type="image/png", timeout=25, token_override=None: calls.append(
+            (method, fields, file_field, filename, file_bytes, content_type, token_override)
+        ) or {"ok": True},
+    )
+
+    assert telegram.send_document(
+        123,
+        "report.html",
+        b"<html/>",
+        caption="REPORT",
+        content_type="text/html; charset=utf-8",
+        token_override="secret-token",
+    ) is True
+    assert calls[0][0] == "sendDocument"
+    assert calls[0][2] == "document"
+    assert calls[0][3] == "report.html"
+    assert calls[0][4] == b"<html/>"
+    assert calls[0][5] == "text/html; charset=utf-8"
+    assert calls[0][6] == "secret-token"

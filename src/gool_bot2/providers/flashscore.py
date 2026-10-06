@@ -4,6 +4,7 @@ import os
 import re
 import time
 from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from urllib.parse import quote
 
@@ -509,6 +510,116 @@ class FlashscoreProvider:
                     rows.append({"event_id": event_id, "home": home, "away": away, "home_score": hs, "away_score": aws, "timestamp": _as_int(ff.get("AD")), "section": section, "source": "flashscore"})
                     if len(rows) >= limit: break
         return rows
+
+    @staticmethod
+    def parse_segment_scores(body: str, sport: str) -> dict[str, list[int]]:
+        """Parse Flashscore df_sui line scores into canonical Q/P scopes.
+
+        Basketball records look like:
+        AC÷1st Quarter¬IG÷16¬IH÷6
+        Hockey uses the same shape with "Period".
+        """
+        hockey = str(sport or "").casefold() == "hockey"
+        kind = "period" if hockey else "quarter"
+        maximum = 3 if hockey else 4
+        out: dict[str, list[int]] = {}
+        for chunk in (body or "").split("~"):
+            if not chunk:
+                continue
+            fields = _fields(chunk)
+            label = str(fields.get("AC") or "").strip()
+            match = re.match(r"^(\\d)(?:st|nd|rd|th)?\\s+" + kind + r"$", label, re.I)
+            if not match:
+                continue
+            idx = int(match.group(1))
+            if idx < 1 or idx > maximum:
+                continue
+            try:
+                home_score = int(float(fields.get("IG")))
+                away_score = int(float(fields.get("IH")))
+            except (TypeError, ValueError):
+                continue
+            scope = f"PERIOD_{idx}" if hockey else f"QUARTER_{idx}"
+            out[scope] = [home_score, away_score]
+        return out
+
+    @lru_cache(maxsize=4096)
+    def fetch_segment_scores(self, event_id: str, sport: str) -> dict[str, list[int]]:
+        event_id = str(event_id or "").strip()
+        if not event_id:
+            return {}
+        timeout = max(2, int(float(os.getenv("GOOL_FLASHSCORE_SEGMENT_TIMEOUT", "8"))))
+        body = self._feed(
+            f"df_sui_1_{event_id}",
+            timeout=timeout,
+            max_hosts=max(1, int(float(os.getenv("GOOL_FLASHSCORE_SEGMENT_MAX_HOSTS", "2")))),
+        )
+        return self.parse_segment_scores(body, sport)
+
+    def enrich_match_history_segments(
+        self,
+        context: dict[str, Any],
+        sport: str,
+        *,
+        recent_limit: int = 10,
+        h2h_limit: int = 6,
+    ) -> dict[str, Any]:
+        """Attach historical quarter/period line scores to recent/H2H rows.
+
+        This intentionally runs only for selected/live matches in the caller.
+        Fetches are de-duplicated by event id and cached by fetch_segment_scores.
+        """
+        out = dict(context or {})
+        keys = ("home_recent", "away_recent", "home_at_home", "away_away", "h2h")
+        limits = {
+            "home_recent": recent_limit,
+            "away_recent": recent_limit,
+            "home_at_home": recent_limit,
+            "away_away": recent_limit,
+            "h2h": h2h_limit,
+        }
+        ids: list[str] = []
+        seen: set[str] = set()
+        for key in keys:
+            for row in list(out.get(key) or [])[:max(0, int(limits[key]))]:
+                if not isinstance(row, dict):
+                    continue
+                event_id = str(row.get("event_id") or "").strip()
+                if event_id and event_id not in seen:
+                    seen.add(event_id)
+                    ids.append(event_id)
+
+        segment_map: dict[str, dict[str, list[int]]] = {}
+        workers = max(1, min(8, int(float(os.getenv("GOOL_FLASHSCORE_SEGMENT_WORKERS", "6")))))
+        if ids:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(self.fetch_segment_scores, event_id, sport): event_id
+                    for event_id in ids
+                }
+                for future in as_completed(futures):
+                    event_id = futures[future]
+                    try:
+                        segments = dict(future.result() or {})
+                    except Exception:
+                        segments = {}
+                    if segments:
+                        segment_map[event_id] = segments
+
+        for key in keys:
+            enriched: list[dict[str, Any]] = []
+            for row in out.get(key) or []:
+                if not isinstance(row, dict):
+                    continue
+                item = dict(row)
+                segments = segment_map.get(str(item.get("event_id") or ""))
+                if segments:
+                    item["segments"] = dict(segments)
+                enriched.append(item)
+            out[key] = enriched
+        out["segment_history_events"] = len(segment_map)
+        out["segment_history_requested"] = len(ids)
+        return out
 
     @staticmethod
     def _same_team(name: str, target: str) -> bool:

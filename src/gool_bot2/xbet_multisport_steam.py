@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import http.cookiejar
 import os
@@ -3469,12 +3470,93 @@ class MultiSportSteamWorker:
         self._prematch_history[key].append(dict(row))
         return list(self._prematch_history[key])
 
+    def _settle_parlay_entry(
+        self,
+        row: dict[str, Any],
+        states: dict[str, dict[str, Any]],
+        cfg: SportConfig,
+        now: str,
+    ) -> bool:
+        """Settle a delivered sport parlay from authoritative Flashscore scores."""
+        legs = [dict(item) for item in (row.get("legs") or []) if isinstance(item, dict)]
+        if not legs:
+            return False
+
+        changed = False
+        settled_results: list[str] = []
+        for leg in legs:
+            existing = str(leg.get("result") or "pending").lower()
+            if existing in _FINAL_RESULTS:
+                settled_results.append(existing)
+                continue
+
+            identity = str(leg.get("flashscore_event_id") or leg.get("event_id") or "")
+            state = states.get(identity)
+            if not state:
+                settled_results.append("pending")
+                continue
+
+            scope = str(leg.get("scope") or SCOPE_FULL)
+            if scope == SCOPE_FULL:
+                if str(state.get("coarse_status") or "") != "3":
+                    settled_results.append("pending")
+                    continue
+                full_score = list(state.get("score") or [0, 0])
+                score = (int(full_score[0]), int(full_score[1]))
+            else:
+                if not multisport_scope_is_complete(state, cfg.key, scope):
+                    settled_results.append("pending")
+                    continue
+                scoped = _flashscore_scoped_scores(state, cfg)
+                score = scoped.get(scope)
+                if score is None:
+                    settled_results.append("pending")
+                    continue
+
+            result = settle_multisport_pick(leg, int(score[0]), int(score[1]))
+            leg["result"] = result
+            leg["settled_score"] = [int(score[0]), int(score[1])]
+            leg["settled_at"] = now
+            settled_results.append(result)
+            changed = True
+
+        row["legs"] = legs
+        if "lost" in settled_results:
+            row["result"] = "lost"
+            row["profit_units"] = -1.0
+            row["settled_at"] = now
+            return True
+
+        if len(settled_results) != len(legs) or any(result == "pending" for result in settled_results):
+            return changed
+
+        if all(result == "void" for result in settled_results):
+            row["result"] = "void"
+            row["profit_units"] = 0.0
+            row["settled_odd"] = 1.0
+        else:
+            settled_odd = 1.0
+            for leg in legs:
+                if str(leg.get("result") or "") == "won":
+                    settled_odd *= float(leg.get("odd") or 1.0)
+            row["result"] = "won"
+            row["settled_odd"] = round(settled_odd, 4)
+            row["profit_units"] = round(settled_odd - 1.0, 4)
+        row["settled_at"] = now
+        return True
+
     def _settle(self, cfg: SportConfig, states: dict[str, dict[str, Any]]) -> int:
         rows = load_journal(self.journal_path)
         changed = 0
         now = datetime.now(timezone.utc).isoformat()
         for row in rows:
             if row.get("sport") != cfg.key:
+                continue
+            if str(row.get("origin") or "") == "multisport_parlay" or str(row.get("market_family") or "") == "parlay":
+                if str(row.get("result") or "pending").lower() in _FINAL_RESULTS:
+                    continue
+                if self._settle_parlay_entry(row, states, cfg, now):
+                    changed += 1
                 continue
             stored_result = str(row.get("result") or "pending")
             displayed_direction = _displayed_total_direction(row)
@@ -4178,21 +4260,99 @@ class MultiSportSteamWorker:
             )
         return f"{sport}|" + "|".join(sorted(legs))
 
-    def _sent_parlay_signatures(self) -> set[str]:
+    def _parlay_delivery_state(self) -> dict[str, Any]:
         try:
             payload = json.loads(self.parlay_delivery_path.read_text("utf-8"))
         except Exception:
-            return set()
-        if isinstance(payload, dict):
-            payload = payload.get("signatures") or []
-        return {str(value) for value in payload if str(value)} if isinstance(payload, list) else set()
+            return {"signatures": [], "history": []}
+        if isinstance(payload, list):
+            return {"signatures": [str(value) for value in payload if str(value)], "history": []}
+        if not isinstance(payload, dict):
+            return {"signatures": [], "history": []}
+        signatures = [str(value) for value in (payload.get("signatures") or []) if str(value)]
+        history = [dict(value) for value in (payload.get("history") or []) if isinstance(value, dict)]
+        return {"signatures": signatures, "history": history}
 
-    def _save_sent_parlay_signatures(self, signatures: set[str]) -> None:
+    def _sent_parlay_signatures(self) -> set[str]:
+        return set(self._parlay_delivery_state().get("signatures") or [])
+
+    @staticmethod
+    def _legacy_parlay_events(signatures: set[str], sport: str) -> set[str]:
+        """Recover event ids from the old signature-only ledger.
+
+        Event ids are fixture-specific, so retaining this migration lock prevents
+        an already-sent match from reappearing with a different market after
+        deployment without blocking future fixtures.
+        """
+        out: set[str] = set()
+        prefix = f"{sport}|"
+        for signature in signatures:
+            if not str(signature).startswith(prefix):
+                continue
+            for token in str(signature)[len(prefix):].split("|"):
+                parts = token.split(":")
+                if not parts:
+                    continue
+                if parts[0] == sport and len(parts) >= 3 and parts[1] == "parlay-safe":
+                    out.add(parts[2])
+                elif parts[0] == sport and len(parts) >= 2:
+                    out.add(parts[1])
+                elif parts[0]:
+                    out.add(parts[0])
+        return {value for value in out if value}
+
+    def _save_parlay_delivery_state(self, signatures: set[str], history: list[dict[str, Any]]) -> None:
         self.parlay_delivery_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.parlay_delivery_path.with_suffix(".tmp")
         values = sorted(signatures)[-500:]
-        tmp.write_text(json.dumps({"signatures": values}, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        history = [dict(row) for row in history][-500:]
+        tmp.write_text(
+            json.dumps({"signatures": values, "history": history}, ensure_ascii=False, separators=(",", ":")),
+            "utf-8",
+        )
         tmp.replace(self.parlay_delivery_path)
+
+    def _record_parlay_journal(
+        self,
+        cfg: SportConfig,
+        parlay: dict[str, Any],
+        signature: str,
+    ) -> None:
+        legs = [dict(item) for item in (parlay.get("legs") or []) if isinstance(item, dict)]
+        if not legs:
+            return
+        digest = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:16]
+        starts = [float(leg.get("start_ts") or 0.0) for leg in legs if float(leg.get("start_ts") or 0.0) > 0.0]
+        combined_odd = float(parlay.get("combined_odd") or 0.0)
+        entry = {
+            "entry_id": f"{cfg.key}:parlay:{digest}",
+            "journal_version": 2,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "phase": "PREMATCH",
+            "origin": "multisport_parlay",
+            "signal_type": "prematch_parlay",
+            "market_family": "parlay",
+            "scope": "MULTI_MATCH",
+            "selection": f"Экспресс ×{len(legs)}",
+            "sport": cfg.key,
+            "event_id": f"parlay:{digest}",
+            "flashscore_event_id": "",
+            "home": "ЭКСПРЕСС",
+            "away": cfg.title,
+            "league": "MULTI",
+            "odd": combined_odd,
+            "fair_probability": float(parlay.get("combined_probability") or 0.0),
+            "strength": float(parlay.get("average_strength") or 0.0),
+            "start_ts": min(starts) if starts else 0.0,
+            "scheduled_start_ts": min(starts) if starts else 0.0,
+            "legs": legs,
+            "parlay_signature": signature,
+            "result": "pending",
+            "profit_units": 0.0,
+            "mode": _mode(),
+            "telegram_sent": True,
+        }
+        append_unique(self.journal_path, entry)
 
     def _deliver_new_parlays(
         self,
@@ -4206,15 +4366,40 @@ class MultiSportSteamWorker:
         if not _truthy("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", True):
             return 0
 
-        sent_signatures = self._sent_parlay_signatures()
+        state = self._parlay_delivery_state()
+        sent_signatures = set(state.get("signatures") or [])
+        history = [dict(row) for row in (state.get("history") or []) if isinstance(row, dict)]
         delivered = 0
         changed = False
         min_lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
+        max_daily = max(1, min(3, _int_env("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", 1)))
+        day = datetime.now(_display_tz()).date().isoformat()
+        today_rows = [
+            row for row in history
+            if str(row.get("day") or "") == day and str(row.get("sport") or "") == cfg.key
+        ]
+        used_event_ids = {
+            str(event_id)
+            for row in today_rows
+            for event_id in (row.get("event_ids") or [])
+            if str(event_id)
+        }
+        # The old ledger had signatures only. Recover its fixture ids so today's
+        # already-sent matches cannot be recycled with another total/IT market.
+        used_event_ids.update(self._legacy_parlay_events(sent_signatures, cfg.key))
+
+        if len(today_rows) >= max_daily:
+            return 0
+
         for parlay in parlays:
+            if len(today_rows) >= max_daily:
+                break
+
             # Re-check immediately before Telegram delivery. A match can start
             # between the PREMATCH scan and card rendering.
             now = time.time()
             stale = False
+            event_ids: list[str] = []
             for leg in parlay.get("legs") or []:
                 try:
                     start_ts = float(leg.get("start_ts") or 0.0)
@@ -4223,9 +4408,18 @@ class MultiSportSteamWorker:
                 if start_ts > 0.0 and start_ts <= now + min_lead:
                     stale = True
                     break
+                identity = str(leg.get("flashscore_event_id") or leg.get("event_id") or "")
+                if identity:
+                    event_ids.append(identity)
             if stale:
+                print(f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_STARTED_OR_IMMINENT", flush=True)
+                continue
+            if not event_ids or len(event_ids) != len(set(event_ids)):
+                print(f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_DUPLICATE_MATCH_INSIDE", flush=True)
+                continue
+            if any(event_id in used_event_ids for event_id in event_ids):
                 print(
-                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_STARTED_OR_IMMINENT",
+                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_EVENT_REUSE events={','.join(event_ids)}",
                     flush=True,
                 )
                 continue
@@ -4248,16 +4442,30 @@ class MultiSportSteamWorker:
                     flush=True,
                 )
                 continue
+
             sent_signatures.add(signature)
+            used_event_ids.update(event_ids)
+            record = {
+                "day": day,
+                "sport": cfg.key,
+                "signature": signature,
+                "event_ids": list(event_ids),
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+            }
+            history.append(record)
+            today_rows.append(record)
+            self._record_parlay_journal(cfg, parlay, signature)
             changed = True
             delivered += sent
             print(
                 f"GOOL_{cfg.key.upper()}_PARLAY_CARD_SENT legs={len(parlay.get('legs') or [])} "
-                f"odd={float(parlay.get('combined_odd') or 0):.2f}",
+                f"odd={float(parlay.get('combined_odd') or 0):.2f} "
+                f"daily={len(today_rows)}/{max_daily}",
                 flush=True,
             )
+
         if changed:
-            self._save_sent_parlay_signatures(sent_signatures)
+            self._save_parlay_delivery_state(sent_signatures, history)
         return delivered
 
     def _enrich_parlay_source_rows(

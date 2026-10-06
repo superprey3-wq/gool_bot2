@@ -4,7 +4,7 @@ import html
 import json
 import os
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -33,14 +33,6 @@ def _parse_dt(value: Any) -> datetime | None:
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except Exception:
         return None
-
-
-def _money(value: Any) -> str:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return "—"
-    return f"{number:+.2f}u"
 
 
 def _odd(row: dict[str, Any]) -> float:
@@ -113,8 +105,10 @@ def _type_label(row: dict[str, Any]) -> str:
     strategy = str(row.get("strategy") or row.get("head") or "").lower()
     if strategy in {"goal_before_ht", "first_half_goal"}:
         return "Гол в 1-м тайме"
-    if strategy in {"another_goal", "two_more_goals"}:
-        return "LIVE"
+    if strategy == "another_goal":
+        return "Ещё гол"
+    if strategy == "two_more_goals":
+        return "Ещё +2 гола"
     return "LIVE"
 
 
@@ -128,8 +122,7 @@ def _market_text(row: dict[str, Any]) -> str:
             teams = f"{leg.get('home') or '?'} — {leg.get('away') or '?'}"
             selection = str(leg.get("selection") or leg.get("market") or "?")
             odd = _odd(leg)
-            result = _result_label(leg)
-            parts.append(f"{index}. {teams}: {selection} @ {odd:.2f} · {result}")
+            parts.append(f"{index}. {teams}: {selection} @ {odd:.2f} · {_result_label(leg)}")
         return "\n".join(parts)
     return str(
         row.get("selection")
@@ -144,9 +137,7 @@ def _match_text(row: dict[str, Any]) -> str:
     if _is_parlay(row):
         legs = [leg for leg in (row.get("legs") or []) if isinstance(leg, dict)]
         return f"Экспресс ×{len(legs)}" if legs else "Экспресс"
-    home = str(row.get("home") or "?")
-    away = str(row.get("away") or "?")
-    return f"{home} — {away}"
+    return f"{row.get('home') or '?'} — {row.get('away') or '?'}"
 
 
 def _score_text(row: dict[str, Any]) -> str:
@@ -158,7 +149,78 @@ def _score_text(row: dict[str, Any]) -> str:
 
 def _created_label(row: dict[str, Any], tz: Any) -> str:
     dt = _parse_dt(row.get("created_at") or row.get("captured_at"))
-    return dt.astimezone(tz).strftime("%d.%m.%Y %H:%M") if dt is not None else "—"
+    return dt.astimezone(tz).strftime("%H:%M") if dt is not None else "—"
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _diagnostic_text(row: dict[str, Any]) -> str:
+    """Compact evidence preserved specifically for next-day tuning/audit."""
+    bits: list[str] = []
+    source = str(row.get("signal_source") or row.get("source") or "").strip()
+    if source:
+        bits.append(f"src={source}")
+
+    strength = _number(
+        row.get("strength")
+        or row.get("gool_signal_strength")
+        or row.get("confidence_score")
+        or row.get("rating")
+    )
+    if strength is not None:
+        strength = strength * 100.0 if 0.0 < strength <= 1.0 else strength
+        bits.append(f"R={strength:.0f}")
+
+    probability = _number(
+        row.get("model_probability")
+        or row.get("fair_probability")
+        or row.get("probability")
+    )
+    if probability is not None:
+        probability = probability * 100.0 if probability <= 1.0 else probability
+        bits.append(f"P={probability:.1f}%")
+
+    edge = _number(row.get("edge") or row.get("edge_pp") or row.get("market_edge"))
+    if edge is not None:
+        edge = edge * 100.0 if abs(edge) <= 1.0 else edge
+        bits.append(f"edge={edge:+.1f}pp")
+
+    pressure = _number(row.get("market_pressure_pp"))
+    if pressure is not None:
+        bits.append(f"1xBet={pressure:+.1f}pp")
+
+    minute = row.get("minute")
+    if minute not in {None, "", 0, "0"}:
+        bits.append(f"вход={minute}'")
+
+    scope = str(row.get("scope") or row.get("period") or "").strip()
+    if scope:
+        bits.append(f"scope={scope}")
+
+    reason = str(
+        row.get("selection_reason")
+        or row.get("brain_reason")
+        or row.get("reason")
+        or ""
+    ).strip()
+    if reason:
+        bits.append(reason)
+
+    if _is_parlay(row):
+        combined_p = _number(row.get("combined_probability"))
+        if combined_p is not None:
+            combined_p = combined_p * 100.0 if combined_p <= 1.0 else combined_p
+            bits.append(f"P экспресса={combined_p:.1f}%")
+        avg_strength = _number(row.get("average_strength"))
+        if avg_strength is not None:
+            bits.append(f"ср.R={avg_strength:.0f}")
+
+    return " · ".join(bits) or "—"
 
 
 def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -203,8 +265,8 @@ def _table(rows: list[dict[str, Any]], tz: Any) -> str:
         return "<p class='muted'>Нет записей.</p>"
     out = [
         "<table><thead><tr>",
-        "<th>Дата</th><th>Спорт</th><th>Фаза</th><th>Тип</th><th>Матч / экспресс</th>",
-        "<th>Турнир</th><th>Ставка</th><th>Кэф</th><th>Результат</th><th>Счёт</th><th>P/L</th>",
+        "<th>Время</th><th>Спорт</th><th>Фаза</th><th>Тип</th><th>Матч / экспресс</th>",
+        "<th>Турнир</th><th>Ставка</th><th>Кэф</th><th>Результат</th><th>Счёт</th><th>P/L</th><th>Диагностика</th>",
         "</tr></thead><tbody>",
     ]
     icons = {"football": "⚽", "hockey": "🏒", "basketball": "🏀"}
@@ -225,6 +287,7 @@ def _table(rows: list[dict[str, Any]], tz: Any) -> str:
             f"<td>{html.escape(_result_label(row))}</td>"
             f"<td>{html.escape(_score_text(row))}</td>"
             f"<td>{'—' if profit is None else f'{profit:+.2f}u'}</td>"
+            f"<td>{html.escape(_diagnostic_text(row))}</td>"
             "</tr>"
         )
     out.append("</tbody></table>")
@@ -239,11 +302,22 @@ def _load_super10(path: Path) -> list[dict[str, Any]]:
     return [dict(row) for row in payload if isinstance(row, dict)] if isinstance(payload, list) else []
 
 
+def _ticket_day(ticket: dict[str, Any], tz: Any) -> date | None:
+    raw_day = str(ticket.get("day") or "").strip()
+    if raw_day:
+        try:
+            return date.fromisoformat(raw_day)
+        except ValueError:
+            pass
+    dt = _parse_dt(ticket.get("created_at"))
+    return dt.astimezone(tz).date() if dt is not None else None
+
+
 def _super10_html(rows: list[dict[str, Any]]) -> str:
     if not rows:
-        return "<p class='muted'>SUPER 10 пока не отправлялся.</p>"
+        return "<p class='muted'>SUPER 10 в этот день не отправлялся.</p>"
     out: list[str] = []
-    for ticket in rows[::-1]:
+    for ticket in rows:
         odd = float(ticket.get("combined_odds") or ticket.get("odd") or 0.0)
         result = str(ticket.get("result") or "pending").lower()
         result_label = {
@@ -254,8 +328,7 @@ def _super10_html(rows: list[dict[str, Any]]) -> str:
             "push": "↩️ ВОЗВРАТ",
         }.get(result, result.upper())
         out.append(
-            f"<div class='ticket'><h3>🌐 SUPER 10 · {html.escape(str(ticket.get('day') or '?'))}"
-            f" · @ {odd:.2f} · {html.escape(result_label)}</h3><ol>"
+            f"<div class='ticket'><h3>🌐 SUPER 10 · @ {odd:.2f} · {html.escape(result_label)}</h3><ol>"
         )
         for leg in ticket.get("legs") or []:
             if not isinstance(leg, dict):
@@ -267,19 +340,70 @@ def _super10_html(rows: list[dict[str, Any]]) -> str:
                 f"{icon} <b>{html.escape(str(leg.get('home') or '?'))} — {html.escape(str(leg.get('away') or '?'))}</b>"
                 f"<br>{html.escape(str(leg.get('selection') or '?'))} @ {float(leg.get('odd') or 0.0):.2f}"
                 f" · {html.escape(str(leg.get('super_tier') or 'strict'))}"
+                f" · {html.escape(_result_label(leg))}"
                 "</li>"
             )
         out.append("</ol></div>")
     return "".join(out)
 
 
-def build_full_report(
+def _fixture_key(leg: dict[str, Any]) -> str:
+    for key in ("flashscore_event_id", "book_event_id", "event_id"):
+        value = str(leg.get(key) or "").strip()
+        if value:
+            return value
+    return f"{str(leg.get('home') or '').casefold()}|{str(leg.get('away') or '').casefold()}"
+
+
+def _audit_html(rows: list[dict[str, Any]]) -> str:
+    losses = [row for row in rows if str(row.get("result") or "").lower() == "lost"]
+    loss_buckets = Counter(f"{_sport(row)} · {_phase(row)} · {_type_label(row)}" for row in losses)
+
+    fixture_counts: Counter[str] = Counter()
+    fixture_labels: dict[str, str] = {}
+    for row in rows:
+        if not _is_parlay(row):
+            continue
+        for leg in row.get("legs") or []:
+            if not isinstance(leg, dict):
+                continue
+            key = _fixture_key(leg)
+            fixture_counts[key] += 1
+            fixture_labels[key] = f"{leg.get('home') or '?'} — {leg.get('away') or '?'}"
+
+    reused = [(fixture_labels[key], count) for key, count in fixture_counts.items() if count > 1]
+    parts = ["<div class='audit'>"]
+    if loss_buckets:
+        parts.append("<h3>Где были минусы</h3><ul>")
+        for label, count in loss_buckets.most_common():
+            parts.append(f"<li>{html.escape(label)}: <b>{count}</b></li>")
+        parts.append("</ul>")
+    else:
+        parts.append("<p>Минусов среди рассчитанных ставок за день нет.</p>")
+
+    if reused:
+        parts.append("<h3>⚠️ Повтор матча между экспрессами</h3><ul>")
+        for label, count in reused:
+            parts.append(f"<li>{html.escape(label)}: <b>{count} раза</b></li>")
+        parts.append("</ul>")
+    else:
+        parts.append("<p>✅ Один матч не повторяется между дневными экспрессами.</p>")
+
+    pending = sum(1 for row in rows if str(row.get("result") or "pending").lower() == "pending")
+    parts.append(f"<p>Нерассчитанных ставок на момент выгрузки: <b>{pending}</b>.</p>")
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def build_daily_report(
     *,
     football_path: Path | None = None,
     multisport_path: Path | None = None,
     super10_history_path: Path | None = None,
     now: datetime | None = None,
+    report_date: date | None = None,
 ) -> tuple[str, bytes, str]:
+    """Build one self-contained audit file for a single local report day."""
     from . import global_super10, multi_menu, multisport_menu
 
     tz = _tz()
@@ -288,6 +412,7 @@ def build_full_report(
         generated = generated.replace(tzinfo=tz)
     else:
         generated = generated.astimezone(tz)
+    day = report_date or generated.date()
 
     football_path = football_path or multi_menu.journal_path()
     multisport_path = multisport_path or multisport_menu.journal_path()
@@ -303,75 +428,102 @@ def build_full_report(
         for row in load_multisport_journal(multisport_path)
         if bool(row.get("telegram_sent"))
     ]
-    rows = [*football, *multisport]
+
+    all_rows = [*football, *multisport]
+    rows = [
+        row for row in all_rows
+        if (dt := _parse_dt(row.get("created_at") or row.get("captured_at"))) is not None
+        and dt.astimezone(tz).date() == day
+    ]
     rows.sort(
-        key=lambda row: (_parse_dt(row.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
-        reverse=True,
+        key=lambda row: (
+            _parse_dt(row.get("created_at") or row.get("captured_at"))
+            or datetime.min.replace(tzinfo=timezone.utc)
+        ).timestamp()
     )
 
-    today = generated.date()
-    today_rows = [
-        row for row in rows
-        if (dt := _parse_dt(row.get("created_at"))) is not None
-        and dt.astimezone(tz).date() == today
-    ]
     football_rows = [row for row in rows if _sport(row) == "football"]
     hockey_rows = [row for row in rows if _sport(row) == "hockey"]
     basketball_rows = [row for row in rows if _sport(row) == "basketball"]
     parlay_rows = [row for row in rows if _is_parlay(row)]
     singles_rows = [row for row in rows if not _is_parlay(row)]
-    super10_rows = _load_super10(super10_history_path)
+
+    football_live = [row for row in football_rows if _phase(row) == "LIVE" and not _is_parlay(row)]
+    football_pre = [row for row in football_rows if _phase(row) == "PREMATCH" and not _is_parlay(row)]
+    hockey_pre = [row for row in hockey_rows if _phase(row) == "PREMATCH" and not _is_parlay(row)]
+    hockey_live = [row for row in hockey_rows if _phase(row) == "LIVE" and not _is_parlay(row)]
+    basketball_pre = [row for row in basketball_rows if _phase(row) == "PREMATCH" and not _is_parlay(row)]
+    basketball_live = [row for row in basketball_rows if _phase(row) == "LIVE" and not _is_parlay(row)]
+
+    super10_rows = [
+        ticket for ticket in _load_super10(super10_history_path)
+        if _ticket_day(ticket, tz) == day
+    ]
 
     css = """
     body{font-family:Arial,sans-serif;background:#f5f6f8;color:#16181d;margin:0;padding:24px}
-    h1,h2,h3{margin:0 0 10px}.wrap{max-width:1500px;margin:auto}
+    h1,h2,h3{margin:0 0 10px}.wrap{max-width:1700px;margin:auto}
     .meta,.muted{color:#6a717c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:18px 0}
-    .stat,.ticket{background:white;border:1px solid #dde1e7;border-radius:12px;padding:14px;margin:10px 0}
-    table{width:100%;border-collapse:collapse;background:white;font-size:13px;margin:12px 0 28px}
+    .stat,.ticket,.audit{background:white;border:1px solid #dde1e7;border-radius:12px;padding:14px;margin:10px 0}
+    table{width:100%;border-collapse:collapse;background:white;font-size:12.5px;margin:12px 0 28px}
     th,td{border:1px solid #dde1e7;padding:8px;vertical-align:top;text-align:left}
     th{background:#eef1f5;position:sticky;top:0}.section{margin-top:32px;overflow-x:auto}
-    ol{margin-bottom:0}li{margin:6px 0}
+    ol,ul{margin-bottom:0}li{margin:6px 0}
     """
     html_doc = [
         "<!doctype html><html lang='ru'><head><meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-        f"<style>{css}</style><title>GOOL Full Report</title></head><body><div class='wrap'>",
-        "<h1>📄 GOOL BOT · ПОЛНЫЙ ОТЧЁТ</h1>",
-        f"<p class='meta'>Сформирован: {generated.strftime('%d.%m.%Y %H:%M')} · только реально отправленные ставки.</p>",
-        "<h2>Сегодня</h2><div class='grid'>",
-        _stat_html("Все ставки сегодня", today_rows),
-        _stat_html("Футбол сегодня", [row for row in today_rows if _sport(row) == "football"]),
-        _stat_html("Хоккей сегодня", [row for row in today_rows if _sport(row) == "hockey"]),
-        _stat_html("Баскетбол сегодня", [row for row in today_rows if _sport(row) == "basketball"]),
-        "</div>",
-        "<h2>За всё время</h2><div class='grid'>",
+        f"<style>{css}</style><title>GOOL Day Report</title></head><body><div class='wrap'>",
+        f"<h1>📄 GOOL BOT · ПОЛНЫЙ ОТЧЁТ ЗА {day.strftime('%d.%m.%Y')}</h1>",
+        (
+            f"<p class='meta'>Сформирован: {generated.strftime('%d.%m.%Y %H:%M')} · "
+            "только реально отправленные ставки. Этот файл предназначен для дневного аудита и настройки Brain.</p>"
+        ),
+        "<h2>Итоги дня</h2><div class='grid'>",
         _stat_html("Все ставки", rows),
-        _stat_html("Футбол", football_rows),
-        _stat_html("Хоккей", hockey_rows),
-        _stat_html("Баскетбол", basketball_rows),
-        _stat_html("Ординары", singles_rows),
+        _stat_html("⚽ Футбол", football_rows),
+        _stat_html("🏒 Хоккей", hockey_rows),
+        _stat_html("🏀 Баскетбол", basketball_rows),
+        _stat_html("Ординары / LIVE", singles_rows),
         _stat_html("Экспрессы", parlay_rows),
         "</div>",
-        "<div class='section'><h2>Все ставки: ординары + LIVE</h2>",
+        "<h2>Разбивка для анализа</h2><div class='grid'>",
+        _stat_html("⚽ Футбол PREMATCH", football_pre),
+        _stat_html("⚽ Футбол LIVE", football_live),
+        _stat_html("🏒 Хоккей PREMATCH", hockey_pre),
+        _stat_html("🏒 Хоккей LIVE", hockey_live),
+        _stat_html("🏀 Баскетбол PREMATCH", basketball_pre),
+        _stat_html("🏀 Баскетбол LIVE", basketball_live),
+        "</div>",
+        "<div class='section'><h2>Контроль и проблемные места</h2>",
+        _audit_html(rows),
+        "</div>",
+        "<div class='section'><h2>Все ординары и LIVE за день</h2>",
         _table(singles_rows, tz),
         "</div>",
-        "<div class='section'><h2>Экспрессы</h2>",
+        "<div class='section'><h2>Все экспрессы за день</h2>",
         _table(parlay_rows, tz),
         "</div>",
-        "<div class='section'><h2>SUPER 10</h2>",
+        "<div class='section'><h2>SUPER 10 за день</h2>",
         _super10_html(super10_rows),
         "</div>",
         "</div></body></html>",
     ]
+
     payload = "".join(html_doc).encode("utf-8")
-    filename = f"GOOL_FULL_REPORT_{generated.strftime('%Y-%m-%d_%H-%M')}.html"
+    filename = f"GOOL_DAY_REPORT_{day.isoformat()}.html"
     summary = _summary(rows)
     caption = (
-        f"📄 <b>GOOL · ПОЛНЫЙ ОТЧЁТ</b>\n"
+        f"📄 <b>GOOL · ПОЛНЫЙ ОТЧЁТ ЗА {day.strftime('%d.%m.%Y')}</b>\n"
         f"Ставок: <b>{summary['total']}</b> · ✅ {summary['won']} · ❌ {summary['lost']} · "
         f"⏳ {summary['pending']} · P/L <b>{summary['profit']:+.2f}u</b>"
     )
     return filename, payload, caption
 
 
-__all__ = ["build_full_report"]
+# Backward-compatible name used by both Telegram responders.
+def build_full_report(**kwargs: Any) -> tuple[str, bytes, str]:
+    return build_daily_report(**kwargs)
+
+
+__all__ = ["build_daily_report", "build_full_report"]

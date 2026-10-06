@@ -264,7 +264,22 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    if text=="/start":
     replies=[START_TEXT]
    elif text in {"📊 отчёт","📊 отчет"}:
-    _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
+    _force_reconcile_pending(journal_path)
+    if send_message(chat_id,report_text(journal_path),reply_markup=MENU_KEYBOARD):changed+=1
+    try:
+     from .full_report_export import build_full_report
+     filename,data,caption=build_full_report()
+     if send_document(
+      chat_id,
+      filename,
+      data,
+      caption=caption,
+      content_type="text/html; charset=utf-8",
+     ):changed+=1
+    except Exception as exc:
+     print(f"GOOL_DAY_REPORT_FILE_ERROR {type(exc).__name__}:{exc}",flush=True)
+     if send_message(chat_id,"⚠️ Сводка готова, но файл полного отчёта за день отправить не удалось.",reply_markup=MENU_KEYBOARD):changed+=1
+    continue
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path)
     replies=in_game_sections(journal_path,_analysis_path(journal_path))

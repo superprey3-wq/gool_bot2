@@ -992,3 +992,119 @@ def test_live_row_keeps_match_date_when_signal_is_after_midnight(tmp_path: Path,
     text = hockey_journal_text()
 
     assert "06.10.2026" in text
+
+
+
+def test_hockey_and_basketball_journals_have_separate_express_sections(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+    _write(journal, [
+        {
+            "entry_id": "h-parlay-1",
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "origin": "multisport_parlay",
+            "signal_type": "prematch_parlay",
+            "market_family": "parlay",
+            "scope": "MULTI_MATCH",
+            "created_at": "2026-10-06T10:00:00+00:00",
+            "selection": "Экспресс ×2",
+            "odd": 2.40,
+            "result": "won",
+            "profit_units": 1.40,
+            "telegram_sent": True,
+        },
+        {
+            "entry_id": "b-parlay-1",
+            "sport": "basketball",
+            "phase": "PREMATCH",
+            "origin": "multisport_parlay",
+            "signal_type": "prematch_parlay",
+            "market_family": "parlay",
+            "scope": "MULTI_MATCH",
+            "created_at": "2026-10-06T11:00:00+00:00",
+            "selection": "Экспресс ×2",
+            "odd": 2.25,
+            "result": "lost",
+            "profit_units": -1.0,
+            "telegram_sent": True,
+        },
+        {
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "event_id": "H-SINGLE",
+            "created_at": "2026-10-06T09:00:00+00:00",
+            "result": "won",
+            "odd": 1.70,
+            "profit_units": 0.70,
+        },
+        {
+            "sport": "basketball",
+            "phase": "LIVE",
+            "event_id": "B-LIVE",
+            "created_at": "2026-10-06T12:00:00+00:00",
+            "result": "won",
+            "odd": 1.80,
+            "profit_units": 0.80,
+        },
+    ])
+
+    hockey = hockey_journal_text()
+    basket = basketball_journal_text()
+
+    assert "🔗 <b>ЭКСПРЕССЫ</b>" in hockey
+    assert "🔗 <b>ЭКСПРЕССЫ</b>" in basket
+    assert "✅ 1 · ❌ 0" in hockey
+    assert "✅ 0 · ❌ 1" in basket
+
+    # Express parents must not inflate the ordinary PREMATCH/LIVE buckets.
+    hockey_day = hockey.split("📅 <b>06.10.2026</b>", 1)[1].split("━━━━━━━━━━━━━━", 1)[0]
+    assert "🟡 <b>PREMATCH</b>\n✅ 1 · ❌ 0" in hockey_day
+    basket_day = basket.split("📅 <b>06.10.2026</b>", 1)[1].split("━━━━━━━━━━━━━━", 1)[0]
+    assert "🔴 <b>LIVE</b>\n✅ 1 · ❌ 0" in basket_day
+
+
+def test_prematch_pick_list_does_not_show_parlay_parent(tmp_path: Path, monkeypatch):
+    import time
+
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    now = time.time()
+    _write(journal, [
+        {
+            "entry_id": "h-parlay-parent",
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "origin": "multisport_parlay",
+            "signal_type": "prematch_parlay",
+            "market_family": "parlay",
+            "scope": "MULTI_MATCH",
+            "result": "pending",
+            "selection": "Экспресс ×2",
+            "home": "ЭКСПРЕСС",
+            "away": "HOCKEY",
+            "start_ts": now + 3600,
+            "odd": 2.40,
+            "strength": 82,
+        },
+        {
+            "sport": "hockey",
+            "phase": "PREMATCH",
+            "result": "pending",
+            "event_id": "H1",
+            "home": "SKA",
+            "away": "CSKA",
+            "start_ts": now + 1800,
+            "selection": "ТМ 5.5",
+            "odd": 1.65,
+            "strength": 88,
+            "scope": "FULL_MATCH",
+        },
+    ])
+
+    text = "\n".join(sport_prematch_picks_sections("hockey"))
+
+    assert "SKA — CSKA" in text
+    assert "ЭКСПРЕСС — HOCKEY" not in text
+    assert "Экспресс ×2" not in text

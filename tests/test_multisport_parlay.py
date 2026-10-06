@@ -236,8 +236,8 @@ def test_parlay_delivery_migrates_old_signature_only_state_and_blocks_reused_fix
     worker.parlay_delivery_path.parent.mkdir(parents=True, exist_ok=True)
     worker.parlay_delivery_path.write_text(json.dumps({
         "signatures": [
-            "hockey|hockey:parlay-safe:FSOLD1:FULL_MATCH:match_total:ТМ 5.5|"
-            "hockey:parlay-safe:FSOLD2:FULL_MATCH:match_total:ТБ 4.5"
+            "hockey|hockey:parlay-safe:BOOKOLD1:FULL_MATCH:match_total:ТМ 5.5|"
+            "hockey:parlay-safe:BOOKOLD2:FULL_MATCH:match_total:ТБ 4.5"
         ]
     }, ensure_ascii=False), encoding="utf-8")
 
@@ -245,7 +245,9 @@ def test_parlay_delivery_migrates_old_signature_only_state_and_blocks_reused_fix
     monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
     monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append(1) or 1)
 
-    candidate = build_sport_parlays([_row("FSOLD1"), _row("FSNEW")], "hockey")[0]
+    reused = {**_row("FS-CANON-1"), "event_id": "BOOKOLD1", "flashscore_event_id": "FS-CANON-1"}
+    fresh = {**_row("FS-CANON-NEW"), "event_id": "BOOKNEW", "flashscore_event_id": "FS-CANON-NEW"}
+    candidate = build_sport_parlays([reused, fresh], "hockey")[0]
     assert worker._deliver_new_parlays(SPORTS["hockey"], [candidate]) == 0
     assert sent == []
 

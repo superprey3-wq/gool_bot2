@@ -214,6 +214,16 @@ def test_live_candidate_needs_multiple_snapshots_and_not_a_break():
     })
     assert paused["state"] == "WAIT"
 
+    fresh = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": True},
+        "history_points": 3,
+        "recent_window_seconds": 60,
+        "recent_score_rate": 4.0,
+        "recent_possessions_per_min": 3.0,
+        "break_transition": False,
+    })
+    assert fresh["state"] in {"PASS", "BORDERLINE"}
+
 
 def test_live_v2_uses_possession_pace_and_probability_edge_for_over():
     signal = live_signal(

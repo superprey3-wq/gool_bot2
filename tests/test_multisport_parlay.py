@@ -47,7 +47,7 @@ def test_parlay_requires_two_confirmed_legs():
     assert build_sport_parlays([_row("1")], "hockey") == []
 
 def test_multisport_parlay_card_renders_png():
-    rows = [_row("1"), _row("2", odd=1.8, strength=84)]
+    rows = [_row("1"), _row("2", odd=1.62, strength=84)]
     parlay = build_sport_parlays(rows, "hockey")[0]
 
     png = render_multisport_parlay_card(parlay, "hockey")
@@ -65,7 +65,7 @@ def test_multisport_parlay_card_is_delivered_once_and_persists_across_restart(tm
     sent = []
     monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append((png, caption)) or 1)
 
-    parlay = build_sport_parlays([_row("1"), _row("2", odd=1.8, strength=84)], "hockey")[0]
+    parlay = build_sport_parlays([_row("1"), _row("2", odd=1.62, strength=84)], "hockey")[0]
     worker = MultiSportSteamWorker(tmp_path)
 
     assert worker._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 1
@@ -82,7 +82,7 @@ def test_three_multisport_parlays_do_not_reuse_same_match(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_EVENT_REUSE", "1")
     monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MIN_COMBINED_ODD", "2.20")
     rows = [
-        _row(str(idx), odd=1.55 + idx * 0.01, strength=100 - idx, probability=0.66 - idx * 0.005)
+        _row(str(idx), odd=1.52 + idx * 0.02, strength=100 - idx, probability=0.80 - idx * 0.01)
         for idx in range(1, 7)
     ]
 
@@ -128,7 +128,7 @@ def test_two_leg_parlay_card_has_footer_below_second_leg():
 
     parlay = build_sport_parlays([
         _row("1", sport="basketball"),
-        _row("2", odd=1.8, strength=84, sport="basketball"),
+        _row("2", odd=1.62, strength=84, sport="basketball"),
     ], "basketball")[0]
     png = render_multisport_parlay_card(parlay, "basketball")
     image = Image.open(BytesIO(png))

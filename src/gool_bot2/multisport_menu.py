@@ -819,7 +819,7 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
 
 
 def multisport_report_text() -> str:
-    lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH, LIVE и ЭКСПРЕССЫ считаются отдельно."]
+    lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH и LIVE считаются отдельно. ЭКСПРЕССЫ — отдельным разделом."]
     all_rows: list[dict[str, Any]] = []
     all_prematch: list[dict[str, Any]] = []
     all_live: list[dict[str, Any]] = []

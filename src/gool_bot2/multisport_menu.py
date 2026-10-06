@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from difflib import SequenceMatcher
 from typing import Any
@@ -63,6 +64,113 @@ def _sport_rows(sport: str, phase: str | None = None) -> list[dict[str, Any]]:
 
 def _record_text(rows: list[dict[str, Any]]) -> str:
     return stat_line(stats([normalize_entry(row) for row in rows]))
+
+
+def _journal_day(row: dict[str, Any]) -> tuple[str, str]:
+    """Return stable YYYY-MM-DD key + display label in report timezone."""
+    try:
+        tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
+    except Exception:
+        tz = timezone.utc
+
+    created = str(row.get("created_at") or "").strip()
+    dt = None
+    if created:
+        try:
+            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(tz)
+        except Exception:
+            dt = None
+
+    if dt is None:
+        try:
+            ts = float(row.get("start_ts") or row.get("scheduled_start_ts") or 0.0)
+            if ts > 0:
+                dt = datetime.fromtimestamp(ts, timezone.utc).astimezone(tz)
+        except Exception:
+            dt = None
+
+    if dt is None:
+        dt = datetime.now(tz)
+
+    return dt.strftime("%Y-%m-%d"), dt.strftime("%d.%m.%Y")
+
+
+def _dated_sport_journal(
+    rows: list[dict[str, Any]],
+    *,
+    heading: str,
+    policy: str,
+    phase: str | None = None,
+    limit_days: int = 16,
+) -> str:
+    normalized = [normalize_entry(row) for row in rows]
+    by_day: dict[str, dict[str, Any]] = {}
+    for row in normalized:
+        day_key, label = _journal_day(row)
+        bucket = by_day.setdefault(day_key, {"label": label, "rows": []})
+        bucket["rows"].append(row)
+
+    day_keys = sorted(by_day)
+    if limit_days > 0 and len(day_keys) > limit_days:
+        day_keys = day_keys[-limit_days:]
+
+    wanted_phase = str(phase or "").upper()
+    blocks: list[str] = [heading, policy]
+
+    if not day_keys:
+        blocks.append("Пока нет записей.")
+    else:
+        for day_key in day_keys:
+            bucket = by_day[day_key]
+            day_rows = list(bucket["rows"])
+            prematch = [row for row in day_rows if _row_phase(row) == "PREMATCH"]
+            live = [row for row in day_rows if _row_phase(row) == "LIVE"]
+
+            day_lines = [f"📅 <b>{bucket['label']}</b>"]
+            if wanted_phase == "PREMATCH":
+                day_lines.append(f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}")
+            elif wanted_phase == "LIVE":
+                day_lines.append(f"🔴 <b>LIVE</b>\n{_record_text(live)}")
+            else:
+                day_lines.extend([
+                    f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}",
+                    f"🔴 <b>LIVE</b>\n{_record_text(live)}",
+                    f"📊 <b>ИТОГ ДНЯ</b>\n{_record_text(day_rows)}",
+                ])
+            blocks.append("\n\n".join(day_lines))
+
+    all_prematch = [row for row in normalized if _row_phase(row) == "PREMATCH"]
+    all_live = [row for row in normalized if _row_phase(row) == "LIVE"]
+
+    if wanted_phase == "PREMATCH":
+        total = (
+            "━━━━━━━━━━━━━━\n"
+            "🏁 <b>ИТОГО · PREMATCH · ЗА ВСЁ ВРЕМЯ</b>\n"
+            f"{_record_text(all_prematch)}"
+        )
+    elif wanted_phase == "LIVE":
+        total = (
+            "━━━━━━━━━━━━━━\n"
+            "🏁 <b>ИТОГО · LIVE · ЗА ВСЁ ВРЕМЯ</b>\n"
+            f"{_record_text(all_live)}"
+        )
+    else:
+        total = (
+            "━━━━━━━━━━━━━━\n"
+            "🏁 <b>ИТОГО · ЗА ВСЁ ВРЕМЯ</b>\n\n"
+            f"🟡 <b>PREMATCH</b>\n{_record_text(all_prematch)}\n\n"
+            f"🔴 <b>LIVE</b>\n{_record_text(all_live)}\n\n"
+            f"🌐 <b>ВСЕГО</b>\n{_record_text(normalized)}"
+        )
+    blocks.append(total)
+
+    if limit_days > 0 and len(by_day) > limit_days:
+        blocks.insert(2, f"ℹ️ Показаны последние {limit_days} дат; общий итог ниже включает весь журнал.")
+
+    return "\n\n".join(blocks)
 
 
 def _coverage_summary(matches: list[dict[str, Any]]) -> str:
@@ -790,33 +898,32 @@ def sport_prematch_picks_sections(sport: str, limit: int = 24) -> list[str]:
 
 
 def sport_journal_text(sport: str | None = None, limit: int = 14, phase: str | None = None) -> str:
-    """Journal is a scoreboard, not a second list of bets.
-
-    Individual PREMATCH picks live in their dedicated prematch/singles views,
-    parlays in parlay views, and active LIVE picks in the common In Game view.
-    Finished picks are represented by their result cards; here we keep only
-    aggregate performance.
-    """
+    """Journal scoreboard grouped by signal date, with an all-time total."""
     rows = load_journal(journal_path())
-    wanted_phase = str(phase or "").upper()
     if sport in SPORT_META:
         rows = [row for row in rows if str(row.get("sport") or "") == sport]
         icon, title = SPORT_META[sport]
         heading = f"📒 <b>{icon} ЖУРНАЛ · {title}</b>"
         prematch_policy, live_policy = policy_text_ru(str(sport))
         policy = f"🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}"
-    else:
-        heading = "📒 <b>GOOL MULTI · ЖУРНАЛ</b>"
-        policy = "🟡 PREMATCH · 🔴 LIVE"
+        return _dated_sport_journal(
+            rows,
+            heading=heading,
+            policy=policy,
+            phase=phase,
+            limit_days=max(1, int(limit or 14)),
+        )
 
+    # Common multisport journal keeps the compact aggregate view.
+    heading = "📒 <b>GOOL MULTI · ЖУРНАЛ</b>"
+    policy = "🟡 PREMATCH · 🔴 LIVE"
     prematch = [row for row in rows if _row_phase(row) == "PREMATCH"]
     live = [row for row in rows if _row_phase(row) == "LIVE"]
-
+    wanted_phase = str(phase or "").upper()
     if wanted_phase == "PREMATCH":
         return f"{heading} · PREMATCH\n\n{policy}\n\n🟡 <b>PREMATCH</b>\n{_record_text(prematch)}"
     if wanted_phase == "LIVE":
         return f"{heading} · LIVE\n\n{policy}\n\n🔴 <b>LIVE</b>\n{_record_text(live)}"
-
     return (
         f"{heading}\n\n{policy}\n\n"
         f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}\n\n"

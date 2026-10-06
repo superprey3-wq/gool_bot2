@@ -556,6 +556,8 @@ def multisport_in_game_sections() -> list[str]:
         for row in rows:
             if str(row.get("sport") or "") != sport:
                 continue
+            if _is_parlay_row(row):
+                continue
             if str(row.get("result") or "pending").lower() != "pending":
                 continue
             phase_name = _row_phase(row)
@@ -870,6 +872,8 @@ def sport_prematch_picks_sections(sport: str, limit: int = 24) -> list[str]:
     now = _time.time()
     rows: list[dict[str, Any]] = []
     for raw in _sport_rows(sport, "PREMATCH"):
+        if _is_parlay_row(raw):
+            continue
         row = normalize_entry(raw)
         if str(row.get("result") or "pending").lower() != "pending":
             continue
@@ -964,18 +968,30 @@ def sport_journal_text(sport: str | None = None, limit: int = 14, phase: str | N
 
     # Common multisport journal keeps the compact aggregate view.
     heading = "📒 <b>GOOL MULTI · ЖУРНАЛ</b>"
-    policy = "🟡 PREMATCH · 🔴 LIVE"
-    prematch = [row for row in rows if _row_phase(row) == "PREMATCH"]
-    live = [row for row in rows if _row_phase(row) == "LIVE"]
+    policy = "🟡 PREMATCH · 🔴 LIVE · 🔗 ЭКСПРЕССЫ"
+    parlays = [row for row in rows if _is_parlay_row(row)]
+    prematch = [
+        row for row in rows
+        if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)
+    ]
+    live = [
+        row for row in rows
+        if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
+    ]
     wanted_phase = str(phase or "").upper()
     if wanted_phase == "PREMATCH":
-        return f"{heading} · PREMATCH\n\n{policy}\n\n🟡 <b>PREMATCH</b>\n{_record_text(prematch)}"
+        return (
+            f"{heading} · PREMATCH\n\n{policy}\n\n"
+            f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}\n\n"
+            f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(parlays)}"
+        )
     if wanted_phase == "LIVE":
         return f"{heading} · LIVE\n\n{policy}\n\n🔴 <b>LIVE</b>\n{_record_text(live)}"
     return (
         f"{heading}\n\n{policy}\n\n"
         f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}\n\n"
-        f"🔴 <b>LIVE</b>\n{_record_text(live)}"
+        f"🔴 <b>LIVE</b>\n{_record_text(live)}\n\n"
+        f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(parlays)}"
     )
 
 def hockey_journal_text(limit: int = 16, phase: str | None = None) -> str:

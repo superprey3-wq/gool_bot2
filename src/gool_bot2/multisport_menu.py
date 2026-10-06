@@ -53,6 +53,14 @@ def _row_phase(row: dict[str, Any]) -> str:
     return "PREMATCH" if str(row.get("origin") or "") == "multisport_prematch" else "LIVE"
 
 
+def _is_parlay_row(row: dict[str, Any]) -> bool:
+    return (
+        str(row.get("origin") or "") == "multisport_parlay"
+        or str(row.get("market_family") or "") == "parlay"
+        or str(row.get("signal_type") or "") == "prematch_parlay"
+    )
+
+
 def _sport_rows(sport: str, phase: str | None = None) -> list[dict[str, Any]]:
     rows = load_journal(journal_path())
     out = [row for row in rows if str(row.get("sport") or "") == sport]
@@ -131,30 +139,49 @@ def _dated_sport_journal(
         for day_key in day_keys:
             bucket = by_day[day_key]
             day_rows = list(bucket["rows"])
-            prematch = [row for row in day_rows if _row_phase(row) == "PREMATCH"]
-            live = [row for row in day_rows if _row_phase(row) == "LIVE"]
+            parlays = [row for row in day_rows if _is_parlay_row(row)]
+            prematch = [
+                row for row in day_rows
+                if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)
+            ]
+            live = [
+                row for row in day_rows
+                if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
+            ]
 
             day_lines = [f"📅 <b>{bucket['label']}</b>"]
             if wanted_phase == "PREMATCH":
-                day_lines.append(f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}")
+                day_lines.extend([
+                    f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}",
+                    f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(parlays)}",
+                ])
             elif wanted_phase == "LIVE":
                 day_lines.append(f"🔴 <b>LIVE</b>\n{_record_text(live)}")
             else:
                 day_lines.extend([
                     f"🟡 <b>PREMATCH</b>\n{_record_text(prematch)}",
                     f"🔴 <b>LIVE</b>\n{_record_text(live)}",
+                    f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(parlays)}",
                     f"📊 <b>ИТОГ ДНЯ</b>\n{_record_text(day_rows)}",
                 ])
             blocks.append("\n\n".join(day_lines))
 
-    all_prematch = [row for row in normalized if _row_phase(row) == "PREMATCH"]
-    all_live = [row for row in normalized if _row_phase(row) == "LIVE"]
+    all_parlays = [row for row in normalized if _is_parlay_row(row)]
+    all_prematch = [
+        row for row in normalized
+        if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)
+    ]
+    all_live = [
+        row for row in normalized
+        if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
+    ]
 
     if wanted_phase == "PREMATCH":
         total = (
             "━━━━━━━━━━━━━━\n"
             "🏁 <b>ИТОГО · PREMATCH · ЗА ВСЁ ВРЕМЯ</b>\n"
-            f"{_record_text(all_prematch)}"
+            f"{_record_text(all_prematch)}\n\n"
+            f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(all_parlays)}"
         )
     elif wanted_phase == "LIVE":
         total = (
@@ -168,6 +195,7 @@ def _dated_sport_journal(
             "🏁 <b>ИТОГО · ЗА ВСЁ ВРЕМЯ</b>\n\n"
             f"🟡 <b>PREMATCH</b>\n{_record_text(all_prematch)}\n\n"
             f"🔴 <b>LIVE</b>\n{_record_text(all_live)}\n\n"
+            f"🔗 <b>ЭКСПРЕССЫ</b>\n{_record_text(all_parlays)}\n\n"
             f"🌐 <b>ВСЕГО</b>\n{_record_text(normalized)}"
         )
     blocks.append(total)
@@ -262,8 +290,10 @@ def sport_overview_text(sport: str) -> str:
     state = _load_json(state_path(), {})
     sports = state.get("sports") if isinstance(state, dict) else {}
     current = ((sports or {}).get(sport) or {}) if isinstance(sports, dict) else {}
-    prematch_rows = _sport_rows(sport, "PREMATCH")
-    live_rows = _sport_rows(sport, "LIVE")
+    sport_rows = _sport_rows(sport)
+    parlay_rows = [row for row in sport_rows if _is_parlay_row(row)]
+    prematch_rows = [row for row in sport_rows if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)]
+    live_rows = [row for row in sport_rows if _row_phase(row) == "LIVE" and not _is_parlay_row(row)]
     mode = str((state or {}).get("mode") or os.getenv("GOOL_MULTISPORT_MODE", "shadow")).upper()
 
     prematch_policy, live_policy = policy_text_ru(sport)
@@ -272,6 +302,7 @@ def sport_overview_text(sport: str) -> str:
         f"🧭 <b>РАЗДЕЛЕНИЕ РЫНКОВ</b>\n🟡 PREMATCH: {prematch_policy}\n🔴 LIVE: {live_policy}",
         f"🟡 <b>PREMATCH журнал</b>\n{_record_text(prematch_rows)}",
         f"🔴 <b>LIVE журнал</b>\n{_record_text(live_rows)}",
+        f"🔗 <b>ЭКСПРЕССЫ журнал</b>\n{_record_text(parlay_rows)}",
     ]
 
     prematch_matches = [row for row in (current.get("prematch_matches") or []) if isinstance(row, dict)]
@@ -786,29 +817,41 @@ def multisport_analysis_sections(limit_per_sport: int = 6) -> list[str]:
 
 
 def multisport_report_text() -> str:
-    lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH и LIVE считаются отдельно."]
+    lines = ["📊 <b>GOOL MULTI · ЖУРНАЛ</b>", "PREMATCH, LIVE и ЭКСПРЕССЫ считаются отдельно."]
     all_rows: list[dict[str, Any]] = []
     all_prematch: list[dict[str, Any]] = []
     all_live: list[dict[str, Any]] = []
+    all_parlays: list[dict[str, Any]] = []
 
     for sport in ("hockey", "basketball"):
-        prematch = _sport_rows(sport, "PREMATCH")
-        live = _sport_rows(sport, "LIVE")
-        rows = [*prematch, *live]
+        sport_rows = _sport_rows(sport)
+        parlays = [row for row in sport_rows if _is_parlay_row(row)]
+        prematch = [
+            row for row in sport_rows
+            if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)
+        ]
+        live = [
+            row for row in sport_rows
+            if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
+        ]
+        rows = [*prematch, *live, *parlays]
         all_rows.extend(rows)
         all_prematch.extend(prematch)
         all_live.extend(live)
+        all_parlays.extend(parlays)
         icon, title = SPORT_META[sport]
         lines.append(
             f"{icon} <b>{title}</b>\n"
             f"🟡 PREMATCH · {_record_text(prematch)}\n"
-            f"🔴 LIVE · {_record_text(live)}"
+            f"🔴 LIVE · {_record_text(live)}\n"
+            f"🔗 ЭКСПРЕССЫ · {_record_text(parlays)}"
         )
 
     lines.append(
         f"🏟 <b>ИТОГО</b>\n"
         f"🟡 PREMATCH · {_record_text(all_prematch)}\n"
         f"🔴 LIVE · {_record_text(all_live)}\n"
+        f"🔗 ЭКСПРЕССЫ · {_record_text(all_parlays)}\n"
         f"📚 ВСЕ · {_record_text(all_rows)}"
     )
     return "\n\n".join(lines)
@@ -947,15 +990,24 @@ def sport_phase_report_text(sport: str) -> str:
     if sport not in SPORT_META:
         return multisport_report_text()
     icon, title = SPORT_META[sport]
-    prematch = _sport_rows(sport, "PREMATCH")
-    live = _sport_rows(sport, "LIVE")
+    sport_rows = _sport_rows(sport)
+    parlays = [row for row in sport_rows if _is_parlay_row(row)]
+    prematch = [
+        row for row in sport_rows
+        if _row_phase(row) == "PREMATCH" and not _is_parlay_row(row)
+    ]
+    live = [
+        row for row in sport_rows
+        if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
+    ]
     prematch_policy, live_policy = policy_text_ru(sport)
     return (
         f"📊 <b>{icon} {title} · ОТДЕЛЬНЫЙ ОТЧЁТ</b>\n\n"
         f"🟡 <b>PREMATCH</b> · {_record_text(prematch)}\n"
         f"Рынки: {prematch_policy}\n\n"
         f"🔴 <b>LIVE</b> · {_record_text(live)}\n"
-        f"Рынки: {live_policy}"
+        f"Рынки: {live_policy}\n\n"
+        f"🔗 <b>ЭКСПРЕССЫ</b> · {_record_text(parlays)}"
     )
 
 

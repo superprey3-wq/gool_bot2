@@ -109,15 +109,11 @@ def install_matchbook_auth() -> None:
     from . import matchbook_exchange as exchange
     original_collect: Callable[..., dict[str, Any]] = exchange.MatchbookExchangeCollector.collect_once
     def fetch_events_authenticated() -> list[dict[str, Any]]:
-        params = urllib.parse.urlencode({"tag-url-names":"soccer","states":"open,suspended","exchange-type":"back-lay","odds-type":"DECIMAL","include-prices":"true","price-depth":exchange._orderbook_depth(),"price-mode":"expanded","currency":"GBP","minimum-liquidity":1,"include-event-participants":"true","markets-limit":40,"per-page":100})
-        payload = _request_json(f"{exchange.MATCHBOOK_EVENTS_URL}?{params}", exchange.UA)
-        rows: list[dict[str, Any]] = []
-        for event in payload.get("events") or []:
-            if isinstance(event, dict):
-                decoded = exchange.decode_event(event)
-                if decoded is not None:
-                    rows.append(decoded)
-        return rows
+        # Use the same paginated multi-sport collector as the standalone worker.
+        # matchbook_pagination calls _request_json lazily, so this does not bypass
+        # auth and does not recurse through exchange._fetch_events.
+        from .matchbook_pagination import fetch_events_paginated
+        return fetch_events_paginated()
     def collect_with_auth_guard(self: Any) -> dict[str, Any]:
         try:
             payload = original_collect(self)

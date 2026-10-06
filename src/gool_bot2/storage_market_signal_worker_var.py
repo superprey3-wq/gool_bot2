@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/fullreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "📄 полный отчёт", "📄 полный отчет", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "📄 отчёт за день", "📄 отчет за день", "📄 полный отчёт", "📄 полный отчет", "🧠 анализ", "🔎 найти матч"}:
         reply_markup = _bot_menu.MENU_KEYBOARD
         try:
             if text == "/start":
@@ -204,7 +204,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"/basketparlay", "🔗 баскет экспресс"}:
                 from .multisport_menu import sport_parlay_text
                 replies = [sport_parlay_text("basketball")]
-            elif text in {"/fullreport", "📄 полный отчёт", "📄 полный отчет"}:
+            elif text in {"/fullreport", "/dayreport", "📄 отчёт за день", "📄 отчет за день", "📄 полный отчёт", "📄 полный отчет"}:
                 from .full_report_export import build_full_report
                 filename, data, caption = build_full_report()
                 sent = telegram_mod.send_document(
@@ -220,7 +220,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                     _direct_send_message(
                         token,
                         chat_id,
-                        "⚠️ Не удалось отправить файл полного отчёта.",
+                        "⚠️ Не удалось отправить файл отчёта за день.",
                         reply_markup=_bot_menu.MENU_KEYBOARD,
                     )
                 return int(bool(sent))

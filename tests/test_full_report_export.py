@@ -12,7 +12,7 @@ def _write(path: Path, payload) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def test_full_report_contains_public_singles_parlays_results_and_super10(tmp_path: Path):
+def test_daily_report_contains_only_requested_day_with_singles_parlays_results_and_super10(tmp_path: Path):
     football = tmp_path / "football.json"
     multisport = tmp_path / "multisport.json"
     super10 = tmp_path / "super10.json"
@@ -61,6 +61,19 @@ def test_full_report_contains_public_singles_parlays_results_and_super10(tmp_pat
                     "result": "lost",
                 },
             ],
+        },
+        {
+            "entry_id": "f-yesterday",
+            "created_at": "2026-10-05T15:00:00+00:00",
+            "telegram_sent": True,
+            "mode": "active",
+            "origin": "live",
+            "home": "Yesterday",
+            "away": "Football",
+            "market": "ТБ 1.5",
+            "odd": 1.70,
+            "result": "won",
+            "profit_units": 0.70,
         },
         {
             "entry_id": "f-hidden",
@@ -150,6 +163,23 @@ def test_full_report_contains_public_singles_parlays_results_and_super10(tmp_pat
 
     _write(super10, [
         {
+            "day": "2026-10-05",
+            "kind": "GLOBAL_SUPER",
+            "result": "won",
+            "combined_odds": 10.0,
+            "legs": [
+                {
+                    "sport": "football",
+                    "home": "Old Super",
+                    "away": "Ticket",
+                    "selection": "ТБ 1.5",
+                    "odd": 1.40,
+                    "super_tier": "strict",
+                    "result": "won",
+                }
+            ],
+        },
+        {
             "day": "2026-10-06",
             "kind": "GLOBAL_SUPER",
             "result": "pending",
@@ -175,8 +205,8 @@ def test_full_report_contains_public_singles_parlays_results_and_super10(tmp_pat
     )
     text = payload.decode("utf-8")
 
-    assert filename.startswith("GOOL_FULL_REPORT_2026-10-06_")
-    assert "GOOL BOT · ПОЛНЫЙ ОТЧЁТ" in text
+    assert filename == "GOOL_DAY_REPORT_2026-10-06.html"
+    assert "GOOL BOT · ПОЛНЫЙ ОТЧЁТ ЗА 06.10.2026" in text
     assert "Alpha — Beta" in text
     assert "SKA — CSKA" in text
     assert "Denver — Utah" in text
@@ -187,7 +217,13 @@ def test_full_report_contains_public_singles_parlays_results_and_super10(tmp_pat
     assert "✅ ЗАШЛО" in text
     assert "❌ НЕ ЗАШЛО" in text
     assert "Hidden" not in text
+    assert "Yesterday — Football" not in text
+    assert "Old Super" not in text
+    assert "ПОЛНЫЙ ОТЧЁТ ЗА 06.10.2026" in caption
     assert "Ставок: <b>5</b>" in caption
+    assert "Контроль и проблемные места" in text
+    assert "Разбивка для анализа" in text
+    assert "Диагностика" in text
 
 
 def test_full_report_handles_empty_files(tmp_path: Path):
@@ -208,5 +244,5 @@ def test_full_report_handles_empty_files(tmp_path: Path):
     assert filename.endswith(".html")
     text = payload.decode("utf-8")
     assert "Нет записей." in text
-    assert "SUPER 10 пока не отправлялся." in text
+    assert "SUPER 10 в этот день не отправлялся." in text
     assert "Ставок: <b>0</b>" in caption

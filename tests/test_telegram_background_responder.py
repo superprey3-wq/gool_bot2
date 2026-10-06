@@ -77,7 +77,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "📄 Полный отчёт", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "📄 Отчёт за день", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):
@@ -372,7 +372,7 @@ def test_production_fullreport_button_sends_document(tmp_path: Path, monkeypatch
     actions = worker._handle_direct_telegram_update(
         "test-credential",
         tmp_path / "signal_journal.json",
-        {"update_id": 40, "message": {"chat": {"id": 123}, "text": "📄 Полный отчёт"}},
+        {"update_id": 40, "message": {"chat": {"id": 123}, "text": "📄 Отчёт за день"}},
     )
 
     assert actions == 1

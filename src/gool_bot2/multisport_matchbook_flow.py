@@ -259,3 +259,43 @@ def matchbook_money_flow(
         "state_age_seconds": None if age is None else round(age, 1),
         "source": "matchbook_matched_volume",
     }
+
+
+def apply_matchbook_confirmation(
+    signal: dict[str, Any],
+    flow: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Enrich an already-created model signal; return (signal, blocked).
+
+    Matchbook is confirmation only. It can never manufacture a candidate or
+    auto-flip the model's direction.
+    """
+    enriched = {
+        **dict(signal),
+        "matchbook_money_flow": dict(flow or {}),
+        "matchbook_money_flow_agrees": None,
+    }
+    if not bool((flow or {}).get("available")):
+        return enriched, False
+
+    confirmed = bool(flow.get("confirmed"))
+    agrees = flow.get("agrees")
+    strong = bool(flow.get("strong"))
+    adjustment = 0.0
+    if confirmed and agrees is True:
+        adjustment = 7.0 if strong else 4.0
+    elif confirmed and agrees is False:
+        adjustment = -10.0 if strong else -6.0
+
+    enriched.update(
+        {
+            "matchbook_money_flow_agrees": agrees,
+            "matchbook_matched_volume_delta": float(flow.get("matched_volume_delta") or 0.0),
+            "matchbook_fair_delta_pp": float(flow.get("fair_over_delta_pp") or 0.0),
+            "strength": round(
+                max(0.0, min(92.0, float(signal.get("strength") or 0.0) + adjustment)),
+                1,
+            ),
+        }
+    )
+    return enriched, bool(confirmed and agrees is False and strong)

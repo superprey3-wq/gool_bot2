@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import math
 import os
@@ -22,6 +23,10 @@ SPORT_META = {
     "hockey": ("🏒", "ХОККЕЙ"),
     "basketball": ("🏀", "БАСКЕТБОЛ"),
 }
+
+
+def _h(value: Any) -> str:
+    return html.escape(str(value or ""), quote=False)
 
 
 def _runtime() -> Path:

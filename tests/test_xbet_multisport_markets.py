@@ -1,6 +1,7 @@
 from gool_bot2.xbet_multisport_markets import (
     decode_core_markets,
     market_lanes,
+    prematch_parlay_market_lanes,
     scope_from_subgame,
     period_scores,
 )
@@ -77,3 +78,24 @@ def test_period_scores_reads_real_sc_ps_shape_and_builds_halves():
     assert scores["QUARTER_4"] == (20, 25)
     assert scores["FIRST_HALF"] == (43, 38)
     assert scores["SECOND_HALF"] == (41, 47)
+
+
+def test_parlay_market_lanes_keep_all_total_lines_not_only_balanced_one():
+    decoded = decode_core_markets({
+        "GE": [{"E": [[
+            {"G": 4, "T": 9, "P": 150.5, "C": 1.50},
+            {"G": 4, "T": 10, "P": 150.5, "C": 2.55},
+            {"G": 4, "T": 9, "P": 160.5, "C": 1.85},
+            {"G": 4, "T": 10, "P": 160.5, "C": 1.85},
+            {"G": 4, "T": 9, "P": 170.5, "C": 2.45},
+            {"G": 4, "T": 10, "P": 170.5, "C": 1.52},
+        ]]}],
+    }, "basketball", scope="FULL_MATCH")
+
+    regular = market_lanes({"FULL_MATCH": decoded})
+    parlay = prematch_parlay_market_lanes({"FULL_MATCH": decoded}, "basketball")
+
+    assert len([x for x in regular if x["market_family"] == "match_total"]) == 1
+    assert {
+        x["line"] for x in parlay if x["market_family"] == "match_total"
+    } == {150.5, 160.5, 170.5}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import math
 import os
+import time
 from typing import Any
 
 
@@ -20,17 +21,26 @@ def _int_env(name: str, default: int) -> int:
         return int(default)
 
 
-def eligible_prematch_legs(rows: list[dict[str, Any]], sport: str) -> list[dict[str, Any]]:
+def eligible_prematch_legs(
+    rows: list[dict[str, Any]],
+    sport: str,
+    *,
+    now_ts: float | None = None,
+) -> list[dict[str, Any]]:
     """Return safe candidate legs for a sport-specific PREMATCH parlay.
 
     LIVE rows and settled rows are never eligible. Only one best signal per
     event is kept so a parlay cannot accidentally correlate multiple markets
     from the same match.
     """
-    min_strength = _float_env("GOOL_MULTISPORT_PARLAY_MIN_STRENGTH", 72.0)
-    min_probability = _float_env("GOOL_MULTISPORT_PARLAY_MIN_FAIR_PROBABILITY", 0.56)
-    min_odd = _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.40)
-    max_odd = _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 2.40)
+    min_strength = _float_env("GOOL_MULTISPORT_PARLAY_MIN_STRENGTH", 76.0)
+    min_probability = _float_env("GOOL_MULTISPORT_PARLAY_MIN_FAIR_PROBABILITY", 0.68)
+    min_edge = _float_env("GOOL_MULTISPORT_PARLAY_MIN_EDGE", 0.055)
+    min_odd = _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.45)
+    max_odd = _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 1.70)
+    max_push = _float_env("GOOL_MULTISPORT_PARLAY_MAX_PUSH_PROBABILITY", 0.20)
+    lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
+    now = time.time() if now_ts is None else float(now_ts)
 
     best: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -44,18 +54,27 @@ def eligible_prematch_legs(rows: list[dict[str, Any]], sport: str) -> list[dict[
             odd = float(row.get("odd") or 0.0)
             strength = float(row.get("strength") or 0.0)
             probability = float(row.get("fair_probability") or 0.0)
+            edge = float(row.get("edge") or 0.0)
+            push = float(row.get("push_probability") or 0.0)
+            start_ts = float(row.get("start_ts") or row.get("scheduled_start_ts") or 0.0)
         except (TypeError, ValueError):
+            continue
+        if start_ts > 0.0 and start_ts <= now + lead:
             continue
         if not (min_odd <= odd <= max_odd):
             continue
-        if strength < min_strength or probability < min_probability:
+        if strength < min_strength or probability < min_probability or edge < min_edge:
             continue
-        event_id = str(row.get("event_id") or "")
+        if push > max_push:
+            continue
+        event_id = str(row.get("flashscore_event_id") or row.get("event_id") or "")
         if not event_id:
             continue
         value = {
             "entry_id": str(row.get("entry_id") or ""),
             "event_id": event_id,
+            "book_event_id": str(row.get("event_id") or ""),
+            "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
             "sport": sport,
             "home": str(row.get("home") or "?"),
             "away": str(row.get("away") or "?"),
@@ -72,25 +91,44 @@ def eligible_prematch_legs(rows: list[dict[str, Any]], sport: str) -> list[dict[
             "odd": odd,
             "strength": strength,
             "fair_probability": probability,
-            "start_ts": float(row.get("start_ts") or row.get("scheduled_start_ts") or 0.0),
+            "edge": edge,
+            "push_probability": push,
+            "parlay_safe": bool(row.get("parlay_safe")),
+            "start_ts": start_ts,
         }
         previous = best.get(event_id)
-        if previous is None or (strength, probability, odd) > (
-            float(previous["strength"]), float(previous["fair_probability"]), float(previous["odd"])
+        # Safety first: prefer the highest model probability, then strength,
+        # then the lower price. A high-odds single must not win the parlay slot
+        # merely because it has the same R score.
+        if previous is None or (probability, strength, -odd, edge) > (
+            float(previous["fair_probability"]),
+            float(previous["strength"]),
+            -float(previous["odd"]),
+            float(previous.get("edge") or 0.0),
         ):
             best[event_id] = value
-    return sorted(best.values(), key=lambda x: (float(x["strength"]), float(x["fair_probability"])), reverse=True)
+    return sorted(
+        best.values(),
+        key=lambda x: (float(x["fair_probability"]), float(x["strength"]), -float(x["odd"])),
+        reverse=True,
+    )
 
 
-def build_sport_parlays(rows: list[dict[str, Any]], sport: str) -> list[dict[str, Any]]:
-    legs = eligible_prematch_legs(rows, sport)
+def build_sport_parlays(
+    rows: list[dict[str, Any]],
+    sport: str,
+    *,
+    now_ts: float | None = None,
+) -> list[dict[str, Any]]:
+    legs = eligible_prematch_legs(rows, sport, now_ts=now_ts)
     if len(legs) < 2:
         return []
 
-    min_combined = _float_env("GOOL_MULTISPORT_PARLAY_MIN_COMBINED_ODD", 2.20)
-    target_combined = _float_env("GOOL_MULTISPORT_PARLAY_TARGET_ODD", 3.20)
-    max_combined = _float_env("GOOL_MULTISPORT_PARLAY_MAX_COMBINED_ODD", 6.50)
-    max_legs = max(2, min(4, _int_env("GOOL_MULTISPORT_PARLAY_MAX_LEGS", 3)))
+    min_combined = _float_env("GOOL_MULTISPORT_PARLAY_MIN_COMBINED_ODD", 2.00)
+    target_combined = _float_env("GOOL_MULTISPORT_PARLAY_TARGET_ODD", 2.45)
+    max_combined = _float_env("GOOL_MULTISPORT_PARLAY_MAX_COMBINED_ODD", 3.40)
+    min_combined_probability = _float_env("GOOL_MULTISPORT_PARLAY_MIN_COMBINED_PROBABILITY", 0.46)
+    max_legs = max(2, min(4, _int_env("GOOL_MULTISPORT_PARLAY_MAX_LEGS", 2)))
     max_results = max(1, min(6, _int_env("GOOL_MULTISPORT_PARLAY_MAX_RESULTS", 3)))
 
     candidates: list[dict[str, Any]] = []
@@ -103,11 +141,14 @@ def build_sport_parlays(rows: list[dict[str, Any]], sport: str) -> list[dict[str
             if not (min_combined <= combined_odd <= max_combined):
                 continue
             combined_probability = math.prod(float(leg["fair_probability"]) for leg in combo)
+            if combined_probability < min_combined_probability:
+                continue
             average_strength = sum(float(leg["strength"]) for leg in combo) / len(combo)
             # Quality first; target-odds closeness breaks near ties.
             score = (
                 average_strength
-                + combined_probability * 30.0
+                + combined_probability * 45.0
+                + sum(float(leg.get("edge") or 0.0) for leg in combo) * 20.0
                 - abs(math.log(max(combined_odd, 1.001) / max(target_combined, 1.001))) * 4.0
             )
             candidates.append({

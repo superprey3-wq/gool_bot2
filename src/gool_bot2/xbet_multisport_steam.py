@@ -51,6 +51,7 @@ from .xbet_multisport_markets import (
     lane_score,
     market_lanes,
     prematch_market_lanes,
+    prematch_parlay_market_lanes,
     period_scores,
     raw_catalog,
     scope_from_subgame,
@@ -3255,6 +3256,7 @@ class MultiSportSteamWorker:
         prematch_context = self._flashscore_prematch_context(fs, cfg)
         sport_context = self._sport_context_features(prematch_context, fs, cfg)
         lanes = prematch_market_lanes(decoded, cfg.key)
+        parlay_lanes = prematch_parlay_market_lanes(decoded, cfg.key)
         for lane in lanes:
             lane["lane_key"] = lane_key(lane)
             if lane.get("choice_key"):
@@ -3297,6 +3299,7 @@ class MultiSportSteamWorker:
             "probability": float((primary or {}).get("probability") or 0.5),
             "metric": float((primary or {}).get("metric") or 0.0),
             "market_lanes": lanes,
+            "parlay_market_lanes": parlay_lanes,
             "markets_by_scope": {scope: self._compact_decoded(item) for scope, item in decoded.items()},
             "market_coverage": market_meta.get("coverage") or {},
             "unknown_market_catalog": market_meta.get("unknown_market_catalog") or [],
@@ -3425,7 +3428,7 @@ class MultiSportSteamWorker:
         compact = {
             key: value
             for key, value in row.items()
-            if key not in {"market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
+            if key not in {"market_lanes", "parlay_market_lanes", "markets_by_scope", "unknown_market_catalog", "signals", "signal", "steam"}
         }
         if row.get("score") is not None:
             compact["match_score"] = list(row.get("score") or [0, 0])
@@ -4013,6 +4016,78 @@ class MultiSportSteamWorker:
                     }
                     candidates.append((lane_row, signal))
 
+                # Build a separate safer pool for parlays. Unlike the published
+                # single, this pool can inspect alternate total/IT lines from the
+                # same event. It never records a second single.
+                parlay_candidates: list[dict[str, Any]] = []
+                if cfg.key in {"hockey", "basketball"}:
+                    for parlay_lane in row.get("parlay_market_lanes") or []:
+                        allowed, _ = lane_phase_policy(cfg.key, "PREMATCH", parlay_lane, row.get("period"))
+                        if not allowed:
+                            continue
+                        lane_row = self._lane_row(row, parlay_lane)
+                        if cfg.key == "hockey":
+                            parlay_signal = hockey_prematch_v2_signal(
+                                lane_row,
+                                dict(row.get("sport_context") or {}),
+                                str(row.get("league") or ""),
+                            )
+                        else:
+                            parlay_signal = basketball_prematch_v2_signal(
+                                lane_row,
+                                dict(row.get("sport_context") or {}),
+                                str(row.get("league") or ""),
+                            )
+                        if parlay_signal is None:
+                            continue
+                        direction = str(parlay_signal.get("direction") or "over")
+                        selection = str(
+                            parlay_signal.get("selection")
+                            or lane_row.get("selection")
+                            or selection_label(
+                                lane_row,
+                                direction,
+                                float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                            )
+                        )
+                        parlay_candidates.append({
+                            "entry_id": (
+                                f"{cfg.key}:parlay-safe:{row.get('flashscore_event_id') or row.get('event_id')}:"
+                                f"{lane_row.get('scope')}:{lane_row.get('market_family')}:{selection}"
+                            ),
+                            "event_id": str(row.get("event_id") or ""),
+                            "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
+                            "sport": cfg.key,
+                            "phase": "PREMATCH",
+                            "result": "pending",
+                            "home": str(row.get("home") or "?"),
+                            "away": str(row.get("away") or "?"),
+                            "league": str(row.get("league") or ""),
+                            "home_logo_file": str(row.get("home_logo_file") or ""),
+                            "away_logo_file": str(row.get("away_logo_file") or ""),
+                            "home_team_id": str(row.get("home_team_id") or ""),
+                            "away_team_id": str(row.get("away_team_id") or ""),
+                            "home_team_slug": str(row.get("home_team_slug") or ""),
+                            "away_team_slug": str(row.get("away_team_slug") or ""),
+                            "scope": str(lane_row.get("scope") or SCOPE_FULL),
+                            "market_family": str(lane_row.get("market_family") or "match_total"),
+                            "selection": selection,
+                            "direction": direction,
+                            "selection_side": str(parlay_signal.get("selection_side") or lane_row.get("selection_side") or ""),
+                            "line": float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                            "odd": float(parlay_signal.get("odd") or 0.0),
+                            "strength": float(parlay_signal.get("strength") or 0.0),
+                            "fair_probability": float(parlay_signal.get("fair_probability") or 0.0),
+                            "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
+                            "market_probability": float(parlay_signal.get("market_probability") or 0.0),
+                            "edge": float(parlay_signal.get("edge") or 0.0),
+                            "push_probability": float(parlay_signal.get("push_probability") or 0.0),
+                            "start_ts": float(row.get("start_ts") or 0.0),
+                            "scheduled_start_ts": float(row.get("start_ts") or 0.0),
+                            "parlay_safe": True,
+                        })
+                row["parlay_candidates"] = parlay_candidates
+
                 signals: list[dict[str, Any]] = []
                 primary = select_prematch_primary(candidates, recent_families, cfg.key)
                 if primary is not None:
@@ -4128,7 +4203,27 @@ class MultiSportSteamWorker:
         sent_signatures = self._sent_parlay_signatures()
         delivered = 0
         changed = False
+        min_lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
         for parlay in parlays:
+            # Re-check immediately before Telegram delivery. A match can start
+            # between the PREMATCH scan and card rendering.
+            now = time.time()
+            stale = False
+            for leg in parlay.get("legs") or []:
+                try:
+                    start_ts = float(leg.get("start_ts") or 0.0)
+                except (TypeError, ValueError):
+                    start_ts = 0.0
+                if start_ts > 0.0 and start_ts <= now + min_lead:
+                    stale = True
+                    break
+            if stale:
+                print(
+                    f"GOOL_{cfg.key.upper()}_PARLAY_SKIP_STARTED_OR_IMMINENT",
+                    flush=True,
+                )
+                continue
+
             signature = self._parlay_signature(parlay, cfg.key)
             if not signature or signature in sent_signatures:
                 continue
@@ -4231,7 +4326,16 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
-        parlay_source = self._enrich_parlay_source_rows(load_journal(self.journal_path), fs_today, cfg)
+        # Parlays are built from the current PREMATCH market tree, not from
+        # previously recorded singles. This prevents started matches from being
+        # reused and lets the parlay choose a safer alternate line.
+        parlay_source: list[dict[str, Any]] = []
+        for match in prematch.get("matches") or []:
+            parlay_source.extend(
+                dict(item)
+                for item in (match.get("parlay_candidates") or [])
+                if isinstance(item, dict)
+            )
         prematch_parlays = build_sport_parlays(parlay_source, cfg.key)
         parlay_delivered = self._deliver_new_parlays(cfg, prematch_parlays)
         fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]

@@ -100,6 +100,34 @@ def build_accumulators(
 
 
 
+def super_candidate_pool(
+    picks: Iterable[PrematchPick],
+    *,
+    min_leg_odds: float = 1.15,
+    max_leg_odds: float = 1.55,
+    min_leg_probability: float = 0.72,
+    min_quality: float = 0.75,
+    min_edge: float = 0.025,
+    min_ev: float = 0.015,
+    model_weight: float = 0.65,
+) -> list[PrematchPick]:
+    """Return calibrated football legs eligible for a SUPER product."""
+    pool = [blend_with_market(p, model_weight=model_weight) for p in picks]
+    pool = [
+        p for p in pool
+        if min_leg_odds <= p.odds <= max_leg_odds
+        and p.model_probability >= min_leg_probability
+        and p.data_quality >= min_quality
+        and p.edge >= min_edge
+        and p.expected_value >= min_ev
+    ]
+    pool.sort(
+        key=lambda p: (p.model_probability * p.data_quality, p.edge, p.expected_value),
+        reverse=True,
+    )
+    return pool
+
+
 def build_super_accumulator(
     picks: Iterable[PrematchPick],
     *,
@@ -114,18 +142,15 @@ def build_super_accumulator(
     max_same_market: int = 10,
 ) -> dict | None:
     """Build a calibrated, diversified SUPER ticket; never pad weak legs."""
-    pool = [blend_with_market(p, model_weight=model_weight) for p in picks]
-    pool = [
-        p for p in pool
-        if min_leg_odds <= p.odds <= max_leg_odds
-        and p.model_probability >= min_leg_probability
-        and p.data_quality >= min_quality
-        and p.edge >= min_edge
-        and p.expected_value >= min_ev
-    ]
-    pool.sort(
-        key=lambda p: (p.model_probability * p.data_quality, p.edge, p.expected_value),
-        reverse=True,
+    pool = super_candidate_pool(
+        picks,
+        min_leg_odds=min_leg_odds,
+        max_leg_odds=max_leg_odds,
+        min_leg_probability=min_leg_probability,
+        min_quality=min_quality,
+        min_edge=min_edge,
+        min_ev=min_ev,
+        model_weight=model_weight,
     )
     chosen: list[PrematchPick] = []
     seen: set[str] = set()
@@ -159,6 +184,7 @@ def choose_delivery(
     *,
     max_singles: int | None = None,
     max_doubles: int | None = None,
+    include_super: bool = True,
 ) -> dict:
     """Build singles and parlays as independent products.
 
@@ -177,9 +203,13 @@ def choose_delivery(
         if 1.15 <= float(p.odds) <= 1.70
     ]
 
-    super_ticket = build_super_accumulator(
-        parlay_pool, target_legs=10, min_leg_probability=.74,
-        min_quality=.80, min_edge=.060, min_ev=.02, max_same_market=6,
+    super_ticket = (
+        build_super_accumulator(
+            parlay_pool, target_legs=10, min_leg_probability=.74,
+            min_quality=.80, min_edge=.060, min_ev=.02, max_same_market=6,
+        )
+        if include_super
+        else None
     )
     doubles = build_accumulators(
         parlay_pool, legs=2, min_combined_probability=.50,

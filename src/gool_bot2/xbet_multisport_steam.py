@@ -30,6 +30,7 @@ from .global_super10 import (
     enabled as global_super_enabled,
     publish_candidates as publish_global_super_candidates,
     maybe_deliver_global_super10,
+    _locked as _global_delivery_lock,
 )
 from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
 from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
@@ -4387,6 +4388,17 @@ class MultiSportSteamWorker:
         append_unique(self.journal_path, entry)
 
     def _deliver_new_parlays(
+        self,
+        cfg: SportConfig,
+        parlays: list[dict[str, Any]],
+    ) -> int:
+        # The production autoupdater can briefly overlap old/new workers. Keep
+        # read-check-send-write under the same process lock so two workers cannot
+        # both pass the daily/event reuse gates before either persists state.
+        with _global_delivery_lock(self.parlay_delivery_path):
+            return self._deliver_new_parlays_locked(cfg, parlays)
+
+    def _deliver_new_parlays_locked(
         self,
         cfg: SportConfig,
         parlays: list[dict[str, Any]],

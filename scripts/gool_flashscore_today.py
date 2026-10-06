@@ -7,7 +7,8 @@ from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.full_market_brain import analyze_full_market
 from gool_bot2.prematch_full_market_runtime import production_full_market_picks
 from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
-from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates
+from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates,super_candidate_pool
+from gool_bot2.global_super10 import enabled as global_super_enabled,football_rows_from_picks,publish_candidates as publish_global_super_candidates,maybe_deliver_global_super10
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
 from gool_bot2.providers.prematch_fusion import PrematchDataFusion
@@ -474,10 +475,27 @@ print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 
 max_singles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_SINGLES","0")))
 max_doubles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_DOUBLES","0")))
+global_super_on=global_super_enabled()
+football_super_pool=super_candidate_pool(
+ priced,
+ min_leg_probability=.74,
+ min_quality=.80,
+ min_edge=.060,
+ min_ev=.02,
+)
+if global_super_on:
+ published_global_football=publish_global_super_candidates(
+  "football",
+  football_rows_from_picks(football_super_pool,meta),
+ )
+ print("GLOBAL_SUPER10_POOL football",published_global_football,flush=True)
+else:
+ published_global_football=0
 d=choose_delivery(
  priced,
  max_singles=None if max_singles<=0 else max_singles,
  max_doubles=None if max_doubles<=0 else max_doubles,
+ include_super=not global_super_on,
 )
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 value_delivered=emit_value_hunter(value_candidates,journal)
@@ -490,6 +508,10 @@ if str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"
   print("PREMATCH_RETRY",{"cards":retried},"journal",journal,flush=True)
  delivered=emit_delivery_selection(d,meta,journal)
  print("PREMATCH_DELIVERY",delivered,"journal",journal,flush=True)
+global_super_delivery=maybe_deliver_global_super10(
+ delivery_enabled=str(os.getenv("GOOL_PREMATCH_DELIVER","0")).lower() in {"1","true","yes","on"}
+) if global_super_on else {"status":"disabled"}
+print("GLOBAL_SUPER10",global_super_delivery,flush=True)
 print("=== GOOL DELIVERY",d["mode"],"===",flush=True)
 if d["super"]:
  print("SUPER 10",flush=True)
@@ -518,6 +540,8 @@ update_prematch_status(
  delivered_cards=int(delivered.get("cards") or 0),
  delivered_entries=int(delivered.get("entries") or 0),
  delivered_parlays=int(delivered.get("parlays") or 0),
+ global_super10_status=str(global_super_delivery.get("status") or ""),
+ global_super10_football_pool=int(published_global_football),
  value_hunter_scan_pool=len(value_scan_rows),
  value_hunter_candidates=len(value_candidates),
  value_hunter_sent=int(value_delivered.get("entries") or 0),

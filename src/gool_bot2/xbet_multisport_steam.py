@@ -2370,6 +2370,15 @@ class MultiSportSteamWorker:
             )
             memory = {}
         self._fs_segment_memory_cache[cache_key] = (now, dict(memory))
+        if memory:
+            print(
+                f"GOOL_{cfg.key.upper()}_SEGMENT_MEMORY event={event_id} "
+                f"usable={int(memory.get('usable_scopes') or 0)} "
+                f"history={int(memory.get('history_events') or 0)}/"
+                f"{int(memory.get('history_requested') or 0)} "
+                f"quality={float(memory.get('quality') or 0.0):.3f}",
+                flush=True,
+            )
         return memory
 
     @staticmethod

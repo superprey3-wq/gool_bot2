@@ -1108,3 +1108,38 @@ def test_prematch_pick_list_does_not_show_parlay_parent(tmp_path: Path, monkeypa
     assert "SKA — CSKA" in text
     assert "ЭКСПРЕСС — HOCKEY" not in text
     assert "Экспресс ×2" not in text
+
+
+
+def test_multisport_status_shows_super10_readiness(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(journal, [])
+    _write(state, {
+        "mode": "active",
+        "global_super10": {
+            "status": "not_ready",
+            "target": 10,
+            "strict": 5,
+            "reserve_extra": 2,
+            "available": 7,
+            "need_more": 3,
+            "available_by_sport": {"football": 3, "hockey": 2, "basketball": 2},
+            "missing_sports": [],
+        },
+        "sports": {
+            "hockey": {"enabled": True},
+            "basketball": {"enabled": True},
+        },
+    })
+
+    text = multisport_status_text()
+
+    assert "SUPER 10" in text
+    assert "not_ready" in text
+    assert "готово 7/10" in text
+    assert "strict 5" in text
+    assert "reserve +2" in text
+    assert "⚽ 3 · 🏒 2 · 🏀 2" in text

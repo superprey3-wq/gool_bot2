@@ -4416,7 +4416,7 @@ class MultiSportSteamWorker:
         delivered = 0
         changed = False
         min_lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
-        max_daily = max(1, min(3, _int_env("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", 1)))
+        max_daily = max(1, min(3, _int_env("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", 3)))
         day = datetime.now(_display_tz()).date().isoformat()
         today_rows = [
             row for row in history

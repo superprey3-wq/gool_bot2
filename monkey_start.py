@@ -270,6 +270,23 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.45")
     os.environ.setdefault("GOOL_MULTISPORT_MAX_ODD", "3.25")
     os.environ.setdefault("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", "3.0")
+    # Product policy: send the three strongest distinct hockey/basketball
+    # parlays per sport/day when enough safe fixtures exist.
+    os.environ["GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT"] = "3"
+    os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MAX_RESULTS", "3")
+    os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MAX_EVENT_REUSE", "1")
+    # GLOBAL SUPER 10 stays active in production and may complete strict legs
+    # from a separately gated safe reserve pool. Candidate snapshots live long
+    # enough for football + hockey + basketball publishers to overlap.
+    os.environ["GOOL_GLOBAL_SUPER10_ENABLED"] = "1"
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_LEGS", "10")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_REQUIRE_ALL_SPORTS", "1")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MAX_ODD", "1.70")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_SOURCE_TTL_SECONDS", "129600")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", "0.68")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", "0.055")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", "0.55")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_STRENGTH", "74")
     os.environ["XBET_MULTISPORT_CARDS_ENABLED"] = "1"
     os.environ["GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED"] = "0"
     os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "1")

@@ -303,3 +303,30 @@ def test_delivered_parlay_is_journaled_and_settled(tmp_path, monkeypatch):
     assert settled["result"] == "won"
     assert settled["profit_units"] > 0
     assert all(leg.get("result") == "won" for leg in settled["legs"])
+
+
+
+def test_default_delivery_cap_allows_three_distinct_parlays(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.delenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", raising=False)
+    sent = []
+    monkeypatch.setattr(steam, "render_multisport_parlay_card", lambda *_args, **_kwargs: b"png")
+    monkeypatch.setattr(steam.telegram, "broadcast_photo", lambda png, caption="": sent.append(1) or 1)
+
+    rows = [
+        _row(str(idx), odd=1.52 + idx * 0.02, strength=100 - idx, probability=0.80 - idx * 0.01)
+        for idx in range(1, 7)
+    ]
+    parlays = build_sport_parlays(rows, "hockey")
+    assert len(parlays) == 3
+
+    worker = MultiSportSteamWorker(tmp_path)
+    assert worker._deliver_new_parlays(SPORTS["hockey"], parlays) == 3
+    assert len(sent) == 3
+
+    all_ids = [leg["event_id"] for parlay in parlays for leg in parlay["legs"]]
+    assert len(all_ids) == len(set(all_ids))

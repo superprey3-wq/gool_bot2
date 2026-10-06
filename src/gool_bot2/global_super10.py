@@ -224,23 +224,28 @@ def _candidate_score(row: dict[str, Any]) -> float:
     return probability * 0.55 + quality * 0.20 + strength * 0.15 + edge_norm * 0.10
 
 
-def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
+def _eligible_candidates(
+    *,
+    now_ts: float | None = None,
+    min_odd: float,
+    max_odd: float,
+    min_probability: float,
+    min_edge: float,
+    min_ev: float,
+    min_quality: float,
+    min_strength: float,
+) -> list[dict[str, Any]]:
     now = float(now_ts or time.time())
     payload = _read_json(pool_path(), {})
     sources = payload.get("sources") if isinstance(payload, dict) else {}
     if not isinstance(sources, dict):
         return []
 
-    min_odd = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.15)
-    max_odd = _num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.65)
-    min_probability = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_PROBABILITY"), 0.72)
-    min_edge = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EDGE"), 0.055)
-    min_ev = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EV"), 0.02)
-    min_quality = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_QUALITY"), 0.60)
-    min_strength = _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_STRENGTH"), 76.0)
     min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300.0))
     horizon = max(3600.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_HORIZON_SECONDS"), 36 * 3600.0))
-    ttl = max(600.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_SOURCE_TTL_SECONDS"), 6 * 3600.0))
+    # Source snapshots should live as long as their still-future fixtures. The
+    # old 6h TTL could expire football before hockey/basketball had enough legs.
+    ttl = max(600.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_SOURCE_TTL_SECONDS"), 36 * 3600.0))
 
     out: list[dict[str, Any]] = []
     for sport in SPORTS:
@@ -255,6 +260,8 @@ def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
                 pass
         for raw in source.get("candidates") or []:
             row = dict(raw)
+            if not bool(row.get("parlay_safe") or sport == "football"):
+                continue
             start_ts = _num(row.get("start_ts"), 0.0)
             if start_ts <= now + min_lead or start_ts - now > horizon:
                 continue
@@ -268,8 +275,6 @@ def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
                 continue
             if p < min_probability or edge < min_edge or ev < min_ev:
                 continue
-            # Football's own SUPER pool is already quality-filtered at 0.80.
-            # Hockey/basketball carry Brain R and data quality; require both.
             if quality < min_quality:
                 continue
             if sport != "football" and strength < min_strength:
@@ -303,40 +308,122 @@ def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
     )
 
 
+def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
+    """Strict GLOBAL SUPER pool."""
+    return _eligible_candidates(
+        now_ts=now_ts,
+        min_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.15),
+        max_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.70),
+        min_probability=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_PROBABILITY"), 0.72),
+        min_edge=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EDGE"), 0.055),
+        min_ev=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EV"), 0.02),
+        min_quality=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_QUALITY"), 0.60),
+        min_strength=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_STRENGTH"), 76.0),
+    )
+
+
+def reserve_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
+    """Safe reserve pool used only when strict legs are fewer than 10.
+
+    Reserve candidates are still Brain/parlay-safe selections. They are not
+    arbitrary padding: probability/edge/quality gates remain in place.
+    """
+    return _eligible_candidates(
+        now_ts=now_ts,
+        min_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.15),
+        max_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.70),
+        min_probability=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY"), 0.68),
+        min_edge=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE"), 0.055),
+        min_ev=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV"), 0.01),
+        min_quality=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY"), 0.55),
+        min_strength=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_STRENGTH"), 74.0),
+    )
+
+
+def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
+    strict = eligible_candidates(now_ts=now_ts)
+    reserve = reserve_candidates(now_ts=now_ts)
+    strict_keys = {(str(row.get("sport") or ""), str(row.get("event_id") or "")) for row in strict}
+    merged = [*strict]
+    merged.extend(
+        row for row in reserve
+        if (str(row.get("sport") or ""), str(row.get("event_id") or "")) not in strict_keys
+    )
+    target = max(2, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_LEGS"), 10)))
+    strict_by = {sport: sum(1 for row in strict if row.get("sport") == sport) for sport in SPORTS}
+    merged_by = {sport: sum(1 for row in merged if row.get("sport") == sport) for sport in SPORTS}
+    return {
+        "target": target,
+        "strict": len(strict),
+        "reserve_extra": max(0, len(merged) - len(strict)),
+        "available": len(merged),
+        "strict_by_sport": strict_by,
+        "available_by_sport": merged_by,
+        "missing_sports": [sport for sport in SPORTS if merged_by.get(sport, 0) <= 0],
+        "need_more": max(0, target - len(merged)),
+    }
+
+
 def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | None:
-    rows = eligible_candidates(now_ts=now_ts)
+    strict = eligible_candidates(now_ts=now_ts)
+    reserve = reserve_candidates(now_ts=now_ts)
     target = max(2, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_LEGS"), 10)))
     max_per_sport = max(1, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_PER_SPORT"), 6)))
     require_all = _truthy("GOOL_GLOBAL_SUPER10_REQUIRE_ALL_SPORTS", True)
 
-    by_sport = {sport: [row for row in rows if row.get("sport") == sport] for sport in SPORTS}
+    strict_keys = {(str(row.get("sport") or ""), str(row.get("event_id") or "")) for row in strict}
+    reserve_only = [
+        row for row in reserve
+        if (str(row.get("sport") or ""), str(row.get("event_id") or "")) not in strict_keys
+    ]
+    all_safe = [*strict, *reserve_only]
+    by_sport = {sport: [row for row in all_safe if row.get("sport") == sport] for sport in SPORTS}
     if require_all and any(not by_sport[sport] for sport in SPORTS):
         return None
 
     chosen: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     counts = {sport: 0 for sport in SPORTS}
+    strict_count = 0
+    reserve_count = 0
 
-    # A GLOBAL SUPER must really be cross-sport. Seed it with the best qualified
-    # leg from each sport, but never relax thresholds to force a weak leg.
-    if require_all:
-        for sport in SPORTS:
-            row = by_sport[sport][0]
-            key = (sport, str(row.get("event_id") or ""))
-            chosen.append(row)
-            seen.add(key)
-            counts[sport] += 1
-
-    for row in rows:
-        if len(chosen) >= target:
-            break
+    def add(row: dict[str, Any], tier: str) -> bool:
+        nonlocal strict_count, reserve_count
         sport = str(row.get("sport") or "")
         key = (sport, str(row.get("event_id") or ""))
-        if key in seen or counts.get(sport, 0) >= max_per_sport:
-            continue
-        chosen.append(row)
+        if not sport or not key[1] or key in seen or counts.get(sport, 0) >= max_per_sport:
+            return False
+        value = dict(row)
+        value["super_tier"] = tier
+        chosen.append(value)
         seen.add(key)
         counts[sport] = counts.get(sport, 0) + 1
+        if tier == "strict":
+            strict_count += 1
+        else:
+            reserve_count += 1
+        return True
+
+    # Cross-sport contract: seed every sport with its safest available leg.
+    if require_all:
+        strict_by = {sport: [row for row in strict if row.get("sport") == sport] for sport in SPORTS}
+        reserve_by = {sport: [row for row in reserve_only if row.get("sport") == sport] for sport in SPORTS}
+        for sport in SPORTS:
+            if strict_by[sport]:
+                add(strict_by[sport][0], "strict")
+            elif reserve_by[sport]:
+                add(reserve_by[sport][0], "reserve")
+
+    # Strict legs always win. Reserve is only used to complete the 10 when the
+    # strict pool alone is not large enough.
+    for row in strict:
+        if len(chosen) >= target:
+            break
+        add(row, "strict")
+    for row in reserve_only:
+        if len(chosen) >= target:
+            break
+        add(row, "reserve")
 
     if len(chosen) < target:
         return None
@@ -354,6 +441,8 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
         "probability": round(combined_probability, 8),
         "combined_probability": round(combined_probability, 8),
         "sport_counts": counts,
+        "strict_legs": strict_count,
+        "reserve_legs": reserve_count,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -371,7 +460,7 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     if not enabled():
         return {"status": "disabled"}
     if not delivery_enabled:
-        return {"status": "shadow"}
+        return {"status": "shadow", **readiness_snapshot()}
 
     path = sent_path()
     with _locked(path):
@@ -383,7 +472,7 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
 
         ticket = build_global_super10(now_ts=now)
         if ticket is None:
-            return {"status": "not_ready", "day": day, "eligible": len(eligible_candidates(now_ts=now))}
+            return {"status": "not_ready", "day": day, **readiness_snapshot(now_ts=now)}
 
         # Final kickoff guard under the delivery lock.
         min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300.0))
@@ -397,6 +486,7 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             f"⚽ {int(counts.get('football') or 0)} · "
             f"🏒 {int(counts.get('hockey') or 0)} · "
             f"🏀 {int(counts.get('basketball') or 0)}\n"
+            f"Ноги: строгие <b>{int(ticket.get('strict_legs') or 0)}</b> · резерв <b>{int(ticket.get('reserve_legs') or 0)}</b>\n"
             f"Общий кэф: <b>{_num(ticket.get('combined_odds')):.2f}</b>"
         )
         delivered = int(telegram.broadcast_photo(png, caption=caption) or 0)
@@ -418,4 +508,6 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             "delivery_count": delivered,
             "combined_odds": ticket["combined_odds"],
             "sport_counts": counts,
+            "strict_legs": int(ticket.get("strict_legs") or 0),
+            "reserve_legs": int(ticket.get("reserve_legs") or 0),
         }

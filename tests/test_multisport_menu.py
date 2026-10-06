@@ -953,3 +953,42 @@ def test_phase_filtered_sport_journal_keeps_dates_and_phase_total(tmp_path: Path
     assert "06.10.2026" in text
     assert "ИТОГО · LIVE · ЗА ВСЁ ВРЕМЯ" in text
     assert "ИТОГ ДНЯ" not in text
+
+
+def test_sport_journal_groups_prematch_by_match_date_not_creation_date(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setenv("REPORT_TIMEZONE", "Europe/Moscow")
+    _write(journal, [
+        {
+            "sport":"basketball","phase":"PREMATCH","event_id":"B-NEXT-DAY",
+            "created_at":"2026-10-05T20:00:00+00:00",
+            "start_ts":1791266400,
+            "scheduled_start_ts":1791266400,
+            "result":"won","odd":1.80,"profit_units":0.80,
+        }
+    ])
+
+    text = basketball_journal_text()
+
+    assert "06.10.2026" in text
+    assert "05.10.2026" not in text
+
+
+def test_live_row_keeps_match_date_when_signal_is_after_midnight(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setenv("REPORT_TIMEZONE", "Europe/Moscow")
+    _write(journal, [
+        {
+            "sport":"hockey","phase":"LIVE","event_id":"H-CROSS-MIDNIGHT",
+            "created_at":"2026-10-06T22:30:00+00:00",
+            "start_ts":1791309600,
+            "scheduled_start_ts":1791309600,
+            "result":"lost","odd":1.75,"profit_units":-1.00,
+        }
+    ])
+
+    text = hockey_journal_text()
+
+    assert "06.10.2026" in text

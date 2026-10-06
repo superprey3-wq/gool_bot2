@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, choose_delivery, signal_tier
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, super_candidate_pool, choose_delivery, signal_tier
 
 
 def test_devig_two_way_removes_margin():
@@ -97,6 +97,26 @@ def test_super_accumulator_never_pads_weak_or_expensive_legs():
     ]
     bad = PrematchPick("bad", "X", "Y", "match_total", "over 1.5", 1.80, 0.86, 0.80, 0.9)
     assert build_super_accumulator([*good, bad]) is None
+
+
+
+
+def test_football_super_pool_can_feed_global_ticket_without_sending_legacy_super():
+    picks = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5", 1.22, 0.90, 0.75, 0.9)
+        for i in range(10)
+    ]
+    pool = super_candidate_pool(
+        picks,
+        min_leg_probability=.74,
+        min_quality=.80,
+        min_edge=.060,
+        min_ev=.02,
+    )
+    delivery = choose_delivery(picks, max_singles=0, max_doubles=0, include_super=False)
+
+    assert len(pool) == 10
+    assert delivery["super"] is None
 
 
 def test_delivery_allows_strong_single_events_in_parlay_but_not_twice_in_same_ticket():

@@ -355,21 +355,38 @@ def test_production_super10_refresh_callback(tmp_path: Path, monkeypatch):
 
 
 
-def test_production_report_button_sends_summary_and_daily_file(tmp_path: Path, monkeypatch):
+def test_production_report_button_stays_text_only(tmp_path: Path, monkeypatch):
     messages = []
     documents = []
     monkeypatch.setattr(worker.telegram_mod, "_force_reconcile_pending", lambda _path: None)
     monkeypatch.setattr(worker.telegram_mod, "report_text", lambda _path: "DAY SUMMARY")
     monkeypatch.setattr(
-        "gool_bot2.full_report_export.build_full_report",
-        lambda: ("GOOL_DAY_REPORT_2026-10-06.html", b"<html>ok</html>", "DAY FILE"),
-    )
-    monkeypatch.setattr(
         worker,
         "_direct_send_message",
-        lambda credential, chat_id, text, reply_markup=None: messages.append(
-            (credential, chat_id, text, reply_markup)
-        ) or True,
+        lambda credential, chat_id, text, reply_markup=None: messages.append(text) or True,
+    )
+    monkeypatch.setattr(
+        worker.telegram_mod,
+        "send_document",
+        lambda *args, **kwargs: documents.append((args, kwargs)) or True,
+    )
+
+    actions = worker._handle_direct_telegram_update(
+        "test-credential",
+        tmp_path / "signal_journal.json",
+        {"update_id": 40, "message": {"chat": {"id": 123}, "text": "📊 Отчёт"}},
+    )
+
+    assert actions == 1
+    assert messages == ["DAY SUMMARY"]
+    assert documents == []
+
+
+def test_production_dayreport_command_sends_daily_file(tmp_path: Path, monkeypatch):
+    documents = []
+    monkeypatch.setattr(
+        "gool_bot2.full_report_export.build_full_report",
+        lambda: ("GOOL_DAY_REPORT_2026-10-06.html", b"<html>ok</html>", "DAY FILE"),
     )
     monkeypatch.setattr(
         worker.telegram_mod,
@@ -382,11 +399,10 @@ def test_production_report_button_sends_summary_and_daily_file(tmp_path: Path, m
     actions = worker._handle_direct_telegram_update(
         "test-credential",
         tmp_path / "signal_journal.json",
-        {"update_id": 40, "message": {"chat": {"id": 123}, "text": "📊 Отчёт"}},
+        {"update_id": 41, "message": {"chat": {"id": 123}, "text": "/dayreport"}},
     )
 
-    assert actions == 2
-    assert messages[0][2] == "DAY SUMMARY"
+    assert actions == 1
     assert documents == [
         (123, "GOOL_DAY_REPORT_2026-10-06.html", b"<html>ok</html>", "DAY FILE", "test-credential")
     ]

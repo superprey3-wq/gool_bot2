@@ -259,27 +259,12 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","/fullreport","/dayreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","📄 отчёт за день","📄 отчет за день","📄 полный отчёт","📄 полный отчет","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","/fullreport","/dayreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
    elif text in {"📊 отчёт","📊 отчет"}:
-    _force_reconcile_pending(journal_path)
-    if send_message(chat_id,report_text(journal_path),reply_markup=MENU_KEYBOARD):changed+=1
-    try:
-     from .full_report_export import build_full_report
-     filename,data,caption=build_full_report()
-     if send_document(
-      chat_id,
-      filename,
-      data,
-      caption=caption,
-      content_type="text/html; charset=utf-8",
-     ):changed+=1
-    except Exception as exc:
-     print(f"GOOL_DAY_REPORT_FILE_ERROR {type(exc).__name__}:{exc}",flush=True)
-     if send_message(chat_id,"⚠️ Сводка готова, но файл полного отчёта за день отправить не удалось.",reply_markup=MENU_KEYBOARD):changed+=1
-    continue
+    _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path)
     replies=in_game_sections(journal_path,_analysis_path(journal_path))
@@ -335,7 +320,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text in {"/basketparlay","🔗 баскет экспресс"}:
     from .multisport_menu import sport_parlay_text
     replies=[sport_parlay_text("basketball")]
-   elif text in {"/fullreport","/dayreport","📄 отчёт за день","📄 отчет за день","📄 полный отчёт","📄 полный отчет"}:
+   elif text in {"/fullreport","/dayreport"}:
     from .full_report_export import build_full_report
     filename,data,caption=build_full_report()
     if send_document(chat_id,filename,data,caption=caption,content_type="text/html; charset=utf-8",reply_markup=MENU_KEYBOARD):changed+=1

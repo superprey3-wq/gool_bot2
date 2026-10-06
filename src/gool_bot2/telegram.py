@@ -94,6 +94,12 @@ def _multipart_call(method:str,fields:dict[str,str],file_field:str,filename:str,
   print(f"telegram_photo_http_error code={exc.code} detail={detail}",flush=True);return None
  except Exception as exc:
   print(f"telegram_photo_error error={type(exc).__name__}:{exc}",flush=True);return None
+def super10_keyboard()->dict[str,Any]:
+ return {"inline_keyboard":[[
+  {"text":"🔄 Обновить SUPER 10","callback_data":"s10:refresh"},
+  {"text":"📚 История","callback_data":"s10:history"},
+ ]]}
+
 def signal_keyboard(match_id:str,head:str,entered:bool=False)->dict[str,Any]:
  code=HEAD_TO_CODE.get(head,"AG");text="✅ В игре" if entered else "🎯 В игре";return {"inline_keyboard":[[{"text":text,"callback_data":f"ig:{code}:{match_id}"}]]}
 def send_message(chat_id:str|int,text:str,parse_mode:str="HTML",reply_markup:dict[str,Any]|None=None)->bool:
@@ -247,7 +253,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -308,6 +314,10 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    elif text in {"/basketparlay","🔗 баскет экспресс"}:
     from .multisport_menu import sport_parlay_text
     replies=[sport_parlay_text("basketball")]
+   elif text in {"/super10","🌐 super 10"}:
+    from .multisport_menu import super10_text
+    if send_message(chat_id,super10_text(),reply_markup=super10_keyboard()):changed+=1
+    continue
    elif text=="🏒 хоккей":
     from .multisport_menu import hockey_journal_text
     replies=[hockey_journal_text()]
@@ -341,6 +351,15 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     send_message(chat_id,f"Нашёл совпадений: <b>{len(matches)}</b>. Выбери нужный матч:",reply_markup=match_choices(matches));changed+=1
    continue
   cb=update.get("callback_query") or {};data=str(cb.get("data") or "")
+  if data.startswith("s10:"):
+   from .multisport_menu import super10_history_text,super10_text
+   cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id")
+   action=data.split(":",1)[1]
+   if cid is not None:
+    body=super10_history_text() if action=="history" else super10_text()
+    if send_message(cid,body,reply_markup=super10_keyboard()):changed+=1
+   answer_callback_query(str(cb.get("id") or ""),"SUPER 10 обновлён" if action!="history" else "История SUPER 10")
+   continue
   if data.startswith("ma:"):
    from .manual_match_analysis import analyse_match_text,find_today_by_id
    event_id=data.split(":",1)[1];cm=cb.get("message") or {};cid=(cm.get("chat") or {}).get("id")

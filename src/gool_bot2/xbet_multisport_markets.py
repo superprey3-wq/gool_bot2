@@ -576,20 +576,27 @@ def lane_phase_policy(sport: str, phase: str, lane: dict[str, Any], period: str 
             return True, "prematch_full_market_tree"
         return False, "prematch_unknown_market_catalog_only"
 
+    # LIVE has two deliberately narrow lanes:
+    # 1) total of the segment currently being played;
+    # 2) regulation FULL_MATCH total / individual team totals, repriced from
+    #    Segment Memory + the observed match trajectory.
+    # Handicaps and moneyline remain PREMATCH-only.
+    if scope == SCOPE_FULL and family in {"match_total", "home_total", "away_total"}:
+        return True, "live_full_match_totals_segment_memory"
     if family != "match_total":
-        return False, "live_segment_total_only"
+        return False, "live_totals_only"
     allowed = live_scopes_from_period(sport, period)
     if scope not in allowed:
         return False, "live_not_current_segment"
-    return True, "live_current_segment_total_only"
+    return True, "live_current_segment_total"
 
 def policy_text_ru(sport: str) -> tuple[str, str]:
     if str(sport).casefold() == "hockey":
         return (
             "Все рынки до матча: матчевые тоталы/ИТ, форы, исходы + рынки периодов",
-            "Только ТБ/ТМ текущего периода",
+            "ТБ/ТМ текущего периода + ТБ/ТМ и ИТБ/ИТМ всего матча по LIVE-модели",
         )
     return (
         "Все рынки до матча: матчевые тоталы/ИТ, форы, исходы + рынки половин/четвертей",
-        "Только ТБ/ТМ текущей четверти",
+        "ТБ/ТМ текущей четверти + ТБ/ТМ и ИТБ/ИТМ всего матча по LIVE-модели",
     )

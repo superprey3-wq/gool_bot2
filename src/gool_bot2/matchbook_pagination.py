@@ -132,6 +132,7 @@ def fetch_events_paginated() -> list[dict[str, Any]]:
     max_pages = max(1, min(12, int(os.getenv("MATCHBOOK_MAX_PAGES", "6"))))
     seen: set[str] = set()
     rows: list[dict[str, Any]] = []
+    sport_mapping = resolve_sport_ids()
 
     for page in range(1, max_pages + 1):
         payload = _page_payload(page, per_page)
@@ -140,6 +141,19 @@ def fetch_events_paginated() -> list[dict[str, Any]]:
             break
         added = 0
         for event in events:
+            sport_id = _number(
+                event.get("sport-id")
+                if event.get("sport-id") is not None
+                else event.get("sport_id")
+                if event.get("sport_id") is not None
+                else event.get("sportId")
+            )
+            if sport_id is None and isinstance(event.get("sport"), dict):
+                sport_id = _number((event.get("sport") or {}).get("id"))
+            if sport_id is not None:
+                event["_gool_sport_id"] = sport_id
+                if sport_id in sport_mapping:
+                    event["_gool_sport_key"] = sport_mapping[sport_id]
             decoded = decode_event(event)
             if decoded is None:
                 continue

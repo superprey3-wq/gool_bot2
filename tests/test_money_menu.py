@@ -164,3 +164,66 @@ def test_money_button_install_is_idempotent():
     buttons = [button["text"] for row in fake.MENU_KEYBOARD["keyboard"] for button in row]
     assert buttons.count("💰 Деньги") == 1
     assert fake.MENU_KEYBOARD["keyboard"][-1][-1]["text"] == "💰 Деньги"
+
+
+def test_money_board_shows_matchbook_low_league_radar(monkeypatch):
+    monkeypatch.setenv("REPORT_TIMEZONE", "UTC")
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        money_menu,
+        "load_betdaq_state",
+        lambda: {
+            "captured_at": now.isoformat(),
+            "available": True,
+            "events": [_event("A B", 1000, start=now)],
+            "tracked_events": 1,
+            "tracked_markets": 3,
+        },
+    )
+    monkeypatch.setattr(
+        money_menu,
+        "load_matchbook_state",
+        lambda: {
+            "captured_at": now.isoformat(),
+            "available": True,
+            "events": [
+                {
+                    "event_id": "gr-1",
+                    "name": "Nestos Chrysoupoli FC vs Marko",
+                    "country": "Greece",
+                    "league": "Super League 2",
+                    "in_running": True,
+                    "totals": {
+                        "FT:2.5": {
+                            "period": "FT",
+                            "line": 2.5,
+                            "volume": 61183.0,
+                            "over": {"volume": 26485.0, "best_back": {"odds": 1.82}},
+                            "under": {"volume": 34698.0, "best_back": {"odds": 2.0}},
+                            "over_matched": 26485.0,
+                            "under_matched": 34698.0,
+                            "flow": {
+                                "window_ready_300s": True,
+                                "volume_delta_300s": 9200.0,
+                                "fair_over_delta_pp_300s": -2.4,
+                                "over_back_old_300s": 1.67,
+                                "over_back_new": 1.82,
+                                "long_over_consistency": 0.18,
+                                "long_under_consistency": 0.82,
+                            },
+                        }
+                    },
+                }
+            ],
+        },
+    )
+
+    text = money_menu.money_text()
+
+    assert "MATCHBOOK MONEY RADAR" in text
+    assert "Greece · Super League 2" in text
+    assert "Nestos Chrysoupoli FC vs Marko" in text
+    assert "ТМ £34.7k (57%)" in text
+    assert "ТБ £26.5k (43%)" in text
+    assert "5 мин" in text
+    assert "Давление: <b>ТМ</b>" in text

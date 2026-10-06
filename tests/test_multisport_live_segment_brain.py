@@ -222,15 +222,22 @@ def test_hockey_flashscore_brain_uses_shots_before_xbet(tmp_path, monkeypatch):
     }
 
     first = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    # Fresh-segment policy requires both enough samples and a genuine analysis
+    # window. Age the first sample, then collect two more current-period reads.
+    key = "hockey:HFSHOT01:PERIOD_2"
+    worker._fs_brain_history[key][0]["ts"] -= 61.0
     second = worker._flashscore_live_brain(fs, SPORTS["hockey"])
+    third = worker._flashscore_live_brain(fs, SPORTS["hockey"])
 
     assert first["scope"] == "PERIOD_2"
     assert first["brain_state"] == "WAIT"
     assert first["history_points"] == 1
-    assert second["brain_state"] in {"PASS", "BORDERLINE"}
+    assert second["brain_state"] == "WAIT"
     assert second["history_points"] == 2
-    assert second["brain_score"] >= 50
-    assert "броски 7" in second["brain_reason"]
+    assert third["brain_state"] in {"PASS", "BORDERLINE"}
+    assert third["history_points"] == 3
+    assert third["brain_score"] >= 50
+    assert "броски 7" in third["brain_reason"]
 
 
 def test_basketball_numeric_38_is_match_minute_not_halftime_enum(tmp_path, monkeypatch):
@@ -692,7 +699,7 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
         "current_segment_score": [1, 0],
         "history_points": 3,
         "recent_window_seconds": 60.0,
-        "recent_shot_rate": 1.1,
+        "recent_shot_rate": 0.75,
         "live_game_stats": {
             "stats_mode": "cumulative_through_current_segment",
             "segment_stats": {"shots_on_goal": [22, 24]},

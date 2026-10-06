@@ -25,6 +25,11 @@ from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
 from .multisport_parlay_card import render_multisport_parlay_card
+from .global_super10 import (
+    enabled as global_super_enabled,
+    publish_candidates as publish_global_super_candidates,
+    maybe_deliver_global_super10,
+)
 from .hockey_signal_card import render_hockey_live_card, render_hockey_prematch_card, render_hockey_result_card
 from .basketball_signal_card import render_basketball_live_card, render_basketball_prematch_card, render_basketball_result_card
 from .hockey_brain_v2 import (
@@ -4081,6 +4086,7 @@ class MultiSportSteamWorker:
                             "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
                             "market_probability": float(parlay_signal.get("market_probability") or 0.0),
                             "edge": float(parlay_signal.get("edge") or 0.0),
+                            "data_quality": float(parlay_signal.get("data_quality") or 0.0),
                             "push_probability": float(parlay_signal.get("push_probability") or 0.0),
                             "start_ts": float(row.get("start_ts") or 0.0),
                             "scheduled_start_ts": float(row.get("start_ts") or 0.0),
@@ -4336,6 +4342,11 @@ class MultiSportSteamWorker:
                 for item in (match.get("parlay_candidates") or [])
                 if isinstance(item, dict)
             )
+        global_super_published = (
+            publish_global_super_candidates(cfg.key, parlay_source)
+            if global_super_enabled()
+            else 0
+        )
         prematch_parlays = build_sport_parlays(parlay_source, cfg.key)
         parlay_delivered = self._deliver_new_parlays(cfg, prematch_parlays)
         fs_live = [dict(row) for row in (prepared.get("fs_live") or [])]
@@ -4442,6 +4453,7 @@ class MultiSportSteamWorker:
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,
             "prematch_parlay_delivered": parlay_delivered,
+            "global_super10_pool": global_super_published,
             "flashscore_live": len(fs_live),
             "live_brain_candidates": len(live_candidates),
             "flashscore_analysis_matches": live_analysis[:120],
@@ -4570,12 +4582,20 @@ class MultiSportSteamWorker:
             if not (stats.get("xbet_diag") or {}).get("ok"):
                 print(f"GOOL_{key.upper()}_XBET_DIAG " + json.dumps(stats.get("xbet_diag") or {}, ensure_ascii=False, separators=(",", ":")), flush=True)
 
+        global_super10 = (
+            maybe_deliver_global_super10(delivery_enabled=_mode() == "active")
+            if global_super_enabled()
+            else {"status": "disabled"}
+        )
+        print("GOOL_GLOBAL_SUPER10 " + json.dumps(global_super10, ensure_ascii=False, separators=(",", ":")), flush=True)
+
         state = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "latency_ms": int((time.time() - started) * 1000),
             "mode": _mode(),
             "flashscore_whitelist_required": True,
             "score_sync_required": True,
+            "global_super10": global_super10,
             "sports": sports,
         }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

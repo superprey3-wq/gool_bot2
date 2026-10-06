@@ -895,3 +895,61 @@ def test_in_game_groups_live_and_prematch_bets_under_one_match(tmp_path: Path, m
     assert "🧠 100/100 · 🟡 PREMATCH" in text
     assert "Матчей: <b>1</b> · ставок: <b>2</b>" in text
 
+
+
+def test_separate_sport_journal_is_grouped_by_date_with_all_time_total(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setenv("REPORT_TIMEZONE", "Europe/Moscow")
+    _write(journal, [
+        {
+            "sport":"basketball","phase":"PREMATCH","event_id":"B-05-P",
+            "created_at":"2026-10-05T10:00:00+00:00",
+            "result":"won","odd":1.80,"profit_units":0.80,
+        },
+        {
+            "sport":"basketball","phase":"LIVE","event_id":"B-05-L",
+            "created_at":"2026-10-05T20:00:00+00:00",
+            "result":"lost","odd":1.90,"profit_units":-1.00,
+        },
+        {
+            "sport":"basketball","phase":"PREMATCH","event_id":"B-06-P",
+            "created_at":"2026-10-06T02:30:00+00:00",
+            "result":"won","odd":2.00,"profit_units":1.00,
+        },
+    ])
+
+    text = basketball_journal_text()
+
+    assert "05.10.2026" in text
+    assert "06.10.2026" in text
+    assert text.index("05.10.2026") < text.index("06.10.2026")
+    assert text.count("ИТОГ ДНЯ") == 2
+    assert "ИТОГО · ЗА ВСЁ ВРЕМЯ" in text
+    assert "🌐 <b>ВСЕГО</b>" in text
+    assert "✅ 2 · ❌ 1" in text
+
+
+def test_phase_filtered_sport_journal_keeps_dates_and_phase_total(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setenv("REPORT_TIMEZONE", "Europe/Moscow")
+    _write(journal, [
+        {
+            "sport":"hockey","phase":"PREMATCH","event_id":"H1",
+            "created_at":"2026-10-05T12:00:00+00:00",
+            "result":"won","odd":1.75,"profit_units":0.75,
+        },
+        {
+            "sport":"hockey","phase":"LIVE","event_id":"H2",
+            "created_at":"2026-10-06T12:00:00+00:00",
+            "result":"lost","odd":1.70,"profit_units":-1.00,
+        },
+    ])
+
+    text = hockey_journal_text(phase="LIVE")
+
+    assert "05.10.2026" in text
+    assert "06.10.2026" in text
+    assert "ИТОГО · LIVE · ЗА ВСЁ ВРЕМЯ" in text
+    assert "ИТОГ ДНЯ" not in text

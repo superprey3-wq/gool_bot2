@@ -92,12 +92,14 @@ def test_betdaq_runtime_does_not_replace_matchbook_context():
     assert matchbook_exchange.matchbook_context.__name__ != "betdaq_context"
 
 
-def test_monkey_start_does_not_launch_exchange_workers():
+def test_monkey_start_keeps_exchange_betting_off_but_allows_matchbook_radar():
     source = Path("monkey_start.py").read_text(encoding="utf-8")
-    assert '"gool_bot2.matchbook_market_worker"' not in source
+    assert '"gool_bot2.matchbook_market_worker"' in source
     assert '"gool_bot2.betdaq_market_worker"' not in source
     assert "systems=GOOL_BRAIN+1XBET_STEAM" in source
-    assert "exchange_money=off" in source
+    assert "exchange_money=radar_only" in source
+    assert 'os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"' in source
+    assert 'os.environ["GOOL_EXCHANGE_MONEY_SYSTEMS_ENABLED"] = "0"' in source
 
 
 def test_matchbook_launcher_cannot_alias_betdaq_worker():

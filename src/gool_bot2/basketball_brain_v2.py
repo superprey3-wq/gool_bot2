@@ -986,6 +986,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "raw_stat_projection": round(target_projection, 2),
         "stat_edge": round(stat_edge, 2),
         "segment_memory_quality": round(memory_quality, 3),
+        "segment_memory": segment_memory,
         "segment_prior_total": None if historical_total is None else round(float(historical_total), 2),
         "segment_history_weight": round(history_weight, 3),
         "segment_h2h_total": (

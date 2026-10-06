@@ -279,36 +279,11 @@ def decode_event(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _fetch_events() -> list[dict[str, Any]]:
-    params = urllib.parse.urlencode(
-        {
-            "tag-url-names": "soccer",
-            "states": "open,suspended",
-            "exchange-type": "back-lay",
-            "odds-type": "DECIMAL",
-            "include-prices": "true",
-            "price-depth": _orderbook_depth(),
-            "price-mode": "expanded",
-            "currency": "GBP",
-            "minimum-liquidity": 1,
-            "include-event-participants": "true",
-            "markets-limit": 40,
-            "per-page": 100,
-        }
-    )
-    req = urllib.request.Request(
-        f"{MATCHBOOK_EVENTS_URL}?{params}",
-        headers={"User-Agent": UA, "Accept": "application/json,*/*"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    rows: list[dict[str, Any]] = []
-    for event in (payload or {}).get("events") or []:
-        if not isinstance(event, dict):
-            continue
-        decoded = decode_event(event)
-        if decoded is not None:
-            rows.append(decoded)
-    return rows
+    # Keep the base collector on the same authenticated, paginated multisport
+    # path as matchbook_market_worker. The import is lazy to avoid a module
+    # cycle while matchbook_pagination imports decode_event from this module.
+    from .matchbook_pagination import fetch_events_paginated
+    return fetch_events_paginated()
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:

@@ -4271,6 +4271,38 @@ class MultiSportSteamWorker:
             return {"signatures": [], "history": []}
         signatures = [str(value) for value in (payload.get("signatures") or []) if str(value)]
         history = [dict(value) for value in (payload.get("history") or []) if isinstance(value, dict)]
+        # Migration from the old signature-only ledger: if that file was
+        # modified today, conservatively count one delivery for every sport
+        # present in it. This prevents a hot deployment from immediately sending
+        # yet another express before the new dated history exists.
+        if signatures and not history:
+            try:
+                modified = datetime.fromtimestamp(
+                    self.parlay_delivery_path.stat().st_mtime,
+                    timezone.utc,
+                ).astimezone(_display_tz())
+                today = datetime.now(_display_tz()).date()
+            except Exception:
+                modified = None
+                today = None
+            if modified is not None and today is not None and modified.date() == today:
+                signature_set = set(signatures)
+                for sport in SPORTS:
+                    sport_signatures = [
+                        signature for signature in signatures
+                        if signature.startswith(f"{sport}|")
+                    ]
+                    if not sport_signatures:
+                        continue
+                    history.append({
+                        "day": today.isoformat(),
+                        "sport": sport,
+                        "signature": sport_signatures[-1],
+                        "event_ids": [],
+                        "event_aliases": sorted(self._legacy_parlay_events(signature_set, sport)),
+                        "sent_at": modified.astimezone(timezone.utc).isoformat(),
+                        "migrated_legacy": True,
+                    })
         return {"signatures": signatures, "history": history}
 
     def _sent_parlay_signatures(self) -> set[str]:

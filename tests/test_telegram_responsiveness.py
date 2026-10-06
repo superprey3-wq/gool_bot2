@@ -59,7 +59,7 @@ def test_super10_is_on_main_keyboard_and_has_inline_actions():
         for button in row
     ]
     assert "🌐 SUPER 10" in texts
-    assert "📄 Полный отчёт" in texts
+    assert "📄 Отчёт за день" in texts
 
     inline = super10_keyboard()["inline_keyboard"][0]
     assert {button["callback_data"] for button in inline} == {"s10:refresh", "s10:history"}

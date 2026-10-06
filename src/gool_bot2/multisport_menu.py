@@ -67,30 +67,35 @@ def _record_text(rows: list[dict[str, Any]]) -> str:
 
 
 def _journal_day(row: dict[str, Any]) -> tuple[str, str]:
-    """Return stable YYYY-MM-DD key + display label in report timezone."""
+    """Group bets by the date of the match, not by signal creation time."""
     try:
         tz = ZoneInfo(os.getenv("REPORT_TIMEZONE", "Europe/Moscow"))
     except Exception:
         tz = timezone.utc
 
-    created = str(row.get("created_at") or "").strip()
     dt = None
-    if created:
-        try:
-            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            dt = dt.astimezone(tz)
-        except Exception:
-            dt = None
 
+    # PREMATCH can be calculated/sent the previous evening. The journal should
+    # still show it under the date when the match is actually played. LIVE rows
+    # also keep the match date when a game crosses midnight.
+    try:
+        ts = float(row.get("scheduled_start_ts") or row.get("start_ts") or 0.0)
+        if ts > 0:
+            dt = datetime.fromtimestamp(ts, timezone.utc).astimezone(tz)
+    except Exception:
+        dt = None
+
+    # Legacy rows may not contain match start time.
     if dt is None:
-        try:
-            ts = float(row.get("start_ts") or row.get("scheduled_start_ts") or 0.0)
-            if ts > 0:
-                dt = datetime.fromtimestamp(ts, timezone.utc).astimezone(tz)
-        except Exception:
-            dt = None
+        created = str(row.get("created_at") or "").strip()
+        if created:
+            try:
+                dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.astimezone(tz)
+            except Exception:
+                dt = None
 
     if dt is None:
         dt = datetime.now(tz)

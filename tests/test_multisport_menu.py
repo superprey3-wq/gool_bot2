@@ -1168,8 +1168,11 @@ def test_super10_interactive_text_shows_readiness_and_sent_ticket(tmp_path: Path
             "need_more": 0,
         },
     )
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d")
     _write(sent, {
-        "day": "2026-10-06",
+        "day": today,
         "sent": True,
         "ticket": {
             "combined_odds": 31.5,

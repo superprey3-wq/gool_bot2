@@ -528,7 +528,7 @@ class FlashscoreProvider:
                 continue
             fields = _fields(chunk)
             label = str(fields.get("AC") or "").strip()
-            match = re.match(r"^(\\d)(?:st|nd|rd|th)?\\s+" + kind + r"$", label, re.I)
+            match = re.match(r"^(\d)(?:st|nd|rd|th)?\s+" + kind + r"$", label, re.I)
             if not match:
                 continue
             idx = int(match.group(1))

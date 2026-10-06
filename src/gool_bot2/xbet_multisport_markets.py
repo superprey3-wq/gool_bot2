@@ -306,6 +306,73 @@ def _fair_many(values: dict[str, float]) -> dict[str, float]:
     return {key: value / total for key, value in inv.items()} if total > 0 else {}
 
 
+def prematch_parlay_market_lanes(decoded_by_scope: dict[str, dict[str, Any]], sport: str) -> list[dict[str, Any]]:
+    """Return the wider PREMATCH tree used only to find safer parlay legs.
+
+    Singles intentionally keep the balanced/main line. Parlays may inspect all
+    safely decoded total lines so Brain can choose a lower-risk alternative
+    (for example, a lower OVER or higher UNDER line) without changing the
+    published single.
+    """
+    lanes: list[dict[str, Any]] = []
+
+    for scope, decoded in decoded_by_scope.items():
+        for family in ("match_total", "home_total", "away_total"):
+            for row in decoded.get(family) or []:
+                try:
+                    line = float(row["line"])
+                    over = float(row["over"])
+                    under = float(row["under"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if not (1.02 < over < 20.0 and 1.02 < under < 20.0):
+                    continue
+                p_over, _ = _fair_two_way(over, under)
+                lanes.append({
+                    "scope": scope,
+                    "market_family": family,
+                    "line": line,
+                    "over": over,
+                    "under": under,
+                    "probability": p_over,
+                    "metric": p_over,
+                    "parlay_alternative": True,
+                })
+
+    # Handicaps and two-way moneylines are already exposed line-by-line by the
+    # regular PREMATCH flattener, so reuse only those families here.
+    for lane in prematch_market_lanes(decoded_by_scope, sport):
+        if str(lane.get("market_family") or "") in {"handicap", "moneyline"}:
+            lanes.append({**lane, "parlay_alternative": True})
+
+    # Exact duplicates can appear through legacy/new-builder mirrors.
+    unique: dict[tuple[str, str, str, float], dict[str, Any]] = {}
+    for lane in lanes:
+        key = (
+            str(lane.get("scope") or SCOPE_FULL),
+            str(lane.get("market_family") or ""),
+            str(lane.get("selection_side") or lane.get("choice_key") or ""),
+            float(lane.get("line") or 0.0),
+        )
+        previous = unique.get(key)
+        if previous is None:
+            unique[key] = lane
+            continue
+        # Prefer the variant with the lower bookmaker overround when mirrors
+        # expose the same market twice.
+        def _vig(value: dict[str, Any]) -> float:
+            try:
+                if value.get("over") and value.get("under"):
+                    return abs((1.0 / float(value["over"]) + 1.0 / float(value["under"])) - 1.0)
+                return abs((1.0 / float(value.get("odd") or 2.0)) * 2.0 - 1.0)
+            except Exception:
+                return 99.0
+        if _vig(lane) < _vig(previous):
+            unique[key] = lane
+
+    return list(unique.values())
+
+
 def prematch_market_lanes(decoded_by_scope: dict[str, dict[str, Any]], sport: str) -> list[dict[str, Any]]:
     """Flatten every safely settleable decoded PREMATCH market.
 

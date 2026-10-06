@@ -94,10 +94,49 @@ def _runner_line(name: str) -> tuple[str | None, float | None]:
 
 
 def _period_from_market(name: str) -> str:
-    text = str(name or "").lower()
-    if "1st half" in text or "first half" in text or "1st-half" in text or "first-half" in text:
-        return "1H"
+    text = str(name or "").casefold()
+    aliases = (
+        (("1st quarter", "first quarter", "quarter 1", "q1"), "QUARTER_1"),
+        (("2nd quarter", "second quarter", "quarter 2", "q2"), "QUARTER_2"),
+        (("3rd quarter", "third quarter", "quarter 3", "q3"), "QUARTER_3"),
+        (("4th quarter", "fourth quarter", "quarter 4", "q4"), "QUARTER_4"),
+        (("1st period", "first period", "period 1"), "PERIOD_1"),
+        (("2nd period", "second period", "period 2"), "PERIOD_2"),
+        (("3rd period", "third period", "period 3"), "PERIOD_3"),
+        (("1st half", "first half", "1st-half", "first-half"), "1H"),
+    )
+    for markers, scope in aliases:
+        if any(marker in text for marker in markers):
+            return scope
     return "FT"
+
+
+def _event_sport(event: dict[str, Any]) -> tuple[int | None, str, str]:
+    sport_id = event.get("_gool_sport_id")
+    if sport_id is None:
+        sport_id = event.get("sport-id")
+    if sport_id is None:
+        sport_id = event.get("sport_id")
+    try:
+        sport_id_value = int(float(sport_id)) if sport_id is not None else None
+    except (TypeError, ValueError):
+        sport_id_value = None
+
+    sport_name = ""
+    raw_sport = event.get("sport")
+    if isinstance(raw_sport, dict):
+        sport_name = str(raw_sport.get("name") or raw_sport.get("sport-name") or "")
+    sport_name = str(event.get("sport-name") or event.get("sport_name") or sport_name or "").strip()
+    key = str(event.get("_gool_sport_key") or "").strip().casefold()
+    if not key:
+        low = sport_name.casefold()
+        if low in {"soccer", "football"}:
+            key = "football"
+        elif low == "basketball":
+            key = "basketball"
+        elif low in {"ice hockey", "hockey"}:
+            key = "hockey"
+    return sport_id_value, sport_name, key
 
 
 def _mid_probability(runner: dict[str, Any]) -> float | None:
@@ -220,9 +259,13 @@ def decode_event(event: dict[str, Any]) -> dict[str, Any] | None:
                 "under": under,
                 "fair_over": _fair_over(over, under),
             }
+    sport_id, sport_name, sport_key = _event_sport(event)
     return {
         "event_id": str(event.get("id") or ""),
         "name": str(event.get("name") or ""),
+        "sport_id": sport_id,
+        "sport_name": sport_name,
+        "sport_key": sport_key,
         "home": home,
         "away": away,
         "start": event.get("start"),

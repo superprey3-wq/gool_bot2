@@ -1715,13 +1715,46 @@ class MultiSportSteamWorker:
         except FileNotFoundError:
             return
         restored = 0
+        fs_restored = 0
+        restore_now = time.time()
         for raw in data.splitlines():
             try:
                 state = json.loads(raw.decode("utf-8"))
             except Exception:
                 continue
+            captured_ts = 0.0
+            try:
+                captured = datetime.fromisoformat(str(state.get("captured_at") or "").replace("Z", "+00:00"))
+                if captured.tzinfo is None:
+                    captured = captured.replace(tzinfo=timezone.utc)
+                captured_ts = captured.timestamp()
+            except Exception:
+                captured_ts = 0.0
             for key, cfg in SPORTS.items():
                 sport_state = ((state.get("sports") or {}).get(key) or {})
+                if captured_ts > 0.0 and restore_now - captured_ts <= 185.0:
+                    for analysis in (sport_state.get("flashscore_analysis_matches") or []):
+                        if not isinstance(analysis, dict):
+                            continue
+                        event_id = str(analysis.get("flashscore_event_id") or "").strip()
+                        scope = str(analysis.get("scope") or "").strip()
+                        score = list(analysis.get("current_segment_score") or [])
+                        if not event_id or not scope or len(score) < 2:
+                            continue
+                        try:
+                            snapshot = {
+                                "ts": captured_ts,
+                                "scope": scope,
+                                "score": [int(score[0]), int(score[1])],
+                                "live_game_stats": dict(analysis.get("live_game_stats") or {}),
+                            }
+                        except (TypeError, ValueError, IndexError):
+                            continue
+                        history_key = f"{cfg.key}:{event_id}:{scope}"
+                        history = self._fs_brain_history[history_key]
+                        if not history or abs(float(history[-1].get("ts") or 0.0) - captured_ts) > 0.5:
+                            history.append(snapshot)
+                            fs_restored += 1
                 for row in (sport_state.get("matches") or []):
                     if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
                         continue
@@ -1751,8 +1784,11 @@ class MultiSportSteamWorker:
                     else:
                         self._append_prematch_history(row, cfg)
                         restored += 1
-        if restored:
-            print(f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored}", flush=True)
+        if restored or fs_restored:
+            print(
+                f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored} fs_brain_snapshots={fs_restored}",
+                flush=True,
+            )
 
     def _flashscore_today(self, cfg: SportConfig) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}

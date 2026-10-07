@@ -241,6 +241,63 @@ def test_production_in_game_adapter_uses_strict_flashscore_live_filter(tmp_path,
         return ["STRICT LIVE"]
 
     monkeypatch.setattr("gool_bot2.strict_in_game_live.strict_in_game_sections", fake_strict)
+    monkeypatch.setattr("gool_bot2.multisport_menu.multisport_in_game_sections", lambda: [])
 
     assert journal_in_game.production_in_game_sections() == ["STRICT LIVE"]
     assert calls == [(journal, analysis)]
+
+
+def test_production_in_game_adapter_includes_multisport_live_when_football_is_empty(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal.write_text("[]", "utf-8")
+    analysis.write_text("", "utf-8")
+
+    monkeypatch.setattr("gool_bot2.multi_menu.journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.multi_menu.analysis_path", lambda: analysis)
+    monkeypatch.setattr(
+        "gool_bot2.strict_in_game_live.strict_in_game_sections",
+        lambda *_args, **_kwargs: [
+            "🟢 <b>GOOL MULTI · В ИГРЕ</b>\n\n"
+            "Сейчас нет сигналов на матчах, подтверждённых Flashscore как LIVE."
+        ],
+    )
+    monkeypatch.setattr(
+        "gool_bot2.multisport_menu.multisport_in_game_sections",
+        lambda: [
+            "🟢 <b>GOOL MULTI · В ИГРЕ</b>\nМатчей: <b>1</b> · ставок: <b>3</b>",
+            "<b>1. 🏀 Home — Away</b>\n"
+            "🎯 ТБ 150.5 @ 1.80\n"
+            "🎯 ИТБ1 75.5 @ 1.85\n"
+            "🎯 3-я четверть: ТБ 40.5 @ 1.90",
+        ],
+    )
+
+    sections = journal_in_game.production_in_game_sections()
+    text = "\n".join(sections)
+
+    assert "Матчей: <b>1</b> · ставок: <b>3</b>" in text
+    assert "ТБ 150.5 @ 1.80" in text
+    assert "ИТБ1 75.5 @ 1.85" in text
+    assert "3-я четверть: ТБ 40.5 @ 1.90" in text
+    assert "Сейчас нет сигналов" not in text
+
+
+def test_production_in_game_adapter_combines_football_and_multisport(monkeypatch, tmp_path):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal.write_text("[]", "utf-8")
+    analysis.write_text("", "utf-8")
+
+    monkeypatch.setattr("gool_bot2.multi_menu.journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.multi_menu.analysis_path", lambda: analysis)
+    monkeypatch.setattr(
+        "gool_bot2.strict_in_game_live.strict_in_game_sections",
+        lambda *_args, **_kwargs: ["FOOTBALL LIVE"],
+    )
+    monkeypatch.setattr(
+        "gool_bot2.multisport_menu.multisport_in_game_sections",
+        lambda: ["BASKETBALL LIVE"],
+    )
+
+    assert journal_in_game.production_in_game_sections() == ["FOOTBALL LIVE", "BASKETBALL LIVE"]

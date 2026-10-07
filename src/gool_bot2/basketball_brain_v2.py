@@ -725,7 +725,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     else:
         return None
     remaining = duration - elapsed
-    if elapsed < 45.0 or remaining < 35.0:
+    if elapsed < 45.0:
+        return None
+    # Avoid betting a quarter in its final seconds, when one foul/possession
+    # dominates the segment line. Do NOT apply this guard to Q1-Q3 FULL_MATCH
+    # projections: those bets explicitly use the remaining-quarter history and
+    # were being incorrectly suppressed near a quarter boundary.
+    if segment_market and remaining < 35.0:
+        return None
+    # Keep the conservative final-seconds guard for full-game pricing only in
+    # Q4, where the match itself is about to end and foul variance dominates.
+    if full_market and current_scope == "QUARTER_4" and remaining < 35.0:
         return None
 
     # FULL_MATCH lanes carry the full scoreboard, but the pace model below

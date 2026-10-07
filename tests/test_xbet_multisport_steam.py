@@ -21,6 +21,7 @@ from gool_bot2.xbet_multisport_steam import (
     detect_steam,
     settle_multisport_pick,
     multisport_scope_is_complete,
+    select_live_signals_for_match,
 )
 
 
@@ -1478,3 +1479,42 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert sent == 1
     assert len(sent_text) == 1
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
+
+
+def test_basketball_live_caps_correlated_full_match_signals_but_keeps_quarter():
+    cfg = SPORTS["basketball"]
+    candidates = [
+        (
+            {"scope": "QUARTER_3", "market_family": "match_total"},
+            {"strength": 78.0, "edge": 0.07, "stat_edge": 4.0, "selection": "Q3 total"},
+        ),
+        (
+            {"scope": "FULL_MATCH", "market_family": "match_total"},
+            {"strength": 81.0, "edge": 0.08, "stat_edge": 6.0, "selection": "Full total"},
+        ),
+        (
+            {"scope": "FULL_MATCH", "market_family": "home_total"},
+            {"strength": 84.0, "edge": 0.075, "stat_edge": 5.0, "selection": "Home total"},
+        ),
+    ]
+
+    selected = select_live_signals_for_match(candidates, cfg)
+
+    assert len(selected) == 2
+    selected_labels = {signal["selection"] for _row, signal in selected}
+    assert "Q3 total" in selected_labels
+    assert "Home total" in selected_labels
+    assert "Full total" not in selected_labels
+
+
+def test_hockey_live_multi_signal_policy_is_unchanged():
+    cfg = SPORTS["hockey"]
+    candidates = [
+        ({"scope": "PERIOD_2", "market_family": "match_total"}, {"strength": 75.0}),
+        ({"scope": "FULL_MATCH", "market_family": "match_total"}, {"strength": 80.0}),
+        ({"scope": "FULL_MATCH", "market_family": "home_total"}, {"strength": 79.0}),
+    ]
+
+    selected = select_live_signals_for_match(candidates, cfg)
+
+    assert selected == candidates

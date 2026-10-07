@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import gool_bot2.journal_in_game as in_game
 import gool_bot2.journal_report as report
@@ -46,6 +47,19 @@ def test_production_in_game_ignores_legacy_responder_journal_path(tmp_path, monk
 
     monkeypatch.setenv("GOOL_MULTI_JOURNAL_PATH", str(canonical))
     monkeypatch.setenv("GOOL_MULTI_ANALYSIS_PATH", str(analysis))
+    monkeypatch.setattr(
+        "gool_bot2.strict_in_game_live.FlashscoreProvider.live_matches",
+        lambda self: [
+            SimpleNamespace(
+                provider_match_id="canonical",
+                minute=67,
+                home_score=1,
+                away_score=1,
+                is_halftime=False,
+            )
+        ],
+    )
+    monkeypatch.setattr("gool_bot2.multi_menu.reconcile_pending", lambda: 0)
 
     text = "\n".join(in_game.production_in_game_sections(legacy, legacy_analysis))
 

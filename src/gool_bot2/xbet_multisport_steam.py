@@ -1311,6 +1311,56 @@ def detect_steam(
     }
 
 
+def select_live_delivery_candidates(
+    candidates: list[tuple[dict[str, Any], dict[str, Any]]],
+    cfg: SportConfig,
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Reduce correlated LIVE spam without restoring one-match-one-bet.
+
+    Basketball may keep one current-quarter total plus one best FULL_MATCH
+    projection. Among FULL_MATCH match/team totals only the strongest candidate
+    is delivered; the others are correlated views of the same remaining game.
+    Other sports keep the existing behavior.
+    """
+    if cfg.key != "basketball" or len(candidates) <= 1:
+        return list(candidates)
+
+    def rank(item: tuple[dict[str, Any], dict[str, Any]]) -> tuple[float, float, float, float]:
+        row, signal = item
+        family = str(row.get("market_family") or "")
+        family_bias = 0.35 if family == "match_total" else 0.0
+        return (
+            float(signal.get("strength") or 0.0) + family_bias,
+            abs(float(signal.get("edge") or 0.0)),
+            float(signal.get("model_probability") or signal.get("fair_probability") or 0.0),
+            float(signal.get("odd") or 0.0),
+        )
+
+    current_segment = [
+        item for item in candidates
+        if str(item[0].get("scope") or "") != SCOPE_FULL
+        and str(item[0].get("market_family") or "") == "match_total"
+    ]
+    full_match = [
+        item for item in candidates
+        if str(item[0].get("scope") or "") == SCOPE_FULL
+        and str(item[0].get("market_family") or "") in {"match_total", "home_total", "away_total"}
+    ]
+
+    selected: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    if current_segment:
+        selected.append(max(current_segment, key=rank))
+    if full_match:
+        selected.append(max(full_match, key=rank))
+
+    # Preserve any future non-correlated LIVE family instead of silently
+    # discarding it if policy expands later.
+    known_ids = {id(item) for item in [*current_segment, *full_match]}
+    selected.extend(item for item in candidates if id(item) not in known_ids)
+    selected.sort(key=rank, reverse=True)
+    return selected
+
+
 def select_prematch_primary(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
     recent_families: list[str] | None = None,
@@ -4965,7 +5015,7 @@ class MultiSportSteamWorker:
         }
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
-        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
+        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = arbitration_filtered = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -4986,6 +5036,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                delivery_candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
@@ -5097,6 +5148,11 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
+                    delivery_candidates.append((lane_row, signal))
+
+                selected_delivery = select_live_delivery_candidates(delivery_candidates, cfg)
+                arbitration_filtered += max(0, len(delivery_candidates) - len(selected_delivery))
+                for lane_row, signal in selected_delivery:
                     recorded, sent = self._record_signal(lane_row, signal, cfg)
                     if recorded:
                         detected += 1
@@ -5168,6 +5224,7 @@ class MultiSportSteamWorker:
             "steam_blocked": steam_blocked,
             "matchbook_blocked": matchbook_blocked_count,
             "duplicate_filtered": duplicate_filtered,
+            "arbitration_filtered": arbitration_filtered,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],
@@ -5258,6 +5315,7 @@ class MultiSportSteamWorker:
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
                 f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
                 f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
+                f"arb={stats.get('arbitration_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "
                 f"delivered={stats['delivered'] + stats['prematch_delivered']} settled={stats['settled']}",

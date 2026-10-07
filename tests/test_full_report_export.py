@@ -304,7 +304,7 @@ def test_daily_report_includes_multisport_live_funnel_and_wait_reasons(tmp_path:
         multisport_path=multisport,
         super10_history_path=super10,
         multisport_history_path=history,
-        now=datetime(2026, 10, 6, 21, 0, tzinfo=timezone.utc),
+        now=datetime(2026, 10, 6, 20, 30, tzinfo=timezone.utc),
     )
     text = payload.decode("utf-8")
 

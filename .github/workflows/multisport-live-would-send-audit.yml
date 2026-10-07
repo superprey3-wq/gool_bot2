@@ -6,6 +6,7 @@ on:
       - "scripts/gool_multisport_live_send_audit.py"
       - "src/gool_bot2/xbet_multisport_steam.py"
       - "src/gool_bot2/hockey_brain_v2.py"
+      - "src/gool_bot2/basketball_brain_v2.py"
       - "src/gool_bot2/xbet_multisport_markets.py"
       - ".github/workflows/multisport-live-would-send-audit.yml"
   workflow_dispatch:

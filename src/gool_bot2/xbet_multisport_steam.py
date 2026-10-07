@@ -1,3 +1,4 @@
+# DIAG_TRIGGER_OVER_UNDER_CURRENT_MAIN
 from __future__ import annotations
 
 import argparse

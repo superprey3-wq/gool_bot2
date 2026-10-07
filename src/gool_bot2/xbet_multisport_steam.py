@@ -1,3 +1,4 @@
+# AUDIT_TRIGGER: basketball possession-delta direction verification.
 from __future__ import annotations
 
 import argparse

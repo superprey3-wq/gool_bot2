@@ -3950,6 +3950,38 @@ class MultiSportSteamWorker:
                 return f"basketball_{scope_key.casefold()}_total"
         return f"{scope_key}:{family_key}"
 
+    def _basketball_live_quarter_pick_count(
+        self,
+        event_id: str,
+        flashscore_event_id: str = "",
+    ) -> int:
+        """Number of distinct basketball quarters already used for LIVE picks.
+
+        Product rule: basketball LIVE may publish only the current-quarter total,
+        at most once per quarter and in at most two different quarters per match.
+        """
+        wanted_identity = str(flashscore_event_id or event_id or "")
+        if not wanted_identity:
+            return 0
+        quarters: set[str] = set()
+        for row in load_journal(self.journal_path):
+            row_phase = str(
+                row.get("phase")
+                or ("PREMATCH" if row.get("origin") == "multisport_prematch" else "LIVE")
+            ).upper()
+            row_identity = str(row.get("flashscore_event_id") or row.get("event_id") or "")
+            row_scope = str(row.get("scope") or "")
+            row_family = str(row.get("market_family") or "")
+            if (
+                str(row.get("sport") or "").casefold() == "basketball"
+                and row_phase == "LIVE"
+                and row_identity == wanted_identity
+                and row_scope.startswith("QUARTER_")
+                and row_family == "match_total"
+            ):
+                quarters.add(row_scope)
+        return len(quarters)
+
     def _already_seen(
         self,
         sport: str,
@@ -5009,10 +5041,11 @@ class MultiSportSteamWorker:
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
-                    # LIVE now prices two tightly controlled lanes:
-                    # - current period/quarter match total;
-                    # - FULL_MATCH match/team totals from Segment Memory.
-                    # Handicaps/moneyline and non-current segment markets stay blocked.
+                    # LIVE market policy:
+                    # - basketball: ONLY the current-quarter match total;
+                    #   no full-match total and no individual/team totals;
+                    # - hockey: current-period total plus the existing controlled
+                    #   FULL_MATCH total/team-total projections.
                     lane_scope = str(lane.get("scope") or "")
                     lane_family = str(lane.get("market_family") or "")
                     is_current_segment = bool(
@@ -5024,14 +5057,17 @@ class MultiSportSteamWorker:
                         lane_scope == SCOPE_FULL
                         and lane_family in {"match_total", "home_total", "away_total"}
                     )
-                    if not (is_current_segment or is_full_projection):
+                    allowed_live_lane = (
+                        is_current_segment
+                        if cfg.key == "basketball"
+                        else (is_current_segment or is_full_projection)
+                    )
+                    if not allowed_live_lane:
                         policy_blocked += 1
                         continue
-                    policy_reason = (
-                        "flashscore_brain_current_segment"
-                        if is_current_segment
-                        else "segment_memory_full_match_total"
-                    )
+                    policy_reason = "flashscore_brain_current_segment"
+                    if cfg.key != "basketball" and is_full_projection:
+                        policy_reason = "segment_memory_full_match_total"
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history, score_changed_at = self._append_history(lane_row, cfg)
                     market_steam = detect_steam(
@@ -5119,11 +5155,9 @@ class MultiSportSteamWorker:
                     }
                     pending_live_signals.append((lane_row, signal))
 
-                # Do not flood one basketball match with three strongly
-                # correlated totals from the same projection. Multiple LIVE
-                # bets per match stay supported, but only one current-quarter
-                # total and one strongest FULL_MATCH total/IT projection may
-                # be delivered.
+                # Basketball LIVE is intentionally simple: at most one
+                # current-quarter total candidate in a cycle. Across the whole
+                # match, only two different quarters may ever publish a pick.
                 selected_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 if cfg.key == "basketball":
                     best_by_group: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
@@ -5146,17 +5180,22 @@ class MultiSportSteamWorker:
                         )
                         if current is None or rank > current_rank:
                             best_by_group[group] = (candidate_row, candidate_signal)
-                    selected_live_signals = list(best_by_group.values())
-                    selected_live_signals.sort(
-                        key=lambda item: (
-                            0 if str(item[0].get("scope") or "").startswith("QUARTER_") else 1,
-                            -float(item[1].get("strength") or 0.0),
-                        )
-                    )
+                    selected_live_signals = sorted(
+                        best_by_group.values(),
+                        key=lambda item: -float(item[1].get("strength") or 0.0),
+                    )[:1]
                 else:
                     selected_live_signals = pending_live_signals
 
                 for selected_row, selected_signal in selected_live_signals:
+                    if cfg.key == "basketball":
+                        used_quarters = self._basketball_live_quarter_pick_count(
+                            str(selected_row.get("event_id") or ""),
+                            str(selected_row.get("flashscore_event_id") or ""),
+                        )
+                        if used_quarters >= 2:
+                            policy_blocked += 1
+                            continue
                     recorded, sent = self._record_signal(selected_row, selected_signal, cfg)
                     if recorded:
                         detected += 1

@@ -1531,3 +1531,70 @@ def test_basketball_live_full_projection_seen_blocks_second_full_family(tmp_path
         "match_total",
         "fs1",
     ) is False
+
+
+def test_basketball_live_quarter_pick_count_caps_match_at_two_quarters(tmp_path):
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.journal_path.write_text(
+        json.dumps([
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb1",
+                "flashscore_event_id": "fs1",
+                "scope": "QUARTER_1",
+                "market_family": "match_total",
+            },
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb1",
+                "flashscore_event_id": "fs1",
+                "scope": "QUARTER_3",
+                "market_family": "match_total",
+            },
+            # Must not count: full-match/team-total legacy row.
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb1",
+                "flashscore_event_id": "fs1",
+                "scope": "FULL_MATCH",
+                "market_family": "away_total",
+            },
+        ]),
+        "utf-8",
+    )
+
+    assert worker._basketball_live_quarter_pick_count("xb1", "fs1") == 2
+
+
+def test_basketball_live_same_quarter_is_seen_but_new_second_quarter_is_allowed(tmp_path):
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.journal_path.write_text(
+        json.dumps([
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb1",
+                "flashscore_event_id": "fs1",
+                "scope": "QUARTER_1",
+                "market_family": "match_total",
+            }
+        ]),
+        "utf-8",
+    )
+
+    assert worker._already_seen(
+        "basketball", "xb1", "LIVE", "QUARTER_1", "match_total", "fs1"
+    ) is True
+    assert worker._already_seen(
+        "basketball", "xb1", "LIVE", "QUARTER_2", "match_total", "fs1"
+    ) is False
+    assert worker._basketball_live_quarter_pick_count("xb1", "fs1") == 1

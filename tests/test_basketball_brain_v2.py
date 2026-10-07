@@ -225,6 +225,34 @@ def test_live_candidate_needs_multiple_snapshots_and_not_a_break():
     assert fresh["state"] in {"PASS", "BORDERLINE"}
 
 
+def test_live_candidate_allows_two_snapshots_after_real_activity():
+    early = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": True},
+        "history_points": 2,
+        "recent_window_seconds": 30,
+        "recent_score_rate": 5.0,
+        "recent_possessions_per_min": 2.5,
+        "recent_activity_available": True,
+        "break_transition": False,
+    })
+    assert early["state"] in {"PASS", "BORDERLINE"}
+    assert early["readiness_mode"] == "active_early"
+
+
+def test_live_candidate_does_not_use_stale_two_snapshot_window():
+    stale = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": True},
+        "history_points": 2,
+        "recent_window_seconds": 45,
+        "recent_score_rate": 0.0,
+        "recent_possessions_per_min": 0.0,
+        "recent_activity_available": False,
+        "break_transition": False,
+    })
+    assert stale["state"] == "WAIT"
+    assert stale["readiness_mode"] == "warming"
+
+
 def test_live_v2_uses_possession_pace_and_probability_edge_for_over():
     signal = live_signal(
         _brain(current=(10, 10), recent_poss=2.2, recent_score=4.0),

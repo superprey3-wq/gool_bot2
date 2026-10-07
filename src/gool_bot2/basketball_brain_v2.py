@@ -642,25 +642,63 @@ def q3_rebound_assist(
     }
 
 
+def _live_window_readiness(brain: dict[str, Any]) -> dict[str, Any]:
+    points = int(brain.get("history_points") or 0)
+    window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+    min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
+    min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
+    early_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_EARLY_ANALYSIS_SNAPSHOTS", 2.0)))
+    early_window = max(20.0, _env_float("GOOL_BASKETBALL_LIVE_EARLY_ANALYSIS_SECONDS", 30.0))
+
+    recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+    activity_raw = brain.get("recent_activity_available")
+    recent_activity = (
+        bool(activity_raw)
+        if activity_raw is not None
+        else recent_score_rate > 0.0
+    )
+
+    strict_ready = points >= min_points and window >= min_window
+    early_ready = (
+        recent_activity
+        and points >= early_points
+        and window >= early_window
+    )
+    return {
+        "ready": bool(strict_ready or early_ready),
+        "mode": "strict" if strict_ready else ("active_early" if early_ready else "warming"),
+        "points": points,
+        "window": window,
+        "min_points": min_points,
+        "min_window": min_window,
+        "early_points": early_points,
+        "early_window": early_window,
+        "recent_activity": recent_activity,
+    }
+
+
 def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     stats_payload = dict(brain.get("live_game_stats") or {})
     available = bool(stats_payload.get("current_segment_available"))
-    points = int(brain.get("history_points") or 0)
-    window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+    readiness = _live_window_readiness(brain)
+    points = int(readiness["points"])
+    window = float(readiness["window"])
     recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
     recent_poss_rate = max(0.0, _num(brain.get("recent_possessions_per_min"), 0.0) or 0.0)
-    min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
-    min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
 
     score = 40.0
     if available:
         score += 12.0
-    if points >= min_points:
+    if readiness["mode"] == "strict":
         score += 13.0
+    elif readiness["mode"] == "active_early":
+        score += 10.0
     elif points >= 2:
         score += 5.0
-    if window >= min_window:
+    if window >= float(readiness["min_window"]):
         score += 7.0
+    elif readiness["mode"] == "active_early":
+        score += 5.0
     if recent_poss_rate > 0:
         score += 7.0
     elif recent_score_rate > 0:
@@ -669,16 +707,18 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     state = "PASS" if score >= 72.0 else ("BORDERLINE" if score >= 64.0 else "WAIT")
     if (
         not available
-        or points < min_points
-        or window < min_window
+        or not bool(readiness["ready"])
         or bool(brain.get("break_transition"))
     ):
         state = "WAIT"
     return {
         "state": state,
         "score": round(_clamp(score, 0.0, 82.0), 1),
-        "required_snapshots": min_points,
-        "required_window_seconds": round(min_window, 1),
+        "readiness_mode": str(readiness["mode"]),
+        "required_snapshots": int(readiness["min_points"]),
+        "required_window_seconds": round(float(readiness["min_window"]), 1),
+        "early_required_snapshots": int(readiness["early_points"]),
+        "early_required_window_seconds": round(float(readiness["early_window"]), 1),
     }
 
 
@@ -696,13 +736,10 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     memory_quality = _clamp(_num(segment_memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
     if full_market and memory_quality < _env_float("GOOL_BASKETBALL_LIVE_FULL_MIN_MEMORY_QUALITY", 0.45):
         return None
-    min_points = max(2, int(_env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
-    min_window = max(30.0, _env_float("GOOL_BASKETBALL_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
+    readiness = _live_window_readiness(brain)
     if bool(brain.get("break_transition")):
         return None
-    if int(brain.get("history_points") or 0) < min_points:
-        return None
-    if max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0) < min_window:
+    if not bool(readiness["ready"]):
         return None
     try:
         line = float(lane.get("line"))

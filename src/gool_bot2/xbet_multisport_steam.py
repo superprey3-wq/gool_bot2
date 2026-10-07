@@ -2221,6 +2221,7 @@ class MultiSportSteamWorker:
                 "recent_window_seconds": age,
                 "recent_score_rate": recent_score_rate,
                 "recent_possessions_per_min": recent_possessions_per_min,
+                "recent_activity_available": recent_activity_available,
                 "break_transition": break_transition,
             })
             rating = float(gate.get("score") or 0.0)

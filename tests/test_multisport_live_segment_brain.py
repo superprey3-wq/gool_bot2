@@ -893,3 +893,10 @@ def test_basketball_mapping_does_not_match_unrelated_short_names():
     fs = [{"flashscore_event_id": "S1", "home": "Shiga", "away": "Tokyo Sunrockers"}]
     xbet = [{"I": "1", "O1": "Chicago Bulls", "O2": "Boston Celtics"}]
     assert map_xbet_to_flashscore(xbet, fs) == []
+
+
+
+def test_usable_market_game_rejects_nonempty_shell_without_market_tree():
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "O1": "A", "O2": "B", "SC": {}}) is False
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "GE": [{"G": 4}]}) is True
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "SG": [{"I": 2, "PN": "4th quarter"}]}) is True

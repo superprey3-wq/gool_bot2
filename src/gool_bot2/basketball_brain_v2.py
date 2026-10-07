@@ -747,18 +747,19 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         return None
     duration = 720.0 if ("nba" in str(lane.get("league") or brain.get("league") or "").casefold() or "g league" in str(lane.get("league") or brain.get("league") or "").casefold()) and "wnba" not in str(lane.get("league") or brain.get("league") or "").casefold() else 600.0
 
-    # Match hockey's Flashscore-first clock policy. 1xBet quarter clocks can be
-    # cumulative, stale around breaks, or momentarily missing after a remap.
-    # Flashscore Brain already tracks the actual current-quarter start, so use
-    # that local elapsed time whenever it is sane and keep 1xBet as fallback.
+    # Price the 1xBet line against the 1xBet in-game clock. Flashscore AO /
+    # period_start_ts is wall time since the segment marker and includes
+    # stoppages/timeouts, so using it as game elapsed can make a normal game look
+    # artificially slow and manufacture UNDERs. Keep it only as a fallback when
+    # the bookmaker segment clock is unavailable.
     brain_elapsed = _num(brain.get("elapsed_seconds"))
     book_elapsed = _num(lane.get("clock_seconds"))
-    if brain_elapsed is not None and 0.0 < brain_elapsed < duration:
-        elapsed = float(brain_elapsed)
-        clock_source = "flashscore_quarter"
-    elif book_elapsed is not None and 0.0 < book_elapsed < duration:
+    if book_elapsed is not None and 0.0 < book_elapsed < duration:
         elapsed = float(book_elapsed)
-        clock_source = "1xbet_after_flashscore_brain"
+        clock_source = "1xbet_segment_clock"
+    elif brain_elapsed is not None and 0.0 < brain_elapsed < duration:
+        elapsed = float(brain_elapsed)
+        clock_source = "flashscore_elapsed_fallback"
     else:
         return None
     remaining = duration - elapsed
@@ -940,6 +941,12 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_p, market_p, odd = max(choices, key=lambda x: x[0])
 
+    # A short active window may surface a genuinely fast OVER, but a quiet
+    # 20-30 second slice is not enough evidence for an UNDER. Require the full
+    # analysis window before any basketball LIVE UNDER can be published.
+    if direction == "under" and str(readiness.get("mode") or "") != "strict":
+        return None
+
     if not (1.45 <= odd <= 3.25):
         return None
     if edge < 0.055 or model_p < 0.56:
@@ -1056,7 +1063,12 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     )
     if historical_confirmation:
         agreement += 1
-    if not directional_confirmation and not historical_confirmation:
+
+    # Segment history is a prior/strengthener, never a standalone LIVE trigger.
+    # The current game must independently confirm the chosen direction. This is
+    # deliberately symmetric: neither OVER nor UNDER may be created only from
+    # team/H2H history.
+    if not directional_confirmation:
         return None
 
     # Q3 comeback context is deliberately only an assistant. It cannot create

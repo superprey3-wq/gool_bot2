@@ -450,11 +450,13 @@ def test_basketball_score_sync_allows_only_bounded_provider_lag(monkeypatch):
     assert not _score_sync_allowed(SPORTS["basketball"], (81, 67), (79, 65), 0.70)
 
 
-def test_basketball_strong_identity_allows_fast_multi_possession_score_lag(monkeypatch):
+def test_basketball_strong_identity_allows_only_small_live_score_lag(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_SCORE_DRIFT_MIN_MATCH", "0.80")
     monkeypatch.setenv("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_MATCH", "0.92")
-    assert _score_sync_allowed(SPORTS["basketball"], (90, 82), (78, 75), 0.97)
-    assert not _score_sync_allowed(SPORTS["basketball"], (90, 82), (78, 75), 0.88)
+    assert _score_sync_allowed(SPORTS["basketball"], (90, 82), (85, 79), 0.97)
+    # 12+7 points of provider drift is far too stale for LIVE total pricing.
+    assert not _score_sync_allowed(SPORTS["basketball"], (90, 82), (78, 75), 0.97)
+    assert not _score_sync_allowed(SPORTS["basketball"], (90, 82), (85, 79), 0.88)
 
 
 def test_basketball_cumulative_clock_is_converted_to_current_quarter():

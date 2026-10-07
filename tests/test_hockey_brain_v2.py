@@ -194,7 +194,7 @@ def test_late_big_lead_p3_under_can_still_be_evaluated():
     assert signal["direction"] == "under"
 
 
-def test_live_uses_flashscore_period_clock_when_bookmaker_clock_is_cumulative():
+def test_live_uses_flashscore_elapsed_only_when_bookmaker_clock_is_invalid():
     brain = _live_brain(recent_shot_rate=0.5)
     brain["elapsed_seconds"] = 600.0
     brain["recent_window_seconds"] = 60.0
@@ -205,7 +205,19 @@ def test_live_uses_flashscore_period_clock_when_bookmaker_clock_is_cumulative():
 
     assert signal is not None
     assert signal["direction"] == "under"
-    assert signal["projection_clock_source"] == "flashscore_period"
+    assert signal["projection_clock_source"] == "flashscore_elapsed_fallback"
+
+
+def test_live_prefers_bookmaker_period_clock_when_both_are_valid():
+    brain = _live_brain(recent_shot_rate=0.5)
+    brain["elapsed_seconds"] = 900.0
+    brain["segment_score_verified"] = True
+    signal = live_signal(
+        brain,
+        _live_lane(elapsed=600, line=1.5, market_over=0.70),
+    )
+    assert signal is not None
+    assert signal["projection_clock_source"] == "1xbet_period_clock"
 
 
 def test_live_uses_bookmaker_period_score_when_flashscore_parts_are_incomplete():
@@ -331,6 +343,14 @@ def test_hockey_segment_rejects_tiny_stat_edge_like_under_one_at_projection_poin
 def test_hockey_under_requires_real_current_period_sog():
     signal = live_signal(
         _live_brain(recent_shot_rate=0.0, shot_rate_available=False),
+        _live_lane(line=1.5, market_over=0.70),
+    )
+    assert signal is None
+
+
+def test_zero_recent_sog_delta_is_wait_even_when_stats_arrays_exist():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.0, shot_rate_available=True),
         _live_lane(line=1.5, market_over=0.70),
     )
     assert signal is None

@@ -403,18 +403,18 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     except (TypeError, ValueError):
         return None
 
-    # For hockey the bookmaker clock can be cumulative (1200/2400+) or stale
-    # at a period boundary. The Flashscore Brain already follows the current
-    # segment and its period_start_ts, so prefer that local clock and keep the
-    # bookmaker clock only as a fallback.
+    # Price the bookmaker line against the bookmaker's local period clock.
+    # Flashscore period_start_ts is wall time and includes stoppages; treating
+    # it as game elapsed systematically depresses pace and can manufacture
+    # UNDERs. Use Flashscore elapsed only when the 1xBet period clock is absent.
     brain_elapsed = _num(brain.get("elapsed_seconds"))
     book_elapsed = _num(lane.get("clock_seconds"))
-    if brain_elapsed is not None and 0.0 < brain_elapsed < 1200.0:
-        elapsed = float(brain_elapsed)
-        clock_source = "flashscore_period"
-    elif book_elapsed is not None and 0.0 < book_elapsed < 1200.0:
+    if book_elapsed is not None and 0.0 < book_elapsed < 1200.0:
         elapsed = float(book_elapsed)
-        clock_source = "1xbet_period_fallback"
+        clock_source = "1xbet_period_clock"
+    elif brain_elapsed is not None and 0.0 < brain_elapsed < 1200.0:
+        elapsed = float(brain_elapsed)
+        clock_source = "flashscore_elapsed_fallback"
     else:
         return None
     remaining = 1200.0 - elapsed
@@ -581,21 +581,33 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     # WAIT, not "slow game".
     if direction == "under" and not shot_rate_available:
         return None
+    # A zero recent SOG delta is ambiguous: it can mean a genuinely dead window,
+    # but it can also mean Flashscore has not refreshed the stat row. Do not
+    # turn that ambiguity into an UNDER.
+    if direction == "under" and recent_shot_rate <= _env_float(
+        "GOOL_HOCKEY_LIVE_UNDER_MIN_RECENT_SHOTS_PER_MIN", 0.10
+    ):
+        return None
 
     if scope == "PERIOD_3" and direction == "under" and remaining <= 330 and margin <= 2:
         return None
 
     agreements = 1
+    directional_confirmation = False
     if direction == "over" and pressure_window_ready and recent_shot_rate >= fast_shot_rate:
         agreements += 1
+        directional_confirmation = True
     elif direction == "under" and pressure_window_ready and recent_shot_rate <= slow_shot_rate:
         # Require genuinely slow pace relative to the league/match scoring
         # baseline, not merely a pace below the old fixed 1.65 SOG/min number.
         agreements += 1
+        directional_confirmation = True
     if direction == "over" and recent_penalty_delta > 0:
         agreements += 1
+        directional_confirmation = True
     if scope == "PERIOD_3" and direction == "over" and margin <= 2 and remaining <= 420:
         agreements += 1
+        directional_confirmation = True
     if (
         direction == "under"
         and scope != "PERIOD_3"
@@ -616,6 +628,11 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     )
     if historical_confirmation:
         agreements += 1
+
+    # History can strengthen a LIVE pick, but cannot create its direction. The
+    # current period must provide independent pressure/pace evidence first.
+    if not directional_confirmation:
+        return None
     if agreements < 2:
         return None
 
@@ -668,6 +685,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "segment_h2h_n": int(historical_segment.get("h2h_n") or 0),
         "remaining_match_projection": remaining_projection or {},
         "historical_confirmation": historical_confirmation,
+        "directional_confirmation": directional_confirmation,
         "current_segment_total": current,
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),

@@ -501,7 +501,18 @@ def test_live_prefers_flashscore_quarter_clock_when_book_clock_is_invalid():
         _lane(score=(10, 10), elapsed=600, line=37.5, market_over=0.50),
     )
     assert signal is not None
-    assert signal["projection_clock_source"] == "flashscore_quarter"
+    assert signal["projection_clock_source"] == "flashscore_elapsed_fallback"
+
+
+def test_live_prefers_bookmaker_game_clock_when_both_clocks_are_valid():
+    brain = _brain(current=(10, 10), recent_poss=2.2, recent_score=4.0)
+    brain["elapsed_seconds"] = 500.0
+    signal = live_signal(
+        brain,
+        _lane(score=(10, 10), elapsed=300, line=37.5, market_over=0.50),
+    )
+    assert signal is not None
+    assert signal["projection_clock_source"] == "1xbet_segment_clock"
 
 
 def _full_match_memory():
@@ -518,8 +529,21 @@ def _full_match_memory():
     }
 
 
-def test_full_match_signal_is_not_blocked_only_because_q2_has_under_35_seconds_left():
-    brain = _brain(scope="QUARTER_2", current=(26, 23), recent_poss=1.7, recent_score=2.0)
+def test_full_match_history_cannot_create_under_without_live_confirmation():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(
+        scope="QUARTER_2",
+        current=(26, 23),
+        recent_poss=0.0,
+        recent_score=0.0,
+        payload=payload,
+    )
+    brain["recent_activity_available"] = False
     brain["score"] = [53, 52]
     brain["segment_memory"] = _full_match_memory()
     lane = _lane(
@@ -530,11 +554,41 @@ def test_full_match_signal_is_not_blocked_only_because_q2_has_under_35_seconds_l
         market_over=0.50,
         match_score=(53, 52),
     )
-    signal = live_signal(brain, lane)
+    # The historical schedule likes UNDER here, but the current quarter is
+    # actually running hot. History must not manufacture a LIVE direction.
+    assert live_signal(brain, lane) is None
+
+
+def test_full_match_under_survives_when_current_live_pace_confirms_it():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(
+        scope="QUARTER_2",
+        current=(7, 8),
+        recent_poss=0.0,
+        recent_score=1.2,
+        payload=payload,
+    )
+    brain["score"] = [45, 45]
+    brain["segment_memory"] = _full_match_memory()
+    signal = live_signal(
+        brain,
+        _lane(
+            scope="FULL_MATCH",
+            elapsed=580,
+            score=(45, 45),
+            line=190.5,
+            market_over=0.50,
+            match_score=(45, 45),
+        ),
+    )
     assert signal is not None
     assert signal["direction"] == "under"
-    assert signal["remaining_match_projection"]
-    assert signal["remaining_seconds"] == 20.0
+    assert signal["directional_confirmation"] is True
 
 
 def test_current_quarter_signal_still_waits_inside_final_35_seconds():
@@ -593,3 +647,38 @@ def test_tiny_possession_delta_with_real_scoring_uses_points_clock_not_slow_poss
     assert signal is not None
     assert signal["direction"] == "over"
     assert signal["possession_source"] == "points_clock_fallback"
+
+
+def test_active_early_window_can_surface_over_but_not_under():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+
+    early_under = _brain(current=(6, 6), recent_poss=0.0, recent_score=1.0, payload=payload)
+    early_under.update({
+        "history_points": 2,
+        "recent_window_seconds": 30.0,
+        "recent_activity_available": True,
+        "elapsed_seconds": 300.0,
+    })
+    assert live_signal(
+        early_under,
+        _lane(score=(6, 6), elapsed=300, line=42.5, market_over=0.50),
+    ) is None
+
+    early_over = _brain(current=(14, 13), recent_poss=0.0, recent_score=6.0, payload=payload)
+    early_over.update({
+        "history_points": 2,
+        "recent_window_seconds": 30.0,
+        "recent_activity_available": True,
+        "elapsed_seconds": 300.0,
+    })
+    signal = live_signal(
+        early_over,
+        _lane(score=(14, 13), elapsed=300, line=39.5, market_over=0.50),
+    )
+    assert signal is not None
+    assert signal["direction"] == "over"

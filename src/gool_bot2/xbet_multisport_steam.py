@@ -1716,6 +1716,50 @@ def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int
     return "won" if total > line else "lost"
 
 
+def _live_candidate_rank(item: tuple[dict[str, Any], dict[str, Any]]) -> tuple[float, float, float, float]:
+    _row, signal = item
+    return (
+        float(signal.get("strength") or 0.0),
+        float(signal.get("edge") or 0.0),
+        abs(float(signal.get("stat_edge") or 0.0)),
+        float(signal.get("model_probability") or 0.0),
+    )
+
+
+def select_live_signals_for_match(
+    candidates: list[tuple[dict[str, Any], dict[str, Any]]],
+    cfg: SportConfig,
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Cap correlated basketball LIVE signals without restoring one-match-one-bet.
+
+    Basketball may publish one current-quarter total plus one strongest
+    full-match projection. FULL_MATCH match total and team totals compete for
+    the same slot because they are strongly correlated views of the same game.
+    Other sports keep their existing multi-signal policy.
+    """
+    rows = list(candidates)
+    if cfg.key != "basketball" or len(rows) <= 1:
+        return rows
+
+    segment = [
+        item for item in rows
+        if str(item[0].get("scope") or "") != SCOPE_FULL
+    ]
+    full_match = [
+        item for item in rows
+        if str(item[0].get("scope") or "") == SCOPE_FULL
+    ]
+
+    selected: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    if segment:
+        selected.append(max(segment, key=_live_candidate_rank))
+    if full_match:
+        selected.append(max(full_match, key=_live_candidate_rank))
+
+    selected.sort(key=_live_candidate_rank, reverse=True)
+    return selected
+
+
 class MultiSportSteamWorker:
     """Basketball + hockey market-movement worker ported from basket_hokkey.
 
@@ -4965,7 +5009,7 @@ class MultiSportSteamWorker:
         }
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
-        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
+        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = correlation_filtered = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -4986,6 +5030,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                ready_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
@@ -5097,6 +5142,11 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
+                    ready_signals.append((lane_row, signal))
+
+                selected_signals = select_live_signals_for_match(ready_signals, cfg)
+                correlation_filtered += max(0, len(ready_signals) - len(selected_signals))
+                for lane_row, signal in selected_signals:
                     recorded, sent = self._record_signal(lane_row, signal, cfg)
                     if recorded:
                         detected += 1
@@ -5168,6 +5218,7 @@ class MultiSportSteamWorker:
             "steam_blocked": steam_blocked,
             "matchbook_blocked": matchbook_blocked_count,
             "duplicate_filtered": duplicate_filtered,
+            "correlation_filtered": correlation_filtered,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],
@@ -5258,6 +5309,7 @@ class MultiSportSteamWorker:
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
                 f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
                 f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
+                f"corr_block={stats.get('correlation_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "
                 f"delivered={stats['delivered'] + stats['prematch_delivered']} settled={stats['settled']}",

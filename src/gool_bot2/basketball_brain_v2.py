@@ -1,3 +1,4 @@
+# DIAGNOSTIC_TRIGGER: current basketball direction audit; no runtime behavior change.
 from __future__ import annotations
 
 import math

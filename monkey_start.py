@@ -288,7 +288,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", "0.55")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_STRENGTH", "74")
     os.environ["XBET_MULTISPORT_CARDS_ENABLED"] = "1"
-    os.environ["GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED"] = "0"
+    os.environ["GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED"] = "1"
     os.environ.setdefault("XBET_MULTISPORT_STEAM_ENABLED", "1")
     os.environ.setdefault("XBET_PREMATCH_INTERVAL_SECONDS", "60")
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")

@@ -4,6 +4,8 @@ from gool_bot2.xbet_multisport_markets import (
     prematch_parlay_market_lanes,
     scope_from_subgame,
     period_scores,
+    lane_phase_policy,
+    policy_text_ru,
 )
 
 
@@ -99,3 +101,40 @@ def test_parlay_market_lanes_keep_all_total_lines_not_only_balanced_one():
     assert {
         x["line"] for x in parlay if x["market_family"] == "match_total"
     } == {150.5, 160.5, 170.5}
+
+
+def test_basketball_live_policy_allows_only_current_quarter_total():
+    ok, reason = lane_phase_policy(
+        "basketball",
+        "LIVE",
+        {"scope": "QUARTER_2", "market_family": "match_total"},
+        period="2nd quarter",
+    )
+    assert ok is True
+    assert reason == "basketball_live_current_quarter_total"
+
+    assert lane_phase_policy(
+        "basketball",
+        "LIVE",
+        {"scope": "FULL_MATCH", "market_family": "match_total"},
+        period="2nd quarter",
+    )[0] is False
+    assert lane_phase_policy(
+        "basketball",
+        "LIVE",
+        {"scope": "FULL_MATCH", "market_family": "away_total"},
+        period="2nd quarter",
+    )[0] is False
+    assert lane_phase_policy(
+        "basketball",
+        "LIVE",
+        {"scope": "QUARTER_1", "market_family": "match_total"},
+        period="2nd quarter",
+    )[0] is False
+
+
+def test_basketball_policy_text_matches_two_quarter_live_rule():
+    _, live = policy_text_ru("basketball")
+    assert "текущей четверти" in live
+    assert "2 четверти за матч" in live
+    assert "ИТБ/ИТМ всего матча" not in live

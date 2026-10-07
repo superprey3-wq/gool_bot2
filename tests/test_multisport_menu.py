@@ -1205,3 +1205,150 @@ def test_super10_interactive_text_shows_readiness_and_sent_ticket(tmp_path: Path
     assert "ТБ 1.5 @ 1.50" in current
     assert "2026-10-06" in archive
     assert "31.50" in archive
+
+
+def test_in_game_hides_legacy_basketball_full_match_live_rows(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "FS-BASKET-1",
+                    "home": "Murcia",
+                    "away": "Varese",
+                    "score": [79, 53],
+                    "status_code": "Q4",
+                    "coarse_status": "2",
+                }],
+                "flashscore_analysis_matches": [{
+                    "flashscore_event_id": "FS-BASKET-1",
+                    "home": "Murcia",
+                    "away": "Varese",
+                    "score": [79, 53],
+                    "scope": "QUARTER_4",
+                    "period": "4-я четверть",
+                }],
+            },
+        },
+    })
+
+    _write(journal, [
+        {
+            "entry_id": "basketball:live:old-total",
+            "sport": "basketball",
+            "phase": "LIVE",
+            "result": "pending",
+            "flashscore_event_id": "FS-BASKET-1",
+            "home": "Murcia",
+            "away": "Varese",
+            "scope": "FULL_MATCH",
+            "market_family": "match_total",
+            "selection": "ТМ 155.5",
+            "odd": 1.88,
+            "strength": 75,
+        },
+        {
+            "entry_id": "basketball:live:old-team",
+            "sport": "basketball",
+            "phase": "LIVE",
+            "result": "pending",
+            "flashscore_event_id": "FS-BASKET-1",
+            "home": "Murcia",
+            "away": "Varese",
+            "scope": "FULL_MATCH",
+            "market_family": "home_total",
+            "selection": "ИТМ1 84.5",
+            "odd": 1.81,
+            "strength": 85,
+        },
+        {
+            "entry_id": "basketball:live:q4",
+            "sport": "basketball",
+            "phase": "LIVE",
+            "result": "pending",
+            "flashscore_event_id": "FS-BASKET-1",
+            "home": "Murcia",
+            "away": "Varese",
+            "scope": "QUARTER_4",
+            "market_family": "match_total",
+            "selection": "4-я четверть: ТМ 42.5",
+            "odd": 1.90,
+            "strength": 82,
+        },
+    ])
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "FS-BASKET-1",
+            "home": "Murcia",
+            "away": "Varese",
+            "score": [79, 53],
+            "status_code": "Q4",
+            "coarse_status": "2",
+        }]
+        if sport == "basketball" else []
+    ))
+
+    text = "\n".join(menu.multisport_in_game_sections())
+
+    assert "4-я четверть: ТМ 42.5 @ 1.90" in text
+    assert "ТМ 155.5 @ 1.88" not in text
+    assert "ИТМ1 84.5 @ 1.81" not in text
+    assert "ставок: <b>1</b>" in text
+
+
+def test_in_game_keeps_started_basketball_prematch_full_match_pick(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
+
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+
+    _write(state, {
+        "mode": "active",
+        "sports": {
+            "hockey": {"matches": [], "flashscore_live_matches": []},
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        },
+    })
+    _write(journal, [{
+        "sport": "basketball",
+        "phase": "PREMATCH",
+        "result": "pending",
+        "flashscore_event_id": "FS-BASKET-2",
+        "home": "Paris",
+        "away": "Lyon",
+        "scope": "FULL_MATCH",
+        "market_family": "match_total",
+        "selection": "ТБ 170.5",
+        "odd": 1.75,
+        "strength": 88,
+    }])
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda sport: (
+        [{
+            "flashscore_event_id": "FS-BASKET-2",
+            "home": "Paris",
+            "away": "Lyon",
+            "score": [40, 38],
+            "status_code": "Q2",
+            "coarse_status": "2",
+        }]
+        if sport == "basketball" else []
+    ))
+
+    text = "\n".join(menu.multisport_in_game_sections())
+
+    assert "Paris — Lyon" in text
+    assert "ТБ 170.5 @ 1.75" in text
+    assert "🟡 PREMATCH" in text

@@ -5045,6 +5045,8 @@ class MultiSportSteamWorker:
                 f"GOOL_{key.upper()} fs={stats['flashscore_live']} brain_cand={stats.get('live_brain_candidates',0)} "
                 f"xbet={stats['xbet_live']} mapped={stats['mapped']} "
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
+                f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
+                f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "
                 f"delivered={stats['delivered'] + stats['prematch_delivered']} settled={stats['settled']}",

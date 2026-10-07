@@ -224,3 +224,23 @@ def test_regular_prematch_also_enters_in_game_by_kickoff_time(tmp_path, monkeypa
     text = "\n".join(journal_in_game.journal_in_game_sections(journal, analysis))
     assert "A" in text
     assert "ТМ 2.5 @ 1.90" in text
+
+
+def test_production_in_game_adapter_uses_strict_flashscore_live_filter(tmp_path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal.write_text("[]", "utf-8")
+    analysis.write_text("", "utf-8")
+
+    monkeypatch.setattr("gool_bot2.multi_menu.journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.multi_menu.analysis_path", lambda: analysis)
+
+    calls = []
+    def fake_strict(journal_path, analysis_path=None):
+        calls.append((journal_path, analysis_path))
+        return ["STRICT LIVE"]
+
+    monkeypatch.setattr("gool_bot2.strict_in_game_live.strict_in_game_sections", fake_strict)
+
+    assert journal_in_game.production_in_game_sections() == ["STRICT LIVE"]
+    assert calls == [(journal, analysis)]

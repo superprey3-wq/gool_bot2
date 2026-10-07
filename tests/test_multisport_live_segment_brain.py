@@ -777,3 +777,37 @@ def test_worker_restores_recent_flashscore_brain_snapshots_after_restart(tmp_pat
     assert len(restored) == 1
     assert restored[0]["score"] == [18, 17]
     assert restored[0]["live_game_stats"]["current_segment_available"] is True
+
+
+def test_basketball_direct_quarter_activity_overrides_false_break_heuristic(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": "QUARTER_2",
+            "available": True,
+            "current_segment_available": True,
+            "stats_mode": "direct_segment",
+            "segment_stats": {"field_goals": [2.0, 1.0], "rebounds": [1.0, 1.0]},
+            "segment_attempts": {"field_goals": [4.0, 3.0]},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BPLAY002",
+        "home": "Home",
+        "away": "Away",
+        "league": "WORLD: Club Friendly",
+        "score": [24, 21],
+        "score_parts": [[20, 18]],
+        "status_code": "22",
+        "coarse_status": "2",
+        "period_start_ts": __import__("time").time() - 180,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_2"
+    assert result["break_transition"] is False
+    assert result["elapsed_seconds"] > 0

@@ -28,12 +28,13 @@ def _strong_features():
     }
 
 
-def _live_brain(*, scope="PERIOD_2", recent_shot_rate=2.6, match_score=(1, 1)):
+def _live_brain(*, scope="PERIOD_2", recent_shot_rate=2.6, match_score=(1, 1), shot_rate_available=True):
     return {
         "scope": scope,
         "history_points": 3,
         "recent_window_seconds": 60.0,
         "recent_shot_rate": recent_shot_rate,
+        "shot_rate_available": shot_rate_available,
         "league": "KHL",
         "live_game_stats": {
             "current_segment_available": True,
@@ -307,3 +308,11 @@ def test_live_integer_line_push_reduces_displayed_confidence():
     assert signal["push_probability"] > 0.0
     assert signal["push_confidence_penalty"] > 0.0
     assert signal["strength"] < 87.0
+
+
+def test_missing_sog_is_not_treated_as_zero_pace_under_confirmation():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.0, shot_rate_available=False),
+        _live_lane(line=1.5, market_over=0.70),
+    )
+    assert signal is None

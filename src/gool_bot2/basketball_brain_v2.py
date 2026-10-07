@@ -705,12 +705,24 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0) < min_window:
         return None
     try:
-        elapsed = float(lane.get("clock_seconds"))
         line = float(lane.get("line"))
     except (TypeError, ValueError):
         return None
     duration = 720.0 if ("nba" in str(lane.get("league") or brain.get("league") or "").casefold() or "g league" in str(lane.get("league") or brain.get("league") or "").casefold()) and "wnba" not in str(lane.get("league") or brain.get("league") or "").casefold() else 600.0
-    if elapsed <= 0 or elapsed >= duration:
+
+    # Match hockey's Flashscore-first clock policy. 1xBet quarter clocks can be
+    # cumulative, stale around breaks, or momentarily missing after a remap.
+    # Flashscore Brain already tracks the actual current-quarter start, so use
+    # that local elapsed time whenever it is sane and keep 1xBet as fallback.
+    brain_elapsed = _num(brain.get("elapsed_seconds"))
+    book_elapsed = _num(lane.get("clock_seconds"))
+    if brain_elapsed is not None and 0.0 < brain_elapsed < duration:
+        elapsed = float(brain_elapsed)
+        clock_source = "flashscore_quarter"
+    elif book_elapsed is not None and 0.0 < book_elapsed < duration:
+        elapsed = float(book_elapsed)
+        clock_source = "1xbet_after_flashscore_brain"
+    else:
         return None
     remaining = duration - elapsed
     if elapsed < 45.0 or remaining < 35.0:
@@ -925,6 +937,32 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         if direction == "under" and ((efg is not None and efg <= 0.47) or (tov_rate is not None and tov_rate >= 0.16)):
             agreement += 1
             directional_confirmation = True
+
+    # Some Flashscore basketball competitions expose the live score and current
+    # quarter but not enough FGA/FTA/OREB/TOV detail to estimate possessions.
+    # Previously that made current-quarter LIVE impossible even with a very
+    # clear points pace. Hockey already has an equivalent fallback via SOG pace.
+    # Allow points pace to confirm direction only when both the recent window
+    # and the overall quarter pace agree materially with the league prior.
+    if possession_source == "points_clock_fallback":
+        expected_score_rate = prior_total / max(1.0, duration / 60.0)
+        recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+        overall_score_rate = current / max(0.75, elapsed / 60.0)
+        if (
+            direction == "over"
+            and recent_score_rate >= expected_score_rate * 1.15
+            and overall_score_rate >= expected_score_rate * 1.05
+        ):
+            agreement += 1
+            directional_confirmation = True
+        elif (
+            direction == "under"
+            and recent_score_rate <= expected_score_rate * 0.82
+            and overall_score_rate <= expected_score_rate * 0.95
+        ):
+            agreement += 1
+            directional_confirmation = True
+
     if abs(projection - line) >= 3.0:
         agreement += 1
 
@@ -1005,7 +1043,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "projected_remaining_possessions": round(remaining_poss, 2),
         "posterior_ppp_pair": round(posterior_ppp, 3),
         "possession_source": possession_source,
-        "projection_clock_source": "1xbet_after_flashscore_brain",
+        "projection_clock_source": clock_source,
         "flashscore_brain_score": round(float(brain.get("brain_score") or 0.0), 1),
         "flashscore_brain_state": str(brain.get("brain_state") or ""),
         "flashscore_brain_reason": str(brain.get("brain_reason") or ""),

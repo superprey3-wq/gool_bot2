@@ -4986,6 +4986,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                live_candidates_for_match: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
@@ -5097,16 +5098,47 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
-                    recorded, sent = self._record_signal(lane_row, signal, cfg)
+                    live_candidates_for_match.append((lane_row, signal))
+
+                # Multiple correlated lanes from the same game can all pass at
+                # once (FULL_MATCH total, team total, current quarter total).
+                # Do not spam the user with a correlated burst. Keep LIVE
+                # multi-bet capability across time, but publish only the
+                # strongest *new* signal for this match in the current scan.
+                live_candidates_for_match.sort(
+                    key=lambda item: (
+                        float((item[1] or {}).get("strength") or 0.0),
+                        float((item[1] or {}).get("edge") or 0.0),
+                        float((item[1] or {}).get("model_probability") or (item[1] or {}).get("fair_probability") or 0.0),
+                    ),
+                    reverse=True,
+                )
+                for best_row, best_signal in live_candidates_for_match:
+                    if self._already_seen(
+                        cfg.key,
+                        str(best_row.get("event_id") or ""),
+                        "LIVE",
+                        str(best_row.get("scope") or SCOPE_FULL),
+                        str(best_row.get("market_family") or "match_total"),
+                        str(best_row.get("flashscore_event_id") or ""),
+                    ):
+                        duplicate_filtered += 1
+                        continue
+                    recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     if recorded:
                         detected += 1
-                        signals.append(signal)
-                    else:
-                        duplicate_filtered += 1
-                    if sent:
-                        delivered += 1
+                        signals.append(best_signal)
+                        if sent:
+                            delivered += 1
+                        break
+                    # Delivery failure is not a duplicate: _record_signal keeps
+                    # it retryable. Stop here so a failed top pick cannot cause
+                    # the second-best correlated market to leak through.
+                    if _mode() == "active":
+                        break
+                    duplicate_filtered += 1
+
                 if signals:
-                    signals.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
                     row["signals"] = signals
                     row["signal"] = signals[0]
                     row["steam"] = signals[0]

@@ -222,10 +222,16 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
 
 
 def production_in_game_sections(_: Path | None = None, __: Path | None = None) -> list[str]:
-    """Production adapter: ignore legacy responder paths and use Multi storage."""
-    from . import multi_menu
+    """Production adapter: show only matches Flashscore confirms as LIVE now.
 
-    return journal_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
+    The canonical journal can legitimately retain unresolved/pending historical
+    rows while result reconciliation is catching up. Those rows must never make
+    the Telegram "В ИГРЕ" view look live just because they are still pending.
+    """
+    from . import multi_menu
+    from .strict_in_game_live import strict_in_game_sections
+
+    return strict_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
 
 
 def install_journal_in_game() -> None:
@@ -236,7 +242,7 @@ def install_journal_in_game() -> None:
 
     telegram.in_game_sections = production_in_game_sections
     _INSTALLED = True
-    print("GOOL_IN_GAME installed source=canonical_multi_journal settlement=external", flush=True)
+    print("GOOL_IN_GAME installed source=flashscore_live_only journal=canonical_multi fail_closed=on", flush=True)
 
 
 __all__ = ["install_journal_in_game", "journal_in_game_sections", "production_in_game_sections"]

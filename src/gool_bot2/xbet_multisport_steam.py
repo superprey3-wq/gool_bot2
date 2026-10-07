@@ -1716,6 +1716,15 @@ def settle_multisport_pick(row: dict[str, Any], home_score: int, away_score: int
     return "won" if total > line else "lost"
 
 
+def _live_signal_rank_key(signal: dict[str, Any]) -> tuple[float, float, float]:
+    """Higher tuple means a more confident LIVE pick."""
+    return (
+        float(signal.get("strength") or 0.0),
+        float(signal.get("edge") or 0.0),
+        float(signal.get("model_probability") or signal.get("fair_probability") or 0.0),
+    )
+
+
 class MultiSportSteamWorker:
     """Basketball + hockey market-movement worker ported from basket_hokkey.
 
@@ -5134,11 +5143,7 @@ class MultiSportSteamWorker:
                 # total + full total + team totals while preserving the full
                 # model comparison internally.
                 eligible_signals.sort(
-                    key=lambda item: (
-                        float(item[1].get("strength") or 0.0),
-                        float(item[1].get("edge") or 0.0),
-                        float(item[1].get("model_probability") or item[1].get("fair_probability") or 0.0),
-                    ),
+                    key=lambda item: _live_signal_rank_key(item[1]),
                     reverse=True,
                 )
                 selected_signals = eligible_signals

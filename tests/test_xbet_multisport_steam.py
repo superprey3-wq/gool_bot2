@@ -1425,7 +1425,7 @@ def test_active_signal_delivery_failure_is_not_journaled_and_retries(tmp_path, m
 
     first = worker._record_signal(row, signal, SPORTS["basketball"])
     assert first == (False, 0)
-    assert json.loads(worker.journal_path.read_text("utf-8")) == []
+    assert not worker.journal_path.exists()
 
     second = worker._record_signal(row, signal, SPORTS["basketball"])
     assert second == (True, 1)

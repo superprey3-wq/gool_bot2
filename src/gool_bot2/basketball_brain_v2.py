@@ -964,7 +964,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         expected_score_rate = prior_total / max(1.0, duration / 60.0)
         recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
         overall_score_rate = current / max(0.75, elapsed / 60.0)
-        recent_activity_available = bool(brain.get("recent_activity_available"))
+        recent_activity_raw = brain.get("recent_activity_available")
+        recent_possessions = max(0.0, _num(brain.get("recent_possessions"), 0.0) or 0.0)
+        min_recent_possessions = max(
+            1.0,
+            _env_float("GOOL_BASKETBALL_LIVE_MIN_RECENT_POSSESSIONS", 2.0),
+        )
+        recent_activity_available = (
+            bool(recent_activity_raw)
+            if recent_activity_raw is not None
+            else bool(recent_score_rate > 0 or recent_possessions >= min_recent_possessions)
+        )
         if (
             recent_activity_available
             and direction == "over"

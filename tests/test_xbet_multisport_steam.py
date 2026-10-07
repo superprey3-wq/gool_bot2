@@ -16,6 +16,7 @@ from gool_bot2.xbet_multisport_steam import (
     _score_candidates,
     _score_sync_allowed,
     _segment_clock_seconds,
+    _live_signal_rank_key,
     _v3_to_legacy_market_game,
     detect_prematch_steam,
     detect_steam,
@@ -1478,3 +1479,58 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert sent == 1
     assert len(sent_text) == 1
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
+
+
+def test_basketball_live_rank_prefers_stronger_then_edge_then_probability():
+    rows = [
+        {"name": "quarter", "strength": 76.0, "edge": 0.10, "model_probability": 0.67},
+        {"name": "team", "strength": 84.0, "edge": 0.06, "model_probability": 0.61},
+        {"name": "full", "strength": 88.0, "edge": 0.05, "model_probability": 0.60},
+        {"name": "team2", "strength": 84.0, "edge": 0.08, "model_probability": 0.59},
+    ]
+    ranked = sorted(rows, key=_live_signal_rank_key, reverse=True)
+    assert [row["name"] for row in ranked[:2]] == ["full", "team2"]
+
+
+def test_basketball_live_sent_count_is_match_lifetime_and_ignores_prematch(tmp_path, monkeypatch):
+    from gool_bot2.multisport_journal import save_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "shadow")
+    worker = MultiSportSteamWorker(tmp_path)
+    save_journal(worker.journal_path, [
+        {
+            "sport": "basketball",
+            "phase": "LIVE",
+            "event_id": "xb-1",
+            "flashscore_event_id": "FS-1",
+            "scope": "QUARTER_2",
+            "market_family": "match_total",
+        },
+        {
+            "sport": "basketball",
+            "phase": "LIVE",
+            "event_id": "xb-1",
+            "flashscore_event_id": "FS-1",
+            "scope": "FULL_MATCH",
+            "market_family": "home_total",
+        },
+        {
+            "sport": "basketball",
+            "phase": "PREMATCH",
+            "event_id": "xb-1",
+            "flashscore_event_id": "FS-1",
+            "scope": "FULL_MATCH",
+            "market_family": "match_total",
+        },
+        {
+            "sport": "basketball",
+            "phase": "LIVE",
+            "event_id": "xb-2",
+            "flashscore_event_id": "FS-2",
+            "scope": "FULL_MATCH",
+            "market_family": "match_total",
+        },
+    ])
+
+    assert worker._live_sent_count("basketball", "xb-1", "FS-1") == 2
+    assert worker._live_sent_count("basketball", "xb-2", "FS-2") == 1

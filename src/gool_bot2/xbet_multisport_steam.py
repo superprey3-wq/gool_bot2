@@ -498,18 +498,42 @@ def _flashscore_scoped_scores(fs: dict[str, Any], cfg: SportConfig) -> dict[str,
 
 
 def _numeric_live_segment_index(fs: dict[str, Any], cfg: SportConfig) -> int:
-    """Return current segment index only when Flashscore exposes a numeric whole-match minute."""
+    """Return the current segment index from Flashscore's numeric AC/status value.
+
+    Hockey AC behaves like a whole-match minute in the feeds we use.
+
+    Basketball is mixed. In the current Flashscore feed, AC=22/23/24/25 are
+    quarter-state codes for Q1/Q2/Q3/Q4. Older/other variants can still expose
+    a whole-match minute. Score-part count disambiguates the two forms: a stage
+    code never points behind already-observed quarter rows.
+    """
     try:
-        minute = int(float(str(fs.get("status_code") or "").strip()))
+        raw = int(float(str(fs.get("status_code") or "").strip()))
     except (TypeError, ValueError):
         return 0
-    if minute <= 0:
+    if raw <= 0:
         return 0
     if cfg.key == "hockey":
-        return max(1, min(3, (minute - 1) // 20 + 1))
+        return max(1, min(3, (raw - 1) // 20 + 1))
+
+    parts = [
+        row for row in (fs.get("score_parts") or [])
+        if isinstance(row, (list, tuple)) and len(row) >= 2
+    ]
+    if 22 <= raw <= 25:
+        stage_idx = raw - 21
+        # Live production evidence:
+        #   AC=22 + one score-part row -> Q1
+        #   AC=24 + three score-part rows -> Q3
+        #   AC=25 + four score-part rows -> Q4
+        # If more quarter rows already exist than the stage code allows, this
+        # is likely the older "whole-match minute" variant, so fall through.
+        if len(parts) <= stage_idx:
+            return stage_idx
+
     league = str(fs.get("league") or "").casefold()
     segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
-    return max(1, min(4, (minute - 1) // segment_minutes + 1))
+    return max(1, min(4, (raw - 1) // segment_minutes + 1))
 
 
 def multisport_scope_is_complete(fs: dict[str, Any], sport: str, scope: str) -> bool:
@@ -581,28 +605,13 @@ def _infer_flashscore_scope(
     ]
     parts_idx = max(1, min(maximum, len(parts) or 1))
 
-    minute_idx = 0
-    try:
-        minute = int(float(str(fs.get("status_code") or "").strip()))
-    except (TypeError, ValueError):
-        minute = 0
-    if minute > 0:
-        if cfg.key == "hockey":
-            minute_idx = max(1, min(3, (minute - 1) // 20 + 1))
-        else:
-            league = str(fs.get("league") or "").casefold()
-            segment_minutes = 12 if ("nba" in league or "g league" in league) and "wnba" not in league else 10
-            minute_idx = max(1, min(4, (minute - 1) // segment_minutes + 1))
-
-            # Flashscore AC is not consistently a whole-match minute during
-            # quarter breaks. In that state it can jump far enough to look like
-            # Q4 even though only Q1+Q2 score parts exist. Never allow a raw AC
-            # value to skip over an unobserved basketball quarter. During live
-            # play the current quarter is already present in score_parts, so
-            # this clamp leaves normal Q2/Q3/Q4 detection unchanged.
-            if parts:
-                next_possible_quarter = min(4, len(parts) + 1)
-                minute_idx = min(minute_idx, next_possible_quarter)
+    minute_idx = _numeric_live_segment_index(fs, cfg)
+    if minute_idx > 0 and cfg.key == "basketball":
+        # Even after decoding quarter-state codes, keep a defensive clamp for
+        # legacy whole-match-minute feeds around quarter transitions.
+        if parts:
+            next_possible_quarter = min(4, len(parts) + 1)
+            minute_idx = min(minute_idx, next_possible_quarter)
 
     idx = max(parts_idx, minute_idx or 1)
     guessed = f"{prefix}{idx}"

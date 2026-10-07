@@ -1478,3 +1478,125 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert sent == 1
     assert len(sent_text) == 1
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
+
+
+def test_live_scan_publishes_only_strongest_signal_for_one_match(monkeypatch, tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_ENABLED", "0")
+    monkeypatch.setattr(worker, "_settle", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        worker,
+        "_scan_prematch",
+        lambda *args, **kwargs: {
+            "flashscore_prematch": 0,
+            "prematch_brain_candidates": 0,
+            "xbet_prematch": 0,
+            "prematch_mapped": 0,
+            "prematch_scanned": 0,
+            "prematch_decoded": 0,
+            "prematch_market_decode_failed": 0,
+            "prematch_detected": 0,
+            "prematch_delivered": 0,
+            "prematch_policy_blocked": 0,
+            "matches": [],
+        },
+    )
+
+    fs = {
+        "flashscore_event_id": "FS-ONE",
+        "home": "Home",
+        "away": "Away",
+        "league": "Test",
+        "score": [60, 58],
+        "coarse_status": "2",
+    }
+    brain = {
+        **fs,
+        "brain_state": "PASS",
+        "brain_score": 80,
+        "scope": "QUARTER_3",
+        "period": "3-я четверть",
+    }
+    prepared = {
+        "fs_today": [fs],
+        "fs_live": [fs],
+        "live_analysis": [brain],
+        "live_candidates": [brain],
+        "prematch_candidates": [],
+    }
+    xbet = [{"I": "XB-ONE", "O1": "Home", "O2": "Away"}]
+
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.map_xbet_to_flashscore",
+        lambda *args, **kwargs: [(xbet[0], fs, False, 1.0)],
+    )
+    snapshot = {
+        "event_id": "XB-ONE",
+        "flashscore_event_id": "FS-ONE",
+        "home": "Home",
+        "away": "Away",
+        "league": "Test",
+        "phase": "LIVE",
+        "period": "3-я четверть",
+        "score": [60, 58],
+        "match_score": [60, 58],
+        "ts": 1_000.0,
+        "market_lanes": [
+            {"scope": "FULL_MATCH", "market_family": "match_total", "line": 180.5},
+            {"scope": "FULL_MATCH", "market_family": "home_total", "line": 92.5},
+            {"scope": "QUARTER_3", "market_family": "match_total", "line": 43.5},
+        ],
+    }
+    monkeypatch.setattr(worker, "_snapshot", lambda *args, **kwargs: (dict(snapshot), None))
+    monkeypatch.setattr(
+        worker,
+        "_lane_row",
+        lambda row, lane: {**row, **lane, "ts": 1_000.0},
+    )
+    monkeypatch.setattr(worker, "_append_history", lambda *args, **kwargs: ([], None))
+    monkeypatch.setattr("gool_bot2.xbet_multisport_steam.detect_steam", lambda *args, **kwargs: None)
+    strengths = {
+        ("FULL_MATCH", "match_total"): 78.0,
+        ("FULL_MATCH", "home_total"): 86.0,
+        ("QUARTER_3", "match_total"): 82.0,
+    }
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.price_flashscore_live_candidate",
+        lambda brain_row, lane_row, cfg: {
+            "direction": "over",
+            "line": lane_row["line"],
+            "odd": 1.85,
+            "strength": strengths[(lane_row["scope"], lane_row["market_family"])],
+            "edge": 0.08,
+            "model_probability": 0.62,
+        },
+    )
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.matchbook_money_flow",
+        lambda **kwargs: {"available": False},
+    )
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.apply_matchbook_confirmation",
+        lambda signal, flow: ({**signal, "matchbook_money_flow": flow}, False),
+    )
+    monkeypatch.setattr(worker, "_already_seen", lambda *args, **kwargs: False)
+
+    recorded = []
+    monkeypatch.setattr(
+        worker,
+        "_record_signal",
+        lambda row, signal, cfg: (recorded.append((row, signal)) or True, 1),
+    )
+
+    state = worker._scan_sport(
+        SPORTS["basketball"],
+        prepared=prepared,
+        xbet_live_prefetched=xbet,
+        xbet_prematch_prefetched=[],
+    )
+
+    assert state["detected"] == 1
+    assert state["delivered"] == 1
+    assert len(recorded) == 1
+    assert recorded[0][0]["market_family"] == "home_total"
+    assert recorded[0][1]["strength"] == 86.0

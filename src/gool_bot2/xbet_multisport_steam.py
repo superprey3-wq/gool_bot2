@@ -5118,40 +5118,36 @@ class MultiSportSteamWorker:
                     }
                     pending_live_signals.append((lane_row, signal))
 
-                # Do not flood one basketball match with three strongly
-                # correlated totals from the same projection. Multiple LIVE
-                # bets per match stay supported, but only one current-quarter
-                # total and one strongest FULL_MATCH total/IT projection may
-                # be delivered.
+                # Basketball LIVE can expose several correlated totals for the
+                # same match (quarter total + full-match total + team total).
+                # Keep multiple LIVE bets per match across time, but deliver only
+                # the single strongest *new* basketball signal in one scan cycle.
+                # A later quarter/state can still produce another signal.
                 selected_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 if cfg.key == "basketball":
-                    best_by_group: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
-                    for candidate_row, candidate_signal in pending_live_signals:
-                        group = self._live_correlation_group(
+                    ranked_live_signals = sorted(
+                        pending_live_signals,
+                        key=lambda item: (
+                            float(item[1].get("strength") or 0.0),
+                            abs(float(item[1].get("edge") or 0.0)),
+                            float(item[1].get("model_probability") or 0.0),
+                            1 if str(item[0].get("scope") or "").startswith("QUARTER_") else 0,
+                        ),
+                        reverse=True,
+                    )
+                    for candidate_row, candidate_signal in ranked_live_signals:
+                        if self._already_seen(
                             cfg.key,
+                            str(candidate_row.get("event_id") or ""),
+                            "LIVE",
                             str(candidate_row.get("scope") or SCOPE_FULL),
                             str(candidate_row.get("market_family") or "match_total"),
-                        )
-                        current = best_by_group.get(group)
-                        rank = (
-                            float(candidate_signal.get("strength") or 0.0),
-                            abs(float(candidate_signal.get("edge") or 0.0)),
-                            float(candidate_signal.get("model_probability") or 0.0),
-                        )
-                        current_rank = (
-                            float((current[1] if current else {}).get("strength") or 0.0),
-                            abs(float((current[1] if current else {}).get("edge") or 0.0)),
-                            float((current[1] if current else {}).get("model_probability") or 0.0),
-                        )
-                        if current is None or rank > current_rank:
-                            best_by_group[group] = (candidate_row, candidate_signal)
-                    selected_live_signals = list(best_by_group.values())
-                    selected_live_signals.sort(
-                        key=lambda item: (
-                            0 if str(item[0].get("scope") or "").startswith("QUARTER_") else 1,
-                            -float(item[1].get("strength") or 0.0),
-                        )
-                    )
+                            str(candidate_row.get("flashscore_event_id") or ""),
+                        ):
+                            duplicate_filtered += 1
+                            continue
+                        selected_live_signals = [(candidate_row, candidate_signal)]
+                        break
                 else:
                     selected_live_signals = pending_live_signals
 

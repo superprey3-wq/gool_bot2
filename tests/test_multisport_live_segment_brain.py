@@ -1,3 +1,5 @@
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from gool_bot2.xbet_multisport_steam import (
@@ -741,3 +743,37 @@ def test_hockey_late_third_period_under_guard_does_not_block_big_lead(monkeypatc
     assert signal is not None
     assert signal["direction"] == "under"
 
+
+
+def test_worker_restores_recent_flashscore_brain_snapshots_after_restart(tmp_path: Path):
+    history = tmp_path / "live" / "gool_multisport_history.jsonl"
+    history.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "sports": {
+            "basketball": {
+                "flashscore_analysis_matches": [
+                    {
+                        "flashscore_event_id": "RESTB001",
+                        "scope": "QUARTER_2",
+                        "current_segment_score": [18, 17],
+                        "live_game_stats": {
+                            "current_segment_available": True,
+                            "stats_mode": "direct_segment",
+                            "segment_stats": {"rebounds": [8, 7]},
+                        },
+                    }
+                ],
+                "matches": [],
+                "prematch_matches": [],
+            }
+        },
+    }
+    history.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+    worker = MultiSportSteamWorker(tmp_path)
+
+    restored = list(worker._fs_brain_history["basketball:RESTB001:QUARTER_2"])
+    assert len(restored) == 1
+    assert restored[0]["score"] == [18, 17]
+    assert restored[0]["live_game_stats"]["current_segment_available"] is True

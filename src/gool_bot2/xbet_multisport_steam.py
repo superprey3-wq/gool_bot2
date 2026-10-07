@@ -1923,6 +1923,30 @@ class MultiSportSteamWorker:
         duration = _segment_duration_seconds({"league": str(fs.get("league") or "")}, cfg)
         period_start = float(fs.get("period_start_ts") or 0.0)
         break_transition = _flashscore_break_transition(fs, cfg)
+        if (
+            cfg.key == "basketball"
+            and break_transition
+            and bool(stats_payload.get("current_segment_available"))
+            and str(stats_payload.get("stats_mode") or "") == "direct_segment"
+        ):
+            # AC/status can look like a quarter-break code on some feeds even
+            # after play has resumed. Direct current-quarter activity is stronger
+            # evidence than that heuristic, so do not freeze a live quarter.
+            stat_activity = 0.0
+            for bucket in (
+                dict(stats_payload.get("segment_stats") or {}),
+                dict(stats_payload.get("segment_attempts") or {}),
+            ):
+                for pair in bucket.values():
+                    if not isinstance(pair, (list, tuple)):
+                        continue
+                    for value in pair[:2]:
+                        try:
+                            stat_activity += max(0.0, float(value))
+                        except (TypeError, ValueError):
+                            continue
+            if (int(segment_score[0]) + int(segment_score[1])) > 0 or stat_activity > 0.0:
+                break_transition = False
         elapsed = now - period_start if period_start > 0 and not break_transition else 0.0
         if elapsed <= 0 or elapsed > duration + 15 * 60:
             elapsed = 0.0

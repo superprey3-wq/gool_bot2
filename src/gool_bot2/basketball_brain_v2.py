@@ -721,7 +721,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         clock_source = "flashscore_quarter"
     elif book_elapsed is not None and 0.0 < book_elapsed < duration:
         elapsed = float(book_elapsed)
-        clock_source = "1xbet_quarter_fallback"
+        clock_source = "1xbet_after_flashscore_brain"
     else:
         return None
     remaining = duration - elapsed

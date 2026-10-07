@@ -530,7 +530,20 @@ def _full_match_memory():
 
 
 def test_full_match_history_cannot_create_under_without_live_confirmation():
-    brain = _brain(scope="QUARTER_2", current=(26, 23), recent_poss=1.7, recent_score=2.0)
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(
+        scope="QUARTER_2",
+        current=(26, 23),
+        recent_poss=0.0,
+        recent_score=0.0,
+        payload=payload,
+    )
+    brain["recent_activity_available"] = False
     brain["score"] = [53, 52]
     brain["segment_memory"] = _full_match_memory()
     lane = _lane(

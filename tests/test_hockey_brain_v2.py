@@ -316,3 +316,19 @@ def test_missing_sog_is_not_treated_as_zero_pace_under_confirmation():
         _live_lane(line=1.5, market_over=0.70),
     )
     assert signal is None
+
+
+def test_hockey_segment_rejects_tiny_stat_edge_like_under_one_at_projection_point_85():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.45, shot_rate_available=True),
+        _live_lane(line=1.0, market_over=0.65),
+    )
+    assert signal is None
+
+
+def test_hockey_under_requires_real_current_period_sog():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.0, shot_rate_available=False),
+        _live_lane(line=1.5, market_over=0.70),
+    )
+    assert signal is None

@@ -28,12 +28,20 @@ def test_background_analysis_reply_uses_captured_credential(tmp_path: Path, monk
     ]
 
 
-def test_background_in_game_reply_includes_multisport_sections(tmp_path: Path, monkeypatch):
+def test_background_in_game_reply_uses_already_composed_sections_once(tmp_path: Path, monkeypatch):
     sent = []
     monkeypatch.setattr(worker.telegram_mod, "_force_reconcile_pending", lambda *_args, **_kwargs: 0)
-    monkeypatch.setattr(worker.telegram_mod, "in_game_sections", lambda *_args, **_kwargs: ["FOOTBALL_LIVE"])
+    monkeypatch.setattr(
+        worker.telegram_mod,
+        "in_game_sections",
+        lambda *_args, **_kwargs: ["FOOTBALL_LIVE", "HOCKEY_AND_BASKET_LIVE"],
+    )
     import gool_bot2.multisport_menu as multisport_menu
-    monkeypatch.setattr(multisport_menu, "multisport_in_game_sections", lambda: ["HOCKEY_AND_BASKET_LIVE"])
+    monkeypatch.setattr(
+        multisport_menu,
+        "multisport_in_game_sections",
+        lambda: (_ for _ in ()).throw(AssertionError("must not append multisport twice")),
+    )
     monkeypatch.setattr(
         worker,
         "_direct_send_message",

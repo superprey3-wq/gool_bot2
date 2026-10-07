@@ -236,12 +236,13 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 replies = [basketball_journal_text()]
             elif text == "🟢 в игре":
                 telegram_mod._force_reconcile_pending(journal_path)
-                replies = telegram_mod.in_game_sections(journal_path, telegram_mod._analysis_path(journal_path))
-                try:
-                    from .multisport_menu import multisport_in_game_sections
-                    replies.extend(multisport_in_game_sections())
-                except Exception as exc:
-                    print(f"GOOL_MULTISPORT_IN_GAME_MENU_ERROR {type(exc).__name__}:{exc}", flush=True)
+                # journal_in_game installs a production adapter into
+                # telegram_mod.in_game_sections. That adapter already returns
+                # football + hockey + basketball exactly once.
+                replies = telegram_mod.in_game_sections(
+                    journal_path,
+                    telegram_mod._analysis_path(journal_path),
+                )
             elif text == "🎟 ординары":
                 prematch_journal = Path(os.getenv("GOOL_MULTI_JOURNAL_PATH", "").strip() or journal_path)
                 replies = telegram_mod.prematch_singles_sections(prematch_journal)

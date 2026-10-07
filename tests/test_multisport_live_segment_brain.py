@@ -393,7 +393,7 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
     assert signal["projected_total"] > 53.5
     assert signal["projected_total"] != 7.8
     assert signal["elapsed_seconds"] == 310.0
-    assert signal["projection_clock_source"] == "1xbet_after_flashscore_brain"
+    assert signal["projection_clock_source"] == "1xbet_segment_clock"
     assert signal["flashscore_brain_score"] == 82.0
 
 
@@ -568,7 +568,7 @@ def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3
     assert signal["projected_total"] != 7.54
     assert signal["elapsed_seconds"] == 45.0
     assert signal["remaining_seconds"] == 675.0
-    assert signal["projection_clock_source"] == "1xbet_after_flashscore_brain"
+    assert signal["projection_clock_source"] == "1xbet_segment_clock"
 
 def test_live_scopes_accept_canonical_scope_names():
     from gool_bot2.xbet_multisport_markets import live_scopes_from_period

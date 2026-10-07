@@ -4832,6 +4832,35 @@ class MultiSportSteamWorker:
             if xbet_live_prefetched is not None
             else (self._xbet_index(cfg) if fs_to_price else [])
         )
+        # Keep nearest 1xBet names for every Brain candidate. This makes a
+        # zero-signal cycle diagnosable without guessing whether the loss was
+        # Brain, naming/mapping, market decoding, or final pricing.
+        mapping_diagnostics: list[dict[str, Any]] = []
+        for fs_candidate in fs_to_price:
+            scored: list[tuple[float, float, bool, dict[str, Any]]] = []
+            for xbet_candidate in xbet_live:
+                if not _event_allowed(xbet_candidate):
+                    continue
+                quality, reversed_order, weakest = _match_quality(xbet_candidate, fs_candidate)
+                scored.append((quality, weakest, reversed_order, xbet_candidate))
+            scored.sort(key=lambda item: item[0], reverse=True)
+            mapping_diagnostics.append({
+                "flashscore_event_id": str(fs_candidate.get("flashscore_event_id") or ""),
+                "home": str(fs_candidate.get("home") or ""),
+                "away": str(fs_candidate.get("away") or ""),
+                "top": [
+                    {
+                        "home": str(item[3].get("O1") or ""),
+                        "away": str(item[3].get("O2") or ""),
+                        "event_id": str(item[3].get("I") or ""),
+                        "quality": round(float(item[0]), 4),
+                        "weakest_side": round(float(item[1]), 4),
+                        "reversed": bool(item[2]),
+                    }
+                    for item in scored[:3]
+                ],
+            })
+
         # Price only Flashscore Brain candidates; non-candidates still remain
         # visible in analysis and continue building stat history.
         mapped = map_xbet_to_flashscore(xbet_live, fs_to_price)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
@@ -5037,6 +5066,7 @@ class MultiSportSteamWorker:
             "decoded": decoded,
             "score_mismatch": mismatch,
             "market_decode_failed": failed,
+            "mapping_diagnostics": mapping_diagnostics,
             "detected": detected,
             "delivered": delivered,
             "policy_blocked": policy_blocked,

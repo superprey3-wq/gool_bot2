@@ -299,7 +299,9 @@ def test_live_integer_line_push_reduces_displayed_confidence():
     brain = _live_brain(recent_shot_rate=0.5)
     brain["elapsed_seconds"] = 600.0
     brain["segment_score_verified"] = True
-    lane = _live_lane(elapsed=600, line=1.0, market_over=0.70)
+    # Keep this as a genuinely strong integer-line UNDER so the test checks
+    # push handling without reviving the weak 0.85-vs-1.0 signal class.
+    lane = _live_lane(elapsed=600, line=2.0, market_over=0.70)
 
     signal = live_signal(brain, lane)
 

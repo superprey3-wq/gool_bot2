@@ -222,16 +222,31 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
 
 
 def production_in_game_sections(_: Path | None = None, __: Path | None = None) -> list[str]:
-    """Production adapter: show only matches Flashscore confirms as LIVE now.
+    """Production adapter: combine strict football LIVE with multisport LIVE.
 
-    The canonical journal can legitimately retain unresolved/pending historical
-    rows while result reconciliation is catching up. Those rows must never make
-    the Telegram "В ИГРЕ" view look live just because they are still pending.
+    Football and hockey/basketball use different canonical journals. The strict
+    football renderer is intentionally legacy-shaped (match_id/market), while
+    multisport LIVE rows use flashscore_event_id/scope/market_family/selection.
+    Both views must be composed here or successfully delivered multisport picks
+    disappear from the common "В ИГРЕ" button.
     """
     from . import multi_menu
     from .strict_in_game_live import strict_in_game_sections
+    from .multisport_menu import multisport_in_game_sections
 
-    return strict_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
+    football = strict_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
+    multisport = multisport_in_game_sections()
+
+    football_empty = (
+        not football
+        or all(
+            "Сейчас нет сигналов на матчах, подтверждённых Flashscore как LIVE." in str(section)
+            for section in football
+        )
+    )
+    if multisport:
+        return list(multisport) if football_empty else [*football, *multisport]
+    return football
 
 
 def install_journal_in_game() -> None:
@@ -242,7 +257,7 @@ def install_journal_in_game() -> None:
 
     telegram.in_game_sections = production_in_game_sections
     _INSTALLED = True
-    print("GOOL_IN_GAME installed source=flashscore_live_only journal=canonical_multi fail_closed=on", flush=True)
+    print("GOOL_IN_GAME installed sources=football_strict+multisport_live fail_closed=on", flush=True)
 
 
 __all__ = ["install_journal_in_game", "journal_in_game_sections", "production_in_game_sections"]

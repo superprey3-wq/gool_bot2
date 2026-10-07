@@ -714,16 +714,17 @@ def _score_sync_allowed(
     dh = abs(int(fs_score[0]) - int(xbet_score[0]))
     da = abs(int(fs_score[1]) - int(xbet_score[1]))
 
-    # Basketball can move several possessions while Flashscore and 1xBet are
-    # fetched sequentially. Use a wider sanity window only when team identity
-    # is very strong; weaker fuzzy matches keep the tighter guard.
+    # Mapping may survive a small sequential-fetch lag, but LIVE pricing must
+    # never compare a materially older Flashscore score with a newer 1xBet
+    # line. The previous 16/24-point tolerance was large enough to turn a fast
+    # game into a false UNDER. Keep only a small multi-possession allowance.
     strong_quality = _float_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_MATCH", 0.92)
     if quality >= strong_quality:
-        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_SIDE_MAX", 16))
-        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_TOTAL_MAX", 24))
+        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_SIDE_MAX", 6))
+        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_STRONG_TOTAL_MAX", 8))
     else:
-        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 10))
-        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 14))
+        side_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_SIDE_MAX", 4))
+        total_max = max(0, _int_env("GOOL_BASKETBALL_SCORE_DRIFT_TOTAL_MAX", 6))
     return dh <= side_max and da <= side_max and (dh + da) <= total_max
 
 

@@ -944,6 +944,14 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_p, market_p, odd = max(choices, key=lambda x: x[0])
 
+    # UNDER is much more vulnerable to a short quiet/stale sample. The
+    # activity-aware early window exists so real fast games can surface sooner,
+    # but an UNDER must survive the full 3-snapshot / ~60s analysis window.
+    # This keeps the stale-delta fix intact and avoids 30s low-scoring slices
+    # turning into premature ТМ bets.
+    if direction == "under" and str(readiness.get("mode") or "") != "strict":
+        return None
+
     if not (1.45 <= odd <= 3.25):
         return None
     if edge < 0.055 or model_p < 0.56:

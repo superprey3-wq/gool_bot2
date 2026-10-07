@@ -468,6 +468,9 @@ def _runtime_live_audit_html(
             f"<div>Пик за цикл: FS <b>{peak('flashscore_live')}</b> → Brain <b>{peak('live_brain_candidates')}</b> "
             f"→ 1xBet <b>{peak('xbet_live')}</b> → mapped <b>{peak('mapped')}</b> "
             f"→ decoded <b>{peak('decoded')}</b> → signals <b>{peak('detected')}</b></div>"
+            f"<div>Отсев после декода: model/price <b>{peak('pricing_rejected')}</b> · "
+            f"1xBet move <b>{peak('steam_blocked')}</b> · Matchbook <b>{peak('matchbook_blocked')}</b> "
+            f"· duplicate <b>{peak('duplicate_filtered')}</b></div>"
             f"<div>Отправленные LIVE-направления: ТБ <b>{directions['over']}</b> · ТМ <b>{directions['under']}</b></div>"
             f"<div>Причины WAIT (наблюдения): {wait_text}</div>{alert}</div>"
         )

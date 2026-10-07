@@ -521,3 +521,23 @@ def test_current_quarter_signal_still_waits_inside_final_35_seconds():
         ),
     )
     assert signal is None
+
+
+def test_stale_tiny_recent_delta_does_not_confirm_under():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(8, 8), recent_poss=0.20, recent_score=0.0, payload=payload)
+    brain["elapsed_seconds"] = 300.0
+    brain["recent_possessions"] = 0.20
+    brain["recent_activity_available"] = False
+
+    signal = live_signal(
+        brain,
+        _lane(score=(8, 8), elapsed=300, line=39.5, market_over=0.50),
+    )
+
+    assert signal is None

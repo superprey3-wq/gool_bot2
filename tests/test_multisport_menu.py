@@ -1207,7 +1207,7 @@ def test_super10_interactive_text_shows_readiness_and_sent_ticket(tmp_path: Path
     assert "31.50" in archive
 
 
-def test_in_game_hides_legacy_basketball_full_match_live_rows(tmp_path: Path, monkeypatch):
+def test_in_game_keeps_already_issued_basketball_live_rows_visible(tmp_path: Path, monkeypatch):
     import gool_bot2.multisport_menu as menu
 
     state = tmp_path / "state.json"
@@ -1301,9 +1301,9 @@ def test_in_game_hides_legacy_basketball_full_match_live_rows(tmp_path: Path, mo
     text = "\n".join(menu.multisport_in_game_sections())
 
     assert "4-я четверть: ТМ 42.5 @ 1.90" in text
-    assert "ТМ 155.5 @ 1.88" not in text
-    assert "ИТМ1 84.5 @ 1.81" not in text
-    assert "ставок: <b>1</b>" in text
+    assert "ТМ 155.5 @ 1.88" in text
+    assert "ИТМ1 84.5 @ 1.81" in text
+    assert "ставок: <b>3</b>" in text
 
 
 def test_in_game_keeps_started_basketball_prematch_full_match_pick(tmp_path: Path, monkeypatch):

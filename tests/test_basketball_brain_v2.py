@@ -291,7 +291,9 @@ def test_cumulative_box_score_is_not_treated_as_current_quarter_possessions():
     )
     assert signal is not None
     assert signal["direction"] == "under"
-    assert signal["possession_source"] == "flashscore_recent_delta"
+    # 1.3 possessions/min without >=2 observed possessions is not enough to
+    # trust Flashscore's bursty possession delta; use points/clock instead.
+    assert signal["possession_source"] == "points_clock_fallback"
     assert signal["model_probability"] < 0.97
     assert signal["probability_reliability"] < 0.90
 

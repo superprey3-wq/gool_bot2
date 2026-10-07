@@ -944,6 +944,14 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_p, market_p, odd = max(choices, key=lambda x: x[0])
 
+    # UNDER needs sustained evidence. The activity-aware early window was added
+    # to make LIVE responsive again, but 2 snapshots/~30s is too fragile for an
+    # under: one quiet possession burst can look slow before scoring accelerates.
+    # Keep early readiness for OVER; require the full 3-snapshot/~60s window for
+    # every UNDER direction.
+    if direction == "under" and str(readiness.get("mode") or "") != "strict":
+        return None
+
     if not (1.45 <= odd <= 3.25):
         return None
     if edge < 0.055 or model_p < 0.56:
@@ -1058,6 +1066,20 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             else _env_float("GOOL_BASKETBALL_LIVE_TEAM_HISTORY_EDGE", 4.5)
         )
     )
+
+    # Historical Q3/Q4 slowdown is useful, but it must not overrule strong live
+    # counter-evidence for an UNDER. If the current quarter or recent scoring is
+    # already running above the league/history prior, history alone cannot
+    # confirm a full-match/team-total UNDER; live pace/efficiency must agree.
+    if direction == "under" and full_market and historical_confirmation and not directional_confirmation:
+        expected_score_rate = prior_total / max(1.0, duration / 60.0)
+        overall_score_rate = current / max(0.75, elapsed / 60.0)
+        recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+        if (
+            overall_score_rate >= expected_score_rate * 1.03
+            or recent_score_rate >= expected_score_rate * 1.08
+        ):
+            historical_confirmation = False
     if historical_confirmation:
         agreement += 1
     if not directional_confirmation and not historical_confirmation:

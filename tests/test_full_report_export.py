@@ -226,6 +226,100 @@ def test_daily_report_contains_only_requested_day_with_singles_parlays_results_a
     assert "Диагностика" in text
 
 
+def test_daily_report_includes_multisport_live_funnel_and_wait_reasons(tmp_path: Path):
+    football = tmp_path / "football.json"
+    multisport = tmp_path / "multisport.json"
+    super10 = tmp_path / "super10.json"
+    history = tmp_path / "gool_multisport_history.jsonl"
+    _write(football, [])
+    _write(multisport, [
+        {
+            "entry_id": "basket-live-under",
+            "created_at": "2026-10-06T20:10:00+00:00",
+            "telegram_sent": True,
+            "sport": "basketball",
+            "phase": "LIVE",
+            "home": "A",
+            "away": "B",
+            "selection": "3-я четверть: ТМ 54.5",
+            "direction": "under",
+            "odd": 1.80,
+            "result": "pending",
+        }
+    ])
+    _write(super10, [])
+    states = [
+        {
+            "captured_at": "2026-10-06T20:00:00+00:00",
+            "sports": {
+                "basketball": {
+                    "flashscore_live": 1,
+                    "live_brain_candidates": 0,
+                    "xbet_live": 0,
+                    "mapped": 0,
+                    "decoded": 0,
+                    "detected": 0,
+                    "flashscore_live_matches": [
+                        {"flashscore_event_id": "B1", "home": "A", "away": "B"}
+                    ],
+                    "flashscore_analysis_matches": [
+                        {
+                            "flashscore_event_id": "B1",
+                            "brain_state": "WAIT",
+                            "history_points": 2,
+                            "recent_window_seconds": 40,
+                            "break_transition": False,
+                            "live_game_stats": {"current_segment_available": False},
+                        }
+                    ],
+                },
+                "hockey": {
+                    "flashscore_live": 1,
+                    "live_brain_candidates": 1,
+                    "xbet_live": 5,
+                    "mapped": 1,
+                    "decoded": 1,
+                    "detected": 1,
+                    "flashscore_live_matches": [
+                        {"flashscore_event_id": "H1", "home": "C", "away": "D"}
+                    ],
+                    "flashscore_analysis_matches": [
+                        {
+                            "flashscore_event_id": "H1",
+                            "brain_state": "PASS",
+                            "history_points": 4,
+                            "recent_window_seconds": 80,
+                            "break_transition": False,
+                            "live_game_stats": {"current_segment_available": True},
+                        }
+                    ],
+                },
+            },
+        }
+    ]
+    history.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in states) + "\n", encoding="utf-8")
+
+    _filename, payload, _caption = build_full_report(
+        football_path=football,
+        multisport_path=multisport,
+        super10_history_path=super10,
+        multisport_history_path=history,
+        now=datetime(2026, 10, 6, 20, 30, tzinfo=timezone.utc),
+    )
+    text = payload.decode("utf-8")
+
+    assert "LIVE funnel · хоккей / баскетбол" in text
+    assert "BASKETBALL LIVE funnel" in text
+    assert "FS уник.: <b>1</b>" in text
+    assert "Brain кандидаты уник.: <b>0</b>" in text
+    assert "нет статистики текущего сегмента: <b>1</b>" in text
+    assert "Все увиденные LIVE-матчи были отсечены до запроса 1xBet" in text
+    assert "Отправленные LIVE-направления: ТБ <b>0</b> · ТМ <b>1</b>" in text
+    assert "HOCKEY LIVE funnel" in text
+    assert "Brain кандидаты уник.: <b>1</b>" in text
+    assert "1xBet <b>5</b> → mapped <b>1</b> → decoded <b>1</b> → signals <b>1</b>" in text
+
+
 def test_full_report_handles_empty_files(tmp_path: Path):
     football = tmp_path / "football.json"
     multisport = tmp_path / "multisport.json"

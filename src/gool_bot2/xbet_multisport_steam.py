@@ -1715,13 +1715,46 @@ class MultiSportSteamWorker:
         except FileNotFoundError:
             return
         restored = 0
+        fs_restored = 0
+        restore_now = time.time()
         for raw in data.splitlines():
             try:
                 state = json.loads(raw.decode("utf-8"))
             except Exception:
                 continue
+            captured_ts = 0.0
+            try:
+                captured = datetime.fromisoformat(str(state.get("captured_at") or "").replace("Z", "+00:00"))
+                if captured.tzinfo is None:
+                    captured = captured.replace(tzinfo=timezone.utc)
+                captured_ts = captured.timestamp()
+            except Exception:
+                captured_ts = 0.0
             for key, cfg in SPORTS.items():
                 sport_state = ((state.get("sports") or {}).get(key) or {})
+                if captured_ts > 0.0 and restore_now - captured_ts <= 185.0:
+                    for analysis in (sport_state.get("flashscore_analysis_matches") or []):
+                        if not isinstance(analysis, dict):
+                            continue
+                        event_id = str(analysis.get("flashscore_event_id") or "").strip()
+                        scope = str(analysis.get("scope") or "").strip()
+                        score = list(analysis.get("current_segment_score") or [])
+                        if not event_id or not scope or len(score) < 2:
+                            continue
+                        try:
+                            snapshot = {
+                                "ts": captured_ts,
+                                "scope": scope,
+                                "score": [int(score[0]), int(score[1])],
+                                "live_game_stats": dict(analysis.get("live_game_stats") or {}),
+                            }
+                        except (TypeError, ValueError, IndexError):
+                            continue
+                        history_key = f"{cfg.key}:{event_id}:{scope}"
+                        history = self._fs_brain_history[history_key]
+                        if not history or abs(float(history[-1].get("ts") or 0.0) - captured_ts) > 0.5:
+                            history.append(snapshot)
+                            fs_restored += 1
                 for row in (sport_state.get("matches") or []):
                     if not isinstance(row, dict) or not row.get("event_id") or row.get("ts") is None:
                         continue
@@ -1751,8 +1784,11 @@ class MultiSportSteamWorker:
                     else:
                         self._append_prematch_history(row, cfg)
                         restored += 1
-        if restored:
-            print(f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored}", flush=True)
+        if restored or fs_restored:
+            print(
+                f"GOOL_MULTISPORT_MEMORY restored_snapshots={restored} fs_brain_snapshots={fs_restored}",
+                flush=True,
+            )
 
     def _flashscore_today(self, cfg: SportConfig) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
@@ -4015,11 +4051,20 @@ class MultiSportSteamWorker:
             "remaining_seconds": signal.get("remaining_seconds"),
             "overall_rate_per_min": signal.get("overall_rate_per_min"),
             "recent_rate_per_min": signal.get("recent_rate_per_min"),
+            "expected_shots_per_min": signal.get("expected_shots_per_min"),
+            "fast_shot_rate": signal.get("fast_shot_rate"),
+            "slow_shot_rate": signal.get("slow_shot_rate"),
             "recent_blocked_rate_per_min": signal.get("recent_blocked_rate_per_min"),
             "recent_window_seconds": signal.get("recent_window_seconds"),
             "recent_penalty_delta": signal.get("recent_penalty_delta"),
             "recent_pp_goal_delta": signal.get("recent_pp_goal_delta"),
             "market_confirmed": signal.get("market_confirmed"),
+            "directional_confirmation": signal.get("directional_confirmation"),
+            "flashscore_brain_score": signal.get("flashscore_brain_score"),
+            "flashscore_brain_state": signal.get("flashscore_brain_state"),
+            "flashscore_brain_reason": signal.get("flashscore_brain_reason"),
+            "projection_clock_source": signal.get("projection_clock_source"),
+            "segment_score_source": signal.get("segment_score_source"),
             "live_game_stats": row.get("live_game_stats") or {},
             "hockey_pressure": signal.get("hockey_pressure") or {},
             "mapping_score": float(row.get("flashscore_match_score") or 0.0),
@@ -4746,6 +4791,7 @@ class MultiSportSteamWorker:
         }
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
+        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -4802,6 +4848,7 @@ class MultiSportSteamWorker:
                     )
                     signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
                     if signal is None:
+                        pricing_rejected += 1
                         continue
                     if market_steam is not None:
                         same_direction = str(market_steam.get("direction") or "") == str(signal.get("direction") or "")
@@ -4831,6 +4878,7 @@ class MultiSportSteamWorker:
                             and float(market_steam.get("strength") or 0.0) >= 82.0
                             and float(signal.get("strength") or 0.0) < 84.0
                         ):
+                            steam_blocked += 1
                             continue
 
                     # Matchbook contributes actual matched-volume flow. It never
@@ -4853,6 +4901,7 @@ class MultiSportSteamWorker:
                         if matchbook_blocked:
                             # Strong, genuinely matched money moving the opposite
                             # way is a WAIT. Do not automatically flip direction.
+                            matchbook_blocked_count += 1
                             continue
                     else:
                         signal = {
@@ -4878,6 +4927,8 @@ class MultiSportSteamWorker:
                     if recorded:
                         detected += 1
                         signals.append(signal)
+                    else:
+                        duplicate_filtered += 1
                     if sent:
                         delivered += 1
                 if signals:
@@ -4938,6 +4989,10 @@ class MultiSportSteamWorker:
             "detected": detected,
             "delivered": delivered,
             "policy_blocked": policy_blocked,
+            "pricing_rejected": pricing_rejected,
+            "steam_blocked": steam_blocked,
+            "matchbook_blocked": matchbook_blocked_count,
+            "duplicate_filtered": duplicate_filtered,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],
@@ -5026,6 +5081,8 @@ class MultiSportSteamWorker:
                 f"GOOL_{key.upper()} fs={stats['flashscore_live']} brain_cand={stats.get('live_brain_candidates',0)} "
                 f"xbet={stats['xbet_live']} mapped={stats['mapped']} "
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
+                f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
+                f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "
                 f"delivered={stats['delivered'] + stats['prematch_delivered']} settled={stats['settled']}",

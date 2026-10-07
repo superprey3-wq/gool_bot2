@@ -3949,6 +3949,36 @@ class MultiSportSteamWorker:
                 return f"basketball_{scope_key.casefold()}_total"
         return f"{scope_key}:{family_key}"
 
+    def _select_basketball_live_cycle_primary(
+        self,
+        pending: list[tuple[dict[str, Any], dict[str, Any]]],
+    ) -> tuple[tuple[dict[str, Any], dict[str, Any]] | None, int]:
+        """Pick one strongest new basketball LIVE signal for this match/cycle."""
+        ranked = sorted(
+            pending,
+            key=lambda item: (
+                float(item[1].get("strength") or 0.0),
+                abs(float(item[1].get("edge") or 0.0)),
+                float(item[1].get("model_probability") or 0.0),
+                1 if str(item[0].get("scope") or "").startswith("QUARTER_") else 0,
+            ),
+            reverse=True,
+        )
+        skipped_seen = 0
+        for candidate_row, candidate_signal in ranked:
+            if self._already_seen(
+                "basketball",
+                str(candidate_row.get("event_id") or ""),
+                "LIVE",
+                str(candidate_row.get("scope") or SCOPE_FULL),
+                str(candidate_row.get("market_family") or "match_total"),
+                str(candidate_row.get("flashscore_event_id") or ""),
+            ):
+                skipped_seen += 1
+                continue
+            return (candidate_row, candidate_signal), skipped_seen
+        return None, skipped_seen
+
     def _already_seen(
         self,
         sport: str,
@@ -5125,29 +5155,12 @@ class MultiSportSteamWorker:
                 # A later quarter/state can still produce another signal.
                 selected_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 if cfg.key == "basketball":
-                    ranked_live_signals = sorted(
-                        pending_live_signals,
-                        key=lambda item: (
-                            float(item[1].get("strength") or 0.0),
-                            abs(float(item[1].get("edge") or 0.0)),
-                            float(item[1].get("model_probability") or 0.0),
-                            1 if str(item[0].get("scope") or "").startswith("QUARTER_") else 0,
-                        ),
-                        reverse=True,
+                    primary_live, seen_skips = self._select_basketball_live_cycle_primary(
+                        pending_live_signals
                     )
-                    for candidate_row, candidate_signal in ranked_live_signals:
-                        if self._already_seen(
-                            cfg.key,
-                            str(candidate_row.get("event_id") or ""),
-                            "LIVE",
-                            str(candidate_row.get("scope") or SCOPE_FULL),
-                            str(candidate_row.get("market_family") or "match_total"),
-                            str(candidate_row.get("flashscore_event_id") or ""),
-                        ):
-                            duplicate_filtered += 1
-                            continue
-                        selected_live_signals = [(candidate_row, candidate_signal)]
-                        break
+                    duplicate_filtered += seen_skips
+                    if primary_live is not None:
+                        selected_live_signals = [primary_live]
                 else:
                     selected_live_signals = pending_live_signals
 

@@ -1973,6 +1973,7 @@ class MultiSportSteamWorker:
         score_delta = max(0, current_total - first_total)
         recent_score_rate = score_delta * 60.0 / age if len(recent) >= 2 else 0.0
         recent_shot_rate = 0.0
+        shot_rate_available = False
         recent_blocked_rate = 0.0
         recent_penalty_delta = 0.0
         recent_pp_goal_delta = 0.0
@@ -1985,7 +1986,12 @@ class MultiSportSteamWorker:
             first_stats = dict((first.get("live_game_stats") or {}).get("segment_stats") or {})
             first_shots = list(first_stats.get("shots_on_goal") or first_stats.get("shots") or [])
             first_shot_total = sum(max(0.0, float(v)) for v in first_shots[:2]) if len(first_shots) >= 2 else shot_total
-            recent_shot_rate = max(0.0, shot_total - first_shot_total) * 60.0 / age if len(recent) >= 2 else 0.0
+            shot_rate_available = bool(len(shots) >= 2 and len(first_shots) >= 2 and len(recent) >= 2)
+            recent_shot_rate = (
+                max(0.0, shot_total - first_shot_total) * 60.0 / age
+                if shot_rate_available
+                else 0.0
+            )
             pp = list(stats.get("powerplay_goals") or stats.get("power_play_goals") or [])
             pp_total = sum(max(0.0, float(v)) for v in pp[:2]) if len(pp) >= 2 else 0.0
             penalties = list(stats.get("penalties_2m") or stats.get("penalties") or [])
@@ -2195,6 +2201,7 @@ class MultiSportSteamWorker:
             "recent_score_rate": round(recent_score_rate, 3),
             "recent_possessions_per_min": round(recent_possessions_per_min, 3),
             "recent_shot_rate": round(recent_shot_rate, 3),
+            "shot_rate_available": bool(shot_rate_available),
             "recent_blocked_rate": round(recent_blocked_rate, 3),
             "recent_penalty_delta": round(recent_penalty_delta, 3),
             "recent_pp_goal_delta": round(recent_pp_goal_delta, 3),

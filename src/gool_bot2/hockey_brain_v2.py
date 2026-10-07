@@ -455,7 +455,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     base_remaining = period_lambda * remaining / 1200.0
 
     recent_shot_rate = max(0.0, _num(brain.get("recent_shot_rate"), 0.0) or 0.0)
-    shot_rate_available = bool(brain.get("shot_rate_available"))
+    shot_rate_flag = brain.get("shot_rate_available")
+    if shot_rate_flag is None:
+        availability_stats = dict((brain.get("live_game_stats") or {}).get("segment_stats") or {})
+        availability_shots = list(
+            availability_stats.get("shots_on_goal")
+            or availability_stats.get("shots")
+            or []
+        )
+        shot_rate_available = len(availability_shots) >= 2
+    else:
+        shot_rate_available = bool(shot_rate_flag)
     recent_blocked_rate = max(0.0, _num(brain.get("recent_blocked_rate"), 0.0) or 0.0)
     recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
     pressure_window_ready = recent_window >= min_window and shot_rate_available

@@ -3101,6 +3101,17 @@ class MultiSportSteamWorker:
                     return value
         return None
 
+    @staticmethod
+    def _usable_market_game(value: Any) -> bool:
+        if not isinstance(value, dict) or not value:
+            return False
+        # Some 1xBet LiveFeed mirrors return a non-empty shell (teams/score only)
+        # for an exact game request. Treat that as a miss so the next mirror/v3
+        # fallback can provide the actual market tree.
+        if value.get("AE") or value.get("GE") or value.get("E") or value.get("SG"):
+            return True
+        return False
+
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
         params = {
             "id": event_id,
@@ -3141,7 +3152,7 @@ class MultiSportSteamWorker:
                 timeout=max(1.0, _float_env("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", 10.0)),
             )
             value = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(value, dict):
+            if self._usable_market_game(value):
                 self._roots[cfg.key] = "https://1xbet.com/LiveFeed"
                 return value
         game_root_attempts = max(1, min(len(unique_roots), _int_env("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", len(unique_roots))))
@@ -3149,7 +3160,7 @@ class MultiSportSteamWorker:
         for root in unique_roots[:game_root_attempts]:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=game_timeout)
             value = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(value, dict):
+            if self._usable_market_game(value):
                 self._roots[cfg.key] = root
                 return value
 

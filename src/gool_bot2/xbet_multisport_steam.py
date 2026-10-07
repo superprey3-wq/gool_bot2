@@ -3524,13 +3524,13 @@ class MultiSportSteamWorker:
         event_id = str(event.get("I") or "").strip()
         game = self._game(event_id, cfg) or event
         if not _event_allowed(game):
-            return None, "market_decode"
+            return None, "market_decode:event_disallowed"
 
         fs_score_raw = list(fs.get("score") or [0, 0])
         fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
         candidates = _score_candidates(game, cfg) or _score_candidates(event, cfg)
         if not candidates:
-            return None, "market_decode"
+            return None, "market_decode:no_score"
         canonical_candidates = [
             (score[1], score[0]) if reversed_order else score
             for score in candidates
@@ -3562,7 +3562,7 @@ class MultiSportSteamWorker:
         )
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
-            return None, "market_decode"
+            return None, "market_decode:no_markets"
         xbet_scoped_scores = period_scores(game, cfg.key)
         fs_scoped_scores = _flashscore_scoped_scores(fs, cfg)
         scoped_scores = {**xbet_scoped_scores, **fs_scoped_scores}
@@ -5191,6 +5191,12 @@ class MultiSportSteamWorker:
             )
             if not (stats.get("xbet_diag") or {}).get("ok"):
                 print(f"GOOL_{key.upper()}_XBET_DIAG " + json.dumps(stats.get("xbet_diag") or {}, ensure_ascii=False, separators=(",", ":")), flush=True)
+            if stats.get("diagnostics"):
+                print(
+                    f"GOOL_{key.upper()}_DECODE_DIAG "
+                    + json.dumps(stats.get("diagnostics") or [], ensure_ascii=False, separators=(",", ":")),
+                    flush=True,
+                )
 
         global_super10 = (
             maybe_deliver_global_super10(delivery_enabled=_mode() == "active")

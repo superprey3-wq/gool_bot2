@@ -20,12 +20,12 @@ def test_hockey_live_current_period_plus_full_match_totals():
     assert not lane_phase_policy("hockey", "LIVE", lane("PERIOD_2", "home_total"), "2nd period")[0]
 
 
-def test_basket_live_current_quarter_plus_full_match_totals():
+def test_basket_live_current_quarter_total_only():
     assert live_scopes_from_period("basketball", "3rd quarter") == {"QUARTER_3"}
     assert lane_phase_policy("basketball", "LIVE", lane("QUARTER_3"), "3rd quarter")[0]
-    assert lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH"), "3rd quarter")[0]
-    assert lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH", "home_total"), "3rd quarter")[0]
-    assert lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH", "away_total"), "3rd quarter")[0]
+    assert not lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH"), "3rd quarter")[0]
+    assert not lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH", "home_total"), "3rd quarter")[0]
+    assert not lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH", "away_total"), "3rd quarter")[0]
     assert not lane_phase_policy("basketball", "LIVE", lane("FULL_MATCH", "moneyline"), "3rd quarter")[0]
     assert not lane_phase_policy("basketball", "LIVE", lane("SECOND_HALF"), "3rd quarter")[0]
     assert not lane_phase_policy("basketball", "LIVE", lane("QUARTER_4"), "3rd quarter")[0]

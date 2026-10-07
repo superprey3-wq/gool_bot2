@@ -791,7 +791,7 @@ def test_multisport_getgamezip_uses_team_sport_profile(tmp_path, monkeypatch):
     urls = []
     def fake_http(url, timeout=8.0):
         urls.append(url)
-        return {"Value": {"I": 123, "O1": "A", "O2": "B", "AE": []}}
+        return {"Value": {"I": 123, "O1": "A", "O2": "B", "AE": [{"G": 4, "ME": []}]}}
 
     monkeypatch.setattr(steam, "_sport_http_json", fake_http)
     game = worker._game("123", SPORTS["basketball"])
@@ -850,7 +850,7 @@ def test_team_sport_exact_game_profile_before_generic(tmp_path, monkeypatch):
 
     def fake_exact(url, timeout=8.0):
         exact_calls.append(url)
-        return {"Value": {"I": 4242, "O1": "Alpha", "O2": "Beta", "GE": []}}
+        return {"Value": {"I": 4242, "O1": "Alpha", "O2": "Beta", "GE": [{"G": 4, "E": []}]}}
 
     monkeypatch.setattr(steam, "_team_sport_exact_json", fake_exact)
     monkeypatch.setattr(steam, "_sport_http_json", lambda *args, **kwargs: generic_calls.append(args[0]) or None)

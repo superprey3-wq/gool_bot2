@@ -1518,7 +1518,27 @@ def _team_similarity(left: str, right: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    return SequenceMatcher(None, a, b).ratio()
+
+    base = SequenceMatcher(None, a, b).ratio()
+
+    # Basketball providers often disagree only on the mascot/full club suffix:
+    # Flashscore "Shiga" vs 1xBet "Shiga Lakestars",
+    # "Toyama" vs "Toyama Grouses", "Kyoto" vs "Kyoto Hannaryz".
+    # Treat complete token containment as a strong same-team hint without
+    # lowering the global fuzzy threshold. Final score-sync is still required
+    # before any market can be priced, so a bad name-only guess cannot become
+    # a signal by itself.
+    a_tokens = [token for token in a.split() if token]
+    b_tokens = [token for token in b.split() if token]
+    if a_tokens and b_tokens:
+        a_set, b_set = set(a_tokens), set(b_tokens)
+        shorter = a_tokens if len(a_tokens) <= len(b_tokens) else b_tokens
+        shorter_compact = "".join(shorter)
+        contained = a_set.issubset(b_set) or b_set.issubset(a_set)
+        if contained and len(shorter_compact) >= 4:
+            base = max(base, 0.86)
+
+    return base
 
 
 def parse_flashscore_events(body: str) -> list[dict[str, Any]]:
@@ -3081,6 +3101,17 @@ class MultiSportSteamWorker:
                     return value
         return None
 
+    @staticmethod
+    def _usable_market_game(value: Any) -> bool:
+        if not isinstance(value, dict) or not value:
+            return False
+        # Some 1xBet LiveFeed mirrors return a non-empty shell (teams/score only)
+        # for an exact game request. Treat that as a miss so the next mirror/v3
+        # fallback can provide the actual market tree.
+        if value.get("AE") or value.get("GE") or value.get("E") or value.get("SG"):
+            return True
+        return False
+
     def _game(self, event_id: str, cfg: SportConfig) -> dict[str, Any] | None:
         params = {
             "id": event_id,
@@ -3121,7 +3152,7 @@ class MultiSportSteamWorker:
                 timeout=max(1.0, _float_env("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", 10.0)),
             )
             value = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(value, dict):
+            if self._usable_market_game(value):
                 self._roots[cfg.key] = "https://1xbet.com/LiveFeed"
                 return value
         game_root_attempts = max(1, min(len(unique_roots), _int_env("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", len(unique_roots))))
@@ -3129,7 +3160,7 @@ class MultiSportSteamWorker:
         for root in unique_roots[:game_root_attempts]:
             payload = _sport_http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=game_timeout)
             value = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(value, dict):
+            if self._usable_market_game(value):
                 self._roots[cfg.key] = root
                 return value
 
@@ -3504,13 +3535,13 @@ class MultiSportSteamWorker:
         event_id = str(event.get("I") or "").strip()
         game = self._game(event_id, cfg) or event
         if not _event_allowed(game):
-            return None, "market_decode"
+            return None, "market_decode:event_disallowed"
 
         fs_score_raw = list(fs.get("score") or [0, 0])
         fs_score = (int(fs_score_raw[0]), int(fs_score_raw[1]))
         candidates = _score_candidates(game, cfg) or _score_candidates(event, cfg)
         if not candidates:
-            return None, "market_decode"
+            return None, "market_decode:no_score"
         canonical_candidates = [
             (score[1], score[0]) if reversed_order else score
             for score in candidates
@@ -3542,7 +3573,7 @@ class MultiSportSteamWorker:
         )
         raw_count = sum(len(item.get("raw") or []) for item in decoded.values())
         if raw_count <= 0:
-            return None, "market_decode"
+            return None, "market_decode:no_markets"
         xbet_scoped_scores = period_scores(game, cfg.key)
         fs_scoped_scores = _flashscore_scoped_scores(fs, cfg)
         scoped_scores = {**xbet_scoped_scores, **fs_scoped_scores}
@@ -4832,6 +4863,35 @@ class MultiSportSteamWorker:
             if xbet_live_prefetched is not None
             else (self._xbet_index(cfg) if fs_to_price else [])
         )
+        # Keep nearest 1xBet names for every Brain candidate. This makes a
+        # zero-signal cycle diagnosable without guessing whether the loss was
+        # Brain, naming/mapping, market decoding, or final pricing.
+        mapping_diagnostics: list[dict[str, Any]] = []
+        for fs_candidate in fs_to_price:
+            scored: list[tuple[float, float, bool, dict[str, Any]]] = []
+            for xbet_candidate in xbet_live:
+                if not _event_allowed(xbet_candidate):
+                    continue
+                quality, reversed_order, weakest = _match_quality(xbet_candidate, fs_candidate)
+                scored.append((quality, weakest, reversed_order, xbet_candidate))
+            scored.sort(key=lambda item: item[0], reverse=True)
+            mapping_diagnostics.append({
+                "flashscore_event_id": str(fs_candidate.get("flashscore_event_id") or ""),
+                "home": str(fs_candidate.get("home") or ""),
+                "away": str(fs_candidate.get("away") or ""),
+                "top": [
+                    {
+                        "home": str(item[3].get("O1") or ""),
+                        "away": str(item[3].get("O2") or ""),
+                        "event_id": str(item[3].get("I") or ""),
+                        "quality": round(float(item[0]), 4),
+                        "weakest_side": round(float(item[1]), 4),
+                        "reversed": bool(item[2]),
+                    }
+                    for item in scored[:3]
+                ],
+            })
+
         # Price only Flashscore Brain candidates; non-candidates still remain
         # visible in analysis and continue building stat history.
         mapped = map_xbet_to_flashscore(xbet_live, fs_to_price)[:max(1, _int_env("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", 120))]
@@ -5037,6 +5097,7 @@ class MultiSportSteamWorker:
             "decoded": decoded,
             "score_mismatch": mismatch,
             "market_decode_failed": failed,
+            "mapping_diagnostics": mapping_diagnostics,
             "detected": detected,
             "delivered": delivered,
             "policy_blocked": policy_blocked,
@@ -5141,6 +5202,12 @@ class MultiSportSteamWorker:
             )
             if not (stats.get("xbet_diag") or {}).get("ok"):
                 print(f"GOOL_{key.upper()}_XBET_DIAG " + json.dumps(stats.get("xbet_diag") or {}, ensure_ascii=False, separators=(",", ":")), flush=True)
+            if stats.get("diagnostics"):
+                print(
+                    f"GOOL_{key.upper()}_DECODE_DIAG "
+                    + json.dumps(stats.get("diagnostics") or [], ensure_ascii=False, separators=(",", ":")),
+                    flush=True,
+                )
 
         global_super10 = (
             maybe_deliver_global_super10(delivery_enabled=_mode() == "active")

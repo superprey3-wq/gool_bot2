@@ -10,6 +10,7 @@ from gool_bot2.xbet_multisport_steam import (
     detect_live_segment_stats,
     parse_flashscore_events,
     price_flashscore_live_candidate,
+    map_xbet_to_flashscore,
 )
 
 
@@ -869,3 +870,33 @@ def test_basketball_flashscore_stage_codes_24_and_25_map_to_q3_q4():
         },
         SPORTS["basketball"],
     ) == "QUARTER_4"
+
+
+
+def test_basketball_mapping_accepts_short_city_names_with_full_club_suffixes():
+    fs = [
+        {"flashscore_event_id": "S1", "home": "Shiga", "away": "Tokyo Sunrockers"},
+        {"flashscore_event_id": "S2", "home": "Shimane", "away": "Levanga Hokkaido"},
+        {"flashscore_event_id": "S3", "home": "Toyama", "away": "Kyoto"},
+    ]
+    xbet = [
+        {"I": "1", "O1": "Shiga Lakestars", "O2": "Tokyo Sunrockers"},
+        {"I": "2", "O1": "Shimane Susanoo Magic", "O2": "Levanga Hokkaido"},
+        {"I": "3", "O1": "Toyama Grouses", "O2": "Kyoto Hannaryz"},
+    ]
+
+    mapped = map_xbet_to_flashscore(xbet, fs)
+    assert {row[1]["flashscore_event_id"] for row in mapped} == {"S1", "S2", "S3"}
+
+
+def test_basketball_mapping_does_not_match_unrelated_short_names():
+    fs = [{"flashscore_event_id": "S1", "home": "Shiga", "away": "Tokyo Sunrockers"}]
+    xbet = [{"I": "1", "O1": "Chicago Bulls", "O2": "Boston Celtics"}]
+    assert map_xbet_to_flashscore(xbet, fs) == []
+
+
+
+def test_usable_market_game_rejects_nonempty_shell_without_market_tree():
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "O1": "A", "O2": "B", "SC": {}}) is False
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "GE": [{"G": 4}]}) is True
+    assert MultiSportSteamWorker._usable_market_game({"I": 1, "SG": [{"I": 2, "PN": "4th quarter"}]}) is True

@@ -4755,6 +4755,7 @@ class MultiSportSteamWorker:
         }
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
+        pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -4811,6 +4812,7 @@ class MultiSportSteamWorker:
                     )
                     signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
                     if signal is None:
+                        pricing_rejected += 1
                         continue
                     if market_steam is not None:
                         same_direction = str(market_steam.get("direction") or "") == str(signal.get("direction") or "")
@@ -4840,6 +4842,7 @@ class MultiSportSteamWorker:
                             and float(market_steam.get("strength") or 0.0) >= 82.0
                             and float(signal.get("strength") or 0.0) < 84.0
                         ):
+                            steam_blocked += 1
                             continue
 
                     # Matchbook contributes actual matched-volume flow. It never
@@ -4862,6 +4865,7 @@ class MultiSportSteamWorker:
                         if matchbook_blocked:
                             # Strong, genuinely matched money moving the opposite
                             # way is a WAIT. Do not automatically flip direction.
+                            matchbook_blocked_count += 1
                             continue
                     else:
                         signal = {
@@ -4887,6 +4891,8 @@ class MultiSportSteamWorker:
                     if recorded:
                         detected += 1
                         signals.append(signal)
+                    else:
+                        duplicate_filtered += 1
                     if sent:
                         delivered += 1
                 if signals:
@@ -4947,6 +4953,10 @@ class MultiSportSteamWorker:
             "detected": detected,
             "delivered": delivered,
             "policy_blocked": policy_blocked,
+            "pricing_rejected": pricing_rejected,
+            "steam_blocked": steam_blocked,
+            "matchbook_blocked": matchbook_blocked_count,
+            "duplicate_filtered": duplicate_filtered,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],

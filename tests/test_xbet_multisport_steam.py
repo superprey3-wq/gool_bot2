@@ -1529,3 +1529,81 @@ def test_basketball_live_full_projection_seen_blocks_second_full_family(tmp_path
         "match_total",
         "fs1",
     ) is False
+
+
+def test_basketball_live_cycle_selects_only_strongest_new_signal(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    base = {
+        "event_id": "xb-cycle-1",
+        "flashscore_event_id": "fs-cycle-1",
+        "phase": "LIVE",
+        "home": "Alpha",
+        "away": "Beta",
+    }
+    pending = [
+        (
+            {**base, "scope": "FULL_MATCH", "market_family": "match_total"},
+            {"strength": 79.0, "edge": 0.07, "model_probability": 0.61},
+        ),
+        (
+            {**base, "scope": "FULL_MATCH", "market_family": "home_total"},
+            {"strength": 83.0, "edge": 0.06, "model_probability": 0.62},
+        ),
+        (
+            {**base, "scope": "QUARTER_3", "market_family": "match_total"},
+            {"strength": 81.0, "edge": 0.08, "model_probability": 0.63},
+        ),
+    ]
+
+    primary, seen_skips = worker._select_basketball_live_cycle_primary(pending)
+
+    assert seen_skips == 0
+    assert primary is not None
+    row, signal = primary
+    assert row["market_family"] == "home_total"
+    assert row["scope"] == "FULL_MATCH"
+    assert signal["strength"] == 83.0
+
+
+def test_basketball_live_cycle_skips_seen_full_projection_and_can_take_quarter(tmp_path):
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.journal_path.write_text(
+        json.dumps([
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb-cycle-2",
+                "flashscore_event_id": "fs-cycle-2",
+                "scope": "FULL_MATCH",
+                "market_family": "match_total",
+            }
+        ]),
+        "utf-8",
+    )
+    base = {
+        "event_id": "xb-cycle-2",
+        "flashscore_event_id": "fs-cycle-2",
+        "phase": "LIVE",
+        "home": "Alpha",
+        "away": "Beta",
+    }
+    pending = [
+        (
+            {**base, "scope": "FULL_MATCH", "market_family": "home_total"},
+            {"strength": 90.0, "edge": 0.10, "model_probability": 0.66},
+        ),
+        (
+            {**base, "scope": "QUARTER_4", "market_family": "match_total"},
+            {"strength": 82.0, "edge": 0.08, "model_probability": 0.63},
+        ),
+    ]
+
+    primary, seen_skips = worker._select_basketball_live_cycle_primary(pending)
+
+    assert seen_skips == 1
+    assert primary is not None
+    row, _signal = primary
+    assert row["scope"] == "QUARTER_4"

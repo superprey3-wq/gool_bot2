@@ -291,7 +291,9 @@ def test_cumulative_box_score_is_not_treated_as_current_quarter_possessions():
     )
     assert signal is not None
     assert signal["direction"] == "under"
-    assert signal["possession_source"] == "flashscore_recent_delta"
+    # 1.3 possessions/min without >=2 observed possessions is not enough to
+    # trust Flashscore's bursty possession delta; use points/clock instead.
+    assert signal["possession_source"] == "points_clock_fallback"
     assert signal["model_probability"] < 0.97
     assert signal["probability_reliability"] < 0.90
 
@@ -569,3 +571,25 @@ def test_stale_tiny_recent_delta_does_not_confirm_under():
     )
 
     assert signal is None
+
+
+def test_tiny_possession_delta_with_real_scoring_uses_points_clock_not_slow_possessions():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(13, 12), recent_poss=0.45, recent_score=5.2, payload=payload)
+    brain["elapsed_seconds"] = 300.0
+    brain["recent_possessions"] = 1.0
+    brain["recent_activity_available"] = True
+
+    signal = live_signal(
+        brain,
+        _lane(score=(13, 12), elapsed=300, line=39.5, market_over=0.50),
+    )
+
+    assert signal is not None
+    assert signal["direction"] == "over"
+    assert signal["possession_source"] == "points_clock_fallback"

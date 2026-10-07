@@ -840,11 +840,11 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             recent_activity_available = bool(
                 recent_score_rate > 0 or recent_possessions >= min_recent_possessions
             )
-        if recent_poss_rate > 0 and recent_activity_available:
-            # Flashscore updates basketball score/stats in bursts. A tiny
-            # fractional possession delta with zero scoring is often provider
-            # staleness, not a genuinely slow game. Trust it only when either
-            # the score moved or enough possessions were actually observed.
+        if recent_poss_rate > 0 and recent_possessions >= min_recent_possessions:
+            # Flashscore possession stats refresh in bursts. Do not turn a
+            # fractional 0.x/1.x possession delta into a slow-tempo signal just
+            # because the scoreboard changed. Until enough actual possessions
+            # are observed, fall through to the points/clock model below.
             poss_per_min = _clamp(
                 recent_poss_rate,
                 prior_poss_per_min * 0.60,
@@ -856,11 +856,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
                 20.0,
                 _num(brain.get("recent_window_seconds"), 60.0) or 60.0,
             )
-            observed_poss = (
-                recent_possessions
-                if recent_possessions > 0
-                else max(1.0, recent_poss_rate * recent_window / 60.0)
-            )
+            observed_poss = recent_possessions
             possession_source = "flashscore_recent_delta"
             data_quality = 0.65
 

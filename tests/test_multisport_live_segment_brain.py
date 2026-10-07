@@ -359,7 +359,9 @@ def test_flashscore_brain_candidate_is_priced_without_waiting_for_odds_history(m
         "history_points": 3,
         "recent_window_seconds": 60.0,
         "recent_possessions_per_min": 2.4,
+        "recent_possessions": 2.4,
         "recent_score_rate": 5.0,
+        "recent_activity_available": True,
         "live_game_stats": {
             "current_segment_available": True,
             "stats_mode": "cumulative_through_current_segment",

@@ -2237,11 +2237,22 @@ class MultiSportSteamWorker:
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_LIVE_FS_BRAIN_WORKERS", 6)))
         out: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(self._flashscore_live_brain, row, cfg) for row in rows]
+            futures = {
+                pool.submit(self._flashscore_live_brain, row, cfg): row
+                for row in rows
+            }
             for future in as_completed(futures):
+                source = futures[future]
                 try:
                     item = future.result(timeout=18)
-                except Exception:
+                except Exception as exc:
+                    print(
+                        f"GOOL_{cfg.key.upper()}_FS_BRAIN_ERROR "
+                        f"event={source.get('flashscore_event_id')} "
+                        f"match={source.get('home')}--{source.get('away')} "
+                        f"{type(exc).__name__}:{exc}",
+                        flush=True,
+                    )
                     continue
                 if item:
                     out.append(item)

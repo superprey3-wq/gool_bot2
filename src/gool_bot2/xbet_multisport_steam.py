@@ -2037,7 +2037,9 @@ class MultiSportSteamWorker:
         recent_blocked_rate = 0.0
         recent_penalty_delta = 0.0
         recent_pp_goal_delta = 0.0
+        recent_possessions = 0.0
         recent_possessions_per_min = 0.0
+        recent_activity_available = False
         projection: float | None = None
 
         if cfg.key == "hockey":
@@ -2138,8 +2140,16 @@ class MultiSportSteamWorker:
                 stats_payload,
                 age,
             )
+            recent_possessions = float(possession_metrics.get("recent_possessions") or 0.0)
             recent_possessions_per_min = float(
                 possession_metrics.get("recent_possessions_per_min") or 0.0
+            )
+            min_recent_possessions = max(
+                1.0,
+                _float_env("GOOL_BASKETBALL_LIVE_MIN_RECENT_POSSESSIONS", 2.0),
+            )
+            recent_activity_available = bool(
+                score_delta > 0 or recent_possessions >= min_recent_possessions
             )
 
         if not stats_payload.get("current_segment_available"):
@@ -2152,14 +2162,22 @@ class MultiSportSteamWorker:
         # mark slow/fast games as interesting before bookmaker pricing.
         if len(recent) >= 2 and age >= 25.0:
             if cfg.key == "basketball":
-                if recent_score_rate <= _float_env("GOOL_BASKETBALL_LIVE_SLOW_PACE_PER_MIN", 2.2):
+                if (
+                    recent_activity_available
+                    and recent_score_rate <= _float_env("GOOL_BASKETBALL_LIVE_SLOW_PACE_PER_MIN", 2.2)
+                ):
                     rating = max(rating, 58.0)
                     direction_hint = "under"
                     reason += f" · свежий темп {recent_score_rate:.1f}/мин выглядит низким"
-                elif recent_score_rate >= _float_env("GOOL_BASKETBALL_LIVE_FAST_PACE_PER_MIN", 5.8):
+                elif (
+                    recent_activity_available
+                    and recent_score_rate >= _float_env("GOOL_BASKETBALL_LIVE_FAST_PACE_PER_MIN", 5.8)
+                ):
                     rating = max(rating, 68.0)
                     direction_hint = "over"
                     reason += f" · свежий темп {recent_score_rate:.1f}/мин выглядит высоким"
+                elif not recent_activity_available:
+                    reason += " · delta Flashscore не обновилась: направление не подтверждаем"
             else:
                 first_stats = dict((first.get("live_game_stats") or {}).get("segment_stats") or {})
                 first_shots = list(first_stats.get("shots_on_goal") or first_stats.get("shots") or [])
@@ -2259,7 +2277,9 @@ class MultiSportSteamWorker:
             "history_points": len(recent),
             "recent_window_seconds": round(age, 1),
             "recent_score_rate": round(recent_score_rate, 3),
+            "recent_possessions": round(recent_possessions, 3),
             "recent_possessions_per_min": round(recent_possessions_per_min, 3),
+            "recent_activity_available": bool(recent_activity_available),
             "recent_shot_rate": round(recent_shot_rate, 3),
             "shot_rate_available": bool(shot_rate_available),
             "recent_blocked_rate": round(recent_blocked_rate, 3),

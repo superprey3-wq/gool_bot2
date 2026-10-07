@@ -3936,6 +3936,33 @@ class MultiSportSteamWorker:
             save_journal(self.journal_path, rows)
         return changed
 
+    def _live_sent_count(
+        self,
+        sport: str,
+        event_id: str,
+        flashscore_event_id: str = "",
+    ) -> int:
+        """Count already delivered LIVE picks for one canonical match."""
+        wanted_identity = str(flashscore_event_id or event_id or "")
+        if not wanted_identity:
+            return 0
+        seen: set[tuple[str, str]] = set()
+        for row in load_journal(self.journal_path):
+            row_phase = str(
+                row.get("phase")
+                or ("PREMATCH" if row.get("origin") == "multisport_prematch" else "LIVE")
+            ).upper()
+            if row_phase != "LIVE" or str(row.get("sport") or "") != sport:
+                continue
+            row_identity = str(row.get("flashscore_event_id") or row.get("event_id") or "")
+            if row_identity != wanted_identity:
+                continue
+            seen.add((
+                str(row.get("scope") or SCOPE_FULL),
+                str(row.get("market_family") or "match_total"),
+            ))
+        return len(seen)
+
     def _already_seen(
         self,
         sport: str,
@@ -4966,6 +4993,7 @@ class MultiSportSteamWorker:
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
         pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
+        live_rank_capped = 0
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -4986,6 +5014,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                eligible_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
@@ -5097,6 +5126,50 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
+                    eligible_signals.append((lane_row, signal))
+
+                # Basketball LIVE: analyse every eligible market, but publish at
+                # most the two strongest picks for this match over its lifetime.
+                # This prevents one fixture from flooding Telegram with quarter
+                # total + full total + team totals while preserving the full
+                # model comparison internally.
+                eligible_signals.sort(
+                    key=lambda item: (
+                        float(item[1].get("strength") or 0.0),
+                        float(item[1].get("edge") or 0.0),
+                        float(item[1].get("model_probability") or item[1].get("fair_probability") or 0.0),
+                    ),
+                    reverse=True,
+                )
+                selected_signals = eligible_signals
+                if cfg.key == "basketball":
+                    limit = max(
+                        1,
+                        min(4, _int_env("GOOL_BASKETBALL_LIVE_MAX_SIGNALS_PER_MATCH", 2)),
+                    )
+                    already_sent = self._live_sent_count(
+                        cfg.key,
+                        str(row.get("event_id") or ""),
+                        str(row.get("flashscore_event_id") or ""),
+                    )
+                    slots = max(0, limit - already_sent)
+                    unseen: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                    for lane_row, signal in eligible_signals:
+                        if self._already_seen(
+                            cfg.key,
+                            str(lane_row.get("event_id") or row.get("event_id") or ""),
+                            "LIVE",
+                            str(lane_row.get("scope") or SCOPE_FULL),
+                            str(lane_row.get("market_family") or "match_total"),
+                            str(lane_row.get("flashscore_event_id") or row.get("flashscore_event_id") or ""),
+                        ):
+                            duplicate_filtered += 1
+                            continue
+                        unseen.append((lane_row, signal))
+                    selected_signals = unseen[:slots]
+                    live_rank_capped += max(0, len(unseen) - len(selected_signals))
+
+                for lane_row, signal in selected_signals:
                     recorded, sent = self._record_signal(lane_row, signal, cfg)
                     if recorded:
                         detected += 1
@@ -5168,6 +5241,7 @@ class MultiSportSteamWorker:
             "steam_blocked": steam_blocked,
             "matchbook_blocked": matchbook_blocked_count,
             "duplicate_filtered": duplicate_filtered,
+            "live_rank_capped": live_rank_capped,
             "diagnostics": diagnostics,
             "xbet_diag": self._index_diag.get(cfg.key) or {},
             "matches": latest[:80],
@@ -5258,6 +5332,7 @@ class MultiSportSteamWorker:
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
                 f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
                 f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
+                f"top2_cap={stats.get('live_rank_capped',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "
                 f"delivered={stats['delivered'] + stats['prematch_delivered']} settled={stats['settled']}",

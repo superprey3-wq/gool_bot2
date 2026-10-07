@@ -329,9 +329,9 @@ def test_basketball_halftime_q3_label_without_q3_score_part_is_still_break(tmp_p
         "league": "ISRAEL: League Cup",
         "score": [33, 40],
         "score_parts": [[19, 27], [14, 13]],
-        # AC already maps to Q3, but there is still no Q3 score-part row and
-        # the full score is exactly Q1+Q2.
-        "status_code": "23",
+        # Current Flashscore basketball feed uses AC=24 for Q3. There is
+        # still no Q3 score-part row and the full score is exactly Q1+Q2.
+        "status_code": "24",
         "period_start_ts": __import__("time").time() - 600,
     }
 
@@ -587,7 +587,9 @@ def test_flashscore_derives_new_segment_score_when_score_parts_lag():
 
     basket = _flashscore_scoped_scores(
         {
-            "status_code": "23",
+            # Current basketball stage-code feed: AC=24 means Q3. The Q3
+            # score-part can lag one snapshot, so derive it from full score.
+            "status_code": "24",
             "league": "Chile",
             "score": [45, 41],
             "score_parts": [[20, 18], [22, 19]],
@@ -811,3 +813,59 @@ def test_basketball_direct_quarter_activity_overrides_false_break_heuristic(tmp_
     assert result["scope"] == "QUARTER_2"
     assert result["break_transition"] is False
     assert result["elapsed_seconds"] > 0
+
+
+def test_basketball_flashscore_ac22_is_q1_stage_code_not_minute_22(tmp_path, monkeypatch):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_flashscore_live_stats",
+        lambda fs, cfg, current_period="": {
+            "source": "flashscore",
+            "scope": current_period,
+            "available": True,
+            "current_segment_available": True,
+            "stats_mode": "direct_segment",
+            "segment_stats": {
+                "field_goals": [3.0, 2.0],
+                "rebounds": [2.0, 1.0],
+            },
+            "segment_attempts": {"field_goals": [7.0, 6.0]},
+        },
+    )
+    fs = {
+        "flashscore_event_id": "BAC22001",
+        "home": "Ibaraki Robots",
+        "away": "Hiroshima D.",
+        "league": "JAPAN: B.League Premier",
+        "score": [7, 6],
+        "score_parts": [[7, 6]],
+        "status_code": "22",
+        "period_start_ts": __import__("time").time() - 180,
+    }
+
+    result = worker._flashscore_live_brain(fs, SPORTS["basketball"])
+
+    assert result["scope"] == "QUARTER_1"
+    assert result["period"] == "1-я четверть"
+    assert result["break_transition"] is False
+    assert result["current_segment_score"] == [7, 6]
+
+
+def test_basketball_flashscore_stage_codes_24_and_25_map_to_q3_q4():
+    assert _infer_flashscore_scope(
+        {
+            "league": "PHILIPPINES: PBA",
+            "status_code": "24",
+            "score_parts": [[20, 18], [18, 20], [7, 4]],
+        },
+        SPORTS["basketball"],
+    ) == "QUARTER_3"
+    assert _infer_flashscore_scope(
+        {
+            "league": "AUSTRALIA: NBL",
+            "status_code": "25",
+            "score_parts": [[21, 31], [17, 25], [21, 20], [24, 12]],
+        },
+        SPORTS["basketball"],
+    ) == "QUARTER_4"

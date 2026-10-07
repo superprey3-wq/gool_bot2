@@ -301,3 +301,32 @@ def test_production_in_game_adapter_combines_football_and_multisport(monkeypatch
     )
 
     assert journal_in_game.production_in_game_sections() == ["FOOTBALL LIVE", "BASKETBALL LIVE"]
+
+
+def test_common_in_game_adapter_contains_multisport_only_once(monkeypatch, tmp_path):
+    journal = tmp_path / "journal.json"
+    analysis = tmp_path / "analysis.jsonl"
+    journal.write_text("[]", "utf-8")
+    analysis.write_text("", "utf-8")
+
+    monkeypatch.setattr("gool_bot2.multi_menu.journal_path", lambda: journal)
+    monkeypatch.setattr("gool_bot2.multi_menu.analysis_path", lambda: analysis)
+    monkeypatch.setattr(
+        "gool_bot2.strict_in_game_live.strict_in_game_sections",
+        lambda *_args, **_kwargs: ["FOOTBALL LIVE"],
+    )
+    calls = {"multi": 0}
+
+    def fake_multisport():
+        calls["multi"] += 1
+        return ["HOCKEY LIVE", "BASKETBALL LIVE"]
+
+    monkeypatch.setattr(
+        "gool_bot2.multisport_menu.multisport_in_game_sections",
+        fake_multisport,
+    )
+
+    sections = journal_in_game.production_in_game_sections()
+
+    assert sections == ["FOOTBALL LIVE", "HOCKEY LIVE", "BASKETBALL LIVE"]
+    assert calls["multi"] == 1

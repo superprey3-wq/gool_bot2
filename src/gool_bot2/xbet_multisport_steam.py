@@ -1518,7 +1518,27 @@ def _team_similarity(left: str, right: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    return SequenceMatcher(None, a, b).ratio()
+
+    base = SequenceMatcher(None, a, b).ratio()
+
+    # Basketball providers often disagree only on the mascot/full club suffix:
+    # Flashscore "Shiga" vs 1xBet "Shiga Lakestars",
+    # "Toyama" vs "Toyama Grouses", "Kyoto" vs "Kyoto Hannaryz".
+    # Treat complete token containment as a strong same-team hint without
+    # lowering the global fuzzy threshold. Final score-sync is still required
+    # before any market can be priced, so a bad name-only guess cannot become
+    # a signal by itself.
+    a_tokens = [token for token in a.split() if token]
+    b_tokens = [token for token in b.split() if token]
+    if a_tokens and b_tokens:
+        a_set, b_set = set(a_tokens), set(b_tokens)
+        shorter = a_tokens if len(a_tokens) <= len(b_tokens) else b_tokens
+        shorter_compact = "".join(shorter)
+        contained = a_set.issubset(b_set) or b_set.issubset(a_set)
+        if contained and len(shorter_compact) >= 4:
+            base = max(base, 0.86)
+
+    return base
 
 
 def parse_flashscore_events(body: str) -> list[dict[str, Any]]:

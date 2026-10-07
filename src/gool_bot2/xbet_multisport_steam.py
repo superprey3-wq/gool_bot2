@@ -1,3 +1,4 @@
+# DIAGNOSTIC_TRIGGER: basketball LIVE current-main audit; no runtime behavior change.
 from __future__ import annotations
 
 import argparse

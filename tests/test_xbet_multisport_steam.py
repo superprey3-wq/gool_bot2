@@ -1432,3 +1432,49 @@ def test_active_signal_delivery_failure_is_not_journaled_and_retries(tmp_path, m
     saved = json.loads(worker.journal_path.read_text("utf-8"))
     assert len(saved) == 1
     assert saved[0]["telegram_sent"] is True
+
+
+def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("XBET_MULTISPORT_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_TEXT_FALLBACK_ENABLED", "1")
+
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.render_basketball_live_card",
+        lambda row, signal, cfg: b"png",
+    )
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.telegram.broadcast_photo",
+        lambda png, caption="": 0,
+    )
+    sent_text = []
+    monkeypatch.setattr(
+        "gool_bot2.xbet_multisport_steam.telegram.broadcast",
+        lambda message: sent_text.append(message) or 1,
+    )
+
+    row = {
+        "phase": "LIVE",
+        "home": "Home",
+        "away": "Away",
+        "league": "Test",
+        "score": [40, 38],
+        "match_score": [40, 38],
+        "period": "2-я четверть",
+        "clock_seconds": 300,
+        "scope": "QUARTER_2",
+        "market_family": "match_total",
+    }
+    signal = {
+        "direction": "over",
+        "line": 42.5,
+        "odd": 1.90,
+        "strength": 80,
+    }
+
+    sent = worker._deliver(row, signal, SPORTS["basketball"])
+
+    assert sent == 1
+    assert len(sent_text) == 1
+    assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]

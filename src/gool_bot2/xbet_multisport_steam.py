@@ -1538,6 +1538,37 @@ def _team_similarity(left: str, right: str) -> float:
         if contained and len(shorter_compact) >= 4:
             base = max(base, 0.86)
 
+        # Turkish/European basketball feeds also alternate between a short
+        # sporting suffix and a municipal/full-club suffix, e.g.
+        #   Konya BBSK <-> Konya Buyuksehir Belediyespor
+        #   Final Spor <-> Final Genclik
+        # Ignore only known organisational tokens. This keeps the distinctive
+        # city/club core intact instead of globally relaxing the fuzzy matcher.
+        generic = {
+            "spor", "genclik", "basket", "basketbol", "basketball",
+            "bbsk", "bsk", "bk", "sk", "club", "kulubu",
+            "belediye", "belediyesi", "belediyespor", "buyuksehir",
+        }
+        a_core = [token for token in a_tokens if token not in generic and len(token) >= 4]
+        b_core = [token for token in b_tokens if token not in generic and len(token) >= 4]
+        if a_core and b_core and a_core == b_core:
+            base = max(base, 0.90)
+
+        # Some full names prepend a locality/sponsor while the real club stem
+        # remains the same with a tiny spelling drift:
+        #   Kipas Istiklal <-> Kahramanmaras Kipash Istiklal
+        # Require at least two distinctive tokens on the shorter side and make
+        # every one of them fuzzy-match a token on the longer side. That avoids
+        # turning a shared city token into a match by itself.
+        if len(a_core) >= 2 and len(b_core) >= 2:
+            short_core, long_core = (a_core, b_core) if len(a_core) <= len(b_core) else (b_core, a_core)
+            token_scores = [
+                max(SequenceMatcher(None, token, other).ratio() for other in long_core)
+                for token in short_core
+            ]
+            if token_scores and min(token_scores) >= 0.84 and sum(token_scores) / len(token_scores) >= 0.90:
+                base = max(base, 0.90)
+
     return base
 
 

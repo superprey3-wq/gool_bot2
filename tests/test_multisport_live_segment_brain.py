@@ -587,7 +587,9 @@ def test_flashscore_derives_new_segment_score_when_score_parts_lag():
 
     basket = _flashscore_scoped_scores(
         {
-            "status_code": "23",
+            # Current basketball stage-code feed: AC=24 means Q3. The Q3
+            # score-part can lag one snapshot, so derive it from full score.
+            "status_code": "24",
             "league": "Chile",
             "score": [45, 41],
             "score_parts": [[20, 18], [22, 19]],

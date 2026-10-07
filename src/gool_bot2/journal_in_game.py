@@ -221,32 +221,21 @@ def journal_in_game_sections(journal_path: Path, analysis_path: Path | None = No
     return ["\n\n".join(parts)]
 
 
-def production_in_game_sections(_: Path | None = None, __: Path | None = None) -> list[str]:
-    """Production adapter: combine strict football LIVE with multisport LIVE.
+def production_in_game_sections(
+    journal_path_arg: Path | None = None,
+    analysis_path_arg: Path | None = None,
+) -> list[str]:
+    """Production adapter for football only.
 
-    Football and hockey/basketball use different canonical journals. The strict
-    football renderer is intentionally legacy-shaped (match_id/market), while
-    multisport LIVE rows use flashscore_event_id/scope/market_family/selection.
-    Both views must be composed here or successfully delivered multisport picks
-    disappear from the common "В ИГРЕ" button.
+    Telegram composes multisport exactly once after this renderer. Keeping this
+    adapter football-only prevents hockey/basketball from being appended twice.
     """
-    from . import multi_menu
     from .strict_in_game_live import strict_in_game_sections
-    from .multisport_menu import multisport_in_game_sections
 
-    football = strict_in_game_sections(multi_menu.journal_path(), multi_menu.analysis_path())
-    multisport = multisport_in_game_sections()
-
-    football_empty = (
-        not football
-        or all(
-            "Сейчас нет сигналов на матчах, подтверждённых Flashscore как LIVE." in str(section)
-            for section in football
-        )
-    )
-    if multisport:
-        return list(multisport) if football_empty else [*football, *multisport]
-    return football
+    if journal_path_arg is None:
+        from . import multi_menu
+        journal_path_arg = multi_menu.journal_path()
+    return strict_in_game_sections(journal_path_arg, analysis_path_arg)
 
 
 def install_journal_in_game() -> None:

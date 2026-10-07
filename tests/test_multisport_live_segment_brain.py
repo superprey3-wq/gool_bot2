@@ -895,6 +895,26 @@ def test_basketball_mapping_does_not_match_unrelated_short_names():
     assert map_xbet_to_flashscore(xbet, fs) == []
 
 
+def test_basketball_mapping_accepts_turkish_provider_aliases():
+    fs = [
+        {"flashscore_event_id": "T1", "home": "OGM Ormanspor", "away": "Konya BBSK"},
+        {"flashscore_event_id": "T2", "home": "Final Spor", "away": "Kipas Istiklal"},
+    ]
+    xbet = [
+        {"I": "11", "O1": "Ormanspor", "O2": "Konya Buyuksehir Belediyespor"},
+        {"I": "12", "O1": "Final Genclik", "O2": "Kahramanmaras Kipash Istiklal"},
+    ]
+
+    mapped = map_xbet_to_flashscore(xbet, fs)
+    assert {row[1]["flashscore_event_id"] for row in mapped} == {"T1", "T2"}
+
+
+def test_basketball_alias_boost_does_not_match_same_city_different_club():
+    fs = [{"flashscore_event_id": "T1", "home": "Konya BBSK", "away": "Final Spor"}]
+    xbet = [{"I": "11", "O1": "Konya Selcuk University", "O2": "Ankara Kolejliler"}]
+    assert map_xbet_to_flashscore(xbet, fs) == []
+
+
 
 def test_usable_market_game_rejects_nonempty_shell_without_market_tree():
     assert MultiSportSteamWorker._usable_market_game({"I": 1, "O1": "A", "O2": "B", "SC": {}}) is False

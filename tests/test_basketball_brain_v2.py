@@ -472,3 +472,52 @@ def test_live_prefers_flashscore_quarter_clock_when_book_clock_is_invalid():
     )
     assert signal is not None
     assert signal["projection_clock_source"] == "flashscore_quarter"
+
+
+def _full_match_memory():
+    return {
+        "sport": "basketball",
+        "quality": 0.80,
+        "expected_match_total": 160.0,
+        "segments": {
+            "QUARTER_1": {"expected_home": 20.0, "expected_away": 20.0, "expected_total": 40.0},
+            "QUARTER_2": {"expected_home": 20.0, "expected_away": 20.0, "expected_total": 40.0},
+            "QUARTER_3": {"expected_home": 20.0, "expected_away": 20.0, "expected_total": 40.0},
+            "QUARTER_4": {"expected_home": 20.0, "expected_away": 20.0, "expected_total": 40.0},
+        },
+    }
+
+
+def test_full_match_signal_is_not_blocked_only_because_q2_has_under_35_seconds_left():
+    brain = _brain(scope="QUARTER_2", current=(26, 23), recent_poss=1.7, recent_score=2.0)
+    brain["score"] = [53, 52]
+    brain["segment_memory"] = _full_match_memory()
+    lane = _lane(
+        scope="FULL_MATCH",
+        elapsed=580,
+        score=(53, 52),
+        line=210.5,
+        market_over=0.50,
+        match_score=(53, 52),
+    )
+    signal = live_signal(brain, lane)
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["remaining_match_projection"]
+    assert signal["remaining_seconds"] == 20.0
+
+
+def test_current_quarter_signal_still_waits_inside_final_35_seconds():
+    brain = _brain(scope="QUARTER_2", current=(26, 23), recent_poss=1.7, recent_score=2.0)
+    signal = live_signal(
+        brain,
+        _lane(
+            scope="QUARTER_2",
+            elapsed=580,
+            score=(26, 23),
+            line=55.5,
+            market_over=0.50,
+            match_score=(53, 52),
+        ),
+    )
+    assert signal is None

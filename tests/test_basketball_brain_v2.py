@@ -426,3 +426,49 @@ def test_quarter_context_is_bounded_and_cannot_overpower_live_model():
     )
     assert abs(context["prior_adjustment"]) <= 4.0
     assert 35.0 < context["adjusted_prior_total"] < 46.0
+
+
+def test_live_points_pace_fallback_can_confirm_over_without_possession_attempts():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(13, 12), recent_poss=0.0, recent_score=5.2, payload=payload)
+    brain["elapsed_seconds"] = 300.0
+    signal = live_signal(
+        brain,
+        _lane(score=(13, 12), elapsed=300, line=39.5, market_over=0.50),
+    )
+    assert signal is not None
+    assert signal["direction"] == "over"
+    assert signal["possession_source"] == "points_clock_fallback"
+    assert signal["directional_confirmation"] is True
+
+
+def test_live_points_pace_fallback_stays_wait_when_direction_is_not_confirmed():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(11, 10), recent_poss=0.0, recent_score=4.1, payload=payload)
+    brain["elapsed_seconds"] = 300.0
+    signal = live_signal(
+        brain,
+        _lane(score=(11, 10), elapsed=300, line=39.5, market_over=0.50),
+    )
+    assert signal is None
+
+
+def test_live_prefers_flashscore_quarter_clock_when_book_clock_is_invalid():
+    brain = _brain(current=(10, 10), recent_poss=2.2, recent_score=4.0)
+    brain["elapsed_seconds"] = 300.0
+    signal = live_signal(
+        brain,
+        _lane(score=(10, 10), elapsed=600, line=37.5, market_over=0.50),
+    )
+    assert signal is not None
+    assert signal["projection_clock_source"] == "flashscore_quarter"

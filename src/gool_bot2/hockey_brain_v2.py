@@ -455,9 +455,10 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     base_remaining = period_lambda * remaining / 1200.0
 
     recent_shot_rate = max(0.0, _num(brain.get("recent_shot_rate"), 0.0) or 0.0)
+    shot_rate_available = bool(brain.get("shot_rate_available"))
     recent_blocked_rate = max(0.0, _num(brain.get("recent_blocked_rate"), 0.0) or 0.0)
     recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
-    pressure_window_ready = recent_window >= min_window
+    pressure_window_ready = recent_window >= min_window and shot_rate_available
 
     # recent_shot_rate is COMBINED shots-on-goal per minute. The old fixed
     # 1.65 baseline was too high for normal hockey and therefore pushed the
@@ -651,6 +652,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "remaining_seconds": round(remaining, 1),
         "recent_rate_per_min": round(recent_shot_rate, 3),
         "expected_shots_per_min": round(expected_shots_per_min, 3),
+        "shot_rate_available": shot_rate_available,
         "fast_shot_rate": round(fast_shot_rate, 3),
         "slow_shot_rate": round(slow_shot_rate, 3),
         "recent_blocked_rate_per_min": round(recent_blocked_rate, 3),

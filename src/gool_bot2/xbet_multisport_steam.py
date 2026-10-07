@@ -3936,6 +3936,18 @@ class MultiSportSteamWorker:
             save_journal(self.journal_path, rows)
         return changed
 
+    @staticmethod
+    def _live_correlation_group(sport: str, scope: str, market_family: str) -> str:
+        sport_key = str(sport or "").casefold()
+        scope_key = str(scope or SCOPE_FULL)
+        family_key = str(market_family or "match_total")
+        if sport_key == "basketball":
+            if scope_key == SCOPE_FULL and family_key in {"match_total", "home_total", "away_total"}:
+                return "basketball_full_total_projection"
+            if scope_key.startswith("QUARTER_") and family_key == "match_total":
+                return f"basketball_{scope_key.casefold()}_total"
+        return f"{scope_key}:{family_key}"
+
     def _already_seen(
         self,
         sport: str,
@@ -3964,6 +3976,11 @@ class MultiSportSteamWorker:
                 # never emit another family/scope for that same match.
                 if wanted_phase == "PREMATCH":
                     return True
+                if wanted_phase == "LIVE" and str(sport or "").casefold() == "basketball":
+                    wanted_group = self._live_correlation_group(sport, wanted_scope, wanted_family)
+                    row_group = self._live_correlation_group(sport, row_scope, row_family)
+                    if wanted_group == row_group:
+                        return True
                 if row_scope == wanted_scope and row_family == wanted_family:
                     return True
         return False
@@ -4986,6 +5003,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 signals: list[dict[str, Any]] = []
+                pending_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
                 for lane in row.get("market_lanes") or []:
@@ -5097,10 +5115,50 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
-                    recorded, sent = self._record_signal(lane_row, signal, cfg)
+                    pending_live_signals.append((lane_row, signal))
+
+                # Do not flood one basketball match with three strongly
+                # correlated totals from the same projection. Multiple LIVE
+                # bets per match stay supported, but only one current-quarter
+                # total and one strongest FULL_MATCH total/IT projection may
+                # be delivered.
+                selected_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                if cfg.key == "basketball":
+                    best_by_group: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+                    for candidate_row, candidate_signal in pending_live_signals:
+                        group = self._live_correlation_group(
+                            cfg.key,
+                            str(candidate_row.get("scope") or SCOPE_FULL),
+                            str(candidate_row.get("market_family") or "match_total"),
+                        )
+                        current = best_by_group.get(group)
+                        rank = (
+                            float(candidate_signal.get("strength") or 0.0),
+                            abs(float(candidate_signal.get("edge") or 0.0)),
+                            float(candidate_signal.get("model_probability") or 0.0),
+                        )
+                        current_rank = (
+                            float((current[1] if current else {}).get("strength") or 0.0),
+                            abs(float((current[1] if current else {}).get("edge") or 0.0)),
+                            float((current[1] if current else {}).get("model_probability") or 0.0),
+                        )
+                        if current is None or rank > current_rank:
+                            best_by_group[group] = (candidate_row, candidate_signal)
+                    selected_live_signals = list(best_by_group.values())
+                    selected_live_signals.sort(
+                        key=lambda item: (
+                            0 if str(item[0].get("scope") or "").startswith("QUARTER_") else 1,
+                            -float(item[1].get("strength") or 0.0),
+                        )
+                    )
+                else:
+                    selected_live_signals = pending_live_signals
+
+                for selected_row, selected_signal in selected_live_signals:
+                    recorded, sent = self._record_signal(selected_row, selected_signal, cfg)
                     if recorded:
                         detected += 1
-                        signals.append(signal)
+                        signals.append(selected_signal)
                     else:
                         duplicate_filtered += 1
                     if sent:

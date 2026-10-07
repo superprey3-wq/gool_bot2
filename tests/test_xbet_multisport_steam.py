@@ -1478,3 +1478,54 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert sent == 1
     assert len(sent_text) == 1
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
+
+
+def test_basketball_live_correlation_groups_keep_quarter_and_one_full_projection(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+
+    full_match = worker._live_correlation_group("basketball", "FULL_MATCH", "match_total")
+    full_home = worker._live_correlation_group("basketball", "FULL_MATCH", "home_total")
+    full_away = worker._live_correlation_group("basketball", "FULL_MATCH", "away_total")
+    q2 = worker._live_correlation_group("basketball", "QUARTER_2", "match_total")
+    q3 = worker._live_correlation_group("basketball", "QUARTER_3", "match_total")
+
+    assert full_match == full_home == full_away
+    assert q2 != full_match
+    assert q3 != q2
+
+
+def test_basketball_live_full_projection_seen_blocks_second_full_family(tmp_path):
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.journal_path.write_text(
+        json.dumps([
+            {
+                "sport": "basketball",
+                "phase": "LIVE",
+                "event_id": "xb1",
+                "flashscore_event_id": "fs1",
+                "scope": "FULL_MATCH",
+                "market_family": "match_total",
+            }
+        ]),
+        "utf-8",
+    )
+
+    assert worker._already_seen(
+        "basketball",
+        "xb1",
+        "LIVE",
+        "FULL_MATCH",
+        "home_total",
+        "fs1",
+    ) is True
+    assert worker._already_seen(
+        "basketball",
+        "xb1",
+        "LIVE",
+        "QUARTER_2",
+        "match_total",
+        "fs1",
+    ) is False

@@ -294,6 +294,155 @@ def _table(rows: list[dict[str, Any]], tz: Any) -> str:
     return "".join(out)
 
 
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    try:
+        for raw in path.read_text("utf-8").splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                value = json.loads(raw)
+            except Exception:
+                continue
+            if isinstance(value, dict):
+                rows.append(dict(value))
+    except Exception:
+        return []
+    return rows
+
+
+def _multisport_history_path() -> Path:
+    runtime = Path(os.getenv("RUNTIME_DATA_DIR", "data"))
+    raw = os.getenv("GOOL_MULTISPORT_HISTORY", "").strip() or os.getenv("XBET_MULTISPORT_HISTORY", "").strip()
+    return Path(raw) if raw else runtime / "live" / "gool_multisport_history.jsonl"
+
+
+def _runtime_day_states(path: Path, day: date, tz: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in _load_jsonl(path):
+        dt = _parse_dt(row.get("captured_at"))
+        if dt is not None and dt.astimezone(tz).date() == day:
+            out.append(row)
+    return out
+
+
+def _bet_direction(row: dict[str, Any]) -> str:
+    direct = str(row.get("direction") or "").strip().casefold()
+    if direct in {"over", "under"}:
+        return direct
+    selection = str(row.get("selection") or row.get("market") or "").casefold()
+    if "тб" in selection or "over" in selection:
+        return "over"
+    if "тм" in selection or "under" in selection:
+        return "under"
+    return ""
+
+
+def _live_wait_bucket(row: dict[str, Any], sport: str) -> str:
+    if bool(row.get("break_transition")):
+        return "пауза/переход сегмента"
+    stats = dict(row.get("live_game_stats") or {})
+    if not bool(stats.get("current_segment_available")):
+        return "нет статистики текущего сегмента"
+    try:
+        points = int(row.get("history_points") or 0)
+    except (TypeError, ValueError):
+        points = 0
+    try:
+        window = float(row.get("recent_window_seconds") or 0.0)
+    except (TypeError, ValueError):
+        window = 0.0
+    prefix = "HOCKEY" if sport == "hockey" else "BASKETBALL"
+    try:
+        min_points = max(2, int(float(os.getenv(f"GOOL_{prefix}_LIVE_MIN_ANALYSIS_SNAPSHOTS", "3"))))
+    except (TypeError, ValueError):
+        min_points = 3
+    try:
+        min_window = max(30.0, float(os.getenv(f"GOOL_{prefix}_LIVE_MIN_ANALYSIS_SECONDS", "60")))
+    except (TypeError, ValueError):
+        min_window = 60.0
+    if points < min_points or window < min_window:
+        return "разогрев Brain"
+    return "прочий WAIT"
+
+
+def _runtime_live_audit_html(
+    states: list[dict[str, Any]],
+    *,
+    hockey_live: list[dict[str, Any]],
+    basketball_live: list[dict[str, Any]],
+) -> str:
+    if not states:
+        return "<p class='muted'>Нет runtime-снимков GOOL MULTISPORT за выбранный день.</p>"
+
+    cards: list[str] = []
+    icons = {"hockey": "🏒", "basketball": "🏀"}
+    live_rows = {"hockey": hockey_live, "basketball": basketball_live}
+    for sport in ("hockey", "basketball"):
+        sport_states = [dict((state.get("sports") or {}).get(sport) or {}) for state in states]
+        sport_states = [row for row in sport_states if row]
+        if not sport_states:
+            cards.append(
+                f'<div class="audit"><h3>{icons[sport]} {sport.upper()} LIVE funnel</h3>'
+                "<p class='muted'>Нет данных по спорту.</p></div>"
+            )
+            continue
+
+        fs_ids: set[str] = set()
+        cand_ids: set[str] = set()
+        wait_buckets: Counter[str] = Counter()
+        for snap in sport_states:
+            for match in snap.get("flashscore_live_matches") or []:
+                if isinstance(match, dict):
+                    key = str(match.get("flashscore_event_id") or "").strip()
+                    if key:
+                        fs_ids.add(key)
+            for analysis in snap.get("flashscore_analysis_matches") or []:
+                if not isinstance(analysis, dict):
+                    continue
+                key = str(analysis.get("flashscore_event_id") or "").strip()
+                state = str(analysis.get("brain_state") or "WAIT").upper()
+                if state in {"PASS", "BORDERLINE"}:
+                    if key:
+                        cand_ids.add(key)
+                else:
+                    wait_buckets[_live_wait_bucket(analysis, sport)] += 1
+
+        def peak(name: str) -> int:
+            values: list[int] = []
+            for snap in sport_states:
+                try:
+                    values.append(int(snap.get(name) or 0))
+                except (TypeError, ValueError):
+                    values.append(0)
+            return max(values or [0])
+
+        directions = Counter(_bet_direction(row) for row in live_rows[sport])
+        wait_text = " · ".join(
+            f"{html.escape(label)}: <b>{count}</b>" for label, count in wait_buckets.most_common()
+        ) or "WAIT-наблюдений нет"
+        alert = ""
+        if fs_ids and not cand_ids:
+            alert = "<p><b>⚠️ Все увиденные LIVE-матчи были отсечены до запроса 1xBet.</b></p>"
+        elif cand_ids and peak("xbet_live") == 0:
+            alert = "<p><b>⚠️ Brain дал кандидатов, но 1xBet LIVE вернул 0 матчей.</b></p>"
+        elif peak("mapped") == 0 and peak("xbet_live") > 0 and cand_ids:
+            alert = "<p><b>⚠️ Есть Brain-кандидаты и линия 1xBet, но сопоставление матчей = 0.</b></p>"
+
+        cards.append(
+            f'<div class="audit"><h3>{icons[sport]} {sport.upper()} LIVE funnel</h3>'
+            f"<div>Runtime-снимков: <b>{len(sport_states)}</b> · FS уник.: <b>{len(fs_ids)}</b> "
+            f"· Brain кандидаты уник.: <b>{len(cand_ids)}</b></div>"
+            f"<div>Пик за цикл: FS <b>{peak('flashscore_live')}</b> → Brain <b>{peak('live_brain_candidates')}</b> "
+            f"→ 1xBet <b>{peak('xbet_live')}</b> → mapped <b>{peak('mapped')}</b> "
+            f"→ decoded <b>{peak('decoded')}</b> → signals <b>{peak('detected')}</b></div>"
+            f"<div>Отправленные LIVE-направления: ТБ <b>{directions['over']}</b> · ТМ <b>{directions['under']}</b></div>"
+            f"<div>Причины WAIT (наблюдения): {wait_text}</div>{alert}</div>"
+        )
+    return "".join(cards)
+
+
 def _load_super10(path: Path) -> list[dict[str, Any]]:
     try:
         payload = json.loads(path.read_text("utf-8"))
@@ -400,6 +549,7 @@ def build_daily_report(
     football_path: Path | None = None,
     multisport_path: Path | None = None,
     super10_history_path: Path | None = None,
+    multisport_history_path: Path | None = None,
     now: datetime | None = None,
     report_date: date | None = None,
 ) -> tuple[str, bytes, str]:
@@ -417,6 +567,7 @@ def build_daily_report(
     football_path = football_path or multi_menu.journal_path()
     multisport_path = multisport_path or multisport_menu.journal_path()
     super10_history_path = super10_history_path or global_super10.history_path()
+    multisport_history_path = multisport_history_path or _multisport_history_path()
 
     football = [
         {**dict(row), "sport": "football"}
@@ -459,6 +610,7 @@ def build_daily_report(
         ticket for ticket in _load_super10(super10_history_path)
         if _ticket_day(ticket, tz) == day
     ]
+    multisport_runtime = _runtime_day_states(multisport_history_path, day, tz)
 
     css = """
     body{font-family:Arial,sans-serif;background:#f5f6f8;color:#16181d;margin:0;padding:24px}
@@ -494,6 +646,13 @@ def build_daily_report(
         _stat_html("🏒 Хоккей LIVE", hockey_live),
         _stat_html("🏀 Баскетбол PREMATCH", basketball_pre),
         _stat_html("🏀 Баскетбол LIVE", basketball_live),
+        "</div>",
+        "<div class='section'><h2>LIVE funnel · хоккей / баскетбол</h2>",
+        _runtime_live_audit_html(
+            multisport_runtime,
+            hockey_live=hockey_live,
+            basketball_live=basketball_live,
+        ),
         "</div>",
         "<div class='section'><h2>Контроль и проблемные места</h2>",
         _audit_html(rows),

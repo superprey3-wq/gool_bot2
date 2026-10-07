@@ -4062,6 +4062,14 @@ class MultiSportSteamWorker:
         return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
+        # The production autoupdater can briefly overlap old/new multisport
+        # workers. Serialize the whole read-check-send-write transaction so two
+        # processes cannot both see the same LIVE pick as unseen and send it.
+        # Different scope/family picks for the same match remain allowed.
+        with _global_delivery_lock(self.journal_path):
+            return self._record_signal_locked(row, signal, cfg)
+
+    def _record_signal_locked(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
         event_id = str(row.get("event_id") or "")
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)

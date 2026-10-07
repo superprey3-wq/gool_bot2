@@ -202,6 +202,37 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
     if scope:
         bits.append(f"scope={scope}")
 
+    projected = _number(row.get("projected_total"))
+    if projected is not None:
+        bits.append(f"proj={projected:.2f}")
+    stat_edge = _number(row.get("stat_edge"))
+    if stat_edge is not None:
+        bits.append(f"statΔ={stat_edge:.2f}")
+    recent_rate = _number(row.get("recent_rate_per_min"))
+    if recent_rate is not None:
+        bits.append(f"recent={recent_rate:.2f}/min")
+    expected_shots = _number(row.get("expected_shots_per_min"))
+    if expected_shots is not None:
+        bits.append(f"SOGexp={expected_shots:.2f}/min")
+    possessions = _number(row.get("possessions_per_min"))
+    if possessions is not None:
+        bits.append(f"poss={possessions:.2f}/min")
+    memory_quality = _number(row.get("segment_memory_quality"))
+    if memory_quality is not None:
+        bits.append(f"Q/Pmem={memory_quality:.2f}")
+    if row.get("historical_confirmation") is True:
+        bits.append("history=confirm")
+    if row.get("directional_confirmation") is True:
+        bits.append("live=confirm")
+    if row.get("market_steam_agrees") is True:
+        bits.append("1xBetMove=agree")
+    elif row.get("market_steam_agrees") is False:
+        bits.append("1xBetMove=oppose")
+    if row.get("matchbook_money_flow_agrees") is True:
+        bits.append("Matchbook=agree")
+    elif row.get("matchbook_money_flow_agrees") is False:
+        bits.append("Matchbook=oppose")
+
     reason = str(
         row.get("selection_reason")
         or row.get("brain_reason")

@@ -680,6 +680,18 @@ def multisport_in_game_sections() -> list[str]:
             phase_name = _row_phase(row)
             if phase_name not in {"PREMATCH", "LIVE"}:
                 continue
+
+            # Basketball LIVE product policy is quarter-total only. Historical
+            # FULL_MATCH and team-total LIVE rows may still be pending in the
+            # journal from the old model; they must not leak into the current
+            # "В ИГРЕ" view after the policy migration. PREMATCH rows are
+            # intentionally unaffected and may still be shown after tip-off.
+            if sport == "basketball" and phase_name == "LIVE":
+                scope = str(row.get("scope") or "")
+                family = str(row.get("market_family") or "")
+                if not (scope.startswith("QUARTER_") and family == "match_total"):
+                    continue
+
             fs_id = str(row.get("flashscore_event_id") or "")
             live = live_by_fs.get(fs_id)
 

@@ -267,14 +267,10 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     _force_reconcile_pending(journal_path);replies=[report_text(journal_path)]
    elif text=="🟢 в игре":
     _force_reconcile_pending(journal_path)
+    # Production installs a composed adapter that already returns football +
+    # hockey + basketball. Appending multisport here again duplicated those
+    # sections (most visibly hockey) in the common "В ИГРЕ" button.
     replies=in_game_sections(journal_path,_analysis_path(journal_path))
-    try:
-     from .multisport_menu import multisport_in_game_sections
-     multi_replies=multisport_in_game_sections()
-     if multi_replies:
-      replies.extend(multi_replies)
-    except Exception as exc:
-     print(f"GOOL_MULTISPORT_IN_GAME_MENU_ERROR {type(exc).__name__}:{exc}",flush=True)
    elif text=="/prematchaudit":
     from .prematch_day_audit import prematch_day_audit_text
     replies=[prematch_day_audit_text(journal_path)]

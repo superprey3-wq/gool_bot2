@@ -10,6 +10,7 @@ from gool_bot2.xbet_multisport_steam import (
     parse_flashscore_events,
     detect_live_segment_stats,
     select_prematch_primary,
+    select_live_delivery_candidates,
     _balanced_total,
     _metric,
     _score,
@@ -1478,3 +1479,44 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert sent == 1
     assert len(sent_text) == 1
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
+
+
+def test_basketball_live_arbitration_keeps_one_full_match_plus_current_quarter():
+    cfg = SPORTS["basketball"]
+    candidates = [
+        (
+            {"scope": "QUARTER_3", "market_family": "match_total"},
+            {"strength": 80.0, "edge": 0.08, "model_probability": 0.61, "odd": 1.86, "selection": "3-я четверть: ТБ 42.5"},
+        ),
+        (
+            {"scope": "FULL_MATCH", "market_family": "match_total"},
+            {"strength": 78.0, "edge": 0.07, "model_probability": 0.60, "odd": 1.90, "selection": "ТБ 168.5"},
+        ),
+        (
+            {"scope": "FULL_MATCH", "market_family": "home_total"},
+            {"strength": 86.0, "edge": 0.09, "model_probability": 0.63, "odd": 1.87, "selection": "ИТБ1 84.5"},
+        ),
+        (
+            {"scope": "FULL_MATCH", "market_family": "away_total"},
+            {"strength": 82.0, "edge": 0.08, "model_probability": 0.62, "odd": 1.91, "selection": "ИТБ2 81.5"},
+        ),
+    ]
+
+    selected = select_live_delivery_candidates(candidates, cfg)
+
+    assert len(selected) == 2
+    assert {row["scope"] for row, _signal in selected} == {"QUARTER_3", "FULL_MATCH"}
+    full = next((row, signal) for row, signal in selected if row["scope"] == "FULL_MATCH")
+    assert full[0]["market_family"] == "home_total"
+    assert full[1]["selection"] == "ИТБ1 84.5"
+
+
+def test_hockey_live_arbitration_keeps_existing_multiple_markets():
+    cfg = SPORTS["hockey"]
+    candidates = [
+        ({"scope": "PERIOD_2", "market_family": "match_total"}, {"strength": 80.0}),
+        ({"scope": "FULL_MATCH", "market_family": "match_total"}, {"strength": 82.0}),
+        ({"scope": "FULL_MATCH", "market_family": "home_total"}, {"strength": 84.0}),
+    ]
+
+    assert select_live_delivery_candidates(candidates, cfg) == candidates

@@ -4055,6 +4055,17 @@ class MultiSportSteamWorker:
             )
         row_for_delivery = {**row, "selection": pick_label, "scope": scope, "market_family": family}
         sent = self._deliver(row_for_delivery, signal, cfg) if mode == "active" else 0
+        if mode == "active" and sent <= 0:
+            # Public journal semantics: only successfully delivered ACTIVE picks
+            # become durable/seen. Otherwise a transient Telegram/card failure
+            # would poison _already_seen() and suppress every later retry.
+            print(
+                f"GOOL_{cfg.key.upper()}_SIGNAL_DELIVERY_RETRY "
+                f"phase={phase} scope={scope} family={family} "
+                f"match={row.get('home')}--{row.get('away')}",
+                flush=True,
+            )
+            return False, 0
         entry = {
             "entry_id": (
                 f"{cfg.key}:prematch:{row.get('flashscore_event_id') or event_id}"

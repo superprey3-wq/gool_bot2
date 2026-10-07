@@ -1384,3 +1384,51 @@ def test_scope_completion_prefers_brain_scope_over_raw_numeric_ac():
     assert multisport_scope_is_complete(fs, "hockey", "PERIOD_1") is True
     assert multisport_scope_is_complete(fs, "hockey", "PERIOD_2") is False
 
+
+
+def test_active_signal_delivery_failure_is_not_journaled_and_retries(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    worker = MultiSportSteamWorker(tmp_path)
+    outcomes = iter([0, 1])
+    monkeypatch.setattr(worker, "_deliver", lambda row, signal, cfg: next(outcomes))
+
+    row = {
+        "phase": "LIVE",
+        "origin": "multisport_live",
+        "event_id": "xb-retry-1",
+        "flashscore_event_id": "FS-RETRY-1",
+        "home": "Retry Home",
+        "away": "Retry Away",
+        "league": "Test",
+        "scope": "QUARTER_2",
+        "market_family": "match_total",
+        "selection": "2-я четверть: ТМ 40.5",
+        "line": 40.5,
+        "score": [30, 28],
+        "match_score": [30, 28],
+        "period": "2-я четверть",
+        "clock_seconds": 240,
+    }
+    signal = {
+        "brain_mode": "basketball_live_v2",
+        "direction": "under",
+        "line": 40.5,
+        "odd": 1.85,
+        "fair_probability": 0.62,
+        "model_probability": 0.62,
+        "market_probability": 0.54,
+        "edge": 0.08,
+        "strength": 80.0,
+    }
+
+    first = worker._record_signal(row, signal, SPORTS["basketball"])
+    assert first == (False, 0)
+    assert json.loads(worker.journal_path.read_text("utf-8")) == []
+
+    second = worker._record_signal(row, signal, SPORTS["basketball"])
+    assert second == (True, 1)
+    saved = json.loads(worker.journal_path.read_text("utf-8"))
+    assert len(saved) == 1
+    assert saved[0]["telegram_sent"] is True

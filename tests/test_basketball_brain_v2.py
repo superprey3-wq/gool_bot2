@@ -296,6 +296,35 @@ def test_cumulative_box_score_is_not_treated_as_current_quarter_possessions():
     assert signal["probability_reliability"] < 0.90
 
 
+def test_early_activity_window_can_surface_over_but_not_under():
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    early_brain = _brain(current=(6, 6), recent_poss=1.0, recent_score=1.0, payload=payload)
+    early_brain.update({
+        "history_points": 2,
+        "recent_window_seconds": 30.0,
+        "recent_activity_available": True,
+        "elapsed_seconds": 300.0,
+    })
+    under_lane = _lane(score=(6, 6), elapsed=300, line=42.5, market_over=0.50)
+
+    # The same quiet sample must not create a premature ТМ from only ~30s.
+    assert live_signal(early_brain, under_lane) is None
+
+    strict_brain = dict(early_brain)
+    strict_brain.update({
+        "history_points": 3,
+        "recent_window_seconds": 60.0,
+    })
+    strict_signal = live_signal(strict_brain, under_lane)
+    assert strict_signal is not None
+    assert strict_signal["direction"] == "under"
+
+
 def test_late_close_q4_under_is_blocked_for_intentional_foul_risk():
     payload = _direct_stats(low_efficiency=True)
     signal = live_signal(

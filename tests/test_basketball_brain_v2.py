@@ -569,3 +569,34 @@ def test_stale_tiny_recent_delta_does_not_confirm_under():
     )
 
     assert signal is None
+
+
+def test_active_early_window_cannot_emit_under():
+    cumulative = {
+        "current_segment_available": True,
+        "stats_mode": "cumulative_through_current_segment",
+        "segment_stats": {
+            "field_goals": [30.0, 29.0],
+            "three_point_field_goals": [10.0, 9.0],
+            "free_throws": [14.0, 12.0],
+            "offensive_rebounds": [12.0, 11.0],
+            "turnovers": [14.0, 13.0],
+            "fouls": [16.0, 15.0],
+        },
+        "segment_attempts": {
+            "field_goals": [65.0, 63.0],
+            "three_point_field_goals": [28.0, 27.0],
+            "free_throws": [18.0, 17.0],
+        },
+    }
+    brain = _brain(current=(7, 8), recent_poss=1.3, recent_score=1.2, payload=cumulative)
+    brain["history_points"] = 2
+    brain["recent_window_seconds"] = 30.0
+    brain["recent_activity_available"] = True
+
+    signal = live_signal(
+        brain,
+        _lane(score=(7, 8), elapsed=300, line=40.5, market_over=0.65),
+    )
+
+    assert signal is None

@@ -571,6 +571,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         )
         if stat_edge < min_stat_edge:
             return None
+    else:
+        min_stat_edge = _env_float("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", 0.35)
+        if stat_edge < min_stat_edge:
+            return None
+
+    # UNDER without real current-period SOG is too easy to manufacture from a
+    # stale/missing stats feed plus historical priors. Missing shots must mean
+    # WAIT, not "slow game".
+    if direction == "under" and not shot_rate_available:
+        return None
+
     if scope == "PERIOD_3" and direction == "under" and remaining <= 330 and margin <= 2:
         return None
 

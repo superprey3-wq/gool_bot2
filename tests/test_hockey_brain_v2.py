@@ -299,7 +299,9 @@ def test_live_integer_line_push_reduces_displayed_confidence():
     brain = _live_brain(recent_shot_rate=0.5)
     brain["elapsed_seconds"] = 600.0
     brain["segment_score_verified"] = True
-    lane = _live_lane(elapsed=600, line=1.0, market_over=0.70)
+    # Keep this as a genuinely strong integer-line UNDER so the test checks
+    # push handling without reviving the weak 0.85-vs-1.0 signal class.
+    lane = _live_lane(elapsed=600, line=2.0, market_over=0.70)
 
     signal = live_signal(brain, lane)
 
@@ -311,6 +313,22 @@ def test_live_integer_line_push_reduces_displayed_confidence():
 
 
 def test_missing_sog_is_not_treated_as_zero_pace_under_confirmation():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.0, shot_rate_available=False),
+        _live_lane(line=1.5, market_over=0.70),
+    )
+    assert signal is None
+
+
+def test_hockey_segment_rejects_tiny_stat_edge_like_under_one_at_projection_point_85():
+    signal = live_signal(
+        _live_brain(recent_shot_rate=0.45, shot_rate_available=True),
+        _live_lane(line=1.0, market_over=0.65),
+    )
+    assert signal is None
+
+
+def test_hockey_under_requires_real_current_period_sog():
     signal = live_signal(
         _live_brain(recent_shot_rate=0.0, shot_rate_available=False),
         _live_lane(line=1.5, market_over=0.70),

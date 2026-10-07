@@ -503,7 +503,8 @@ def test_full_match_signal_is_not_blocked_only_because_q2_has_under_35_seconds_l
     signal = live_signal(brain, lane)
     assert signal is not None
     assert signal["direction"] == "under"
-    assert signal["scope"] == "FULL_MATCH"
+    assert signal["remaining_match_projection"]
+    assert signal["remaining_seconds"] == 20.0
 
 
 def test_current_quarter_signal_still_waits_inside_final_35_seconds():

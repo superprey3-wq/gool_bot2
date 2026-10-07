@@ -788,11 +788,17 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         data_quality = 0.85
     else:
         recent_poss_rate = max(0.0, _num(brain.get("recent_possessions_per_min"), 0.0) or 0.0)
+        recent_possessions = max(0.0, _num(brain.get("recent_possessions"), 0.0) or 0.0)
         recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
-        if recent_poss_rate > 0:
-            # Flashscore stat rows can refresh in bursts. Keep the fresh delta
-            # as evidence, but do not let one slow/fast refresh window dictate
-            # the rest of the quarter.
+        min_recent_possessions = max(
+            1.0,
+            _env_float("GOOL_BASKETBALL_LIVE_MIN_RECENT_POSSESSIONS", 2.0),
+        )
+        if recent_poss_rate > 0 and recent_possessions >= min_recent_possessions:
+            # Flashscore updates basketball score/stats in bursts. A tiny
+            # fractional possession delta across ~60-90s is usually provider
+            # staleness, not a genuinely slow game. Only trust recent tempo
+            # after enough *observed* possessions accumulated in the window.
             poss_per_min = _clamp(
                 recent_poss_rate,
                 prior_poss_per_min * 0.60,
@@ -804,7 +810,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
                 20.0,
                 _num(brain.get("recent_window_seconds"), 60.0) or 60.0,
             )
-            observed_poss = max(1.0, poss_per_min * recent_window / 60.0)
+            observed_poss = recent_possessions
             possession_source = "flashscore_recent_delta"
             data_quality = 0.65
 
@@ -958,15 +964,18 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         expected_score_rate = prior_total / max(1.0, duration / 60.0)
         recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
         overall_score_rate = current / max(0.75, elapsed / 60.0)
+        recent_activity_available = bool(brain.get("recent_activity_available"))
         if (
-            direction == "over"
+            recent_activity_available
+            and direction == "over"
             and recent_score_rate >= expected_score_rate * 1.15
             and overall_score_rate >= expected_score_rate * 1.05
         ):
             agreement += 1
             directional_confirmation = True
         elif (
-            direction == "under"
+            recent_activity_available
+            and direction == "under"
             and recent_score_rate <= expected_score_rate * 0.82
             and overall_score_rate <= expected_score_rate * 0.95
         ):
@@ -1049,6 +1058,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "elapsed_seconds": round(elapsed, 1),
         "remaining_seconds": round(remaining, 1),
         "recent_rate_per_min": round(max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0), 3),
+        "recent_possessions": round(max(0.0, _num(brain.get("recent_possessions"), 0.0) or 0.0), 3),
+        "recent_activity_available": bool(brain.get("recent_activity_available")),
         "possessions_per_min": round(poss_per_min, 3),
         "projected_remaining_possessions": round(remaining_poss, 2),
         "posterior_ppp_pair": round(posterior_ppp, 3),

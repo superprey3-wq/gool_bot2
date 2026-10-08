@@ -149,8 +149,8 @@ def global_super_publish_pool(picks: Iterable[PrematchPick]) -> list[PrematchPic
 
     return super_candidate_pool(
         picks,
-        min_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30),
-        max_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50),
+        min_leg_odds=max(1.30, env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30)),
+        max_leg_odds=min(1.50, env_float("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50)),
         min_leg_probability=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", 0.68),
         min_quality=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", 0.55),
         min_edge=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", 0.055),

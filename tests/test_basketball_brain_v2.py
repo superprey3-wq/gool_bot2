@@ -175,6 +175,36 @@ def test_prematch_quarter_scope_scales_game_mean_before_pricing():
     assert 35.0 < signal["mu_total"] < 65.0
 
 
+
+def test_prematch_quarter_uses_exact_segment_memory_as_bounded_prior():
+    lane = {
+        "scope": "QUARTER_1",
+        "market_family": "match_total",
+        "line": 40.5,
+        "probability": 0.50,
+        "over": 1.90,
+        "under": 1.90,
+    }
+    baseline = prematch_signal(lane, _high_total_features(), "TURKEY: Super Lig")
+    memory = {
+        "sport": "basketball",
+        "quality": 0.80,
+        "segments": {
+            "QUARTER_1": {
+                "expected_home": 18.0,
+                "expected_away": 18.0,
+                "expected_total": 36.0,
+            }
+        },
+    }
+    adjusted = prematch_signal(lane, _high_total_features(), "TURKEY: Super Lig", memory)
+    assert baseline is not None
+    assert adjusted is not None
+    assert adjusted["segment_memory_weight"] > 0
+    assert adjusted["segment_prior_total"] == 36.0
+    assert adjusted["mu_total"] < baseline["mu_total"]
+
+
 def test_recent_possessions_are_derived_from_attempts_rebounds_and_turnovers():
     first = {
         "stats_mode": "direct_segment",

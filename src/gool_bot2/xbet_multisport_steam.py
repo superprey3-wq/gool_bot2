@@ -4021,6 +4021,11 @@ class MultiSportSteamWorker:
                     row_group = self._live_correlation_group(sport, row_scope, row_family)
                     if wanted_group == row_group:
                         return True
+                # Hockey public contract: one LIVE pick per match. Period total,
+                # full-match total and team totals are competing candidates, not
+                # separate public bets on the same game.
+                if wanted_phase == "LIVE" and str(sport or "").casefold() == "hockey":
+                    return True
                 if row_scope == wanted_scope and row_family == wanted_family:
                     return True
         return False
@@ -5189,6 +5194,16 @@ class MultiSportSteamWorker:
                     selected_live_signals = sorted(
                         best_by_group.values(),
                         key=lambda item: -float(item[1].get("strength") or 0.0),
+                    )[:1]
+                elif cfg.key == "hockey":
+                    # Period/full/team totals compete for one public hockey pick.
+                    selected_live_signals = sorted(
+                        pending_live_signals,
+                        key=lambda item: (
+                            -float(item[1].get("strength") or 0.0),
+                            -abs(float(item[1].get("edge") or 0.0)),
+                            -float(item[1].get("model_probability") or 0.0),
+                        ),
                     )[:1]
                 else:
                     selected_live_signals = pending_live_signals

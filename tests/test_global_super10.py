@@ -108,10 +108,10 @@ def test_global_super10_uses_safe_reserve_to_complete_ten(tmp_path: Path, monkey
     gs.publish_candidates("hockey", [
         _candidate("hockey", 1, now),
         _candidate("hockey", 2, now),
-        {**_candidate("hockey", 3, now, odd=1.62, p=0.69), "data_quality": 0.58, "strength": 75},
+        {**_candidate("hockey", 3, now, odd=1.49, p=0.69), "data_quality": 0.58, "strength": 75},
     ])
     gs.publish_candidates("basketball", [
-        {**_candidate("basketball", i, now, odd=1.62, p=0.69), "data_quality": 0.58, "strength": 75}
+        {**_candidate("basketball", i, now, odd=1.49, p=0.69), "data_quality": 0.58, "strength": 75}
         for i in range(1, 4)
     ])
 
@@ -529,3 +529,36 @@ def test_super10_result_report_is_sent_only_after_last_match_finishes(tmp_path: 
     third = gs.reconcile_global_super10(deliver_result=True)
     assert third["delivered"] == 0
     assert len(sent) == 1
+
+
+def test_global_super10_hard_bounds_every_leg_to_1_30_1_50(tmp_path: Path, monkeypatch):
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+
+    # Even broader env values must not widen the product contract.
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_MIN_ODD", "1.10")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_MAX_ODD", "1.90")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", "1.10")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", "1.90")
+
+    football = [_candidate("football", i, now, odd=1.40) for i in range(1, 5)]
+    football += [
+        _candidate("football", 90, now, odd=1.29, p=0.95),
+        _candidate("football", 91, now, odd=1.51, p=0.95),
+    ]
+    hockey = [_candidate("hockey", i, now, odd=1.45) for i in range(1, 4)]
+    basketball = [_candidate("basketball", i, now, odd=1.50) for i in range(1, 4)]
+
+    gs.publish_candidates("football", football)
+    gs.publish_candidates("hockey", hockey)
+    gs.publish_candidates("basketball", basketball)
+
+    strict = gs.eligible_candidates(now_ts=now)
+    reserve = gs.reserve_candidates(now_ts=now)
+    assert strict
+    assert reserve
+    assert all(1.30 <= float(row["odd"]) <= 1.50 for row in strict)
+    assert all(1.30 <= float(row["odd"]) <= 1.50 for row in reserve)
+    ids = {row["event_id"] for row in reserve}
+    assert "football-90" not in ids
+    assert "football-91" not in ids

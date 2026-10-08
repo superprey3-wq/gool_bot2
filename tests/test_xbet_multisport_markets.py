@@ -82,7 +82,7 @@ def test_period_scores_reads_real_sc_ps_shape_and_builds_halves():
     assert scores["SECOND_HALF"] == (41, 47)
 
 
-def test_parlay_market_lanes_keep_all_total_lines_not_only_balanced_one():
+def test_singles_live_and_parlay_lanes_keep_all_safe_total_lines():
     decoded = decode_core_markets({
         "GE": [{"E": [[
             {"G": 4, "T": 9, "P": 150.5, "C": 1.50},
@@ -97,7 +97,9 @@ def test_parlay_market_lanes_keep_all_total_lines_not_only_balanced_one():
     regular = market_lanes({"FULL_MATCH": decoded})
     parlay = prematch_parlay_market_lanes({"FULL_MATCH": decoded}, "basketball")
 
-    assert len([x for x in regular if x["market_family"] == "match_total"]) == 1
+    assert {
+        x["line"] for x in regular if x["market_family"] == "match_total"
+    } == {150.5, 160.5, 170.5}
     assert {
         x["line"] for x in parlay if x["market_family"] == "match_total"
     } == {150.5, 160.5, 170.5}

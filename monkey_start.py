@@ -331,8 +331,8 @@ def main() -> None:
     os.environ["GOOL_LIVE_V4_MODE"] = "active"
     os.environ.setdefault("GOOL_LIVE_MULTI_ALL_MARKETS_SHADOW", "1")
 
-    # Hard production kill-switches for every exchange-money lane. Values from an
-    # old gool.env cannot re-enable them accidentally after this deployment.
+    # Keep legacy exchange emitters/push systems disabled. Matchbook context is
+    # a separate read-only collector below and starts only with real auth.
     os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"
     os.environ["BETDAQ_SELECTION_PUSH_ENABLED"] = "0"
     os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"

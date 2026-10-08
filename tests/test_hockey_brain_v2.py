@@ -282,6 +282,36 @@ def test_prematch_period_total_uses_period_lambda_not_full_match_lambda():
     assert signal["strength"] <= 87.0
 
 
+
+def test_prematch_period_uses_exact_segment_memory_as_bounded_prior():
+    lane = {
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "line": 1.5,
+        "over": 1.90,
+        "under": 1.90,
+        "probability": 0.50,
+    }
+    baseline = prematch_signal(lane, _strong_features(), "NHL")
+    memory = {
+        "sport": "hockey",
+        "quality": 0.80,
+        "segments": {
+            "PERIOD_1": {
+                "expected_home": 1.5,
+                "expected_away": 1.5,
+                "expected_total": 3.0,
+            }
+        },
+    }
+    adjusted = prematch_signal(lane, _strong_features(), "NHL", memory)
+    assert baseline is not None
+    assert adjusted is not None
+    assert adjusted["segment_memory_weight"] > 0
+    assert adjusted["segment_prior_total"] == 3.0
+    assert adjusted["lambda_home"] + adjusted["lambda_away"] > baseline["lambda_home"] + baseline["lambda_away"]
+
+
 def test_live_short_pressure_window_does_not_count_as_shot_confirmation():
     brain = _live_brain(recent_shot_rate=0.0)
     brain["elapsed_seconds"] = 600.0

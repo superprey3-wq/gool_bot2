@@ -284,7 +284,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
     os.environ.setdefault("GOOL_HOCKEY_ENABLED", "1")
     os.environ.setdefault("GOOL_BASKETBALL_ENABLED", "1")
-    os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.45")
+    os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.50")
     os.environ.setdefault("GOOL_MULTISPORT_MAX_ODD", "3.25")
     os.environ.setdefault("GOOL_MULTISPORT_MIN_FAIR_EDGE_PP", "3.0")
     # Product policy: send the three strongest distinct hockey/basketball

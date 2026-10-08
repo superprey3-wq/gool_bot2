@@ -601,6 +601,10 @@ def build_daily_report(
     football_path = football_path or multi_menu.journal_path()
     multisport_path = multisport_path or multisport_menu.journal_path()
     super10_history_path = super10_history_path or global_super10.history_path()
+    try:
+        global_super10.reconcile_global_super10(deliver_result=False)
+    except Exception as exc:
+        print(f"GOOL_REPORT_SUPER10_RECONCILE_ERROR {type(exc).__name__}:{exc}", flush=True)
     multisport_history_path = multisport_history_path or _multisport_history_path()
 
     football = [

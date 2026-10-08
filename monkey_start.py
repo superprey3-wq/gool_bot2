@@ -321,7 +321,7 @@ def main() -> None:
     os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"
     os.environ["GOOL_EXCHANGE_MONEY_SYSTEMS_ENABLED"] = "0"
 
-    os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
+    os.environ.setdefault("GOOL_MATCHBOOK_ENABLED", "1")\n    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")\n    os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
     os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "30")
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "2")
     os.environ.setdefault("GOOL_BROWSER_MATCH_CACHE_SECONDS", "90")
@@ -365,9 +365,10 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
-        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
-        "prematch_full_market=active live_consensus=2of3 "
-        "matchbook_worker=off betdaq_worker=off sx_board=off",
+        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} "
+        f"matchbook_worker={'on' if _matchbook_runtime_enabled() else 'off_auth_missing'} "
+        "prematch_full_market=active live_consensus=2of3 legacy_exchange_emitters=off "
+        "betdaq_worker=off sx_board=off",
         flush=True,
     )
     if browser_enabled:

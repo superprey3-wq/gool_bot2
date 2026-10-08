@@ -381,6 +381,93 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
     assert "может проиграть максимум в 4" in text
 
 
+
+def test_in_game_drops_stale_saved_live_when_fresh_flashscore_is_authoritative(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    state.write_text(json.dumps({
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "stale1",
+                    "home": "Old Home",
+                    "away": "Old Away",
+                    "score": [2, 1],
+                    "coarse_status": "2",
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        }
+    }), "utf-8")
+    journal.write_text(json.dumps([{
+        "sport": "hockey",
+        "phase": "LIVE",
+        "result": "pending",
+        "flashscore_event_id": "stale1",
+        "event_id": "xb-stale1",
+        "home": "Old Home",
+        "away": "Old Away",
+        "scope": "PERIOD_2",
+        "market_family": "match_total",
+        "selection": "2-й период: ТБ 1.5",
+        "odd": 1.80,
+    }]), "utf-8")
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
+    monkeypatch.setitem(menu._DIRECT_FLASH_META, "hockey", {"authoritative": True})
+    monkeypatch.setitem(menu._DIRECT_FLASH_META, "basketball", {"authoritative": True})
+
+    text = "\n".join(menu.multisport_in_game_sections())
+    assert "Old Home" not in text
+
+
+def test_in_game_keeps_saved_live_when_fresh_flashscore_is_unavailable(tmp_path: Path, monkeypatch):
+    state = tmp_path / "state.json"
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    state.write_text(json.dumps({
+        "sports": {
+            "hockey": {
+                "matches": [],
+                "flashscore_live_matches": [{
+                    "flashscore_event_id": "saved1",
+                    "home": "Saved Home",
+                    "away": "Saved Away",
+                    "score": [1, 1],
+                    "coarse_status": "2",
+                    "scope": "PERIOD_2",
+                    "period": "2-й период",
+                }],
+            },
+            "basketball": {"matches": [], "flashscore_live_matches": []},
+        }
+    }), "utf-8")
+    journal.write_text(json.dumps([{
+        "sport": "hockey",
+        "phase": "LIVE",
+        "result": "pending",
+        "flashscore_event_id": "saved1",
+        "event_id": "xb-saved1",
+        "home": "Saved Home",
+        "away": "Saved Away",
+        "scope": "PERIOD_2",
+        "market_family": "match_total",
+        "selection": "2-й период: ТБ 1.5",
+        "odd": 1.80,
+    }]), "utf-8")
+
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
+    monkeypatch.setitem(menu._DIRECT_FLASH_META, "hockey", {"authoritative": False})
+    monkeypatch.setitem(menu._DIRECT_FLASH_META, "basketball", {"authoritative": False})
+
+    text = "\n".join(menu.multisport_in_game_sections())
+    assert "Saved Home" in text
+
+
 def test_multisport_analysis_includes_hockey_and_basketball_brain(tmp_path: Path, monkeypatch):
     import gool_bot2.multisport_menu as menu
 

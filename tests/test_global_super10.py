@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import gool_bot2.global_super10 as gs
@@ -562,3 +563,95 @@ def test_global_super10_hard_bounds_every_leg_to_1_30_1_50(tmp_path: Path, monke
     ids = {row["event_id"] for row in reserve}
     assert "football-90" not in ids
     assert "football-91" not in ids
+
+
+def test_final_unsent_super10_is_delivered_even_when_already_settled(tmp_path: Path, monkeypatch):
+    import json
+
+    _paths(tmp_path, monkeypatch)
+    created = datetime.now(timezone.utc).isoformat()
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "lost",
+        "created_at": created,
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": f"done{i}",
+                "selection": "ТБ 0.5",
+                "result": "won" if i else "lost",
+                "odd": 1.40,
+            }
+            for i in range(10)
+        ],
+    }
+    gs.history_path().write_text(json.dumps([{"day": "2026-10-09", **ticket}]), "utf-8")
+    gs.sent_path().write_text(json.dumps({
+        "day": "2026-10-09",
+        "sent": True,
+        "ticket": ticket,
+    }), "utf-8")
+
+    sent = []
+    monkeypatch.setattr(gs, "render_v4_parlay_card", lambda row, result=False: b"PNG")
+    monkeypatch.setattr(
+        gs.telegram,
+        "broadcast_photo",
+        lambda png, caption="": sent.append(caption) or 1,
+    )
+
+    first = gs.reconcile_global_super10(deliver_result=True)
+    second = gs.reconcile_global_super10(deliver_result=True)
+
+    assert first["delivered"] == 1
+    assert first["delivery_pending"] == 0
+    assert second["delivered"] == 0
+    assert len(sent) == 1
+    stored = json.loads(gs.history_path().read_text("utf-8"))[0]
+    assert stored["result_telegram_sent"] is True
+
+
+def test_super10_final_report_retries_after_telegram_failure(tmp_path: Path, monkeypatch):
+    import json
+
+    _paths(tmp_path, monkeypatch)
+    created = datetime.now(timezone.utc).isoformat()
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "won",
+        "created_at": created,
+        "result_report_expected": True,
+        "legs": [
+            {
+                "sport": "basketball",
+                "event_id": f"b{i}",
+                "selection": "SAFE",
+                "result": "won",
+                "odd": 1.40,
+            }
+            for i in range(10)
+        ],
+    }
+    gs.history_path().write_text(json.dumps([{"day": "2026-10-09", **ticket}]), "utf-8")
+    gs.sent_path().write_text(json.dumps({
+        "day": "2026-10-09",
+        "sent": True,
+        "ticket": ticket,
+    }), "utf-8")
+
+    attempts = []
+    monkeypatch.setattr(gs, "render_v4_parlay_card", lambda row, result=False: b"PNG")
+
+    def flaky_send(png, caption=""):
+        attempts.append(caption)
+        return 0 if len(attempts) == 1 else 1
+
+    monkeypatch.setattr(gs.telegram, "broadcast_photo", flaky_send)
+
+    first = gs.reconcile_global_super10(deliver_result=True)
+    second = gs.reconcile_global_super10(deliver_result=True)
+
+    assert first["delivered"] == 0
+    assert first["delivery_pending"] == 1
+    assert second["delivered"] == 1
+    assert len(attempts) == 2

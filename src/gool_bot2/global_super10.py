@@ -673,19 +673,74 @@ def _ticket_all_legs_final(ticket: dict[str, Any]) -> bool:
     return all(str(leg.get("result") or "pending").lower() in final for leg in legs)
 
 
+def _result_delivery_candidates(
+    rows: list[dict[str, Any]],
+    sent_record: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return final unsent tickets that are entitled to a result report.
+
+    New tickets explicitly carry result_report_expected. For the ticket that
+    was already sent before this flag existed, matching sent_path is enough.
+    As a one-time migration safety net, the newest final unsent ticket from the
+    last 72 hours is also eligible, which repairs the currently missed report
+    without flooding Telegram with old history.
+    """
+    final_results = {"won", "lost", "push", "void"}
+    final_unsent = [
+        row for row in rows
+        if isinstance(row, dict)
+        and str(row.get("kind") or "") == "GLOBAL_SUPER"
+        and str(row.get("result") or "").lower() in final_results
+        and _ticket_all_legs_final(row)
+        and not bool(row.get("result_telegram_sent"))
+    ]
+    if not final_unsent:
+        return []
+
+    wanted: dict[str, dict[str, Any]] = {}
+    for row in final_unsent:
+        if bool(row.get("result_report_expected")):
+            key = str(row.get("created_at") or "")
+            if key:
+                wanted[key] = row
+
+    sent_ticket = sent_record.get("ticket") if isinstance(sent_record, dict) else None
+    sent_key = str((sent_ticket or {}).get("created_at") or "") if isinstance(sent_ticket, dict) else ""
+    if sent_key:
+        for row in final_unsent:
+            if str(row.get("created_at") or "") == sent_key:
+                wanted[sent_key] = row
+                break
+
+    if not wanted:
+        newest = max(final_unsent, key=lambda row: str(row.get("created_at") or ""))
+        raw = str(newest.get("created_at") or "")
+        try:
+            stamp = datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            stamp = 0.0
+        if stamp > 0.0 and time.time() - stamp <= 72 * 3600:
+            wanted[raw] = newest
+
+    return sorted(wanted.values(), key=lambda row: str(row.get("created_at") or ""))
+
+
 def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
-    """Settle sent GLOBAL SUPER legs from authoritative Flashscore results."""
+    """Settle sent GLOBAL SUPER legs and reliably deliver any missed final report."""
     path = history_path()
+    sent_file = sent_path()
     with _locked(path):
         rows = _read_json(path, [])
         if not isinstance(rows, list) or not rows:
-            return {"changed": 0, "settled": 0, "delivered": 0}
+            return {"changed": 0, "settled": 0, "delivered": 0, "delivery_pending": 0}
 
         repaired = 0
         for ticket in rows:
             if isinstance(ticket, dict) and _repair_legacy_super_ticket(ticket):
                 repaired += 1
 
+        changed = repaired
+        settled = 0
         pending_ids = {
             str(leg.get("event_id") or "")
             for ticket in rows
@@ -695,37 +750,30 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
             and str(leg.get("result") or "pending").lower() == "pending"
             and str(leg.get("event_id") or "")
         }
-        if not pending_ids:
-            if repaired:
-                _write_json(path, rows[-120:])
-            return {"changed": repaired, "settled": 0, "delivered": 0}
 
-        from .providers.flashscore import FlashscoreProvider
+        if pending_ids:
+            from .providers.flashscore import FlashscoreProvider
 
-        provider = FlashscoreProvider()
-        states = provider.event_states(pending_ids)
-        changed = repaired
-        settled = 0
-        newly_settled: list[dict[str, Any]] = []
-        for ticket in rows:
-            if not isinstance(ticket, dict):
-                continue
-            before = str(ticket.get("result") or "pending").lower()
-            if _settle_super_ticket(provider, ticket, states):
-                changed += 1
-            after = str(ticket.get("result") or "pending").lower()
-            if before == "pending" and after in {"won", "lost", "void", "push"}:
-                settled += 1
-                newly_settled.append(ticket)
+            provider = FlashscoreProvider()
+            states = provider.event_states(pending_ids)
+            for ticket in rows:
+                if not isinstance(ticket, dict):
+                    continue
+                before = str(ticket.get("result") or "pending").lower()
+                if _settle_super_ticket(provider, ticket, states):
+                    changed += 1
+                after = str(ticket.get("result") or "pending").lower()
+                if before == "pending" and after in {"won", "lost", "void", "push"}:
+                    settled += 1
+
         if changed:
             _write_json(path, rows[-120:])
 
-        # Keep the interactive "sent today" snapshot aligned with history.
-        sent_file = sent_path()
+        # Keep the interactive sent snapshot aligned even when another call
+        # settled the ticket with deliver_result=False.
         sent = _read_json(sent_file, {})
         if isinstance(sent, dict) and isinstance(sent.get("ticket"), dict):
-            ticket = sent["ticket"]
-            signature = str(ticket.get("created_at") or "")
+            signature = str(sent["ticket"].get("created_at") or "")
             matching = next(
                 (
                     row for row in reversed(rows)
@@ -739,14 +787,15 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
                 sent["result"] = matching.get("result")
                 _write_json(sent_file, sent)
 
+        delivery_candidates = _result_delivery_candidates(
+            [row for row in rows if isinstance(row, dict)],
+            sent if isinstance(sent, dict) else {},
+        )
+
     delivered = 0
+    successful: dict[str, dict[str, Any]] = {}
     if deliver_result:
-        for ticket in newly_settled:
-            # Final report is allowed only after the LAST leg is settled.
-            if not _ticket_all_legs_final(ticket):
-                continue
-            if bool(ticket.get("result_telegram_sent")):
-                continue
+        for ticket in delivery_candidates:
             try:
                 png = render_v4_parlay_card(ticket, result=True)
                 result = str(ticket.get("result") or "void").lower()
@@ -758,33 +807,55 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
                         "✅ Все 10 матчей завершены"
                     ),
                 ) or 0)
-            except Exception:
+            except Exception as exc:
+                print(f"GOOL_GLOBAL_SUPER10_RESULT_SEND_ERROR {type(exc).__name__}:{exc}", flush=True)
                 sent_count = 0
+
             if sent_count > 0:
                 ticket["result_telegram_sent"] = True
                 ticket["result_telegram_sent_at"] = datetime.now(timezone.utc).isoformat()
+                ticket["result_report_expected"] = True
+                key = str(ticket.get("created_at") or "")
+                if key:
+                    successful[key] = ticket
                 delivered += sent_count
-        if newly_settled:
-            with _locked(path):
-                current = _read_json(path, [])
-                by_created = {
-                    str(ticket.get("created_at") or ""): ticket
-                    for ticket in newly_settled
-                    if str(ticket.get("created_at") or "")
-                }
-                dirty = False
-                for row in current if isinstance(current, list) else []:
-                    key = str(row.get("created_at") or "") if isinstance(row, dict) else ""
-                    if key in by_created and bool(by_created[key].get("result_telegram_sent")):
-                        row.update({
-                            "result_telegram_sent": True,
-                            "result_telegram_sent_at": by_created[key].get("result_telegram_sent_at"),
-                        })
-                        dirty = True
-                if dirty:
-                    _write_json(path, current[-120:])
-    return {"changed": changed, "settled": settled, "delivered": delivered}
 
+    if successful:
+        with _locked(path):
+            current = _read_json(path, [])
+            dirty = False
+            for row in current if isinstance(current, list) else []:
+                key = str(row.get("created_at") or "") if isinstance(row, dict) else ""
+                ticket = successful.get(key)
+                if ticket is not None:
+                    row.update({
+                        "result_report_expected": True,
+                        "result_telegram_sent": True,
+                        "result_telegram_sent_at": ticket.get("result_telegram_sent_at"),
+                    })
+                    dirty = True
+            if dirty:
+                _write_json(path, current[-120:])
+
+        sent = _read_json(sent_file, {})
+        if isinstance(sent, dict) and isinstance(sent.get("ticket"), dict):
+            key = str(sent["ticket"].get("created_at") or "")
+            ticket = successful.get(key)
+            if ticket is not None:
+                sent["ticket"].update({
+                    "result_report_expected": True,
+                    "result_telegram_sent": True,
+                    "result_telegram_sent_at": ticket.get("result_telegram_sent_at"),
+                })
+                _write_json(sent_file, sent)
+
+    still_pending = max(0, len(delivery_candidates) - len(successful))
+    return {
+        "changed": changed,
+        "settled": settled,
+        "delivered": delivered,
+        "delivery_pending": still_pending,
+    }
 
 def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     reconcile_global_super10(deliver_result=bool(delivery_enabled))
@@ -810,6 +881,8 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
         if any(_num(leg.get("start_ts")) <= time.time() + min_lead for leg in ticket["legs"]):
             return {"status": "stale_before_send", "day": day}
 
+        ticket["result_report_expected"] = True
+        ticket["result_telegram_sent"] = False
         png = render_v4_parlay_card(ticket)
         counts = ticket.get("sport_counts") or {}
         caption = (

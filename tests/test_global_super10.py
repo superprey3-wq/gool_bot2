@@ -312,3 +312,141 @@ def test_global_super10_prefers_more_confident_reserve_over_weaker_strict(tmp_pa
     reserve_leg = next(leg for leg in ticket["legs"] if leg["event_id"] == "basketball-99")
     assert reserve_leg["super_tier"] == "reserve"
     assert reserve_leg["super_confidence_score"] > 0
+
+
+def test_super10_missing_football_total_line_is_not_coerced_to_zero():
+    row = gs._normalize_candidate(
+        {
+            "event_id": "f-total-1",
+            "home": "Tractor",
+            "away": "Esteghlal",
+            "market": "home_total",
+            "selection": "ИТМ1 1.5",
+            "odd": 1.39,
+            "model_probability": 0.80,
+            "market_probability": 0.65,
+            "edge": 0.15,
+            "data_quality": 0.85,
+            "strength": 84,
+            "start_ts": time.time() + 3600,
+        },
+        "football",
+    )
+    assert row is not None
+    assert row["line"] is None
+
+
+def test_super10_individual_under_1_5_at_one_goal_is_won():
+    class Provider:
+        def fetch_goal_timeline(self, event_id):
+            return []
+
+    leg = {
+        "sport": "football",
+        "event_id": "f-total-2",
+        "market": "home_total",
+        "market_family": "home_total",
+        "selection": "ИТМ1 1.5",
+        "line": None,
+    }
+    state = {"is_finished": True, "home_score": 1, "away_score": 1}
+    assert gs._settle_super_leg(Provider(), leg, state) == "won"
+
+
+def test_super_ticket_waits_for_all_legs_before_final_lost():
+    class Provider:
+        def fetch_goal_timeline(self, event_id):
+            return []
+
+    ticket = {
+        "result": "pending",
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": "done",
+                "market": "match_total",
+                "market_family": "match_total",
+                "selection": "ТБ 2.5",
+                "line": None,
+                "result": "pending",
+            },
+            {
+                "sport": "football",
+                "event_id": "waiting",
+                "market": "match_total",
+                "market_family": "match_total",
+                "selection": "ТБ 2.5",
+                "line": None,
+                "result": "pending",
+            },
+        ],
+    }
+    states = {
+        "done": {"is_finished": True, "home_score": 0, "away_score": 0},
+        "waiting": {"is_finished": False, "home_score": 0, "away_score": 0},
+    }
+    assert gs._settle_super_ticket(Provider(), ticket, states) is True
+    assert ticket["legs"][0]["result"] == "lost"
+    assert ticket["legs"][1]["result"] == "pending"
+    assert ticket["result"] == "pending"
+
+
+def test_reconcile_repairs_legacy_zero_line_and_premature_lost(tmp_path: Path, monkeypatch):
+    import json
+    from gool_bot2.providers import flashscore as flashscore_module
+
+    _paths(tmp_path, monkeypatch)
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "lost",
+        "settled_at": "2026-10-08T15:00:00+00:00",
+        "profit_units": -1.0,
+        "created_at": "2026-10-08T12:00:00+00:00",
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": "tractor",
+                "market": "home_total",
+                "market_family": "home_total",
+                "selection": "ИТМ1 1.5",
+                "line": 0.0,
+                "odd": 1.39,
+                "result": "lost",
+                "settled_score": [1, 1],
+            },
+            {
+                "sport": "hockey",
+                "event_id": "later",
+                "scope": "FULL_MATCH",
+                "market_family": "match_total",
+                "selection": "ТБ 4.5",
+                "line": 4.5,
+                "direction": "over",
+                "odd": 1.50,
+                "result": "pending",
+            },
+        ],
+    }
+    gs.history_path().write_text(json.dumps([ticket]), "utf-8")
+    gs.sent_path().write_text(json.dumps({"day": "2026-10-08", "sent": True, "ticket": ticket}), "utf-8")
+
+    class FakeFlashscore:
+        def event_states(self, ids):
+            return {
+                "tractor": {"is_finished": True, "home_score": 1, "away_score": 1},
+                "later": {"is_finished": False, "home_score": 0, "away_score": 0},
+            }
+
+        def fetch_goal_timeline(self, event_id):
+            return []
+
+    monkeypatch.setattr(flashscore_module, "FlashscoreProvider", FakeFlashscore)
+
+    result = gs.reconcile_global_super10(deliver_result=False)
+
+    stored = json.loads(gs.history_path().read_text("utf-8"))[0]
+    assert result["changed"] >= 1
+    assert stored["result"] == "pending"
+    assert stored["legs"][0]["line"] is None
+    assert stored["legs"][0]["result"] == "won"
+    assert stored["legs"][1]["result"] == "pending"

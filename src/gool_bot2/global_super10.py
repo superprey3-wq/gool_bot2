@@ -144,7 +144,11 @@ def _normalize_candidate(row: dict[str, Any], sport: str) -> dict[str, Any] | No
         "scope": str(row.get("scope") or "FULL_MATCH"),
         "direction": str(row.get("direction") or ""),
         "selection_side": str(row.get("selection_side") or ""),
-        "line": _num(row.get("line"), 0.0),
+        "line": (
+            None
+            if row.get("line") is None or str(row.get("line")).strip() == ""
+            else _num(row.get("line"), 0.0)
+        ),
         "moneyline_kind": str(row.get("moneyline_kind") or ""),
         "odd": round(odd, 4),
         "model_probability": round(model_p, 6),
@@ -585,13 +589,16 @@ def _settle_super_ticket(provider: Any, ticket: dict[str, Any], states: dict[str
 
     ticket["legs"] = legs
     results = [str(leg.get("result") or "pending").lower() for leg in legs]
+    # Do not publish a final SUPER result while the card still contains WAIT
+    # legs. Even if one leg has already lost, the result card is only final
+    # after every displayed leg is settled.
+    if any(result == "pending" for result in results):
+        return changed
     if any(result == "lost" for result in results):
         ticket["result"] = "lost"
         ticket["profit_units"] = -1.0
         ticket["settled_at"] = datetime.now(timezone.utc).isoformat()
         return True
-    if any(result == "pending" for result in results):
-        return changed
     if all(result in {"void", "push"} for result in results):
         ticket["result"] = "void"
         ticket["effective_odd"] = 1.0
@@ -608,6 +615,55 @@ def _settle_super_ticket(provider: Any, ticket: dict[str, Any], states: dict[str
     return True
 
 
+
+def _repair_legacy_super_ticket(ticket: dict[str, Any]) -> bool:
+    """Repair tickets created while missing football total lines were stored as 0.0."""
+    changed = False
+    legs = [dict(leg) for leg in (ticket.get("legs") or []) if isinstance(leg, dict)]
+    if not legs:
+        return False
+
+    total_families = {
+        "match_total",
+        "home_total",
+        "away_total",
+        "first_half_total",
+        "second_half_total",
+    }
+    for leg in legs:
+        if str(leg.get("sport") or "").casefold() != "football":
+            continue
+        family = str(leg.get("market_family") or leg.get("market") or "").casefold()
+        selection = str(leg.get("selection") or "").casefold()
+        try:
+            line = float(leg.get("line"))
+        except (TypeError, ValueError):
+            line = None
+        looks_like_total = family in total_families or any(
+            token in selection for token in ("тб", "тм", "over", "under", "больше", "меньше")
+        )
+        if looks_like_total and line == 0.0:
+            leg["line"] = None
+            # Re-open a result calculated against the bogus 0.0 line so the
+            # next reconciliation settles it from the selection text.
+            if str(leg.get("result") or "pending").lower() in {"won", "lost", "push", "void"}:
+                leg["result"] = "pending"
+                for key in ("settled_at", "settled_score", "settled_minute"):
+                    leg.pop(key, None)
+            changed = True
+
+    results = [str(leg.get("result") or "pending").lower() for leg in legs]
+    if any(result == "pending" for result in results) and str(ticket.get("result") or "pending").lower() in {"won", "lost", "void", "push"}:
+        ticket["result"] = "pending"
+        for key in ("settled_at", "profit_units", "effective_odd"):
+            ticket.pop(key, None)
+        changed = True
+
+    if changed:
+        ticket["legs"] = legs
+    return changed
+
+
 def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
     """Settle sent GLOBAL SUPER legs from authoritative Flashscore results."""
     path = history_path()
@@ -615,6 +671,11 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
         rows = _read_json(path, [])
         if not isinstance(rows, list) or not rows:
             return {"changed": 0, "settled": 0}
+
+        repaired = 0
+        for ticket in rows:
+            if isinstance(ticket, dict) and _repair_legacy_super_ticket(ticket):
+                repaired += 1
 
         pending_ids = {
             str(leg.get("event_id") or "")
@@ -626,13 +687,16 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
             and str(leg.get("event_id") or "")
         }
         if not pending_ids:
-            return {"changed": 0, "settled": 0}
+            if repaired:
+                _write_json(path, rows[-120:])
+            return {"changed": repaired, "settled": 0}
 
         from .providers.flashscore import FlashscoreProvider
 
         provider = FlashscoreProvider()
         states = provider.event_states(pending_ids)
-        changed = settled = 0
+        changed = repaired
+        settled = 0
         newly_settled: list[dict[str, Any]] = []
         for ticket in rows:
             if not isinstance(ticket, dict):

@@ -222,7 +222,12 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     }
 
 
-def prematch_signal(\n    lane: dict[str, Any],\n    features: dict[str, Any],\n    league: str,\n    segment_memory: dict[str, Any] | None = None,\n) -> dict[str, Any] | None:
+def prematch_signal(
+    lane: dict[str, Any],
+    features: dict[str, Any],
+    league: str,
+    segment_memory: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     full_lam_home, full_lam_away, baseline = prematch_lambdas(features, league)
     scope = str(lane.get("scope") or "FULL_MATCH")

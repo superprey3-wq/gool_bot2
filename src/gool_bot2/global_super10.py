@@ -345,8 +345,9 @@ def reserve_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
 
 
 def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
-    strict = eligible_candidates(now_ts=now_ts)
-    reserve = reserve_candidates(now_ts=now_ts)
+    now = float(now_ts or time.time())
+    strict = eligible_candidates(now_ts=now)
+    reserve = reserve_candidates(now_ts=now)
     strict_keys = {(str(row.get("sport") or ""), str(row.get("event_id") or "")) for row in strict}
     merged = [*strict]
     merged.extend(
@@ -356,6 +357,28 @@ def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
     target = max(2, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_LEGS"), 10)))
     strict_by = {sport: sum(1 for row in strict if row.get("sport") == sport) for sport in SPORTS}
     merged_by = {sport: sum(1 for row in merged if row.get("sport") == sport) for sport in SPORTS}
+    payload = _read_json(pool_path(), {})
+    sources = payload.get("sources") if isinstance(payload, dict) else {}
+    if not isinstance(sources, dict):
+        sources = {}
+    source_raw_by_sport: dict[str, int] = {}
+    source_age_seconds: dict[str, float | None] = {}
+    source_updated_at: dict[str, str] = {}
+    for sport in SPORTS:
+        source = sources.get(sport) or {}
+        rows = source.get("candidates") if isinstance(source, dict) else []
+        source_raw_by_sport[sport] = len(rows) if isinstance(rows, list) else 0
+        updated = str(source.get("updated_at") or "") if isinstance(source, dict) else ""
+        source_updated_at[sport] = updated
+        age = None
+        if updated:
+            try:
+                stamp = datetime.fromisoformat(updated.replace("Z", "+00:00")).timestamp()
+                age = max(0.0, now - stamp)
+            except Exception:
+                age = None
+        source_age_seconds[sport] = age
+
     return {
         "target": target,
         "strict": len(strict),
@@ -365,6 +388,9 @@ def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
         "available_by_sport": merged_by,
         "missing_sports": [sport for sport in SPORTS if merged_by.get(sport, 0) <= 0],
         "need_more": max(0, target - len(merged)),
+        "source_raw_by_sport": source_raw_by_sport,
+        "source_age_seconds": source_age_seconds,
+        "source_updated_at": source_updated_at,
     }
 
 

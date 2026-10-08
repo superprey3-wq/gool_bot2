@@ -679,7 +679,7 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
     with _locked(path):
         rows = _read_json(path, [])
         if not isinstance(rows, list) or not rows:
-            return {"changed": 0, "settled": 0}
+            return {"changed": 0, "settled": 0, "delivered": 0}
 
         repaired = 0
         for ticket in rows:
@@ -698,7 +698,7 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
         if not pending_ids:
             if repaired:
                 _write_json(path, rows[-120:])
-            return {"changed": repaired, "settled": 0}
+            return {"changed": repaired, "settled": 0, "delivered": 0}
 
         from .providers.flashscore import FlashscoreProvider
 

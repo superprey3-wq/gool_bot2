@@ -868,22 +868,60 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     with _locked(path):
         now = time.time()
         day = _moscow_day(now)
-        sent = _read_json(path, {})
-        if isinstance(sent, dict) and str(sent.get("day") or "") == day and sent.get("sent"):
+        state = _read_json(path, {})
+        if isinstance(state, dict) and str(state.get("day") or "") == day and state.get("sent"):
             return {"status": "already_sent", "day": day}
 
-        ticket = build_global_super10(now_ts=now)
-        if ticket is None:
-            return {"status": "not_ready", "day": day, **readiness_snapshot(now_ts=now)}
+        pending_ticket = (
+            dict(state.get("ticket") or {})
+            if isinstance(state, dict)
+            and str(state.get("day") or "") == day
+            and not state.get("sent")
+            and state.get("pending_send")
+            and isinstance(state.get("ticket"), dict)
+            else None
+        )
 
-        # Final kickoff guard under the delivery lock.
-        min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300.0))
-        if any(_num(leg.get("start_ts")) <= time.time() + min_lead for leg in ticket["legs"]):
-            return {"status": "stale_before_send", "day": day}
+        if pending_ticket is not None:
+            ticket = pending_ticket
+            retrying = True
+        else:
+            ticket = build_global_super10(now_ts=now)
+            retrying = False
+            if ticket is None:
+                return {"status": "not_ready", "day": day, **readiness_snapshot(now_ts=now)}
 
-        ticket["result_report_expected"] = True
-        ticket["result_telegram_sent"] = False
-        png = render_v4_parlay_card(ticket)
+            # A newly built PREMATCH ticket must still have the normal safety
+            # lead. Persist it BEFORE rendering/sending so a transient image or
+            # Telegram failure cannot lose the exact assembled SUPER10.
+            min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300.0))
+            if any(_num(leg.get("start_ts")) <= time.time() + min_lead for leg in ticket["legs"]):
+                return {"status": "stale_before_send", "day": day}
+
+            ticket["result_report_expected"] = True
+            ticket["result_telegram_sent"] = False
+            state = {
+                "day": day,
+                "sent": False,
+                "pending_send": True,
+                "assembled_at": datetime.now(timezone.utc).isoformat(),
+                "send_attempts": 0,
+                "ticket": ticket,
+            }
+            _write_json(path, state)
+
+        # On retry keep the exact saved ticket, but never publish a PREMATCH
+        # card after one of its matches has already started.
+        if retrying and any(
+            _num(leg.get("start_ts")) > 0.0 and _num(leg.get("start_ts")) <= time.time()
+            for leg in (ticket.get("legs") or [])
+            if isinstance(leg, dict)
+        ):
+            state["last_send_error"] = "ticket_started_before_retry"
+            state["last_send_attempt_at"] = datetime.now(timezone.utc).isoformat()
+            _write_json(path, state)
+            return {"status": "pending_send_stale", "day": day}
+
         counts = ticket.get("sport_counts") or {}
         caption = (
             "🌐 <b>SUPER 10 · ФУТБОЛ + ХОККЕЙ + БАСКЕТБОЛ</b>\n"
@@ -893,14 +931,36 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             f"Ноги: строгие <b>{int(ticket.get('strict_legs') or 0)}</b> · резерв <b>{int(ticket.get('reserve_legs') or 0)}</b>\n"
             f"Общий кэф: <b>{_num(ticket.get('combined_odds')):.2f}</b>"
         )
-        delivered = int(telegram.broadcast_photo(png, caption=caption) or 0)
+
+        state["send_attempts"] = int(state.get("send_attempts") or 0) + 1
+        state["last_send_attempt_at"] = datetime.now(timezone.utc).isoformat()
+        try:
+            png = render_v4_parlay_card(ticket)
+            delivered = int(telegram.broadcast_photo(png, caption=caption) or 0)
+        except Exception as exc:
+            delivered = 0
+            state["last_send_error"] = f"{type(exc).__name__}:{exc}"
+            print(f"GOOL_GLOBAL_SUPER10_INITIAL_SEND_ERROR {type(exc).__name__}:{exc}", flush=True)
+
         if delivered <= 0:
-            return {"status": "send_failed", "day": day}
+            state["sent"] = False
+            state["pending_send"] = True
+            state["ticket"] = ticket
+            state.setdefault("last_send_error", "telegram_delivery_zero")
+            _write_json(path, state)
+            return {
+                "status": "retry_pending" if retrying else "send_failed",
+                "day": day,
+                "send_attempts": int(state.get("send_attempts") or 0),
+            }
 
         record = {
             "day": day,
             "sent": True,
+            "pending_send": False,
+            "assembled_at": state.get("assembled_at"),
             "sent_at": datetime.now(timezone.utc).isoformat(),
+            "send_attempts": int(state.get("send_attempts") or 0),
             "delivery_count": delivered,
             "ticket": ticket,
         }
@@ -910,8 +970,10 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             "status": "sent",
             "day": day,
             "delivery_count": delivered,
+            "send_attempts": int(record.get("send_attempts") or 0),
             "combined_odds": ticket["combined_odds"],
             "sport_counts": counts,
             "strict_legs": int(ticket.get("strict_legs") or 0),
             "reserve_legs": int(ticket.get("reserve_legs") or 0),
         }
+

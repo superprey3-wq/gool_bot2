@@ -655,3 +655,110 @@ def test_super10_final_report_retries_after_telegram_failure(tmp_path: Path, mon
     assert first["delivery_pending"] == 1
     assert second["delivered"] == 1
     assert len(attempts) == 2
+
+
+def test_initial_super10_card_retries_same_persisted_ticket_after_send_failure(tmp_path: Path, monkeypatch):
+    import json
+
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "combined_odds": 28.5,
+        "strict_legs": 8,
+        "reserve_legs": 2,
+        "sport_counts": {"football": 3, "hockey": 3, "basketball": 4},
+        "legs": [
+            {
+                "sport": "football" if i < 3 else ("hockey" if i < 6 else "basketball"),
+                "event_id": f"e{i}",
+                "home": f"H{i}",
+                "away": f"A{i}",
+                "selection": "SAFE",
+                "odd": 1.40,
+                "start_ts": now + 3600 + i,
+            }
+            for i in range(10)
+        ],
+    }
+
+    builds = []
+    monkeypatch.setattr(gs, "build_global_super10", lambda now_ts=None: builds.append(now_ts) or dict(ticket))
+    monkeypatch.setattr(gs, "reconcile_global_super10", lambda deliver_result=False: {"changed": 0, "settled": 0, "delivered": 0})
+    monkeypatch.setattr(gs, "render_v4_parlay_card", lambda row, result=False: b"PNG")
+
+    attempts = []
+    def flaky_send(png, caption=""):
+        attempts.append(caption)
+        return 0 if len(attempts) == 1 else 1
+
+    monkeypatch.setattr(gs.telegram, "broadcast_photo", flaky_send)
+
+    first = gs.maybe_deliver_global_super10(delivery_enabled=True)
+    saved_after_first = json.loads(gs.sent_path().read_text("utf-8"))
+    second = gs.maybe_deliver_global_super10(delivery_enabled=True)
+    saved_after_second = json.loads(gs.sent_path().read_text("utf-8"))
+
+    assert first["status"] == "send_failed"
+    assert saved_after_first["pending_send"] is True
+    assert saved_after_first["sent"] is False
+    assert saved_after_first["ticket"]["combined_odds"] == 28.5
+    assert second["status"] == "sent"
+    assert saved_after_second["sent"] is True
+    assert saved_after_second["pending_send"] is False
+    assert saved_after_second["send_attempts"] == 2
+    assert len(builds) == 1
+    assert len(attempts) == 2
+
+
+def test_initial_super10_card_retries_after_render_exception(tmp_path: Path, monkeypatch):
+    import json
+
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "combined_odds": 20.0,
+        "strict_legs": 10,
+        "reserve_legs": 0,
+        "sport_counts": {"football": 4, "hockey": 3, "basketball": 3},
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": f"r{i}",
+                "selection": "SAFE",
+                "odd": 1.40,
+                "start_ts": now + 3600 + i,
+            }
+            for i in range(10)
+        ],
+    }
+
+    monkeypatch.setattr(gs, "build_global_super10", lambda now_ts=None: dict(ticket))
+    monkeypatch.setattr(gs, "reconcile_global_super10", lambda deliver_result=False: {"changed": 0, "settled": 0, "delivered": 0})
+
+    renders = []
+    def flaky_render(row, result=False):
+        renders.append(1)
+        if len(renders) == 1:
+            raise RuntimeError("render boom")
+        return b"PNG"
+
+    sent = []
+    monkeypatch.setattr(gs, "render_v4_parlay_card", flaky_render)
+    monkeypatch.setattr(gs.telegram, "broadcast_photo", lambda png, caption="": sent.append(1) or 1)
+
+    first = gs.maybe_deliver_global_super10(delivery_enabled=True)
+    second = gs.maybe_deliver_global_super10(delivery_enabled=True)
+
+    assert first["status"] == "send_failed"
+    assert second["status"] == "sent"
+    assert len(renders) == 2
+    assert len(sent) == 1
+    state = json.loads(gs.sent_path().read_text("utf-8"))
+    assert state["sent"] is True
+    assert state["send_attempts"] == 2

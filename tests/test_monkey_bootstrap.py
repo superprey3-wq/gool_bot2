@@ -80,3 +80,18 @@ def test_monkey_launches_multisport_as_separate_process():
     assert '"gool_bot2.xbet_multisport_steam"' in source
     assert 'GOOL_MULTISPORT_EMBEDDED_ENABLED"] = "0"' in source
     assert 'child_env["GOOL_FOOTBALL_AUTOINSTALL"] = "0"' in source
+
+
+def test_monkey_starts_matchbook_only_when_authenticated(monkeypatch):
+    monkey_start = _load_monkey_start()
+    monkeypatch.setenv("GOOL_MATCHBOOK_ENABLED", "1")
+    monkeypatch.delenv("MATCHBOOK_SESSION_TOKEN", raising=False)
+    monkeypatch.delenv("MATCHBOOK_USERNAME", raising=False)
+    monkeypatch.delenv("MATCHBOOK_PASSWORD", raising=False)
+
+    assert "matchbook" not in monkey_start._production_commands(False)
+
+    monkeypatch.setenv("MATCHBOOK_SESSION_TOKEN", "token")
+    commands = monkey_start._production_commands(False)
+    assert "matchbook" in commands
+    assert "gool_bot2.matchbook_market_worker" in commands["matchbook"]

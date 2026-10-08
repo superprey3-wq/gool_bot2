@@ -182,7 +182,12 @@ def _scope_factor(scope: str) -> float:
     return 1.0
 
 
-def prematch_signal(\n    lane: dict[str, Any],\n    features: dict[str, Any],\n    league: str,\n    segment_memory: dict[str, Any] | None = None,\n) -> dict[str, Any] | None:
+def prematch_signal(
+    lane: dict[str, Any],
+    features: dict[str, Any],
+    league: str,
+    segment_memory: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     scope = str(lane.get("scope") or "FULL_MATCH")
     factor = _scope_factor(scope)

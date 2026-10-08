@@ -153,6 +153,7 @@ def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, mon
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
     monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
 
     _write(state, {
         "mode": "active",

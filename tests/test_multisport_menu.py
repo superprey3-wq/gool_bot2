@@ -30,8 +30,6 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
     monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
-    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
-
     _write(state, {
         "mode": "shadow",
         "sports": {

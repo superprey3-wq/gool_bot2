@@ -221,11 +221,16 @@ def publish_candidates(sport: str, rows: Iterable[dict[str, Any]]) -> int:
 
 
 def _candidate_score(row: dict[str, Any]) -> float:
-    probability = _num(row.get("model_probability"))
+    """Cross-sport reliability score used only for ranking safe SUPER legs.
+
+    Odds, EV and market price are intentionally excluded from the ranking.
+    They remain eligibility guards, while final ordering is confidence-first
+    across football, hockey and basketball.
+    """
+    probability = max(0.0, min(1.0, _num(row.get("model_probability"))))
     quality = max(0.0, min(1.0, _num(row.get("data_quality"))))
     strength = max(0.0, min(1.0, _num(row.get("strength")) / 100.0))
-    edge_norm = max(0.0, min(1.0, _num(row.get("edge")) / 0.15))
-    return probability * 0.55 + quality * 0.20 + strength * 0.15 + edge_norm * 0.10
+    return probability * 0.75 + quality * 0.20 + strength * 0.05
 
 
 def _eligible_candidates(
@@ -294,11 +299,13 @@ def _eligible_candidates(
         if previous is None or (
             _num(row.get("global_super_score")),
             _num(row.get("model_probability")),
-            -_num(row.get("odd")),
+            _num(row.get("data_quality")),
+            _num(row.get("strength")),
         ) > (
             _num(previous.get("global_super_score")),
             _num(previous.get("model_probability")),
-            -_num(previous.get("odd")),
+            _num(previous.get("data_quality")),
+            _num(previous.get("strength")),
         ):
             best[key] = row
     return sorted(
@@ -306,7 +313,8 @@ def _eligible_candidates(
         key=lambda row: (
             _num(row.get("global_super_score")),
             _num(row.get("model_probability")),
-            -_num(row.get("odd")),
+            _num(row.get("data_quality")),
+            _num(row.get("strength")),
         ),
         reverse=True,
     )
@@ -380,8 +388,31 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
         row for row in reserve
         if (str(row.get("sport") or ""), str(row.get("event_id") or "")) not in strict_keys
     ]
-    all_safe = [*strict, *reserve_only]
-    by_sport = {sport: [row for row in all_safe if row.get("sport") == sport] for sport in SPORTS}
+    tier_by_key = {
+        (str(row.get("sport") or ""), str(row.get("event_id") or "")): "strict"
+        for row in strict
+    }
+    tier_by_key.update({
+        (str(row.get("sport") or ""), str(row.get("event_id") or "")): "reserve"
+        for row in reserve_only
+    })
+
+    # Strict/reserve controls eligibility only. Once a leg is safe enough to
+    # enter the mixed pool, rank it only by cross-sport reliability.
+    all_safe = sorted(
+        [*strict, *reserve_only],
+        key=lambda row: (
+            _num(row.get("global_super_score")),
+            _num(row.get("model_probability")),
+            _num(row.get("data_quality")),
+            _num(row.get("strength")),
+        ),
+        reverse=True,
+    )
+    by_sport = {
+        sport: [row for row in all_safe if row.get("sport") == sport]
+        for sport in SPORTS
+    }
     if require_all and any(not by_sport[sport] for sport in SPORTS):
         return None
 
@@ -391,14 +422,16 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
     strict_count = 0
     reserve_count = 0
 
-    def add(row: dict[str, Any], tier: str) -> bool:
+    def add(row: dict[str, Any]) -> bool:
         nonlocal strict_count, reserve_count
         sport = str(row.get("sport") or "")
         key = (sport, str(row.get("event_id") or ""))
         if not sport or not key[1] or key in seen or counts.get(sport, 0) >= max_per_sport:
             return False
+        tier = tier_by_key.get(key, "reserve")
         value = dict(row)
         value["super_tier"] = tier
+        value["super_confidence_score"] = round(_candidate_score(row) * 100.0, 1)
         chosen.append(value)
         seen.add(key)
         counts[sport] = counts.get(sport, 0) + 1
@@ -408,26 +441,16 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
             reserve_count += 1
         return True
 
-    # Cross-sport contract: seed every sport with its safest available leg.
+    # Keep the three-sport product contract: take the single safest leg from
+    # each sport first, then fill every remaining slot globally by reliability.
     if require_all:
-        strict_by = {sport: [row for row in strict if row.get("sport") == sport] for sport in SPORTS}
-        reserve_by = {sport: [row for row in reserve_only if row.get("sport") == sport] for sport in SPORTS}
         for sport in SPORTS:
-            if strict_by[sport]:
-                add(strict_by[sport][0], "strict")
-            elif reserve_by[sport]:
-                add(reserve_by[sport][0], "reserve")
+            add(by_sport[sport][0])
 
-    # Strict legs always win. Reserve is only used to complete the 10 when the
-    # strict pool alone is not large enough.
-    for row in strict:
+    for row in all_safe:
         if len(chosen) >= target:
             break
-        add(row, "strict")
-    for row in reserve_only:
-        if len(chosen) >= target:
-            break
-        add(row, "reserve")
+        add(row)
 
     if len(chosen) < target:
         return None
@@ -435,6 +458,10 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
     chosen = sorted(chosen[:target], key=lambda row: _num(row.get("start_ts")))
     combined_odds = math.prod(_num(row.get("odd"), 1.0) for row in chosen)
     combined_probability = math.prod(_num(row.get("model_probability"), 0.0) for row in chosen)
+    avg_confidence = (
+        sum(_candidate_score(row) for row in chosen) / len(chosen)
+        if chosen else 0.0
+    )
     return {
         "kind": "GLOBAL_SUPER",
         "result": "pending",
@@ -444,6 +471,7 @@ def build_global_super10(*, now_ts: float | None = None) -> dict[str, Any] | Non
         "combined_odds": round(combined_odds, 4),
         "probability": round(combined_probability, 8),
         "combined_probability": round(combined_probability, 8),
+        "average_confidence_score": round(avg_confidence * 100.0, 1),
         "sport_counts": counts,
         "strict_legs": strict_count,
         "reserve_legs": reserve_count,

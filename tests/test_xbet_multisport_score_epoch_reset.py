@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from gool_bot2.xbet_market_worker import ScoreEpochMultiSportSteamWorker, _inherit_production_multisport_mode
-from gool_bot2.xbet_multisport_steam import SPORTS, _metric, detect_steam
+from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS, _metric, detect_steam
 
 
 def _row(sport: str, score: tuple[int, int], ts: float, metric: float) -> dict:
@@ -40,6 +40,20 @@ def test_hockey_score_change_clears_old_market_epoch(tmp_path):
         now=50.0,
         score_changed_at=changed_at,
     ) is None
+
+
+
+def test_standalone_multisport_hockey_score_change_clears_old_market_epoch(tmp_path):
+    worker = MultiSportSteamWorker(tmp_path)
+    worker._append_history(_row("hockey", (0, 0), 10.0, 2.0), SPORTS["hockey"])
+    worker._append_history(_row("hockey", (0, 0), 30.0, 2.4), SPORTS["hockey"])
+    history, changed_at = worker._append_history(
+        _row("hockey", (1, 0), 50.0, 3.0),
+        SPORTS["hockey"],
+    )
+    assert changed_at == 50.0
+    assert len(history) == 1
+    assert history[0]["score"] == [1, 0]
 
 
 def test_hockey_new_signal_requires_fresh_post_goal_samples(tmp_path):

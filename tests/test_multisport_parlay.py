@@ -345,3 +345,89 @@ def test_default_parlay_leg_band_is_1_45_to_1_50(monkeypatch):
     ]
     legs = eligible_prematch_legs(rows, "hockey", now_ts=0)
     assert {leg["event_id"] for leg in legs} == {"ok1", "ok2"}
+
+
+def test_multisport_parlay_result_card_waits_for_last_match_and_sends_once(tmp_path, monkeypatch):
+    import gool_bot2.xbet_multisport_steam as steam
+    from gool_bot2.multisport_journal import load_journal
+
+    monkeypatch.setenv("GOOL_MULTISPORT_MODE", "active")
+    monkeypatch.setenv("XBET_MULTISPORT_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", "1")
+    monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT", "1")
+
+    sent = []
+    rendered = []
+    monkeypatch.setattr(
+        steam,
+        "render_multisport_parlay_card",
+        lambda row, sport, result=False: rendered.append((sport, result, row.get("result"))) or b"png",
+    )
+    monkeypatch.setattr(
+        steam.telegram,
+        "broadcast_photo",
+        lambda png, caption="": sent.append(caption) or 1,
+    )
+
+    worker = MultiSportSteamWorker(tmp_path)
+    parlay = build_sport_parlays(
+        [_row("LAST1", odd=1.49), _row("LAST2", odd=1.49)],
+        "hockey",
+    )[0]
+    assert worker._deliver_new_parlays(SPORTS["hockey"], [parlay]) == 1
+    sent.clear()
+    rendered.clear()
+
+    # First leg is already lost, but the second match is still live:
+    # parent must remain pending and no final card may be sent.
+    first_states = {
+        "LAST1": {"coarse_status": "3", "score": [2, 2]},
+        "LAST2": {"coarse_status": "2", "score": [1, 1]},
+    }
+    assert worker._settle(SPORTS["hockey"], first_states) == 1
+    parent = next(
+        row for row in load_journal(worker.journal_path)
+        if row.get("origin") == "multisport_parlay"
+    )
+    assert parent["legs"][0]["result"] == "lost"
+    assert parent["legs"][1]["result"] == "pending"
+    assert parent["result"] == "pending"
+    assert sent == []
+
+    # Last match finishes. Now the final card is delivered exactly once.
+    final_states = {
+        "LAST1": {"coarse_status": "3", "score": [2, 2]},
+        "LAST2": {"coarse_status": "3", "score": [4, 2]},
+    }
+    assert worker._settle(SPORTS["hockey"], final_states) >= 1
+    parent = next(
+        row for row in load_journal(worker.journal_path)
+        if row.get("origin") == "multisport_parlay"
+    )
+    assert parent["result"] == "lost"
+    assert parent["legs"][1]["result"] == "won"
+    assert parent["result_card_sent"] is True
+    assert len(sent) == 1
+    assert "НЕ ЗАШЁЛ" in sent[0]
+    assert rendered == [("hockey", True, "lost")]
+
+    worker._settle(SPORTS["hockey"], final_states)
+    assert len(sent) == 1
+
+
+def test_multisport_parlay_result_card_renderer_shows_final_status():
+    from gool_bot2.multisport_parlay_card import render_multisport_parlay_card
+
+    parlay = build_sport_parlays(
+        [_row("R1", odd=1.49), _row("R2", odd=1.49)],
+        "basketball",
+    )[0]
+    parlay["result"] = "won"
+    parlay["settled_odd"] = parlay["combined_odd"]
+    for idx, leg in enumerate(parlay["legs"], 1):
+        leg["result"] = "won"
+        leg["settled_score"] = [80 + idx, 70 + idx]
+
+    png = render_multisport_parlay_card(parlay, "basketball", result=True)
+    assert png.startswith(b"\x89PNG")
+    assert len(png) > 1000

@@ -338,7 +338,9 @@ def main() -> None:
     os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"
     os.environ["GOOL_EXCHANGE_MONEY_SYSTEMS_ENABLED"] = "0"
 
-    os.environ.setdefault("GOOL_MATCHBOOK_ENABLED", "1")\n    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")\n    os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
+    os.environ.setdefault("GOOL_MATCHBOOK_ENABLED", "1")
+    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")
+    os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
     os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "30")
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "2")
     os.environ.setdefault("GOOL_BROWSER_MATCH_CACHE_SECONDS", "90")

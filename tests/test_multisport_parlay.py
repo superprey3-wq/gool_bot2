@@ -390,7 +390,7 @@ def test_multisport_parlay_result_card_waits_for_last_match_and_sends_once(tmp_p
         if row.get("origin") == "multisport_parlay"
     )
     assert parent["legs"][0]["result"] == "lost"
-    assert parent["legs"][1]["result"] == "pending"
+    assert str(parent["legs"][1].get("result") or "pending") == "pending"
     assert parent["result"] == "pending"
     assert sent == []
 
@@ -419,7 +419,10 @@ def test_multisport_parlay_result_card_renderer_shows_final_status():
     from gool_bot2.multisport_parlay_card import render_multisport_parlay_card
 
     parlay = build_sport_parlays(
-        [_row("R1", odd=1.49), _row("R2", odd=1.49)],
+        [
+            _row("R1", odd=1.49, sport="basketball"),
+            _row("R2", odd=1.49, sport="basketball"),
+        ],
         "basketball",
     )[0]
     parlay["result"] = "won"

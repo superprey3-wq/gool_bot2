@@ -3865,9 +3865,9 @@ class MultiSportSteamWorker:
                         changed += 1
                     continue
 
-                if self._settle_parlay_entry(row, states, cfg, now):
-                    changed += 1
-                if self._deliver_parlay_result_card(row, cfg, now):
+                row_changed = self._settle_parlay_entry(row, states, cfg, now)
+                card_sent = self._deliver_parlay_result_card(row, cfg, now)
+                if row_changed or card_sent:
                     changed += 1
                 continue
             stored_result = str(row.get("result") or "pending")

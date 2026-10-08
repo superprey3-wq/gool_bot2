@@ -3767,14 +3767,16 @@ class MultiSportSteamWorker:
             changed = True
 
         row["legs"] = legs
+
+        # Result card is final only after the LAST displayed leg is final.
+        if len(settled_results) != len(legs) or any(result == "pending" for result in settled_results):
+            return changed
+
         if "lost" in settled_results:
             row["result"] = "lost"
             row["profit_units"] = -1.0
             row["settled_at"] = now
             return True
-
-        if len(settled_results) != len(legs) or any(result == "pending" for result in settled_results):
-            return changed
 
         if all(result == "void" for result in settled_results):
             row["result"] = "void"
@@ -3791,6 +3793,50 @@ class MultiSportSteamWorker:
         row["settled_at"] = now
         return True
 
+    @staticmethod
+    def _parlay_all_legs_final(row: dict[str, Any]) -> bool:
+        legs = [leg for leg in (row.get("legs") or []) if isinstance(leg, dict)]
+        return bool(legs) and all(
+            str(leg.get("result") or "pending").lower() in _FINAL_RESULTS
+            for leg in legs
+        )
+
+    def _deliver_parlay_result_card(self, row: dict[str, Any], cfg: SportConfig, now: str) -> bool:
+        if not self._parlay_all_legs_final(row):
+            return False
+        if str(row.get("result") or "pending").lower() not in _FINAL_RESULTS:
+            return False
+        if row.get("result_card_sent_at") or row.get("result_card_sent"):
+            return False
+        if _mode() != "active" or not _truthy("GOOL_MULTISPORT_PARLAY_CARDS_ENABLED", True):
+            return False
+        try:
+            png = render_multisport_parlay_card(row, cfg.key, result=True)
+            result = str(row.get("result") or "void").lower()
+            icon = {"won": "✅", "lost": "❌", "void": "↩️"}.get(result, "ℹ️")
+            label = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "void": "ВОЗВРАТ"}.get(result, "РЕЗУЛЬТАТ")
+            sent = int(telegram.broadcast_photo(
+                png,
+                caption=f"{icon} <b>{cfg.title} · ЭКСПРЕСС · {label}</b>\n✅ Все матчи экспресса завершены",
+            ) or 0)
+            if sent <= 0:
+                return False
+            row["result_card_sent"] = True
+            row["result_card_sent_at"] = now
+            print(
+                f"GOOL_{cfg.key.upper()}_PARLAY_RESULT_CARD_SENT "
+                f"entry={row.get('entry_id')} result={result}",
+                flush=True,
+            )
+            return True
+        except Exception as exc:
+            print(
+                f"GOOL_{cfg.key.upper()}_PARLAY_RESULT_CARD_ERROR "
+                f"entry={row.get('entry_id')} error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+            return False
+
     def _settle(self, cfg: SportConfig, states: dict[str, dict[str, Any]]) -> int:
         rows = load_journal(self.journal_path)
         changed = 0
@@ -3799,9 +3845,29 @@ class MultiSportSteamWorker:
             if row.get("sport") != cfg.key:
                 continue
             if str(row.get("origin") or "") == "multisport_parlay" or str(row.get("market_family") or "") == "parlay":
-                if str(row.get("result") or "pending").lower() in _FINAL_RESULTS:
+                parent_result = str(row.get("result") or "pending").lower()
+                all_final = self._parlay_all_legs_final(row)
+
+                # Repair legacy parents that were marked LOST as soon as the
+                # first leg lost while later legs were still waiting.
+                if parent_result in _FINAL_RESULTS and not all_final:
+                    row["result"] = "pending"
+                    row["profit_units"] = 0.0
+                    row.pop("settled_at", None)
+                    row.pop("settled_odd", None)
+                    parent_result = "pending"
+                    changed += 1
+
+                # Old fully-settled parlays may have never received a result
+                # card. Send it once without requiring a new settlement event.
+                if parent_result in _FINAL_RESULTS and all_final:
+                    if self._deliver_parlay_result_card(row, cfg, now):
+                        changed += 1
                     continue
-                if self._settle_parlay_entry(row, states, cfg, now):
+
+                row_changed = self._settle_parlay_entry(row, states, cfg, now)
+                card_sent = self._deliver_parlay_result_card(row, cfg, now)
+                if row_changed or card_sent:
                     changed += 1
                 continue
             stored_result = str(row.get("result") or "pending")

@@ -15,6 +15,8 @@ LINE = (45, 63, 88)
 GOLD = (255, 184, 48)
 ICE = (104, 224, 242)
 ORANGE = (255, 142, 43)
+GREEN = (58, 210, 128)
+RED = (246, 91, 91)
 
 
 def _center(d: ImageDraw.ImageDraw, text: str, cx: int, y: int, width: int, size: int, fill) -> None:
@@ -31,13 +33,15 @@ def _leg_logo_meta(leg: dict[str, Any], side: str) -> dict[str, Any]:
     }
 
 
-def render_multisport_parlay_card(parlay: dict[str, Any], sport: str) -> bytes:
+def render_multisport_parlay_card(parlay: dict[str, Any], sport: str, *, result: bool = False) -> bytes:
     legs = [dict(x) for x in (parlay.get("legs") or [])][:4]
     icon = "🏒" if sport == "hockey" else "🏀"
     title = "ХОККЕЙ" if sport == "hockey" else "БАСКЕТБОЛ"
     accent = ICE if sport == "hockey" else ORANGE
+    final = str(parlay.get("result") or "pending").lower()
+    result_accent = GREEN if final == "won" else RED if final == "lost" else accent
 
-    leg_h = 205
+    leg_h = 225 if result else 205
     leg_gap = 18
     legs_top = 282
     footer_h = 58
@@ -48,9 +52,11 @@ def render_multisport_parlay_card(parlay: dict[str, Any], sport: str) -> bytes:
     d = ImageDraw.Draw(im)
 
     # Header
-    d.rounded_rectangle((32, 24, 1048, 112), 24, fill=PANEL, outline=accent, width=3)
+    header_accent = result_accent if result else accent
+    d.rounded_rectangle((32, 24, 1048, 112), 24, fill=PANEL, outline=header_accent, width=3)
     d.text((58, 48), f"{icon} GOOL {title}", font=sc._font(28, True), fill=TEXT)
-    d.text((796, 49), "PREMATCH · ЭКСПРЕСС", font=sc._fit(d, "PREMATCH · ЭКСПРЕСС", 220, 18, True), fill=accent)
+    header = "РЕЗУЛЬТАТ · ЭКСПРЕСС" if result else "PREMATCH · ЭКСПРЕСС"
+    d.text((760, 49), header, font=sc._fit(d, header, 255, 18, True), fill=header_accent)
 
     # Summary
     combined = float(parlay.get("combined_odd") or 0.0)
@@ -58,11 +64,20 @@ def render_multisport_parlay_card(parlay: dict[str, Any], sport: str) -> bytes:
     probability = float(parlay.get("combined_probability") or 0.0)
     d.rounded_rectangle((42, 136, 1038, 250), 22, fill=PANEL2, outline=GOLD, width=3)
 
-    summary = [
-        ("ОБЩИЙ КЭФ", f"{combined:.2f}", GOLD),
-        ("СР. СИЛА", f"R{avg_strength:.0f}", accent),
-        ("ВЕРОЯТНОСТЬ ЭКСПРЕССА", f"{probability * 100:.1f}%", TEXT),
-    ]
+    if result:
+        label = {"won": "ЗАШЁЛ", "lost": "НЕ ЗАШЁЛ", "void": "ВОЗВРАТ", "push": "ВОЗВРАТ"}.get(final, "РЕЗУЛЬТАТ")
+        settled_odd = float(parlay.get("settled_odd") or parlay.get("effective_odd") or combined or 0.0)
+        summary = [
+            ("ИТОГ", label, result_accent),
+            ("ИТОГОВЫЙ КЭФ", f"{settled_odd:.2f}", GOLD),
+            ("НОГ ЗАВЕРШЕНО", f"{len(legs)}/{len(legs)}", TEXT),
+        ]
+    else:
+        summary = [
+            ("ОБЩИЙ КЭФ", f"{combined:.2f}", GOLD),
+            ("СР. СИЛА", f"R{avg_strength:.0f}", accent),
+            ("ВЕРОЯТНОСТЬ ЭКСПРЕССА", f"{probability * 100:.1f}%", TEXT),
+        ]
     xs = [(68, 310), (370, 610), (690, 1005)]
     for (label, value, color), (x1, x2) in zip(summary, xs):
         d.text((x1, 158), label, font=sc._fit(d, label, x2 - x1, 14, True), fill=MUTED)
@@ -97,11 +112,20 @@ def render_multisport_parlay_card(parlay: dict[str, Any], sport: str) -> bytes:
         d.text((300, y + 124), selection, font=sc._fit(d, selection, 300, 25, True), fill=GOLD)
         d.text((620, y + 124), f"@ {odd:.2f}", font=sc._font(25, True), fill=TEXT)
         d.text((720, y + 128), f"R{strength:.0f}", font=sc._font(18, True), fill=accent)
+        if result:
+            leg_result = str(leg.get("result") or "pending").lower()
+            status = {"won": "✓ ЗАШЛА", "lost": "✕ НЕ ЗАШЛА", "void": "↩ ВОЗВРАТ", "push": "↩ ВОЗВРАТ"}.get(leg_result, "ЖДЁМ")
+            status_color = GREEN if leg_result == "won" else RED if leg_result == "lost" else MUTED
+            score = list(leg.get("settled_score") or [])
+            score_text = f" · {int(score[0])}:{int(score[1])}" if len(score) >= 2 else ""
+            _center(d, f"{status}{score_text}", center_x, y + 184, 600, 18, status_color)
 
         y += leg_h + leg_gap
 
     footer_y = height - footer_h - 28
-    d.rounded_rectangle((300, footer_y, 780, footer_y + footer_h), 16, fill=accent)
-    _center(d, f"{icon} {title} · ЭКСПРЕСС", 540, footer_y + 16, 410, 20, BG)
+    footer_color = result_accent if result else accent
+    d.rounded_rectangle((300, footer_y, 780, footer_y + footer_h), 16, fill=footer_color)
+    footer = f"{icon} {title} · ИТОГ" if result else f"{icon} {title} · ЭКСПРЕСС"
+    _center(d, footer, 540, footer_y + 16, 410, 20, BG)
     return sc._save(im)
 

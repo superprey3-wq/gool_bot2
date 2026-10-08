@@ -253,6 +253,35 @@ def test_live_candidate_does_not_use_stale_two_snapshot_window():
     assert stale["readiness_mode"] == "warming"
 
 
+
+def test_live_candidate_gate_allows_verified_score_only_strict_fallback():
+    candidate = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": False},
+        "history_points": 5,
+        "recent_window_seconds": 95.0,
+        "recent_score_rate": 1.4,
+        "recent_possessions_per_min": 0.0,
+        "recent_activity_available": True,
+        "segment_score_verified": True,
+        "break_transition": False,
+    })
+    assert candidate["state"] == "BORDERLINE"
+
+
+def test_live_candidate_gate_rejects_score_only_when_segment_score_is_unverified():
+    candidate = live_candidate_gate({
+        "live_game_stats": {"current_segment_available": False},
+        "history_points": 5,
+        "recent_window_seconds": 95.0,
+        "recent_score_rate": 1.4,
+        "recent_possessions_per_min": 0.0,
+        "recent_activity_available": True,
+        "segment_score_verified": False,
+        "break_transition": False,
+    })
+    assert candidate["state"] == "WAIT"
+
+
 def test_live_v2_uses_possession_pace_and_probability_edge_for_over():
     signal = live_signal(
         _brain(current=(10, 10), recent_poss=2.2, recent_score=4.0),

@@ -1018,7 +1018,7 @@ def detect_live_segment_stats(
     )
 
     odd = float(end.get(direction) or 0.0)
-    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
 
     edge_ratio = stat_edge / max(1e-6, min_edge)
@@ -1196,7 +1196,7 @@ def price_flashscore_live_candidate(
         over_probability = float(lane.get("probability") or 0.5)
     except (TypeError, ValueError):
         return None
-    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
     market_probability = over_probability if direction == "over" else 1.0 - over_probability
     if market_probability < _float_env("GOOL_MULTISPORT_LIVE_MARKET_OPPOSITION_FLOOR", 0.42):
@@ -1274,7 +1274,7 @@ def detect_steam(
         odd = float(end[direction])
     except (TypeError, ValueError, KeyError):
         return None
-    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
 
     over_probability_delta = (float(end["probability"]) - float(start["probability"])) * 100.0
@@ -1313,67 +1313,33 @@ def detect_steam(
     }
 
 
+def _signal_confidence_key(signal: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Odds-independent reliability ranking for public singles/LIVE picks."""
+    probability = float(
+        signal.get("model_probability")
+        if signal.get("model_probability") is not None
+        else signal.get("fair_probability")
+        or 0.0
+    )
+    quality = float(signal.get("data_quality") or 0.0)
+    strength = float(signal.get("strength") or 0.0) / 100.0
+    edge = abs(float(signal.get("edge") or 0.0))
+    return (probability, quality, strength, edge)
+
+
 def select_prematch_primary(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
     recent_families: list[str] | None = None,
     sport: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    """Pick one PREMATCH market without letting one family dominate by accident."""
+    """Choose the single safest PREMATCH pick, independent of price level.
+
+    Family diversity and low-odds preferences must never displace a materially
+    more reliable candidate. The bookmaker price is already validated upstream.
+    """
     if not candidates:
         return None
-    family_bias = {
-        "match_total": 0.8,
-        "home_total": 0.6,
-        "away_total": 0.6,
-        "moneyline": 0.3,
-        "handicap": 0.0,
-    }
-    if str(sport or "").casefold() == "hockey":
-        # Choice-market strength grows much faster than total-market strength in
-        # hockey. Normalise that scale so a close total/IT candidate is not
-        # permanently hidden by handicaps, while a materially stronger handicap
-        # can still win.
-        family_bias.update({
-            "match_total": _float_env("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", 4.0),
-            "home_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
-            "away_total": _float_env("GOOL_HOCKEY_PREMATCH_TEAM_TOTAL_BIAS", 3.0),
-            "moneyline": _float_env("GOOL_HOCKEY_PREMATCH_MONEYLINE_BIAS", 0.5),
-            "handicap": _float_env("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", -3.0),
-        })
-    ranked = sorted(
-        candidates,
-        key=lambda item: (
-            float(item[1].get("strength") or 0.0)
-            + family_bias.get(str(item[0].get("market_family") or ""), 0.0),
-            float(item[1].get("fair_probability") or 0.0),
-        ),
-        reverse=True,
-    )
-    best_row, best_signal = ranked[0]
-    best_family = str(best_row.get("market_family") or "")
-    recent = [str(x or "") for x in (recent_families or []) if str(x or "")]
-    streak = max(2, _int_env("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", 3))
-    if len(recent) < streak or any(family != best_family for family in recent[-streak:]):
-        return best_row, best_signal
-    alternative = next(
-        ((row, signal) for row, signal in ranked if str(row.get("market_family") or "") != best_family),
-        None,
-    )
-    if alternative is None:
-        return best_row, best_signal
-    alt_row, alt_signal = alternative
-    max_gap = max(
-        0.0,
-        _float_env(
-            "GOOL_HOCKEY_PREMATCH_FAMILY_DIVERSITY_MAX_GAP"
-            if str(sport or "").casefold() == "hockey"
-            else "GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP",
-            10.0 if str(sport or "").casefold() == "hockey" else 8.0,
-        ),
-    )
-    if float(alt_signal.get("strength") or 0.0) >= float(best_signal.get("strength") or 0.0) - max_gap:
-        return alt_row, alt_signal
-    return best_row, best_signal
+    return max(candidates, key=lambda item: _signal_confidence_key(item[1]))
 
 
 def detect_prematch_choice(
@@ -1409,7 +1375,7 @@ def detect_prematch_choice(
         odd = float(end.get("odd") or 0.0)
     except (TypeError, ValueError):
         return None
-    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
 
     line_delta = float(end.get("line") or 0.0) - float(start.get("line") or 0.0)
@@ -1483,7 +1449,7 @@ def detect_prematch_steam(
         return None
 
     odd = float(end[direction])
-    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.45) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    if not (_float_env("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
 
     fair_probability = float(end["probability"]) if direction == "over" else 1.0 - float(end["probability"])
@@ -5187,31 +5153,21 @@ class MultiSportSteamWorker:
                             str(candidate_row.get("market_family") or "match_total"),
                         )
                         current = best_by_group.get(group)
-                        rank = (
-                            float(candidate_signal.get("strength") or 0.0),
-                            abs(float(candidate_signal.get("edge") or 0.0)),
-                            float(candidate_signal.get("model_probability") or 0.0),
-                        )
-                        current_rank = (
-                            float((current[1] if current else {}).get("strength") or 0.0),
-                            abs(float((current[1] if current else {}).get("edge") or 0.0)),
-                            float((current[1] if current else {}).get("model_probability") or 0.0),
-                        )
+                        rank = _signal_confidence_key(candidate_signal)
+                        current_rank = _signal_confidence_key(current[1]) if current else (-1.0, -1.0, -1.0, -1.0)
                         if current is None or rank > current_rank:
                             best_by_group[group] = (candidate_row, candidate_signal)
                     selected_live_signals = sorted(
                         best_by_group.values(),
-                        key=lambda item: -float(item[1].get("strength") or 0.0),
+                        key=lambda item: _signal_confidence_key(item[1]),
+                        reverse=True,
                     )[:1]
                 elif cfg.key == "hockey":
                     # Period/full/team totals compete for one public hockey pick.
                     selected_live_signals = sorted(
                         pending_live_signals,
-                        key=lambda item: (
-                            -float(item[1].get("strength") or 0.0),
-                            -abs(float(item[1].get("edge") or 0.0)),
-                            -float(item[1].get("model_probability") or 0.0),
-                        ),
+                        key=lambda item: _signal_confidence_key(item[1]),
+                        reverse=True,
                     )[:1]
                 else:
                     selected_live_signals = pending_live_signals

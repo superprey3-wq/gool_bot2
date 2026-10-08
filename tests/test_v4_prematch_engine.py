@@ -121,9 +121,9 @@ def test_football_super_pool_can_feed_global_ticket_without_sending_legacy_super
 
 def test_delivery_allows_strong_single_events_in_parlay_but_not_twice_in_same_ticket():
     picks = [
-        PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.49, .86, .66, .92),
-        PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.48, .85, .65, .91),
-        PrematchPick("p3", "P3H", "P3A", "match_total", "over 2.5", 1.47, .83, .63, .90),
+        PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.50, .86, .66, .92),
+        PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.50, .85, .65, .91),
+        PrematchPick("p3", "P3H", "P3A", "match_total", "over 2.5", 1.49, .83, .63, .90),
     ]
     delivery = choose_delivery(picks, max_singles=3, max_doubles=1)
     assert delivery["singles"]
@@ -193,8 +193,8 @@ def test_delivery_doubles_require_six_point_edge_after_market_blend():
 
 def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
     picks = [
-        PrematchPick("r1", "A", "B", "match_total", "over 1.5", 1.55, .82, .68, .70),
-        PrematchPick("r2", "C", "D", "match_total", "over 1.5", 1.58, .81, .67, .70),
+        PrematchPick("r1", "A", "B", "match_total", "over 1.5", 1.49, .86, .66, .70),
+        PrematchPick("r2", "C", "D", "match_total", "over 1.5", 1.48, .85, .65, .70),
     ]
     delivery = choose_delivery(picks, max_singles=0, max_doubles=1)
     assert len(delivery["doubles"]) == 1
@@ -204,8 +204,8 @@ def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
 
 def test_delivery_double_keeps_leg_that_already_passed_qualified_pick_at_quality_060():
     picks = [
-        PrematchPick("qa", "A", "B", "match_total", "over 1.5", 1.55, .82, .70, .60),
-        PrematchPick("qb", "C", "D", "match_total", "over 1.5", 1.58, .81, .69, .60),
+        PrematchPick("qa", "A", "B", "match_total", "over 1.5", 1.50, .86, .66, .60),
+        PrematchPick("qb", "C", "D", "match_total", "over 1.5", 1.50, .85, .65, .60),
     ]
     delivery = choose_delivery(picks, max_singles=2, max_doubles=1)
     assert len(delivery["singles"]) == 2

@@ -296,7 +296,7 @@ def prematch_signal(
     else:
         return None
 
-    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.45)
+    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50)
     max_odd = _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)
     if not (min_odd <= odd <= max_odd):
         return None
@@ -587,7 +587,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ]
     edge, direction, model_probability, push, market_probability, odd = max(choices, key=lambda x: x[0])
 
-    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.45)
+    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50)
     max_odd = _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)
     if not (min_odd <= odd <= max_odd):
         return None

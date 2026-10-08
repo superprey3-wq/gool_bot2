@@ -277,19 +277,34 @@ def raw_catalog(decoded: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def market_lanes(decoded_by_scope: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """Flatten total markets into independent movement lanes.
+    """Flatten every safely decoded total line into independent lanes.
 
-    A lane is one subject (match/home/away) inside one scope. The movement brain
-    can monitor each lane independently; moneyline/handicap are still captured
-    in the catalog but not converted into a total signal.
+    Singles and LIVE must be free to choose a safer adjacent line (for example
+    TB 140.5 @1.52 instead of the balanced TB 150.5 @1.90) when the model gives
+    the safer line materially higher probability. Odds are an eligibility gate,
+    not a ranking bonus.
     """
     lanes: list[dict[str, Any]] = []
     for scope, decoded in decoded_by_scope.items():
         for family in ("match_total", "home_total", "away_total"):
-            total = balanced_total(decoded.get(family) or [])
-            if total is None:
-                continue
-            lanes.append({"scope": scope, "market_family": family, **total})
+            for row in decoded.get(family) or []:
+                try:
+                    line = float(row["line"])
+                    over = float(row["over"])
+                    under = float(row["under"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if not (1.02 < over < 20.0 and 1.02 < under < 20.0):
+                    continue
+                p_over, _ = _fair_two_way(over, under)
+                lanes.append({
+                    "scope": scope,
+                    "market_family": family,
+                    "line": line,
+                    "over": over,
+                    "under": under,
+                    "probability": p_over,
+                })
     return lanes
 
 

@@ -869,38 +869,34 @@ def test_team_sport_exact_game_profile_before_generic(tmp_path, monkeypatch):
     assert "countevents=500" in url
 
 
-def test_select_prematch_primary_breaks_repeated_family_when_close(monkeypatch):
-    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", "3")
-    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", "8")
+def test_select_prematch_primary_does_not_force_family_diversity_over_confidence(monkeypatch):
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 94, "fair_probability": .55}),
-        ({"market_family": "match_total"}, {"strength": 90, "fair_probability": .54}),
-    ]
-    row, signal = select_prematch_primary(candidates, ["handicap", "handicap", "handicap"])
-    assert row["market_family"] == "match_total"
-    assert signal["strength"] == 90
-
-
-def test_select_prematch_primary_keeps_clearly_stronger_repeated_family(monkeypatch):
-    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_STREAK", "3")
-    monkeypatch.setenv("GOOL_MULTISPORT_PREMATCH_FAMILY_DIVERSITY_MAX_GAP", "8")
-    candidates = [
-        ({"market_family": "handicap"}, {"strength": 98, "fair_probability": .58}),
-        ({"market_family": "match_total"}, {"strength": 84, "fair_probability": .56}),
+        ({"market_family": "handicap"}, {"strength": 94, "model_probability": .64, "fair_probability": .64, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"strength": 90, "model_probability": .61, "fair_probability": .61, "data_quality": .90}),
     ]
     row, signal = select_prematch_primary(candidates, ["handicap", "handicap", "handicap"])
     assert row["market_family"] == "handicap"
-    assert signal["strength"] == 98
+    assert signal["model_probability"] == .64
 
 
-def test_select_prematch_primary_quality_wins_without_streak():
+def test_select_prematch_primary_prefers_probability_over_strength():
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 94, "fair_probability": .55}),
-        ({"market_family": "match_total"}, {"strength": 90, "fair_probability": .54}),
+        ({"market_family": "handicap"}, {"strength": 98, "model_probability": .62, "fair_probability": .62, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"strength": 84, "model_probability": .72, "fair_probability": .72, "data_quality": .80}),
+    ]
+    row, signal = select_prematch_primary(candidates, [])
+    assert row["market_family"] == "match_total"
+    assert signal["model_probability"] == .72
+
+
+def test_select_prematch_primary_uses_quality_as_probability_tiebreak():
+    candidates = [
+        ({"market_family": "handicap"}, {"strength": 94, "model_probability": .66, "fair_probability": .66, "data_quality": .72}),
+        ({"market_family": "match_total"}, {"strength": 90, "model_probability": .66, "fair_probability": .66, "data_quality": .91}),
     ]
     row, signal = select_prematch_primary(candidates, ["match_total", "handicap"])
-    assert row["market_family"] == "handicap"
-    assert signal["strength"] == 94
+    assert row["market_family"] == "match_total"
+    assert signal["data_quality"] == .91
 
 
 def test_live_snapshot_uses_flashscore_stats_not_xbet_stat_subgames(tmp_path, monkeypatch):
@@ -1148,24 +1144,20 @@ def test_prematch_one_match_one_pick_across_market_families(tmp_path, monkeypatc
     assert prematch[0]["selection"] == "ИТБ1 76"
 
 
-def test_hockey_primary_prefers_close_total_over_handicap(monkeypatch):
-    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
-    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+def test_hockey_primary_no_longer_uses_family_bias():
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
-        ({"market_family": "match_total"}, {"strength": 95, "fair_probability": .57}),
+        ({"market_family": "handicap"}, {"strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"strength": 95, "model_probability": .57, "fair_probability": .57, "data_quality": .90}),
     ]
     row, signal = select_prematch_primary(candidates, [], "hockey")
-    assert row["market_family"] == "match_total"
-    assert signal["strength"] == 95
+    assert row["market_family"] == "handicap"
+    assert signal["model_probability"] == .61
 
 
-def test_hockey_primary_keeps_materially_stronger_handicap(monkeypatch):
-    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_MATCH_TOTAL_BIAS", "4")
-    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_HANDICAP_BIAS", "-3")
+def test_hockey_primary_still_uses_strength_after_probability_and_quality():
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 100, "fair_probability": .61}),
-        ({"market_family": "match_total"}, {"strength": 84, "fair_probability": .57}),
+        ({"market_family": "handicap"}, {"strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"strength": 84, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
     ]
     row, signal = select_prematch_primary(candidates, [], "hockey")
     assert row["market_family"] == "handicap"
@@ -1626,3 +1618,20 @@ def test_basketball_live_same_quarter_is_seen_but_new_second_quarter_is_allowed(
         "basketball", "xb1", "LIVE", "QUARTER_2", "match_total", "fs1"
     ) is False
     assert worker._basketball_live_quarter_pick_count("xb1", "fs1") == 1
+
+
+def test_prematch_single_prefers_safer_lower_odd_when_model_probability_is_higher():
+    candidates = [
+        (
+            {"market_family": "match_total", "line": 150.5, "over": 1.90},
+            {"selection": "ТБ 150.5", "odd": 1.90, "model_probability": 0.62, "fair_probability": 0.62, "data_quality": 0.86, "strength": 90, "edge": 0.08},
+        ),
+        (
+            {"market_family": "match_total", "line": 140.5, "over": 1.52},
+            {"selection": "ТБ 140.5", "odd": 1.52, "model_probability": 0.78, "fair_probability": 0.78, "data_quality": 0.86, "strength": 88, "edge": 0.07},
+        ),
+    ]
+    row, signal = select_prematch_primary(candidates, [])
+    assert row["line"] == 140.5
+    assert signal["odd"] == 1.52
+    assert signal["model_probability"] == 0.78

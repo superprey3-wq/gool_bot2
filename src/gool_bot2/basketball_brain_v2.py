@@ -503,12 +503,12 @@ def live_quarter_context_assist(
     state_adj = 0.0
     reversion_adj = 0.0
 
-    # Daily audit showed Q4 as the lowest-scoring quarter. Apply only a small
-    # conservative shrink so one-day evidence cannot overpower live stats.
+    # Do not impose an unconditional Q4 UNDER prior. That old one-day rule
+    # systematically pulled every fourth-quarter projection downward before any
+    # live evidence was considered. Q4 context is now state-driven only: close
+    # games may score more because of fouls; comfortable/blowout games may slow.
     if quarter == 4:
-        q4_adj = -min(2.4 * scale, max(1.0 * scale, base * 0.04))
-        adjustment += q4_adj
-        reasons.append("Q4 conservative lower-scoring prior")
+        q4_adj = 0.0
 
         if len(parts) >= 3:
             try:
@@ -914,7 +914,30 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         observed_rate = current / max(0.5, elapsed / 60.0)
         raw_pace_total = current * duration / max(1.0, elapsed)
         observed_weight = _clamp(elapsed / duration, 0.15, 0.68)
-        projection = prior_total * (1.0 - observed_weight) + raw_pace_total * observed_weight
+
+        # Score-only competitions need the fresh scoreboard delta to participate
+        # in the projection itself. Previously recent pace was used only as a
+        # final direction veto, so a stale league/history prior could keep the
+        # model below a rapidly rising live line and repeatedly manufacture
+        # UNDER candidates. Blend fresh pace symmetrically, stealing weight from
+        # the prior rather than adding extra confidence.
+        recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+        recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+        recent_activity_available = bool(brain.get("recent_activity_available"))
+        recent_weight = 0.0
+        recent_pace_total = raw_pace_total
+        if recent_activity_available and recent_score_rate > 0.0 and recent_window >= 30.0:
+            recent_pace_total = current + recent_score_rate * remaining / 60.0
+            recent_weight = min(
+                0.30,
+                max(0.0, 1.0 - observed_weight) * _clamp(recent_window / 120.0, 0.20, 0.55),
+            )
+        prior_weight = max(0.0, 1.0 - observed_weight - recent_weight)
+        projection = (
+            prior_total * prior_weight
+            + raw_pace_total * observed_weight
+            + recent_pace_total * recent_weight
+        )
         poss_per_min = prior_poss_per_min
         posterior_ppp = prior_ppp_pair
         remaining_poss = prior_poss_per_min * remaining / 60.0
@@ -1192,6 +1215,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "four_factors": factors,
         "q3_rebound_assist": q3_assist,
         "quarter_context_assist": quarter_context,
+        "score_only_recent_projection_weight": round(recent_weight, 3) if possession_source == "points_clock_fallback" else 0.0,
+        "score_only_recent_pace_total": round(recent_pace_total, 2) if possession_source == "points_clock_fallback" else None,
         "market_confirmed": edge >= 0.055,
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,

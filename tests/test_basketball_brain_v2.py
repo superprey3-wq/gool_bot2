@@ -191,9 +191,9 @@ def test_prematch_quarter_uses_exact_segment_memory_as_bounded_prior():
         "quality": 0.80,
         "segments": {
             "QUARTER_1": {
-                "expected_home": 18.0,
-                "expected_away": 18.0,
-                "expected_total": 36.0,
+                "expected_home": 30.0,
+                "expected_away": 30.0,
+                "expected_total": 60.0,
             }
         },
     }
@@ -201,8 +201,8 @@ def test_prematch_quarter_uses_exact_segment_memory_as_bounded_prior():
     assert baseline is not None
     assert adjusted is not None
     assert adjusted["segment_memory_weight"] > 0
-    assert adjusted["segment_prior_total"] == 36.0
-    assert adjusted["mu_total"] < baseline["mu_total"]
+    assert adjusted["segment_prior_total"] == 60.0
+    assert adjusted["mu_total"] > baseline["mu_total"]
 
 
 def test_recent_possessions_are_derived_from_attempts_rebounds_and_turnovers():
@@ -453,7 +453,7 @@ def test_q4_context_uses_lower_baseline_and_close_game_relief():
         },
         profile,
     )
-    assert close["q4_baseline_adjustment"] < 0
+    assert close["q4_baseline_adjustment"] == 0
     assert close["game_state_adjustment"] > 0
     assert comfortable["game_state_adjustment"] < 0
     assert close["adjusted_prior_total"] > comfortable["adjusted_prior_total"]
@@ -515,6 +515,64 @@ def test_quarter_context_is_bounded_and_cannot_overpower_live_model():
     )
     assert abs(context["prior_adjustment"]) <= 4.0
     assert 35.0 < context["adjusted_prior_total"] < 46.0
+
+
+
+def test_q4_has_no_unconditional_under_prior_when_game_state_is_unknown():
+    profile = {"quarter_total": 41.5}
+    context = live_quarter_context_assist(
+        {"scope": "QUARTER_4", "score_parts": []},
+        profile,
+    )
+    assert context["q4_baseline_adjustment"] == 0
+    assert context["prior_adjustment"] == 0
+    assert context["adjusted_prior_total"] == 41.5
+
+
+def test_score_only_fresh_fast_pace_lifts_projection_symmetrically():
+    payload = {
+        "current_segment_available": False,
+        "stats_mode": "",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(12, 11), recent_poss=0.0, recent_score=6.0, payload=payload)
+    brain["brain_state"] = "BORDERLINE"
+    brain["segment_score_verified"] = True
+    brain["recent_activity_available"] = True
+    brain["recent_window_seconds"] = 90.0
+    brain["history_points"] = 5
+    brain["elapsed_seconds"] = 240.0
+
+    lane = _lane(score=(12, 11), elapsed=240, line=49.5, market_over=0.50)
+    signal = live_signal(brain, lane)
+
+    assert signal is not None
+    assert signal["direction"] == "over"
+    assert signal["score_only_recent_projection_weight"] > 0
+
+
+def test_score_only_fresh_slow_pace_can_still_confirm_under():
+    payload = {
+        "current_segment_available": False,
+        "stats_mode": "",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(7, 6), recent_poss=0.0, recent_score=1.0, payload=payload)
+    brain["brain_state"] = "BORDERLINE"
+    brain["segment_score_verified"] = True
+    brain["recent_activity_available"] = True
+    brain["recent_window_seconds"] = 90.0
+    brain["history_points"] = 5
+    brain["elapsed_seconds"] = 300.0
+
+    lane = _lane(score=(7, 6), elapsed=300, line=38.5, market_over=0.50)
+    signal = live_signal(brain, lane)
+
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["score_only_recent_projection_weight"] > 0
 
 
 def test_live_points_pace_fallback_can_confirm_over_without_possession_attempts():

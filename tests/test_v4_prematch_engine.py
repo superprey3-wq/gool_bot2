@@ -1,4 +1,4 @@
-from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, super_candidate_pool, choose_delivery, signal_tier
+from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, super_candidate_pool, choose_delivery, signal_tier, global_super_publish_pool
 
 
 def test_devig_two_way_removes_margin():
@@ -210,3 +210,35 @@ def test_delivery_double_keeps_leg_that_already_passed_qualified_pick_at_quality
     delivery = choose_delivery(picks, max_singles=2, max_doubles=1)
     assert len(delivery["singles"]) == 2
     assert len(delivery["doubles"]) == 1
+
+
+def test_global_super_publish_pool_does_not_apply_old_football_only_wall(monkeypatch):
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", "1.15")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", "1.70")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", "0.68")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", "0.055")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV", "0.01")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", "0.55")
+
+    # After market shrink this leg is still safe for the mixed SUPER reserve,
+    # but the old football-only wall rejected it for odd>1.55/quality<0.80.
+    pick = PrematchPick(
+        event_id="football-safe-reserve",
+        home="Home",
+        away="Away",
+        market="match_total",
+        selection="over 2.5",
+        odds=1.62,
+        model_probability=0.78,
+        market_probability=0.65,
+        data_quality=0.70,
+        league="Test",
+        kickoff_ts=2_000_000_000.0,
+    )
+
+    pool = global_super_publish_pool([pick])
+
+    assert len(pool) == 1
+    assert pool[0].odds == 1.62
+    assert pool[0].model_probability >= 0.68
+    assert pool[0].edge >= 0.055

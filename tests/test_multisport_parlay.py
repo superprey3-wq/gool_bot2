@@ -164,7 +164,7 @@ def test_parlay_drops_started_and_imminent_matches(monkeypatch):
     )
 
 
-def test_parlay_prefers_safer_alternative_over_higher_odd_single(monkeypatch):
+def test_parlay_prefers_safer_alternative_and_hard_caps_above_1_50(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_PARLAY_MAX_ODD", "1.90")
     rows = [
         {
@@ -174,12 +174,13 @@ def test_parlay_prefers_safer_alternative_over_higher_odd_single(monkeypatch):
             "parlay_safe": False,
         },
         {
-            **_row("1", odd=1.55, probability=0.79, strength=84),
+            **_row("1", odd=1.49, probability=0.79, strength=84),
             "entry_id": "safe-1",
             "selection": "1-я половина: ТМ 122.5",
             "parlay_safe": True,
         },
-        _row("2", odd=1.49, probability=0.76, strength=83),
+        _row("2", odd=1.48, probability=0.76, strength=83),
+        _row("3", odd=1.51, probability=0.95, strength=99),
     ]
 
     legs = eligible_prematch_legs(rows, "hockey", now_ts=0)
@@ -187,8 +188,9 @@ def test_parlay_prefers_safer_alternative_over_higher_odd_single(monkeypatch):
     first = next(leg for leg in legs if leg["event_id"] == "1")
     assert first["entry_id"] == "safe-1"
     assert first["selection"] == "1-я половина: ТМ 122.5"
-    assert first["odd"] == 1.55
-
+    assert first["odd"] == 1.49
+    assert all(float(leg["odd"]) <= 1.50 for leg in legs)
+    assert "3" not in {leg["event_id"] for leg in legs}
 
 
 def test_parlay_delivery_rejects_same_match_when_market_changes_across_restart(tmp_path, monkeypatch):

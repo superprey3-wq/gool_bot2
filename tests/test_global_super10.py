@@ -450,3 +450,82 @@ def test_reconcile_repairs_legacy_zero_line_and_premature_lost(tmp_path: Path, m
     assert stored["legs"][0]["line"] is None
     assert stored["legs"][0]["result"] == "won"
     assert stored["legs"][1]["result"] == "pending"
+
+
+def test_super10_result_report_is_sent_only_after_last_match_finishes(tmp_path: Path, monkeypatch):
+    import json
+    from gool_bot2.providers import flashscore as flashscore_module
+
+    _paths(tmp_path, monkeypatch)
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "pending",
+        "created_at": "2026-10-08T12:00:00+00:00",
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": f"f{i}",
+                "market": "match_total",
+                "market_family": "match_total",
+                "selection": "ТБ 0.5",
+                "line": 0.5,
+                "odd": 1.20,
+                "result": "pending",
+            }
+            for i in range(10)
+        ],
+    }
+    gs.history_path().write_text(json.dumps([ticket]), "utf-8")
+    gs.sent_path().write_text(
+        json.dumps({"day": "2026-10-08", "sent": True, "ticket": ticket}),
+        "utf-8",
+    )
+
+    state = {"last_finished": False}
+
+    class FakeFlashscore:
+        def event_states(self, ids):
+            out = {}
+            for event_id in ids:
+                index = int(str(event_id)[1:])
+                finished = index < 9 or state["last_finished"]
+                out[event_id] = {
+                    "is_finished": finished,
+                    "home_score": 1 if finished else 0,
+                    "away_score": 0,
+                }
+            return out
+
+        def fetch_goal_timeline(self, event_id):
+            return []
+
+    sent = []
+    monkeypatch.setattr(flashscore_module, "FlashscoreProvider", FakeFlashscore)
+    monkeypatch.setattr(gs, "render_v4_parlay_card", lambda row, result=False: b"PNG")
+    monkeypatch.setattr(
+        gs.telegram,
+        "broadcast_photo",
+        lambda png, caption="": sent.append(caption) or 1,
+    )
+
+    first = gs.reconcile_global_super10(deliver_result=True)
+    stored = json.loads(gs.history_path().read_text("utf-8"))[0]
+    assert first["delivered"] == 0
+    assert stored["result"] == "pending"
+    assert [leg["result"] for leg in stored["legs"]].count("won") == 9
+    assert stored["legs"][9]["result"] == "pending"
+    assert sent == []
+
+    state["last_finished"] = True
+    second = gs.reconcile_global_super10(deliver_result=True)
+    stored = json.loads(gs.history_path().read_text("utf-8"))[0]
+    assert second["settled"] == 1
+    assert second["delivered"] == 1
+    assert stored["result"] == "won"
+    assert all(leg["result"] == "won" for leg in stored["legs"])
+    assert len(sent) == 1
+    assert "Все 10 матчей завершены" in sent[0]
+
+    third = gs.reconcile_global_super10(deliver_result=True)
+    assert third["delivered"] == 0
+    assert len(sent) == 1

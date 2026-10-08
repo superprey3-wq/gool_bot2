@@ -705,12 +705,21 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
         score += 4.0
 
     state = "PASS" if score >= 72.0 else ("BORDERLINE" if score >= 64.0 else "WAIT")
-    if (
+    # Some competitions expose a trustworthy current-quarter scoreboard but no
+    # detailed current-quarter stat section. The final LIVE model already has a
+    # conservative points/clock fallback for exactly this case. Do not kill the
+    # match before 1xBet pricing when we have a verified segment score, a full
+    # analysis window and real scoring activity; surface it only as BORDERLINE.
+    score_only_fallback = bool(
         not available
-        or not bool(readiness["ready"])
-        or bool(brain.get("break_transition"))
-    ):
+        and bool(brain.get("segment_score_verified"))
+        and str(readiness.get("mode") or "") == "strict"
+        and bool(readiness.get("recent_activity"))
+    )
+    if bool(brain.get("break_transition")) or not bool(readiness["ready"]):
         state = "WAIT"
+    elif not available:
+        state = "BORDERLINE" if score_only_fallback and score >= 64.0 else "WAIT"
     return {
         "state": state,
         "score": round(_clamp(score, 0.0, 82.0), 1),

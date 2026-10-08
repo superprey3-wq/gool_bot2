@@ -3730,6 +3730,12 @@ class MultiSportSteamWorker:
         previous_score = self._last_score.get(key)
         if previous_score is not None and previous_score != score:
             self._score_changed_at[key] = now
+            # Hockey is low-scoring: a goal creates a new market epoch and the
+            # pre-goal line must never be mixed with post-goal steam. Basketball
+            # keeps normalized history because ordinary scoring is continuous
+            # and _metric already removes the points just scored.
+            if cfg.key == "hockey":
+                self._history[key].clear()
         self._last_score[key] = score
         self._history[key].append(dict(row))
         return list(self._history[key]), self._score_changed_at.get(key)

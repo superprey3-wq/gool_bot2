@@ -30,6 +30,7 @@ def test_multisport_menu_reads_shared_state_and_journal(tmp_path: Path, monkeypa
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
     monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
 
     _write(state, {
         "mode": "shadow",
@@ -147,6 +148,7 @@ def test_separate_hockey_and_basketball_journal_views(tmp_path: Path, monkeypatc
 
 
 def test_started_multisport_prematch_moves_into_in_game_view(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
     state = tmp_path / "state.json"
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
@@ -222,10 +224,12 @@ def test_multisport_in_game_needed_result_text_matches_settlement_rules():
 
 
 def test_multisport_in_game_uses_raw_flashscore_live_even_when_xbet_mapping_is_zero(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
     state = tmp_path / "state.json"
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
     monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
 
     _write(state, {
         "mode": "active",
@@ -383,6 +387,7 @@ def test_multisport_in_game_fetches_fresh_flashscore_when_saved_state_is_empty(t
 
 
 def test_in_game_drops_stale_saved_live_when_fresh_flashscore_is_authoritative(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
     state = tmp_path / "state.json"
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
@@ -416,15 +421,14 @@ def test_in_game_drops_stale_saved_live_when_fresh_flashscore_is_authoritative(t
         "odd": 1.80,
     }]), "utf-8")
 
-    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
-    monkeypatch.setitem(menu._DIRECT_FLASH_META, "hockey", {"authoritative": True})
-    monkeypatch.setitem(menu._DIRECT_FLASH_META, "basketball", {"authoritative": True})
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: menu._FreshLiveRows([], authoritative=True))
 
     text = "\n".join(menu.multisport_in_game_sections())
     assert "Old Home" not in text
 
 
 def test_in_game_keeps_saved_live_when_fresh_flashscore_is_unavailable(tmp_path: Path, monkeypatch):
+    import gool_bot2.multisport_menu as menu
     state = tmp_path / "state.json"
     journal = tmp_path / "journal.json"
     monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(state))
@@ -460,9 +464,7 @@ def test_in_game_keeps_saved_live_when_fresh_flashscore_is_unavailable(tmp_path:
         "odd": 1.80,
     }]), "utf-8")
 
-    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: [])
-    monkeypatch.setitem(menu._DIRECT_FLASH_META, "hockey", {"authoritative": False})
-    monkeypatch.setitem(menu._DIRECT_FLASH_META, "basketball", {"authoritative": False})
+    monkeypatch.setattr(menu, "_direct_flashscore_live", lambda _sport: menu._FreshLiveRows([], authoritative=False))
 
     text = "\n".join(menu.multisport_in_game_sections())
     assert "Saved Home" in text

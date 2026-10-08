@@ -640,15 +640,10 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if scope == "PERIOD_3" and direction == "over" and margin <= 2 and remaining <= 420:
         agreements += 1
         directional_confirmation = True
-    if (
-        direction == "under"
-        and scope != "PERIOD_3"
-        and current == 0
-        and elapsed >= 360
-        and pressure_window_ready
-        and recent_shot_rate <= slow_shot_rate * 0.95
-    ):
-        agreements += 1
+    # Do not double-count the same slow-SOG evidence for scoreless UNDERs.
+    # Slow pace already supplies the directional confirmation above; awarding a
+    # second agreement for 0:0 after six minutes systematically ranked UNDER
+    # above equally strong OVER candidates.
     historical_confirmation = bool(
         full_market
         and memory_quality >= 0.55

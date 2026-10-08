@@ -1482,6 +1482,34 @@ def test_multisport_live_card_failure_falls_back_to_text(monkeypatch, tmp_path):
     assert "GOOL MULTI · LIVE · BASKETBALL" in sent_text[0]
 
 
+
+def test_hockey_live_any_existing_pick_blocks_second_market_family(tmp_path):
+    import json
+
+    worker = MultiSportSteamWorker(tmp_path)
+    worker.journal_path.parent.mkdir(parents=True, exist_ok=True)
+    worker.journal_path.write_text(
+        json.dumps([
+            {
+                "sport": "hockey",
+                "phase": "LIVE",
+                "event_id": "xh1",
+                "flashscore_event_id": "fh1",
+                "scope": "PERIOD_2",
+                "market_family": "match_total",
+            }
+        ]),
+        "utf-8",
+    )
+
+    assert worker._already_seen(
+        "hockey", "xh1", "LIVE", "FULL_MATCH", "home_total", "fh1"
+    ) is True
+    assert worker._already_seen(
+        "hockey", "xh1", "LIVE", "PERIOD_3", "match_total", "fh1"
+    ) is True
+
+
 def test_basketball_live_correlation_groups_keep_quarter_and_one_full_projection(tmp_path):
     worker = MultiSportSteamWorker(tmp_path)
 

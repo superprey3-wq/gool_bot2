@@ -295,7 +295,7 @@ def test_global_super10_prefers_more_confident_reserve_over_weaker_strict(tmp_pa
     ]
     # Seven ordinary strict fillers, one deliberately weaker than the reserve.
     strict.extend(
-        row("football", 10+i, 0.73 + i*0.002, 0.80, 78, "strict")
+        row("football" if i % 2 == 0 else "hockey", 10+i, 0.73 + i*0.002, 0.80, 78, "strict")
         for i in range(6)
     )
     strong_reserve = row("basketball", 99, 0.86, 0.59, 90, "reserve")

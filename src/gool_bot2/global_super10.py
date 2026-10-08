@@ -664,6 +664,15 @@ def _repair_legacy_super_ticket(ticket: dict[str, Any]) -> bool:
     return changed
 
 
+
+def _ticket_all_legs_final(ticket: dict[str, Any]) -> bool:
+    legs = [leg for leg in (ticket.get("legs") or []) if isinstance(leg, dict)]
+    if not legs:
+        return False
+    final = {"won", "lost", "push", "void"}
+    return all(str(leg.get("result") or "pending").lower() in final for leg in legs)
+
+
 def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
     """Settle sent GLOBAL SUPER legs from authoritative Flashscore results."""
     path = history_path()
@@ -733,6 +742,9 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
     delivered = 0
     if deliver_result:
         for ticket in newly_settled:
+            # Final report is allowed only after the LAST leg is settled.
+            if not _ticket_all_legs_final(ticket):
+                continue
             if bool(ticket.get("result_telegram_sent")):
                 continue
             try:
@@ -741,7 +753,10 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
                 icon = {"won": "✅", "lost": "❌", "void": "↩️", "push": "↩️"}.get(result, "ℹ️")
                 sent_count = int(telegram.broadcast_photo(
                     png,
-                    caption=f"{icon} <b>SUPER 10 · РЕЗУЛЬТАТ</b> · {result.upper()}",
+                    caption=(
+                        f"{icon} <b>SUPER 10 · ИТОГ</b> · {result.upper()}\n"
+                        "✅ Все 10 матчей завершены"
+                    ),
                 ) or 0)
             except Exception:
                 sent_count = 0

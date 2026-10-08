@@ -51,11 +51,33 @@ def main() -> None:
             row = (state.get("sports") or {}).get(sport) or {}
             would_send = _n(row.get("detected"))
             total += would_send
+            analyses = [x for x in (row.get("flashscore_analysis_matches") or []) if isinstance(x, dict)]
+            states_count = {}
+            reasons_count = {}
+            for item in analyses:
+                state_key = str(item.get("brain_state") or "UNKNOWN")
+                states_count[state_key] = states_count.get(state_key, 0) + 1
+                reason_key = str(item.get("brain_reason") or "").strip() or "no_reason"
+                reasons_count[reason_key] = reasons_count.get(reason_key, 0) + 1
             print(
                 f"WOULD_SEND_NOW sport={sport} bets={would_send} "
-                f"fs={_n(row.get('flashscore_live'))} xb={_n(row.get('xbet_live'))} "
-                f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))} "
-                f"policy_skip={_n(row.get('policy_blocked'))}"
+                f"fs={_n(row.get('flashscore_live'))} brain={_n(row.get('live_brain_candidates'))} "
+                f"xb={_n(row.get('xbet_live'))} mapped={_n(row.get('mapped'))} "
+                f"decoded={_n(row.get('decoded'))} policy_skip={_n(row.get('policy_blocked'))} "
+                f"price_rej={_n(row.get('pricing_rejected'))} steam_block={_n(row.get('steam_blocked'))} "
+                f"matchbook_block={_n(row.get('matchbook_blocked'))} dup={_n(row.get('duplicate_filtered'))}"
+            )
+            print(
+                "WOULD_SEND_BRAIN "
+                + json.dumps(
+                    {
+                        "sport": sport,
+                        "states": states_count,
+                        "top_reasons": sorted(reasons_count.items(), key=lambda x: (-x[1], x[0]))[:8],
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
             )
             for match in row.get("matches") or []:
                 for signal in match.get("signals") or []:
@@ -105,10 +127,17 @@ def main() -> None:
     ]
     for sport in ("hockey", "basketball"):
         row = ((latest.get("sports") or {}).get(sport) or {})
+        analyses = [x for x in (row.get("flashscore_analysis_matches") or []) if isinstance(x, dict)]
+        states_count = {}
+        for item in analyses:
+            key = str(item.get("brain_state") or "UNKNOWN")
+            states_count[key] = states_count.get(key, 0) + 1
         lines.append(
             f"- {sport}: would_send={_n(row.get('detected'))} "
-            f"FS={_n(row.get('flashscore_live'))} 1xBet={_n(row.get('xbet_live'))} "
-            f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))}"
+            f"FS={_n(row.get('flashscore_live'))} Brain={_n(row.get('live_brain_candidates'))} "
+            f"1xBet={_n(row.get('xbet_live'))} mapped={_n(row.get('mapped'))} "
+            f"decoded={_n(row.get('decoded'))} price_rej={_n(row.get('pricing_rejected'))} "
+            f"policy_skip={_n(row.get('policy_blocked'))} brain_states={states_count}"
         )
     if final_picks:
         lines += ["", "### Picks that would have been sent", ""]

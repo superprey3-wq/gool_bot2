@@ -328,8 +328,8 @@ def eligible_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
     """Strict GLOBAL SUPER pool."""
     return _eligible_candidates(
         now_ts=now_ts,
-        min_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.15),
-        max_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.70),
+        min_odd=max(1.30, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.30)),
+        max_odd=min(1.50, _num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.50)),
         min_probability=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_PROBABILITY"), 0.72),
         min_edge=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EDGE"), 0.055),
         min_ev=_num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_EV"), 0.02),
@@ -346,8 +346,8 @@ def reserve_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
     """
     return _eligible_candidates(
         now_ts=now_ts,
-        min_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.15),
-        max_odd=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.70),
+        min_odd=max(1.30, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.30)),
+        max_odd=min(1.50, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.50)),
         min_probability=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY"), 0.68),
         min_edge=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE"), 0.055),
         min_ev=_num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV"), 0.01),

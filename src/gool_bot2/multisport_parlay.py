@@ -37,7 +37,7 @@ def eligible_prematch_legs(
     min_probability = _float_env("GOOL_MULTISPORT_PARLAY_MIN_FAIR_PROBABILITY", 0.68)
     min_edge = _float_env("GOOL_MULTISPORT_PARLAY_MIN_EDGE", 0.055)
     min_odd = _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.45)
-    max_odd = _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 1.70)
+    max_odd = min(1.50, _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 1.50))
     max_push = _float_env("GOOL_MULTISPORT_PARLAY_MAX_PUSH_PROBABILITY", 0.20)
     lead = max(0.0, _float_env("GOOL_MULTISPORT_PARLAY_MIN_LEAD_SECONDS", 180.0))
     now = time.time() if now_ts is None else float(now_ts)

@@ -121,9 +121,9 @@ def test_football_super_pool_can_feed_global_ticket_without_sending_legacy_super
 
 def test_delivery_allows_strong_single_events_in_parlay_but_not_twice_in_same_ticket():
     picks = [
-        PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.55, .86, .66, .92),
-        PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.58, .85, .65, .91),
-        PrematchPick("p3", "P3H", "P3A", "match_total", "over 2.5", 1.62, .83, .63, .90),
+        PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.50, .86, .66, .92),
+        PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.50, .85, .65, .91),
+        PrematchPick("p3", "P3H", "P3A", "match_total", "over 2.5", 1.49, .83, .63, .90),
     ]
     delivery = choose_delivery(picks, max_singles=3, max_doubles=1)
     assert delivery["singles"]
@@ -138,14 +138,14 @@ def test_delivery_allows_strong_single_events_in_parlay_but_not_twice_in_same_ti
 def test_parlay_pool_rejects_expensive_non_single_legs():
     picks = [
         PrematchPick("s1", "A", "B", "match_total", "over 2.5", 1.80, .84, .60, .9),
-        PrematchPick("p1", "C", "D", "goal_1h", "goal 1h", 1.55, .83, .68, .9),
-        PrematchPick("p2", "E", "F", "goal_1h", "goal 1h", 1.58, .82, .67, .9),
+        PrematchPick("p1", "C", "D", "goal_1h", "goal 1h", 1.49, .83, .68, .9),
+        PrematchPick("p2", "E", "F", "goal_1h", "goal 1h", 1.48, .82, .67, .9),
         PrematchPick("x", "G", "H", "match_total", "over 3.5", 2.10, .80, .55, .9),
     ]
     delivery = choose_delivery(picks, max_singles=1, max_doubles=1)
     legs = [p for acc in delivery["doubles"] for p in acc["legs"]]
     assert legs
-    assert all(p.odds <= 1.70 for p in legs)
+    assert all(p.odds <= 1.50 for p in legs)
 
 
 def test_btts_profile_builds_yes_and_no_from_team_goal_rates():
@@ -193,8 +193,8 @@ def test_delivery_doubles_require_six_point_edge_after_market_blend():
 
 def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
     picks = [
-        PrematchPick("r1", "A", "B", "match_total", "over 1.5", 1.55, .82, .68, .70),
-        PrematchPick("r2", "C", "D", "match_total", "over 1.5", 1.58, .81, .67, .70),
+        PrematchPick("r1", "A", "B", "match_total", "over 1.5", 1.49, .86, .66, .70),
+        PrematchPick("r2", "C", "D", "match_total", "over 1.5", 1.48, .85, .65, .70),
     ]
     delivery = choose_delivery(picks, max_singles=0, max_doubles=1)
     assert len(delivery["doubles"]) == 1
@@ -204,8 +204,8 @@ def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
 
 def test_delivery_double_keeps_leg_that_already_passed_qualified_pick_at_quality_060():
     picks = [
-        PrematchPick("qa", "A", "B", "match_total", "over 1.5", 1.55, .82, .70, .60),
-        PrematchPick("qb", "C", "D", "match_total", "over 1.5", 1.58, .81, .69, .60),
+        PrematchPick("qa", "A", "B", "match_total", "over 1.5", 1.50, .86, .66, .60),
+        PrematchPick("qb", "C", "D", "match_total", "over 1.5", 1.50, .85, .65, .60),
     ]
     delivery = choose_delivery(picks, max_singles=2, max_doubles=1)
     assert len(delivery["singles"]) == 2
@@ -213,8 +213,8 @@ def test_delivery_double_keeps_leg_that_already_passed_qualified_pick_at_quality
 
 
 def test_global_super_publish_pool_does_not_apply_old_football_only_wall(monkeypatch):
-    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", "1.15")
-    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", "1.70")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", "1.30")
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", "1.50")
     monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", "0.68")
     monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", "0.055")
     monkeypatch.setenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV", "0.01")
@@ -228,7 +228,7 @@ def test_global_super_publish_pool_does_not_apply_old_football_only_wall(monkeyp
         away="Away",
         market="match_total",
         selection="over 2.5",
-        odds=1.62,
+        odds=1.49,
         model_probability=0.78,
         market_probability=0.65,
         data_quality=0.70,
@@ -239,6 +239,19 @@ def test_global_super_publish_pool_does_not_apply_old_football_only_wall(monkeyp
     pool = global_super_publish_pool([pick])
 
     assert len(pool) == 1
-    assert pool[0].odds == 1.62
+    assert pool[0].odds == 1.49
     assert pool[0].model_probability >= 0.68
     assert pool[0].edge >= 0.055
+
+
+def test_football_choose_delivery_caps_parlay_legs_at_1_50():
+    picks = [
+        PrematchPick("a", "A", "B", "goal_1h", "goal 1h", 1.49, .86, .66, .92),
+        PrematchPick("b", "C", "D", "goal_1h", "goal 1h", 1.50, .85, .65, .91),
+        PrematchPick("c", "E", "F", "goal_1h", "goal 1h", 1.51, .95, .70, .95),
+    ]
+    delivery = choose_delivery(picks, max_singles=0, max_doubles=2, include_super=False)
+    legs = [leg for acc in delivery["doubles"] for leg in acc["legs"]]
+    assert legs
+    assert all(1.45 <= leg.odds <= 1.50 for leg in legs)
+    assert "c" not in {leg.event_id for leg in legs}

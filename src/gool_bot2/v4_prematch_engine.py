@@ -63,11 +63,13 @@ def build_accumulators(
     min_combined_probability: float = 0.42,
     min_combined_odds: float = 1.65,
     max_combined_odds: float = 4.00,
+    min_leg_odds: float = 1.50,
+    max_leg_odds: float = 2.40,
 ) -> list[dict]:
     # Accumulators must use the same market-shrunk probabilities as singles.
     # Otherwise a leg can look qualified in an ACCA while being rejected by delivery.
     pool = [blend_with_market(p) for p in picks]
-    pool = [p for p in pool if qualified_pick(p)]
+    pool = [p for p in pool if qualified_pick(p, min_odds=min_leg_odds, max_odds=max_leg_odds)]
     pool.sort(key=lambda p: (p.edge, p.expected_value, p.model_probability, p.data_quality), reverse=True)
     out: list[dict] = []
 
@@ -147,8 +149,8 @@ def global_super_publish_pool(picks: Iterable[PrematchPick]) -> list[PrematchPic
 
     return super_candidate_pool(
         picks,
-        min_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.15),
-        max_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.70),
+        min_leg_odds=max(1.30, env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30)),
+        max_leg_odds=min(1.50, env_float("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50)),
         min_leg_probability=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", 0.68),
         min_quality=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", 0.55),
         min_edge=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", 0.055),
@@ -226,9 +228,11 @@ def choose_delivery(
 
     # Parlays have their own confidence/value selection. Do not starve them just
     # because the same high-quality fixtures were already selected as singles.
+    parlay_min_odd = 1.45
+    parlay_max_odd = 1.50
     parlay_pool = [
         p for p in rows
-        if 1.15 <= float(p.odds) <= 1.70
+        if parlay_min_odd <= float(p.odds) <= parlay_max_odd
     ]
 
     super_ticket = (
@@ -242,6 +246,7 @@ def choose_delivery(
     doubles = build_accumulators(
         parlay_pool, legs=2, min_combined_probability=.50,
         min_combined_odds=1.70, max_combined_odds=3.20,
+        min_leg_odds=parlay_min_odd, max_leg_odds=parlay_max_odd,
     )
     strong = []
     used = set()

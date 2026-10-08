@@ -343,6 +343,15 @@ def super10_text() -> str:
     if missing:
         names = {"football": "футбол", "hockey": "хоккей", "basketball": "баскетбол"}
         lines.append("⚠️ Нет подходящих ног: " + ", ".join(names.get(x, x) for x in missing))
+        raw_by = readiness.get("source_raw_by_sport") or {}
+        age_by = readiness.get("source_age_seconds") or {}
+        for sport in missing:
+            raw = int(raw_by.get(sport) or 0)
+            age = age_by.get(sport)
+            age_text = "нет публикации" if age is None else f"{int(float(age) // 60)} мин назад"
+            lines.append(
+                f"↳ источник {names.get(sport, sport)}: raw <b>{raw}</b> · {age_text}"
+            )
     need_more = int(readiness.get("need_more") or 0)
     if need_more > 0:
         lines.append(f"⏳ До сборки не хватает: <b>{need_more}</b>")

@@ -4404,6 +4404,7 @@ class MultiSportSteamWorker:
                             lane_row,
                             dict(row.get("sport_context") or {}),
                             str(row.get("league") or ""),
+                            dict(row.get("segment_memory") or {}),
                         )
                         if signal is None:
                             continue
@@ -4494,6 +4495,7 @@ class MultiSportSteamWorker:
                                 lane_row,
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
+                                dict(row.get("segment_memory") or {}),
                             )
                         if parlay_signal is None:
                             continue

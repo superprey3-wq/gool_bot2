@@ -182,12 +182,40 @@ def _scope_factor(scope: str) -> float:
     return 1.0
 
 
-def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str) -> dict[str, Any] | None:
+def prematch_signal(\n    lane: dict[str, Any],\n    features: dict[str, Any],\n    league: str,\n    segment_memory: dict[str, Any] | None = None,\n) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     scope = str(lane.get("scope") or "FULL_MATCH")
     factor = _scope_factor(scope)
     mu_home_full, mu_away_full, profile = prematch_means(features, league)
     mu_home, mu_away = mu_home_full * factor, mu_away_full * factor
+
+    memory = dict(segment_memory or {})
+    memory_quality = _clamp(_num(memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
+    memory_expected_home = memory_expected_away = None
+    if scope.startswith("QUARTER_"):
+        item = segment_prior(memory, scope)
+        memory_expected_home = _num(item.get("expected_home"))
+        memory_expected_away = _num(item.get("expected_away"))
+    elif scope in {"FIRST_HALF", "SECOND_HALF"}:
+        parts = ("QUARTER_1", "QUARTER_2") if scope == "FIRST_HALF" else ("QUARTER_3", "QUARTER_4")
+        home_parts = [_num(segment_prior(memory, part).get("expected_home")) for part in parts]
+        away_parts = [_num(segment_prior(memory, part).get("expected_away")) for part in parts]
+        if all(value is not None for value in home_parts):
+            memory_expected_home = sum(float(value) for value in home_parts if value is not None)
+        if all(value is not None for value in away_parts):
+            memory_expected_away = sum(float(value) for value in away_parts if value is not None)
+    if (
+        memory_quality >= 0.25
+        and memory_expected_home is not None
+        and memory_expected_away is not None
+    ):
+        # Exact Q/H team history is a specific prior, but remains sample-capped.
+        memory_weight = _clamp(0.18 + memory_quality * 0.44, 0.18, 0.60)
+        mu_home = mu_home * (1.0 - memory_weight) + float(memory_expected_home) * memory_weight
+        mu_away = mu_away * (1.0 - memory_weight) + float(memory_expected_away) * memory_weight
+    else:
+        memory_weight = 0.0
+
     variance_inflation = 1.12 if factor == 0.25 else (1.06 if factor == 0.50 else 1.0)
     sigma_total = profile["sigma_total"] * math.sqrt(factor) * variance_inflation
     sigma_margin = profile["sigma_margin"] * math.sqrt(factor) * variance_inflation
@@ -292,6 +320,13 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         "mu_away": round(mu_away, 2),
         "mu_total": round(mu_home + mu_away, 2),
         "data_quality": round(quality, 3),
+        "segment_memory_quality": round(memory_quality, 3),
+        "segment_memory_weight": round(memory_weight, 3),
+        "segment_prior_total": (
+            None
+            if memory_expected_home is None or memory_expected_away is None
+            else round(float(memory_expected_home) + float(memory_expected_away), 2)
+        ),
         "agreement_blocks": agreement,
         "market_confirmed": edge >= 0.055,
         "metric_delta": round(edge * 100.0, 3),

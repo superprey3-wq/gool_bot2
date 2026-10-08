@@ -200,8 +200,8 @@ def strict_in_game_sections(journal_path: Path, analysis_path: Path | None = Non
         block = (
             f"<b>{index}. {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
             f"сейчас <b>{int(live.get('minute') or 0)}' · {live_score[0]}:{live_score[1]}</b>\n"
-            f"🎯 <b>{_h(row.get('market'))} @ {_odd_text(row)}</b>\n"
-            f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence(row):.0f}/100</b> · {_h(source)}\n"
+            f"🎯 <b>{_h(_pick_text(row))} @ {_odd_text(row)}</b>\n"
+            f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence_text(row)}</b> · {_h(source)}\n"
             f"📈 1xBet {pressure:+.1f} п.п. · вход {int(row.get('minute') or 0)}' {entry_score[0]}:{entry_score[1]}"
         )
         if reason:

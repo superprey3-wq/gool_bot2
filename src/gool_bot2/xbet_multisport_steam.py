@@ -2447,7 +2447,7 @@ class MultiSportSteamWorker:
             0,
             min(
                 len(selected),
-                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 3),
+                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 8),
             ),
         )
         if prefetch_max:
@@ -2467,6 +2467,7 @@ class MultiSportSteamWorker:
                     brain["segment_memory_quality"] = float(memory.get("quality") or 0.0)
                     brain["segment_history_events"] = int(memory.get("history_events") or 0)
                     selected[idx]["prematch_brain"] = brain
+                    selected[idx]["segment_memory"] = memory
         return selected
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
@@ -3531,6 +3532,7 @@ class MultiSportSteamWorker:
         decoded, market_meta = self._market_tree(game, cfg, prematch=True)
         prematch_context = self._flashscore_prematch_context(fs, cfg)
         sport_context = self._sport_context_features(prematch_context, fs, cfg)
+        segment_memory = dict(fs.get("segment_memory") or {})
         lanes = prematch_market_lanes(decoded, cfg.key)
         parlay_lanes = prematch_parlay_market_lanes(decoded, cfg.key)
         for lane in lanes:
@@ -3582,6 +3584,7 @@ class MultiSportSteamWorker:
             "subgame_fetch": market_meta.get("subgame_fetch") or {},
             "prematch_context": prematch_context,
             "sport_context": sport_context,
+            "segment_memory": segment_memory,
             "flashscore_match_score": round(float(match_score), 4),
         }, None
 
@@ -4376,6 +4379,7 @@ class MultiSportSteamWorker:
                             lane_row,
                             dict(row.get("sport_context") or {}),
                             str(row.get("league") or ""),
+                            dict(row.get("segment_memory") or {}),
                         )
                         if signal is None:
                             continue
@@ -4483,6 +4487,7 @@ class MultiSportSteamWorker:
                                 lane_row,
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
+                                dict(row.get("segment_memory") or {}),
                             )
                         else:
                             parlay_signal = basketball_prematch_v2_signal(

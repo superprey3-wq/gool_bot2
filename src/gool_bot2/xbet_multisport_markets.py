@@ -527,9 +527,10 @@ def selection_label(lane: dict[str, Any], direction: str, line: float | None = N
 def live_scopes_from_period(sport: str, period: str | None) -> set[str]:
     """Return the one segment scope allowed to generate a LIVE signal.
 
-    Product policy: hockey LIVE = current period total only; basketball LIVE =
-    current quarter total only. Full-match, team totals, halves, handicaps and
-    moneyline remain visible in telemetry but are PREMATCH-only signal markets.
+    Return the current segment scope used by segment-scoped LIVE markets.
+    Basketball public LIVE is current-quarter total only. Hockey also uses this
+    current-period scope, while lane_phase_policy separately permits controlled
+    FULL_MATCH total/team-total projections that compete for one public pick.
     """
     raw = re.sub(r"\s+", " ", str(period or "").strip().casefold())
     if not raw:

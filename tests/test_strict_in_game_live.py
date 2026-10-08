@@ -68,6 +68,30 @@ def test_in_game_shows_only_matches_flashscore_confirms_live(tmp_path, monkeypat
     assert "@ —" in text
 
 
+def test_in_game_prefers_exact_selection_and_does_not_fake_zero_confidence(tmp_path, monkeypatch):
+    path = tmp_path / "journal.json"
+    row = _row("live02", "Home", "Away", minute=60, odd=1.54)
+    row["market"] = "match_total"
+    row["selection"] = "ТБ 4.5"
+    row.pop("confidence_score", None)
+    row.pop("rating", None)
+    row.pop("strength", None)
+    row.pop("probability", None)
+    save_signal_journal(path, [row])
+    monkeypatch.setattr("gool_bot2.multi_menu.reconcile_pending", lambda: 0)
+    monkeypatch.setattr(
+        live_menu.FlashscoreProvider,
+        "live_matches",
+        lambda self: [_live("live02", minute=66, home_score=2, away_score=2)],
+    )
+
+    text = "\n".join(live_menu.strict_in_game_sections(path))
+
+    assert "ТБ 4.5 @ 1.54" in text
+    assert "match_total @ 1.54" not in text
+    assert "уверенность <b>—</b>" in text
+    assert "уверенность <b>0/100</b>" not in text
+
 def test_first_half_entry_is_not_shown_after_second_half_starts(tmp_path, monkeypatch):
     path = tmp_path / "journal.json"
     save_signal_journal(

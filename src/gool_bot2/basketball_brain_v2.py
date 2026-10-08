@@ -271,7 +271,7 @@ def prematch_signal(
     else:
         return None
 
-    if not (1.45 <= odd <= 3.25):
+    if not (_env_float("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
     edge = model_p - market_p
     if edge < 0.055 or model_p < 0.55:
@@ -1019,7 +1019,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if direction == "under" and str(readiness.get("mode") or "") != "strict":
         return None
 
-    if not (1.45 <= odd <= 3.25):
+    if not (_env_float("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None
     if edge < 0.055 or model_p < 0.56:
         return None

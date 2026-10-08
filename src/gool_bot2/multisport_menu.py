@@ -23,7 +23,11 @@ SPORT_META = {
     "hockey": ("🏒", "ХОККЕЙ"),
     "basketball": ("🏀", "БАСКЕТБОЛ"),
 }
-_DIRECT_FLASH_META: dict[str, dict[str, Any]] = {}
+class _FreshLiveRows(list):
+    def __init__(self, rows=(), *, authoritative: bool = False):
+        super().__init__(rows)
+        self.authoritative = bool(authoritative)
+
 
 
 def _h(value: Any) -> str:
@@ -585,8 +589,7 @@ def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
         for row in parse_flashscore_events(body):
             if str(row.get("coarse_status") or "") == "2":
                 merged[str(row.get("flashscore_event_id") or "")] = dict(row)
-    _DIRECT_FLASH_META[str(sport)] = {"authoritative": authoritative}
-    return list(merged.values())
+    return _FreshLiveRows(merged.values(), authoritative=authoritative)
 
 
 def multisport_in_game_sections() -> list[str]:
@@ -621,7 +624,7 @@ def multisport_in_game_sections() -> list[str]:
         # the already-decoded Flashscore Brain scope/period on top. Raw AC alone
         # is not a safe period label for every hockey/basketball feed.
         fresh_live = _direct_flashscore_live(sport)
-        fresh_authoritative = bool((_DIRECT_FLASH_META.get(str(sport)) or {}).get("authoritative"))
+        fresh_authoritative = bool(getattr(fresh_live, "authoritative", False))
         fresh_by_id = {}
         for row in fresh_live:
             fs_id = str(row.get("flashscore_event_id") or "")

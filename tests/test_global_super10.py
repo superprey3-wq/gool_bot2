@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import time
 from pathlib import Path
 
@@ -260,3 +261,31 @@ def test_super10_football_first_half_settlement_counts_stoppage_time(tmp_path: P
     state = {"is_finished": True, "home_score": 2, "away_score": 1}
 
     assert gs._settle_super_leg(FakeProvider(), leg, state) == "won"
+
+
+def test_readiness_snapshot_exposes_raw_source_counts_and_age(tmp_path: Path, monkeypatch):
+    import json, time
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+    payload = {
+        "updated_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+        "sources": {
+            "football": {
+                "updated_at": datetime.fromtimestamp(now - 120, timezone.utc).isoformat(),
+                "candidates": [{"event_id": "f1"}],
+            },
+            "hockey": {
+                "updated_at": datetime.fromtimestamp(now - 30, timezone.utc).isoformat(),
+                "candidates": [{"event_id": "h1"}, {"event_id": "h2"}],
+            },
+        },
+    }
+    gs.pool_path().write_text(json.dumps(payload), "utf-8")
+
+    snap = gs.readiness_snapshot(now_ts=now)
+
+    assert snap["source_raw_by_sport"]["football"] == 1
+    assert snap["source_raw_by_sport"]["hockey"] == 2
+    assert snap["source_raw_by_sport"]["basketball"] == 0
+    assert 119 <= snap["source_age_seconds"]["football"] <= 121
+    assert snap["source_age_seconds"]["basketball"] is None

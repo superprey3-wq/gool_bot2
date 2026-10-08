@@ -291,6 +291,8 @@ def main() -> None:
     # parlays per sport/day when enough safe fixtures exist.
     os.environ["GOOL_MULTISPORT_PARLAY_MAX_DAILY_PER_SPORT"] = "3"
     os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MAX_RESULTS", "3")
+    os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MIN_ODD", "1.45")
+    os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MAX_ODD", "1.50")
     os.environ.setdefault("GOOL_MULTISPORT_PARLAY_MAX_EVENT_REUSE", "1")
     # GLOBAL SUPER 10 stays active in production and may complete strict legs
     # from a separately gated safe reserve pool. Candidate snapshots live long
@@ -298,7 +300,10 @@ def main() -> None:
     os.environ["GOOL_GLOBAL_SUPER10_ENABLED"] = "1"
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_LEGS", "10")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_REQUIRE_ALL_SPORTS", "1")
-    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MAX_ODD", "1.70")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MIN_ODD", "1.30")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MAX_ODD", "1.50")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", "1.30")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", "1.50")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_SOURCE_TTL_SECONDS", "129600")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", "0.68")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", "0.055")

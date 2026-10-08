@@ -222,7 +222,12 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     }
 
 
-def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str) -> dict[str, Any] | None:
+def prematch_signal(
+    lane: dict[str, Any],
+    features: dict[str, Any],
+    league: str,
+    segment_memory: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     full_lam_home, full_lam_away, baseline = prematch_lambdas(features, league)
     scope = str(lane.get("scope") or "FULL_MATCH")
@@ -230,6 +235,26 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
     lam_home = full_lam_home * scope_share
     lam_away = full_lam_away * scope_share
     scoped_baseline = baseline * scope_share
+
+    memory = dict(segment_memory or {})
+    memory_quality = _clamp(_num(memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
+    memory_expected_home = memory_expected_away = None
+    if scope.startswith("PERIOD_"):
+        item = segment_prior(memory, scope)
+        memory_expected_home = _num(item.get("expected_home"))
+        memory_expected_away = _num(item.get("expected_away"))
+    if (
+        memory_quality >= 0.25
+        and memory_expected_home is not None
+        and memory_expected_away is not None
+    ):
+        # Exact period form/H2H is a specific prior. Cap its influence so a
+        # small segment sample cannot replace the full-match scoring model.
+        memory_weight = _clamp(0.18 + memory_quality * 0.44, 0.18, 0.60)
+        lam_home = lam_home * (1.0 - memory_weight) + float(memory_expected_home) * memory_weight
+        lam_away = lam_away * (1.0 - memory_weight) + float(memory_expected_away) * memory_weight
+    else:
+        memory_weight = 0.0
     quality = _data_quality(features)
     if quality < 0.55:
         return None
@@ -332,6 +357,13 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         "scope_goal_share": round(scope_share, 3),
         "league_baseline": round(scoped_baseline, 3),
         "data_quality": round(quality, 3),
+        "segment_memory_quality": round(memory_quality, 3),
+        "segment_memory_weight": round(memory_weight, 3),
+        "segment_prior_total": (
+            None
+            if memory_expected_home is None or memory_expected_away is None
+            else round(float(memory_expected_home) + float(memory_expected_away), 3)
+        ),
         "agreement_blocks": agreement,
         "market_confirmed": edge >= min_edge,
         "metric_delta": round(edge * 100.0, 3),
@@ -608,15 +640,10 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     if scope == "PERIOD_3" and direction == "over" and margin <= 2 and remaining <= 420:
         agreements += 1
         directional_confirmation = True
-    if (
-        direction == "under"
-        and scope != "PERIOD_3"
-        and current == 0
-        and elapsed >= 360
-        and pressure_window_ready
-        and recent_shot_rate <= slow_shot_rate * 0.95
-    ):
-        agreements += 1
+    # Do not double-count the same slow-SOG evidence for scoreless UNDERs.
+    # Slow pace already supplies the directional confirmation above; awarding a
+    # second agreement for 0:0 after six minutes systematically ranked UNDER
+    # above equally strong OVER candidates.
     historical_confirmation = bool(
         full_market
         and memory_quality >= 0.55

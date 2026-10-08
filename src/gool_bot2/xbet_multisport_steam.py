@@ -2224,6 +2224,7 @@ class MultiSportSteamWorker:
                 "recent_score_rate": recent_score_rate,
                 "recent_possessions_per_min": recent_possessions_per_min,
                 "recent_activity_available": recent_activity_available,
+                "segment_score_verified": bool(segment_score_verified),
                 "break_transition": break_transition,
             })
             rating = float(gate.get("score") or 0.0)
@@ -2447,7 +2448,7 @@ class MultiSportSteamWorker:
             0,
             min(
                 len(selected),
-                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 3),
+                _int_env("GOOL_MULTISPORT_SEGMENT_PREMATCH_PREFETCH_MAX", 8),
             ),
         )
         if prefetch_max:
@@ -2467,6 +2468,7 @@ class MultiSportSteamWorker:
                     brain["segment_memory_quality"] = float(memory.get("quality") or 0.0)
                     brain["segment_history_events"] = int(memory.get("history_events") or 0)
                     selected[idx]["prematch_brain"] = brain
+                    selected[idx]["segment_memory"] = memory
         return selected
 
     def _flashscore_prematch_context(self, fs: dict[str, Any], cfg: SportConfig) -> dict[str, Any]:
@@ -3531,6 +3533,7 @@ class MultiSportSteamWorker:
         decoded, market_meta = self._market_tree(game, cfg, prematch=True)
         prematch_context = self._flashscore_prematch_context(fs, cfg)
         sport_context = self._sport_context_features(prematch_context, fs, cfg)
+        segment_memory = dict(fs.get("segment_memory") or {})
         lanes = prematch_market_lanes(decoded, cfg.key)
         parlay_lanes = prematch_parlay_market_lanes(decoded, cfg.key)
         for lane in lanes:
@@ -3582,6 +3585,7 @@ class MultiSportSteamWorker:
             "subgame_fetch": market_meta.get("subgame_fetch") or {},
             "prematch_context": prematch_context,
             "sport_context": sport_context,
+            "segment_memory": segment_memory,
             "flashscore_match_score": round(float(match_score), 4),
         }, None
 
@@ -3730,6 +3734,12 @@ class MultiSportSteamWorker:
         previous_score = self._last_score.get(key)
         if previous_score is not None and previous_score != score:
             self._score_changed_at[key] = now
+            # Hockey is low-scoring: a goal creates a new market epoch and the
+            # pre-goal line must never be mixed with post-goal steam. Basketball
+            # keeps normalized history because ordinary scoring is continuous
+            # and _metric already removes the points just scored.
+            if cfg.key == "hockey":
+                self._history[key].clear()
         self._last_score[key] = score
         self._history[key].append(dict(row))
         return list(self._history[key]), self._score_changed_at.get(key)
@@ -4015,6 +4025,11 @@ class MultiSportSteamWorker:
                     row_group = self._live_correlation_group(sport, row_scope, row_family)
                     if wanted_group == row_group:
                         return True
+                # Hockey public contract: one LIVE pick per match. Period total,
+                # full-match total and team totals are competing candidates, not
+                # separate public bets on the same game.
+                if wanted_phase == "LIVE" and str(sport or "").casefold() == "hockey":
+                    return True
                 if row_scope == wanted_scope and row_family == wanted_family:
                     return True
         return False
@@ -4365,6 +4380,7 @@ class MultiSportSteamWorker:
                             lane_row,
                             dict(row.get("sport_context") or {}),
                             str(row.get("league") or ""),
+                            dict(row.get("segment_memory") or {}),
                         )
                         if signal is None:
                             continue
@@ -4389,6 +4405,7 @@ class MultiSportSteamWorker:
                             lane_row,
                             dict(row.get("sport_context") or {}),
                             str(row.get("league") or ""),
+                            dict(row.get("segment_memory") or {}),
                         )
                         if signal is None:
                             continue
@@ -4472,12 +4489,14 @@ class MultiSportSteamWorker:
                                 lane_row,
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
+                                dict(row.get("segment_memory") or {}),
                             )
                         else:
                             parlay_signal = basketball_prematch_v2_signal(
                                 lane_row,
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
+                                dict(row.get("segment_memory") or {}),
                             )
                         if parlay_signal is None:
                             continue
@@ -5183,6 +5202,16 @@ class MultiSportSteamWorker:
                     selected_live_signals = sorted(
                         best_by_group.values(),
                         key=lambda item: -float(item[1].get("strength") or 0.0),
+                    )[:1]
+                elif cfg.key == "hockey":
+                    # Period/full/team totals compete for one public hockey pick.
+                    selected_live_signals = sorted(
+                        pending_live_signals,
+                        key=lambda item: (
+                            -float(item[1].get("strength") or 0.0),
+                            -abs(float(item[1].get("edge") or 0.0)),
+                            -float(item[1].get("model_probability") or 0.0),
+                        ),
                     )[:1]
                 else:
                     selected_live_signals = pending_live_signals

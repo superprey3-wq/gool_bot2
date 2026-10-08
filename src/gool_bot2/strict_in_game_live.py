@@ -27,11 +27,32 @@ def _score(value: Any) -> list[int]:
     return [0, 0]
 
 
-def _confidence(row: dict[str, Any]) -> float:
+def _confidence(row: dict[str, Any]) -> float | None:
+    for key in ("confidence_score", "rating", "strength"):
+        try:
+            value = row.get(key)
+            if value is not None and str(value).strip() != "":
+                return float(value)
+        except (TypeError, ValueError):
+            continue
     try:
-        return float(row.get("confidence_score") or row.get("rating") or 0.0)
+        probability = row.get("probability")
+        if probability is not None and str(probability).strip() != "":
+            value = float(probability)
+            return value * 100.0 if value <= 1.0 else value
     except (TypeError, ValueError):
-        return 0.0
+        pass
+    return None
+
+
+def _confidence_text(row: dict[str, Any]) -> str:
+    value = _confidence(row)
+    return "—" if value is None else f"{value:.0f}/100"
+
+
+def _pick_text(row: dict[str, Any]) -> str:
+    # Public UI must show the exact user-facing selection, not a technical family name.
+    return str(row.get("selection") or row.get("market_label") or row.get("market") or "?")
 
 
 def _event_score(row: dict[str, Any]) -> float:
@@ -179,8 +200,8 @@ def strict_in_game_sections(journal_path: Path, analysis_path: Path | None = Non
         block = (
             f"<b>{index}. {_h(row.get('home'))} — {_h(row.get('away'))}</b>\n"
             f"сейчас <b>{int(live.get('minute') or 0)}' · {live_score[0]}:{live_score[1]}</b>\n"
-            f"🎯 <b>{_h(row.get('market'))} @ {_odd_text(row)}</b>\n"
-            f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence(row):.0f}/100</b> · {_h(source)}\n"
+            f"🎯 <b>{_h(_pick_text(row))} @ {_odd_text(row)}</b>\n"
+            f"🧠 событие <b>{_event_score(row):.0f}/100</b> · уверенность <b>{_confidence_text(row)}</b> · {_h(source)}\n"
             f"📈 1xBet {pressure:+.1f} п.п. · вход {int(row.get('minute') or 0)}' {entry_score[0]}:{entry_score[1]}"
         )
         if reason:

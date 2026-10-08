@@ -180,6 +180,15 @@ def find_model(filename: str) -> Path:
     return matches[0]
 
 
+def _matchbook_runtime_enabled() -> bool:
+    if not _truthy("GOOL_MATCHBOOK_ENABLED", True):
+        return False
+    token = os.getenv("MATCHBOOK_SESSION_TOKEN", "").strip()
+    username = os.getenv("MATCHBOOK_USERNAME", "").strip()
+    password = os.getenv("MATCHBOOK_PASSWORD", "").strip()
+    return bool(token or (username and password))
+
+
 def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
     """Return the only processes allowed in the public two-system product."""
     commands = {
@@ -207,6 +216,14 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
+    if _matchbook_runtime_enabled():
+        commands["matchbook"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.matchbook_market_worker",
+            "--interval",
+            os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10"),
+        ]
     if browser_enabled:
         commands["browser"] = [
             sys.executable,
@@ -314,13 +331,15 @@ def main() -> None:
     os.environ["GOOL_LIVE_V4_MODE"] = "active"
     os.environ.setdefault("GOOL_LIVE_MULTI_ALL_MARKETS_SHADOW", "1")
 
-    # Hard production kill-switches for every exchange-money lane. Values from an
-    # old gool.env cannot re-enable them accidentally after this deployment.
+    # Keep legacy exchange emitters/push systems disabled. Matchbook context is
+    # a separate read-only collector below and starts only with real auth.
     os.environ["GOOL_MONEY_FLOW_ENABLED"] = "0"
     os.environ["BETDAQ_SELECTION_PUSH_ENABLED"] = "0"
     os.environ["GOOL_MULTI_DAILY_BANK_REPORT_ENABLED"] = "0"
     os.environ["GOOL_EXCHANGE_MONEY_SYSTEMS_ENABLED"] = "0"
 
+    os.environ.setdefault("GOOL_MATCHBOOK_ENABLED", "1")
+    os.environ.setdefault("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10")
     os.environ.setdefault("GOOL_BROWSER_ENABLE", "0")
     os.environ.setdefault("GOOL_BROWSER_INTERVAL_SECONDS", "30")
     os.environ.setdefault("GOOL_BROWSER_MAX_MATCHES_PER_CYCLE", "2")
@@ -365,9 +384,10 @@ def main() -> None:
     print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
-        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} exchange_money=off "
-        "prematch_full_market=active live_consensus=2of3 "
-        "matchbook_worker=off betdaq_worker=off sx_board=off",
+        f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} "
+        f"matchbook_worker={'on' if _matchbook_runtime_enabled() else 'off_auth_missing'} "
+        "prematch_full_market=active live_consensus=2of3 legacy_exchange_emitters=off "
+        "betdaq_worker=off sx_board=off",
         flush=True,
     )
     if browser_enabled:

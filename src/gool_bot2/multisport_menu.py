@@ -23,6 +23,11 @@ SPORT_META = {
     "hockey": ("🏒", "ХОККЕЙ"),
     "basketball": ("🏀", "БАСКЕТБОЛ"),
 }
+class _FreshLiveRows(list):
+    def __init__(self, rows=(), *, authoritative: bool = False):
+        super().__init__(rows)
+        self.authoritative = bool(authoritative)
+
 
 
 def _h(value: Any) -> str:
@@ -563,10 +568,16 @@ def _teams_match(left_home: str, left_away: str, right_home: str, right_away: st
 
 
 def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
-    """Fresh LIVE identity/score for the menu, independent of saved worker state."""
+    """Fresh LIVE identity/score for the menu, independent of saved worker state.
+
+    The side metadata distinguishes a successful fresh feed with no matching
+    event from a provider failure. That lets the menu drop stale saved LIVE rows
+    without going blank during a transient Flashscore outage.
+    """
     sport_id = 4 if sport == "hockey" else 3
     provider = FlashscoreProvider()
     merged: dict[str, dict[str, Any]] = {}
+    authoritative = False
     for path in (f"f_{sport_id}_0_3_en_1", f"f_{sport_id}_0_0_en_1"):
         try:
             body = provider._feed(path, timeout=3, max_hosts=1)
@@ -574,10 +585,11 @@ def _direct_flashscore_live(sport: str) -> list[dict[str, Any]]:
             body = ""
         if not body:
             continue
+        authoritative = True
         for row in parse_flashscore_events(body):
             if str(row.get("coarse_status") or "") == "2":
                 merged[str(row.get("flashscore_event_id") or "")] = dict(row)
-    return list(merged.values())
+    return _FreshLiveRows(merged.values(), authoritative=authoritative)
 
 
 def multisport_in_game_sections() -> list[str]:
@@ -612,6 +624,7 @@ def multisport_in_game_sections() -> list[str]:
         # the already-decoded Flashscore Brain scope/period on top. Raw AC alone
         # is not a safe period label for every hockey/basketball feed.
         fresh_live = _direct_flashscore_live(sport)
+        fresh_authoritative = bool(getattr(fresh_live, "authoritative", False))
         fresh_by_id = {}
         for row in fresh_live:
             fs_id = str(row.get("flashscore_event_id") or "")
@@ -642,7 +655,10 @@ def multisport_in_game_sections() -> list[str]:
                 if analysis.get("period"):
                     merged["period"] = analysis.get("period")
                 fresh_by_id[fs_id] = merged
-            else:
+            elif not fresh_authoritative:
+                # Saved LIVE state is only a resilience fallback. When a fresh
+                # authoritative Flashscore response succeeded, absence means the
+                # event is no longer LIVE and must not be resurrected.
                 fresh_by_id[fs_id] = {**analysis, **saved}
         fs_live_matches = list(fresh_by_id.values())
         mapped_matches = [
@@ -662,8 +678,10 @@ def multisport_in_game_sections() -> list[str]:
                 continue
             if fs_id in live_by_fs:
                 live_by_fs[fs_id] = {**live_by_fs[fs_id], **mapped}
-            else:
+            elif not fresh_authoritative:
                 live_by_fs[fs_id] = dict(mapped)
+            else:
+                continue
             analysis = analysis_by_id.get(fs_id) or {}
             if analysis.get("scope"):
                 live_by_fs[fs_id]["scope"] = analysis.get("scope")

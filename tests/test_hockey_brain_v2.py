@@ -165,6 +165,20 @@ def test_huge_cumulative_shots_do_not_force_over_when_recent_pressure_is_low():
     assert signal["shot_factor"] < 1.0
 
 
+
+def test_scoreless_slow_hockey_under_does_not_double_count_same_pace_evidence():
+    brain = _live_brain(scope="PERIOD_2", recent_shot_rate=0.5, match_score=(1, 1))
+    brain["elapsed_seconds"] = 600.0
+    brain["segment_score_verified"] = True
+    signal = live_signal(
+        brain,
+        _live_lane(scope="PERIOD_2", elapsed=600, line=1.5, market_over=0.70, match_score=(1, 1)),
+    )
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["agreement_blocks"] == 2
+
+
 def test_late_close_p3_under_is_blocked_for_empty_net_risk():
     signal = live_signal(
         _live_brain(scope="PERIOD_3", recent_shot_rate=0.5, match_score=(3, 2)),
@@ -280,6 +294,36 @@ def test_prematch_period_total_uses_period_lambda_not_full_match_lambda():
     # The old bug produced ~0.98 OVER by feeding a full-match lambda into P1.
     assert signal["model_probability"] < 0.85
     assert signal["strength"] <= 87.0
+
+
+
+def test_prematch_period_uses_exact_segment_memory_as_bounded_prior():
+    lane = {
+        "scope": "PERIOD_1",
+        "market_family": "match_total",
+        "line": 1.5,
+        "over": 1.90,
+        "under": 1.90,
+        "probability": 0.50,
+    }
+    baseline = prematch_signal(lane, _strong_features(), "NHL")
+    memory = {
+        "sport": "hockey",
+        "quality": 0.80,
+        "segments": {
+            "PERIOD_1": {
+                "expected_home": 1.5,
+                "expected_away": 1.5,
+                "expected_total": 3.0,
+            }
+        },
+    }
+    adjusted = prematch_signal(lane, _strong_features(), "NHL", memory)
+    assert baseline is not None
+    assert adjusted is not None
+    assert adjusted["segment_memory_weight"] > 0
+    assert adjusted["segment_prior_total"] == 3.0
+    assert adjusted["lambda_home"] + adjusted["lambda_away"] > baseline["lambda_home"] + baseline["lambda_away"]
 
 
 def test_live_short_pressure_window_does_not_count_as_shot_confirmation():

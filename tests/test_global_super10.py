@@ -161,3 +161,102 @@ def test_global_super10_not_ready_reports_per_sport_counts(tmp_path: Path, monke
     assert status["available"] == 6
     assert status["need_more"] == 4
     assert status["available_by_sport"] == {"football": 3, "hockey": 2, "basketball": 1}
+
+
+def test_global_super10_reconciles_cross_sport_results(tmp_path: Path, monkeypatch):
+    import json
+    from gool_bot2.providers import flashscore as flashscore_module
+
+    _paths(tmp_path, monkeypatch)
+    ticket = {
+        "kind": "GLOBAL_SUPER",
+        "result": "pending",
+        "created_at": "2026-10-08T00:00:00+00:00",
+        "legs": [
+            {
+                "sport": "football",
+                "event_id": "FOOT0001",
+                "market": "match_total",
+                "market_family": "match_total",
+                "selection": "ТБ 2.5",
+                "odd": 1.50,
+                "result": "pending",
+            },
+            {
+                "sport": "basketball",
+                "event_id": "BASK0001",
+                "scope": "QUARTER_2",
+                "market_family": "match_total",
+                "selection": "2-я четверть: ТБ 40.5",
+                "direction": "over",
+                "line": 40.5,
+                "odd": 1.60,
+                "result": "pending",
+            },
+            {
+                "sport": "hockey",
+                "event_id": "HOCK0001",
+                "scope": "PERIOD_1",
+                "market_family": "match_total",
+                "selection": "1-й период: ТМ 1.5",
+                "direction": "under",
+                "line": 1.5,
+                "odd": 1.70,
+                "result": "pending",
+            },
+        ],
+    }
+    gs.history_path().write_text(json.dumps([ticket]), "utf-8")
+    gs.sent_path().write_text(json.dumps({"day": "2026-10-08", "sent": True, "ticket": ticket}), "utf-8")
+
+    class FakeFlashscore:
+        def event_states(self, ids):
+            return {
+                "FOOT0001": {"is_finished": True, "home_score": 2, "away_score": 1},
+                "BASK0001": {"is_finished": True, "home_score": 84, "away_score": 80},
+                "HOCK0001": {"is_finished": True, "home_score": 3, "away_score": 2},
+            }
+
+        def fetch_segment_scores(self, event_id, sport):
+            if event_id == "BASK0001":
+                return {"QUARTER_2": [21, 22]}
+            if event_id == "HOCK0001":
+                return {"PERIOD_1": [1, 0]}
+            return {}
+
+        def fetch_goal_timeline(self, event_id):
+            return []
+
+    monkeypatch.setattr(flashscore_module, "FlashscoreProvider", FakeFlashscore)
+
+    result = gs.reconcile_global_super10(deliver_result=False)
+
+    assert result["settled"] == 1
+    stored = json.loads(gs.history_path().read_text("utf-8"))[0]
+    assert stored["result"] == "won"
+    assert [leg["result"] for leg in stored["legs"]] == ["won", "won", "won"]
+    assert stored["effective_odd"] == 4.08
+    sent = json.loads(gs.sent_path().read_text("utf-8"))
+    assert sent["ticket"]["result"] == "won"
+
+
+def test_super10_football_first_half_settlement_counts_stoppage_time(tmp_path: Path, monkeypatch):
+    class FakeProvider:
+        def fetch_goal_timeline(self, event_id):
+            return [
+                {"base_minute": 12, "minute": 12, "home": 1, "away": 0},
+                {"base_minute": 45, "minute": 47, "home": 1, "away": 1},
+                {"base_minute": 70, "minute": 70, "home": 2, "away": 1},
+            ]
+
+    leg = {
+        "sport": "football",
+        "event_id": "FOOTHT01",
+        "market": "1H_OVER_UNDER",
+        "market_family": "first_half_total",
+        "selection": "over 1.5",
+        "odd": 1.80,
+    }
+    state = {"is_finished": True, "home_score": 2, "away_score": 1}
+
+    assert gs._settle_super_leg(FakeProvider(), leg, state) == "won"

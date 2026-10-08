@@ -182,12 +182,45 @@ def _scope_factor(scope: str) -> float:
     return 1.0
 
 
-def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str) -> dict[str, Any] | None:
+def prematch_signal(
+    lane: dict[str, Any],
+    features: dict[str, Any],
+    league: str,
+    segment_memory: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     scope = str(lane.get("scope") or "FULL_MATCH")
     factor = _scope_factor(scope)
     mu_home_full, mu_away_full, profile = prematch_means(features, league)
     mu_home, mu_away = mu_home_full * factor, mu_away_full * factor
+
+    memory = dict(segment_memory or {})
+    memory_quality = _clamp(_num(memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
+    memory_expected_home = memory_expected_away = None
+    if scope.startswith("QUARTER_"):
+        item = segment_prior(memory, scope)
+        memory_expected_home = _num(item.get("expected_home"))
+        memory_expected_away = _num(item.get("expected_away"))
+    elif scope in {"FIRST_HALF", "SECOND_HALF"}:
+        parts = ("QUARTER_1", "QUARTER_2") if scope == "FIRST_HALF" else ("QUARTER_3", "QUARTER_4")
+        home_parts = [_num(segment_prior(memory, part).get("expected_home")) for part in parts]
+        away_parts = [_num(segment_prior(memory, part).get("expected_away")) for part in parts]
+        if all(value is not None for value in home_parts):
+            memory_expected_home = sum(float(value) for value in home_parts if value is not None)
+        if all(value is not None for value in away_parts):
+            memory_expected_away = sum(float(value) for value in away_parts if value is not None)
+    if (
+        memory_quality >= 0.25
+        and memory_expected_home is not None
+        and memory_expected_away is not None
+    ):
+        # Exact Q/H team history is a specific prior, but remains sample-capped.
+        memory_weight = _clamp(0.18 + memory_quality * 0.44, 0.18, 0.60)
+        mu_home = mu_home * (1.0 - memory_weight) + float(memory_expected_home) * memory_weight
+        mu_away = mu_away * (1.0 - memory_weight) + float(memory_expected_away) * memory_weight
+    else:
+        memory_weight = 0.0
+
     variance_inflation = 1.12 if factor == 0.25 else (1.06 if factor == 0.50 else 1.0)
     sigma_total = profile["sigma_total"] * math.sqrt(factor) * variance_inflation
     sigma_margin = profile["sigma_margin"] * math.sqrt(factor) * variance_inflation
@@ -292,6 +325,13 @@ def prematch_signal(lane: dict[str, Any], features: dict[str, Any], league: str)
         "mu_away": round(mu_away, 2),
         "mu_total": round(mu_home + mu_away, 2),
         "data_quality": round(quality, 3),
+        "segment_memory_quality": round(memory_quality, 3),
+        "segment_memory_weight": round(memory_weight, 3),
+        "segment_prior_total": (
+            None
+            if memory_expected_home is None or memory_expected_away is None
+            else round(float(memory_expected_home) + float(memory_expected_away), 2)
+        ),
         "agreement_blocks": agreement,
         "market_confirmed": edge >= 0.055,
         "metric_delta": round(edge * 100.0, 3),
@@ -463,12 +503,12 @@ def live_quarter_context_assist(
     state_adj = 0.0
     reversion_adj = 0.0
 
-    # Daily audit showed Q4 as the lowest-scoring quarter. Apply only a small
-    # conservative shrink so one-day evidence cannot overpower live stats.
+    # Do not impose an unconditional Q4 UNDER prior. That old one-day rule
+    # systematically pulled every fourth-quarter projection downward before any
+    # live evidence was considered. Q4 context is now state-driven only: close
+    # games may score more because of fouls; comfortable/blowout games may slow.
     if quarter == 4:
-        q4_adj = -min(2.4 * scale, max(1.0 * scale, base * 0.04))
-        adjustment += q4_adj
-        reasons.append("Q4 conservative lower-scoring prior")
+        q4_adj = 0.0
 
         if len(parts) >= 3:
             try:
@@ -705,12 +745,21 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
         score += 4.0
 
     state = "PASS" if score >= 72.0 else ("BORDERLINE" if score >= 64.0 else "WAIT")
-    if (
+    # Some competitions expose a trustworthy current-quarter scoreboard but no
+    # detailed current-quarter stat section. The final LIVE model already has a
+    # conservative points/clock fallback for exactly this case. Do not kill the
+    # match before 1xBet pricing when we have a verified segment score, a full
+    # analysis window and real scoring activity; surface it only as BORDERLINE.
+    score_only_fallback = bool(
         not available
-        or not bool(readiness["ready"])
-        or bool(brain.get("break_transition"))
-    ):
+        and bool(brain.get("segment_score_verified"))
+        and str(readiness.get("mode") or "") == "strict"
+        and bool(readiness.get("recent_activity"))
+    )
+    if bool(brain.get("break_transition")) or not bool(readiness["ready"]):
         state = "WAIT"
+    elif not available:
+        state = "BORDERLINE" if score_only_fallback and score >= 64.0 else "WAIT"
     return {
         "state": state,
         "score": round(_clamp(score, 0.0, 82.0), 1),
@@ -865,7 +914,30 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         observed_rate = current / max(0.5, elapsed / 60.0)
         raw_pace_total = current * duration / max(1.0, elapsed)
         observed_weight = _clamp(elapsed / duration, 0.15, 0.68)
-        projection = prior_total * (1.0 - observed_weight) + raw_pace_total * observed_weight
+
+        # Score-only competitions need the fresh scoreboard delta to participate
+        # in the projection itself. Previously recent pace was used only as a
+        # final direction veto, so a stale league/history prior could keep the
+        # model below a rapidly rising live line and repeatedly manufacture
+        # UNDER candidates. Blend fresh pace symmetrically, stealing weight from
+        # the prior rather than adding extra confidence.
+        recent_score_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+        recent_window = max(0.0, _num(brain.get("recent_window_seconds"), 0.0) or 0.0)
+        recent_activity_available = bool(brain.get("recent_activity_available"))
+        recent_weight = 0.0
+        recent_pace_total = raw_pace_total
+        if recent_activity_available and recent_score_rate > 0.0 and recent_window >= 30.0:
+            recent_pace_total = current + recent_score_rate * remaining / 60.0
+            recent_weight = min(
+                0.30,
+                max(0.0, 1.0 - observed_weight) * _clamp(recent_window / 120.0, 0.20, 0.55),
+            )
+        prior_weight = max(0.0, 1.0 - observed_weight - recent_weight)
+        projection = (
+            prior_total * prior_weight
+            + raw_pace_total * observed_weight
+            + recent_pace_total * recent_weight
+        )
         poss_per_min = prior_poss_per_min
         posterior_ppp = prior_ppp_pair
         remaining_poss = prior_poss_per_min * remaining / 60.0
@@ -1143,6 +1215,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "four_factors": factors,
         "q3_rebound_assist": q3_assist,
         "quarter_context_assist": quarter_context,
+        "score_only_recent_projection_weight": round(recent_weight, 3) if possession_source == "points_clock_fallback" else 0.0,
+        "score_only_recent_pace_total": round(recent_pace_total, 2) if possession_source == "points_clock_fallback" else None,
         "market_confirmed": edge >= 0.055,
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,

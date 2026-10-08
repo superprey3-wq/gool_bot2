@@ -142,6 +142,10 @@ def _normalize_candidate(row: dict[str, Any], sport: str) -> dict[str, Any] | No
         "market": str(row.get("market") or row.get("market_family") or ""),
         "market_family": str(row.get("market_family") or row.get("market") or ""),
         "scope": str(row.get("scope") or "FULL_MATCH"),
+        "direction": str(row.get("direction") or ""),
+        "selection_side": str(row.get("selection_side") or ""),
+        "line": _num(row.get("line"), 0.0),
+        "moneyline_kind": str(row.get("moneyline_kind") or ""),
         "odd": round(odd, 4),
         "model_probability": round(model_p, 6),
         "market_probability": round(market_p, 6),
@@ -456,7 +460,227 @@ def _append_history(ticket: dict[str, Any], day: str) -> None:
     _write_json(path, rows[-120:])
 
 
+
+def _football_half_time_score(provider: Any, event_id: str) -> tuple[int, int]:
+    """Reconstruct HT from confirmed goal incidents, including 45+ stoppage time."""
+    try:
+        goals = list(provider.fetch_goal_timeline(event_id) or [])
+    except Exception:
+        goals = []
+    home = away = 0
+    for goal in goals:
+        try:
+            base = int(goal.get("base_minute") if goal.get("base_minute") is not None else goal.get("minute") or 0)
+        except (TypeError, ValueError):
+            continue
+        if base > 45:
+            continue
+        try:
+            home = int(goal.get("home") if goal.get("home") is not None else home)
+            away = int(goal.get("away") if goal.get("away") is not None else away)
+        except (TypeError, ValueError):
+            continue
+    return home, away
+
+
+def _settle_super_leg(provider: Any, leg: dict[str, Any], state: dict[str, Any]) -> str | None:
+    if not bool(state.get("is_finished")):
+        return None
+    sport = str(leg.get("sport") or "")
+    try:
+        home_score = int(state.get("home_score"))
+        away_score = int(state.get("away_score"))
+    except (TypeError, ValueError):
+        return None
+
+    if sport == "football":
+        from .v4_prematch_settlement import settle_prematch_pick
+
+        market = str(leg.get("market") or "")
+        family = str(leg.get("market_family") or "")
+        needs_half = (
+            family in {"first_half_total", "second_half_total"}
+            or market.upper().startswith(("1H_", "2H_"))
+            or "1-й тайм" in str(leg.get("selection") or "")
+            or "2-й тайм" in str(leg.get("selection") or "")
+        )
+        half = _football_half_time_score(provider, str(leg.get("event_id") or "")) if needs_half else None
+        return settle_prematch_pick(
+            leg,
+            home_score,
+            away_score,
+            half_time_score=half,
+        )
+
+    if sport not in {"hockey", "basketball"}:
+        return None
+    from .xbet_multisport_steam import settle_multisport_pick
+
+    scope = str(leg.get("scope") or "FULL_MATCH")
+    if scope == "FULL_MATCH":
+        score = (home_score, away_score)
+    else:
+        try:
+            segments = provider.fetch_segment_scores(str(leg.get("event_id") or ""), sport) or {}
+        except Exception:
+            segments = {}
+        pair = segments.get(scope)
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            return None
+        try:
+            score = (int(pair[0]), int(pair[1]))
+        except (TypeError, ValueError):
+            return None
+    return settle_multisport_pick(leg, score[0], score[1])
+
+
+def _settle_super_ticket(provider: Any, ticket: dict[str, Any], states: dict[str, dict[str, Any]]) -> bool:
+    if str(ticket.get("result") or "pending").lower() in {"won", "lost", "void", "push"}:
+        return False
+    legs = [dict(leg) for leg in (ticket.get("legs") or []) if isinstance(leg, dict)]
+    if not legs:
+        return False
+
+    changed = False
+    for leg in legs:
+        if str(leg.get("result") or "pending").lower() in {"won", "lost", "void", "push"}:
+            continue
+        event_id = str(leg.get("event_id") or "")
+        state = states.get(event_id) or {}
+        result = _settle_super_leg(provider, leg, state)
+        if result is None:
+            continue
+        leg["result"] = result
+        leg["settled_at"] = datetime.now(timezone.utc).isoformat()
+        leg["settled_score"] = [state.get("home_score"), state.get("away_score")]
+        changed = True
+
+    ticket["legs"] = legs
+    results = [str(leg.get("result") or "pending").lower() for leg in legs]
+    if any(result == "lost" for result in results):
+        ticket["result"] = "lost"
+        ticket["profit_units"] = -1.0
+        ticket["settled_at"] = datetime.now(timezone.utc).isoformat()
+        return True
+    if any(result == "pending" for result in results):
+        return changed
+    if all(result in {"void", "push"} for result in results):
+        ticket["result"] = "void"
+        ticket["effective_odd"] = 1.0
+        ticket["profit_units"] = 0.0
+    else:
+        effective = 1.0
+        for leg in legs:
+            if str(leg.get("result") or "") == "won":
+                effective *= max(1.0, _num(leg.get("odd"), 1.0))
+        ticket["result"] = "won"
+        ticket["effective_odd"] = round(effective, 4)
+        ticket["profit_units"] = round(effective - 1.0, 4)
+    ticket["settled_at"] = datetime.now(timezone.utc).isoformat()
+    return True
+
+
+def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
+    """Settle sent GLOBAL SUPER legs from authoritative Flashscore results."""
+    path = history_path()
+    with _locked(path):
+        rows = _read_json(path, [])
+        if not isinstance(rows, list) or not rows:
+            return {"changed": 0, "settled": 0}
+
+        pending_ids = {
+            str(leg.get("event_id") or "")
+            for ticket in rows
+            if isinstance(ticket, dict) and str(ticket.get("result") or "pending").lower() == "pending"
+            for leg in (ticket.get("legs") or [])
+            if isinstance(leg, dict)
+            and str(leg.get("result") or "pending").lower() == "pending"
+            and str(leg.get("event_id") or "")
+        }
+        if not pending_ids:
+            return {"changed": 0, "settled": 0}
+
+        from .providers.flashscore import FlashscoreProvider
+
+        provider = FlashscoreProvider()
+        states = provider.event_states(pending_ids)
+        changed = settled = 0
+        newly_settled: list[dict[str, Any]] = []
+        for ticket in rows:
+            if not isinstance(ticket, dict):
+                continue
+            before = str(ticket.get("result") or "pending").lower()
+            if _settle_super_ticket(provider, ticket, states):
+                changed += 1
+            after = str(ticket.get("result") or "pending").lower()
+            if before == "pending" and after in {"won", "lost", "void", "push"}:
+                settled += 1
+                newly_settled.append(ticket)
+        if changed:
+            _write_json(path, rows[-120:])
+
+        # Keep the interactive "sent today" snapshot aligned with history.
+        sent_file = sent_path()
+        sent = _read_json(sent_file, {})
+        if isinstance(sent, dict) and isinstance(sent.get("ticket"), dict):
+            ticket = sent["ticket"]
+            signature = str(ticket.get("created_at") or "")
+            matching = next(
+                (
+                    row for row in reversed(rows)
+                    if isinstance(row, dict)
+                    and str(row.get("created_at") or "") == signature
+                ),
+                None,
+            )
+            if matching is not None:
+                sent["ticket"] = dict(matching)
+                sent["result"] = matching.get("result")
+                _write_json(sent_file, sent)
+
+    delivered = 0
+    if deliver_result:
+        for ticket in newly_settled:
+            if bool(ticket.get("result_telegram_sent")):
+                continue
+            try:
+                png = render_v4_parlay_card(ticket, result=True)
+                result = str(ticket.get("result") or "void").lower()
+                icon = {"won": "✅", "lost": "❌", "void": "↩️", "push": "↩️"}.get(result, "ℹ️")
+                sent_count = int(telegram.broadcast_photo(
+                    png,
+                    caption=f"{icon} <b>SUPER 10 · РЕЗУЛЬТАТ</b> · {result.upper()}",
+                ) or 0)
+            except Exception:
+                sent_count = 0
+            if sent_count > 0:
+                ticket["result_telegram_sent"] = True
+                ticket["result_telegram_sent_at"] = datetime.now(timezone.utc).isoformat()
+                delivered += sent_count
+        if newly_settled:
+            with _locked(path):
+                current = _read_json(path, [])
+                by_created = {
+                    str(ticket.get("created_at") or ""): ticket
+                    for ticket in newly_settled
+                    if str(ticket.get("created_at") or "")
+                }
+                dirty = False
+                for row in current if isinstance(current, list) else []:
+                    key = str(row.get("created_at") or "") if isinstance(row, dict) else ""
+                    if key in by_created and bool(by_created[key].get("result_telegram_sent")):
+                        row.update({
+                            "result_telegram_sent": True,
+                            "result_telegram_sent_at": by_created[key].get("result_telegram_sent_at"),
+                        })
+                        dirty = True
+                if dirty:
+                    _write_json(path, current[-120:])
+    return {"changed": changed, "settled": settled, "delivered": delivered}
+
+
 def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
+    reconcile_global_super10(deliver_result=bool(delivery_enabled))
     if not enabled():
         return {"status": "disabled"}
     if not delivery_enabled:

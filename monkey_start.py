@@ -180,6 +180,15 @@ def find_model(filename: str) -> Path:
     return matches[0]
 
 
+def _matchbook_runtime_enabled() -> bool:
+    if not _truthy("GOOL_MATCHBOOK_ENABLED", True):
+        return False
+    token = os.getenv("MATCHBOOK_SESSION_TOKEN", "").strip()
+    username = os.getenv("MATCHBOOK_USERNAME", "").strip()
+    password = os.getenv("MATCHBOOK_PASSWORD", "").strip()
+    return bool(token or (username and password))
+
+
 def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
     """Return the only processes allowed in the public two-system product."""
     commands = {
@@ -207,6 +216,14 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
+    if _matchbook_runtime_enabled():
+        commands["matchbook"] = [
+            sys.executable,
+            "-m",
+            "gool_bot2.matchbook_market_worker",
+            "--interval",
+            os.environ.get("MATCHBOOK_MARKET_INTERVAL_SECONDS", "10"),
+        ]
     if browser_enabled:
         commands["browser"] = [
             sys.executable,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from math import prod
 from typing import Iterable
@@ -126,6 +127,33 @@ def super_candidate_pool(
         reverse=True,
     )
     return pool
+
+
+
+def global_super_publish_pool(picks: Iterable[PrematchPick]) -> list[PrematchPick]:
+    """Publish the broad safe football pool; GLOBAL SUPER does final strict/reserve selection.
+
+    The old football-only SUPER prefilter was stricter than the mixed-sport
+    GLOBAL SUPER contract (notably max odd 1.55, p 0.74, quality 0.80). That
+    could erase every football leg before the common builder even saw it.
+    Use the same reserve floor as GLOBAL SUPER so all three sports enter the
+    shared selector on equal terms.
+    """
+    def env_float(name: str, default: float) -> float:
+        try:
+            return float(os.getenv(name, str(default)))
+        except (TypeError, ValueError):
+            return float(default)
+
+    return super_candidate_pool(
+        picks,
+        min_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.15),
+        max_leg_odds=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.70),
+        min_leg_probability=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY", 0.68),
+        min_quality=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY", 0.55),
+        min_edge=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE", 0.055),
+        min_ev=env_float("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV", 0.01),
+    )
 
 
 def build_super_accumulator(

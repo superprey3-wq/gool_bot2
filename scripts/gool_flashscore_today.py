@@ -7,7 +7,7 @@ from gool_bot2.flashscore_odds import fetch_event_odds,exact_trend_price
 from gool_bot2.full_market_brain import analyze_full_market
 from gool_bot2.prematch_full_market_runtime import production_full_market_picks
 from gool_bot2.v4_shadow_report import _analyse_fixtures,_trend_signals,_primary_trend,_brain_score
-from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates,super_candidate_pool
+from gool_bot2.v4_prematch_engine import PrematchPick,choose_delivery,build_prematch_candidates,global_super_publish_pool
 from gool_bot2.global_super10 import enabled as global_super_enabled,football_rows_from_picks,publish_candidates as publish_global_super_candidates,maybe_deliver_global_super10
 from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
@@ -476,19 +476,13 @@ print("PRICED_MARKET_COUNTS",dict(Counter(p.market for p in priced)),flush=True)
 max_singles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_SINGLES","0")))
 max_doubles=max(0,int(os.getenv("GOOL_PREMATCH_MAX_DOUBLES","0")))
 global_super_on=global_super_enabled()
-football_super_pool=super_candidate_pool(
- priced,
- min_leg_probability=.74,
- min_quality=.80,
- min_edge=.060,
- min_ev=.02,
-)
+football_super_pool=global_super_publish_pool(priced)
 if global_super_on:
  published_global_football=publish_global_super_candidates(
   "football",
   football_rows_from_picks(football_super_pool,meta),
  )
- print("GLOBAL_SUPER10_POOL football",published_global_football,flush=True)
+ print("GLOBAL_SUPER10_POOL football",published_global_football,"priced",len(priced),"safe_publish_pool",len(football_super_pool),flush=True)
 else:
  published_global_football=0
 d=choose_delivery(

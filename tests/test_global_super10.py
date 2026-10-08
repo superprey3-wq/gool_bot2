@@ -260,3 +260,55 @@ def test_super10_football_first_half_settlement_counts_stoppage_time(tmp_path: P
     state = {"is_finished": True, "home_score": 2, "away_score": 1}
 
     assert gs._settle_super_leg(FakeProvider(), leg, state) == "won"
+
+
+def test_candidate_score_is_independent_of_odds():
+    base = {
+        "sport": "football",
+        "model_probability": 0.80,
+        "data_quality": 0.85,
+        "strength": 82,
+        "edge": 0.08,
+    }
+    low = {**base, "odd": 1.20}
+    high = {**base, "odd": 1.68}
+    assert gs._candidate_score(low) == gs._candidate_score(high)
+
+
+def test_global_super10_prefers_more_confident_reserve_over_weaker_strict(tmp_path: Path, monkeypatch):
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+
+    def row(sport, event_id, p, quality, strength, tier_hint):
+        value = _candidate(sport, event_id, now, odd=1.50, p=p)
+        value["event_id"] = f"{sport}-{event_id}"
+        value["data_quality"] = quality
+        value["strength"] = strength
+        value["global_super_score"] = gs._candidate_score(value)
+        value["_tier_hint"] = tier_hint
+        return value
+
+    strict = [
+        row("football", 1, 0.78, 0.85, 82, "strict"),
+        row("hockey", 1, 0.77, 0.84, 82, "strict"),
+        row("basketball", 1, 0.76, 0.84, 81, "strict"),
+    ]
+    # Seven ordinary strict fillers, one deliberately weaker than the reserve.
+    strict.extend(
+        row("football", 10+i, 0.73 + i*0.002, 0.80, 78, "strict")
+        for i in range(6)
+    )
+    strong_reserve = row("basketball", 99, 0.86, 0.59, 90, "reserve")
+
+    monkeypatch.setattr(gs, "eligible_candidates", lambda now_ts=None: sorted(strict, key=lambda x: x["global_super_score"], reverse=True))
+    monkeypatch.setattr(gs, "reserve_candidates", lambda now_ts=None: sorted([*strict, strong_reserve], key=lambda x: x["global_super_score"], reverse=True))
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_MAX_PER_SPORT", "6")
+
+    ticket = gs.build_global_super10(now_ts=now)
+
+    assert ticket is not None
+    ids = {leg["event_id"] for leg in ticket["legs"]}
+    assert "basketball-99" in ids
+    reserve_leg = next(leg for leg in ticket["legs"] if leg["event_id"] == "basketball-99")
+    assert reserve_leg["super_tier"] == "reserve"
+    assert reserve_leg["super_confidence_score"] > 0

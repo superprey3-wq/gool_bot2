@@ -165,6 +165,20 @@ def test_huge_cumulative_shots_do_not_force_over_when_recent_pressure_is_low():
     assert signal["shot_factor"] < 1.0
 
 
+
+def test_scoreless_slow_hockey_under_does_not_double_count_same_pace_evidence():
+    brain = _live_brain(scope="PERIOD_2", recent_shot_rate=0.5, match_score=(1, 1))
+    brain["elapsed_seconds"] = 600.0
+    brain["segment_score_verified"] = True
+    signal = live_signal(
+        brain,
+        _live_lane(scope="PERIOD_2", elapsed=600, line=1.5, market_over=0.70, match_score=(1, 1)),
+    )
+    assert signal is not None
+    assert signal["direction"] == "under"
+    assert signal["agreement_blocks"] == 2
+
+
 def test_late_close_p3_under_is_blocked_for_empty_net_risk():
     signal = live_signal(
         _live_brain(scope="PERIOD_3", recent_shot_rate=0.5, match_score=(3, 2)),

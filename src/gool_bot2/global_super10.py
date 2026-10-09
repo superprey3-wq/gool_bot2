@@ -204,6 +204,56 @@ def publish_candidates(sport: str, rows: Iterable[dict[str, Any]]) -> int:
         if value is not None:
             normalized.append(value)
 
+    # Score eligible-priced selections BEFORE the publication cap.
+    # Previously [:120] kept the first ~few fixtures' line variants and could
+    # discard every good market from later matches in the day.
+    price_floor = min(
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.30),
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.30),
+    )
+    price_ceiling = max(
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.50),
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.50),
+    )
+    relevant = [
+        row for row in normalized
+        if bool(row.get("parlay_safe"))
+        and price_floor <= float(row.get("odd") or 0.0) <= price_ceiling
+    ]
+    max_per_fixture = max(1, min(12, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_PUBLISH_PER_FIXTURE"), 4))))
+    max_pool = max(100, min(8000, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_PUBLISH_POOL_CAP"), 2000))))
+    unique: dict[str, dict[str, Any]] = {}
+    for row in relevant:
+        key = "|".join((
+            str(row.get("event_id") or ""),
+            str(row.get("scope") or ""),
+            str(row.get("market_family") or ""),
+            str(row.get("selection") or ""),
+            str(row.get("line") or ""),
+        ))
+        previous = unique.get(key)
+        if previous is None or (
+            _candidate_score(row), _num(row.get("edge"))
+        ) > (
+            _candidate_score(previous), _num(previous.get("edge"))
+        ):
+            unique[key] = row
+    by_fixture: dict[str, list[dict[str, Any]]] = {}
+    for row in unique.values():
+        by_fixture.setdefault(str(row.get("event_id") or ""), []).append(row)
+    reduced: list[dict[str, Any]] = []
+    for markets in by_fixture.values():
+        markets.sort(key=lambda row: (
+            _candidate_score(row),
+            _num(row.get("edge")),
+            _num(row.get("data_quality")),
+        ), reverse=True)
+        reduced.extend(markets[:max_per_fixture])
+    reduced.sort(key=lambda row: (
+        _candidate_score(row), _num(row.get("edge")), _num(row.get("data_quality"))
+    ), reverse=True)
+    published = reduced[:max_pool]
+
     path = pool_path()
     with _locked(path):
         payload = _read_json(path, {})
@@ -214,7 +264,11 @@ def publish_candidates(sport: str, rows: Iterable[dict[str, Any]]) -> int:
             sources = {}
         sources[sport] = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "candidates": normalized[:120],
+            "candidates": published,
+            "raw_input": len(normalized),
+            "price_eligible": len(relevant),
+            "fixtures_priced": len(by_fixture),
+            "published_count": len(published),
         }
         payload = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -277,6 +331,8 @@ def _eligible_candidates(
                 continue
             start_ts = _num(row.get("start_ts"), 0.0)
             if start_ts <= now + min_lead or start_ts - now > horizon:
+                continue
+            if _truthy("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", False) and _moscow_day(start_ts) != _moscow_day(now):
                 continue
             odd = _num(row.get("odd"))
             p = _num(row.get("model_probability"))
@@ -356,6 +412,65 @@ def reserve_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
     )
 
 
+def publication_funnel(*, now_ts: float | None = None) -> dict[str, dict[str, int]]:
+    """Explain why a sport has zero SUPER legs without relaxing any safety gate."""
+    now = float(now_ts or time.time())
+    payload = _read_json(pool_path(), {})
+    sources = payload.get("sources") if isinstance(payload, dict) else {}
+    sources = sources if isinstance(sources, dict) else {}
+    min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300))
+    horizon = max(3600.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_HORIZON_SECONDS"), 129600))
+    require_day = _truthy("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", False)
+    today = _moscow_day(now)
+    floor = max(1.30, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.30))
+    ceiling = min(1.50, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.50))
+    probability = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY"), 0.68)
+    edge = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE"), 0.055)
+    min_ev = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV"), 0.01)
+    quality = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY"), 0.55)
+    strength = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_STRENGTH"), 74)
+    stats = {}
+    for sport in SPORTS:
+        source = sources.get(sport) or {}
+        rows = source.get("candidates") or []
+        c = {
+            "raw_input": int(source.get("raw_input") or 0),
+            "price_eligible_before_cap": int(source.get("price_eligible") or 0),
+            "published": len(rows), "upcoming": 0, "in_odds": 0,
+            "probability_ok": 0, "edge_ok": 0, "ev_ok": 0,
+            "quality_ok": 0, "strength_ok": 0,
+        }
+        for row in rows:
+            start = _num(row.get("start_ts"))
+            if not (now + min_lead < start <= now + horizon):
+                continue
+            if require_day and _moscow_day(start) != today:
+                continue
+            c["upcoming"] += 1
+            odd = _num(row.get("odd"))
+            if not floor <= odd <= ceiling:
+                continue
+            c["in_odds"] += 1
+            p = _num(row.get("model_probability"))
+            if p < probability:
+                continue
+            c["probability_ok"] += 1
+            if _num(row.get("edge")) < edge:
+                continue
+            c["edge_ok"] += 1
+            if _num(row.get("expected_value"), p * odd - 1) < min_ev:
+                continue
+            c["ev_ok"] += 1
+            if _num(row.get("data_quality")) < quality:
+                continue
+            c["quality_ok"] += 1
+            if sport != "football" and _num(row.get("strength")) < strength:
+                continue
+            c["strength_ok"] += 1
+        stats[sport] = c
+    return stats
+
+
 def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
     strict = eligible_candidates(now_ts=now_ts)
     reserve = reserve_candidates(now_ts=now_ts)
@@ -377,6 +492,7 @@ def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
         "available_by_sport": merged_by,
         "missing_sports": [sport for sport in SPORTS if merged_by.get(sport, 0) <= 0],
         "need_more": max(0, target - len(merged)),
+        "publication_funnel": publication_funnel(now_ts=now_ts),
     }
 
 
@@ -857,6 +973,44 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
         "delivery_pending": still_pending,
     }
 
+def day_market_readiness(*, now_ts: float | None = None) -> dict[str, Any]:
+    """Require broad bookmaker coverage before assembling a once-per-day SUPER.
+
+    Coverage counts are bookmaker-observed fixtures, not a promise that
+    unavailable/undecoded markets magically have prices.
+    """
+    day = _moscow_day(now_ts)
+    needed = min(1.0, max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE"), 0.85)))
+    runtime = _runtime() / "live"
+    football = _read_json(runtime / "xbet_prematch_archive_state.json", {})
+    multi_path = Path(os.getenv("GOOL_MULTISPORT_STATE", str(runtime / "gool_multisport_state.json")))
+    multi = _read_json(multi_path, {})
+    if not multi and multi_path != runtime / "gool_multisport_state.json":
+        multi = _read_json(runtime / "gool_multisport_state.json", {})
+    details: dict[str, Any] = {}
+    for sport in SPORTS:
+        if sport == "football":
+            current_day = str(football.get("archive_day") or "")
+            target = int(football.get("archive_catalog_today") or 0)
+            actual = int((football.get("archive_coverage") or {}).get("archived_matches") or 0)
+        else:
+            item = ((multi.get("sports") or {}).get(sport) or {}).get("daily_market_coverage") or {}
+            current_day = str(item.get("day") or "")
+            target = int(item.get("matched_today") or 0)
+            actual = int(item.get("archived_matches") or 0)
+        ratio = min(1.0, actual / target) if target > 0 and current_day == day else 0.0
+        details[sport] = {
+            "expected": target if current_day == day else 0,
+            "archived": actual if current_day == day else 0,
+            "ratio": round(ratio, 4),
+            "ready": current_day == day and target > 0 and ratio >= needed,
+        }
+    return {
+        "day": day, "required_ratio": needed, "ready": all(x["ready"] for x in details.values()),
+        "sports": details,
+    }
+
+
 def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     reconcile_global_super10(deliver_result=bool(delivery_enabled))
     if not enabled():
@@ -886,6 +1040,10 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             ticket = pending_ticket
             retrying = True
         else:
+            if _truthy("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", False):
+                completeness = day_market_readiness(now_ts=now)
+                if not completeness["ready"]:
+                    return {"status": "warming_odds_archive", "day": day, **readiness_snapshot(now_ts=now), "market_coverage": completeness}
             ticket = build_global_super10(now_ts=now)
             retrying = False
             if ticket is None:

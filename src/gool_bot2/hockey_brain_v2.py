@@ -227,6 +227,8 @@ def prematch_signal(
     features: dict[str, Any],
     league: str,
     segment_memory: dict[str, Any] | None = None,
+    *,
+    odds_range: tuple[float, float] | None = None,
 ) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     full_lam_home, full_lam_away, baseline = prematch_lambdas(features, league)
@@ -281,6 +283,10 @@ def prematch_signal(
             (over_model - market_over, "over", over_model, op, market_over, _num(lane.get("over"), 0.0) or 0.0),
             (under_model - (1.0 - market_over), "under", under_model, up, 1.0 - market_over, _num(lane.get("under"), 0.0) or 0.0),
         ]
+        if odds_range is not None:
+            choices = [choice for choice in choices if odds_range[0] <= choice[-1] <= odds_range[1]]
+            if not choices:
+                return None
         _, direction, model_probability, push, market_probability, odd = max(choices, key=lambda x: x[0])
     elif family == "moneyline" and selection_side in {"home", "away"}:
         model_probability = _two_way_win_probability(lam_home, lam_away, selection_side)
@@ -296,8 +302,10 @@ def prematch_signal(
     else:
         return None
 
-    min_odd = _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50)
-    max_odd = _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)
+    min_odd, max_odd = odds_range if odds_range is not None else (
+        _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50),
+        _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25),
+    )
     if not (min_odd <= odd <= max_odd):
         return None
     edge = model_probability - market_probability

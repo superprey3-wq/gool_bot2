@@ -27,6 +27,7 @@ from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
 from .multisport_parlay_card import render_multisport_parlay_card
+from .daily_odds_archive import DailyOddsArchive, match_day, select_due_events
 from .global_super10 import (
     enabled as global_super_enabled,
     publish_candidates as publish_global_super_candidates,
@@ -1720,6 +1721,11 @@ class MultiSportSteamWorker:
         self._subgame_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._scope_scores: dict[str, dict[str, tuple[int, int]]] = defaultdict(dict)
         self._prematch_cursor: dict[str, int] = defaultdict(int)
+        self._fs_prematch_cursor: dict[str, int] = defaultdict(int)
+        self._fs_prematch_candidate_cache: dict[str, dict[str, tuple[float, dict[str, Any]]]] = defaultdict(dict)
+        self._super_price_cursor: dict[str, int] = defaultdict(int)
+        self._daily_odds_archive = DailyOddsArchive(Path(os.getenv("GOOL_DAILY_ODDS_DB", str(runtime / "live" / "daily_odds.sqlite"))))
+        self._last_daily_odds_prune = 0.0
         self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
         self._fs_live_stats_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -1824,6 +1830,7 @@ class MultiSportSteamWorker:
             f"f_{cfg.flashscore_id}_-1_3_en_1",
             f"f_{cfg.flashscore_id}_0_3_en_1",
             f"f_{cfg.flashscore_id}_0_0_en_1",
+            f"f_{cfg.flashscore_id}_1_3_en_1",  # include tomorrow for midnight rollover
         ):
             body = self._flashscore._feed(path)
             if not body:
@@ -2379,11 +2386,27 @@ class MultiSportSteamWorker:
             else 32
         )
         price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", price_default)))
-        rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
-        if not rows:
+        # Survey the complete upcoming field over successive cycles. Retain recent
+        # Brain results so the shortlist is ranked across the day, not merely the
+        # earliest scan_max fixtures. Deep history still has a bounded budget.
+        all_rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))
+        if not all_rows:
+            self._fs_prematch_candidate_cache[cfg.key].clear()
             return []
+        cursor = self._fs_prematch_cursor[cfg.key] % len(all_rows)
+        chunk = (all_rows + all_rows)[cursor:cursor + min(scan_max, len(all_rows))]
+        self._fs_prematch_cursor[cfg.key] = (cursor + len(chunk)) % len(all_rows)
+        cache = self._fs_prematch_candidate_cache[cfg.key]
+        valid_ids = {str(row.get("flashscore_event_id") or "") for row in all_rows}
+        for event_id in list(cache):
+            if event_id not in valid_ids:
+                cache.pop(event_id, None)
+        refresh_age = max(120.0, _float_env("GOOL_MULTISPORT_PREMATCH_BRAIN_REFRESH_SECONDS", 1800.0))
+        now_mono = time.monotonic()
+        rows = [row for row in chunk if
+                str(row.get("flashscore_event_id") or "") not in cache
+                or now_mono - cache[str(row.get("flashscore_event_id") or "")][0] >= refresh_age]
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_WORKERS", 6)))
-        analysed: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(self._flashscore_prematch_candidate, row, cfg) for row in rows]
             for future in as_completed(futures):
@@ -2392,10 +2415,13 @@ class MultiSportSteamWorker:
                 except Exception:
                     continue
                 if item:
-                    analysed.append(item)
+                    event_id = str(item.get("flashscore_event_id") or "")
+                    if event_id:
+                        cache[event_id] = (time.monotonic(), item)
         interesting = [
-            row for row in analysed
-            if str((row.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
+            item for checked, item in cache.values()
+            if time.monotonic() - checked < 2 * refresh_age
+            and str((item.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
         ]
         interesting.sort(
             key=lambda row: (
@@ -2404,7 +2430,19 @@ class MultiSportSteamWorker:
             ),
             reverse=True,
         )
-        selected = interesting[:price_max]
+        # Constantly price the strongest candidates; rotate remaining acceptable
+        # Brain fixtures so SUPER can discover better alternate markets later.
+        priority_count = min(len(interesting), max(1, price_max // 2))
+        priority = interesting[:priority_count]
+        remainder = interesting[priority_count:]
+        remaining_slots = max(0, price_max - len(priority))
+        if remainder and remaining_slots:
+            offset = self._super_price_cursor[cfg.key] % len(remainder)
+            rotated = (remainder + remainder)[offset:offset + min(remaining_slots, len(remainder))]
+            self._super_price_cursor[cfg.key] = (offset + len(rotated)) % len(remainder)
+        else:
+            rotated = []
+        selected = priority + rotated
 
         # Warm the expensive Q/P history before kickoff for the strongest
         # PREMATCH candidates. The same cache is then reused by LIVE during
@@ -2945,6 +2983,17 @@ class MultiSportSteamWorker:
         ]
 
     def _xbet_prematch_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
+        # Index discovery is shared by full-day archiving and signal selection.
+        # Do not hit every LineFeed root on every 20-second brain cycle.
+        cached_at, cached_rows = self._last_prematch_index.get(cfg.key, (0.0, []))
+        refresh = max(30.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_REFRESH_SECONDS", 120.0))
+        if cached_rows and time.monotonic() - cached_at < refresh:
+            self._prematch_index_diag[cfg.key] = {
+                "ok": True, "raw": len(cached_rows), "usable": len(cached_rows),
+                "cache": True, "cache_age_seconds": round(time.monotonic() - cached_at, 1),
+                "root": self._prematch_roots[cfg.key],
+            }
+            return [dict(item) for item in cached_rows]
         roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
         attempts: list[dict[str, Any]] = []
         merged: dict[str, dict[str, Any]] = {}
@@ -4511,75 +4560,105 @@ class MultiSportSteamWorker:
                 # same event. It never records a second single.
                 parlay_candidates: list[dict[str, Any]] = []
                 if cfg.key in {"hockey", "basketball"}:
+                    # Singles and LIVE keep their separate 1.50+ odds policy.
+                    # A SUPER-10 leg is evaluated *at its own* 1.30-1.50 price
+                    # without letting the singles gate discard it in advance.
+                    parlay_min_odd = _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.45)
+                    parlay_max_odd = _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 1.70)
                     for parlay_lane in row.get("parlay_market_lanes") or []:
                         allowed, _ = lane_phase_policy(cfg.key, "PREMATCH", parlay_lane, row.get("period"))
                         if not allowed:
                             continue
                         lane_row = self._lane_row(row, parlay_lane)
-                        if cfg.key == "hockey":
-                            parlay_signal = hockey_prematch_v2_signal(
-                                lane_row,
-                                dict(row.get("sport_context") or {}),
-                                str(row.get("league") or ""),
-                                dict(row.get("segment_memory") or {}),
+                        # Keep normal sports parlays and GLOBAL SUPER separate:
+                        # regular lines can be 1.45-1.70, global safe lines 1.30-1.50.
+                        super_min_odd = max(1.30, min(
+                            _float_env("GOOL_GLOBAL_SUPER10_MIN_ODD", 1.30),
+                            _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30),
+                        ))
+                        super_max_odd = min(1.50, max(
+                            _float_env("GOOL_GLOBAL_SUPER10_MAX_ODD", 1.50),
+                            _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50),
+                        ))
+                        model_ranges = [(parlay_min_odd, parlay_max_odd)]
+                        if global_super_enabled():
+                            model_ranges.append((super_min_odd, super_max_odd))
+                        for model_odds_range in model_ranges:
+                            if cfg.key == "hockey":
+                                parlay_signal = hockey_prematch_v2_signal(
+                                    lane_row,
+                                    dict(row.get("sport_context") or {}),
+                                    str(row.get("league") or ""),
+                                    dict(row.get("segment_memory") or {}),
+                                    odds_range=model_odds_range,
+                                )
+                            else:
+                                parlay_signal = basketball_prematch_v2_signal(
+                                    lane_row,
+                                    dict(row.get("sport_context") or {}),
+                                    str(row.get("league") or ""),
+                                    dict(row.get("segment_memory") or {}),
+                                    odds_range=model_odds_range,
+                                )
+                            if parlay_signal is None:
+                                continue
+                            direction = str(parlay_signal.get("direction") or "over")
+                            selection = str(
+                                parlay_signal.get("selection")
+                                or lane_row.get("selection")
+                                or selection_label(
+                                    lane_row,
+                                    direction,
+                                    float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                                )
                             )
-                        else:
-                            parlay_signal = basketball_prematch_v2_signal(
-                                lane_row,
-                                dict(row.get("sport_context") or {}),
-                                str(row.get("league") or ""),
-                                dict(row.get("segment_memory") or {}),
-                            )
-                        if parlay_signal is None:
-                            continue
-                        direction = str(parlay_signal.get("direction") or "over")
-                        selection = str(
-                            parlay_signal.get("selection")
-                            or lane_row.get("selection")
-                            or selection_label(
-                                lane_row,
-                                direction,
-                                float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
-                            )
-                        )
-                        parlay_candidates.append({
-                            "entry_id": (
-                                f"{cfg.key}:parlay-safe:{row.get('flashscore_event_id') or row.get('event_id')}:"
-                                f"{lane_row.get('scope')}:{lane_row.get('market_family')}:{selection}"
-                            ),
-                            "event_id": str(row.get("event_id") or ""),
-                            "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
-                            "sport": cfg.key,
-                            "phase": "PREMATCH",
-                            "result": "pending",
-                            "home": str(row.get("home") or "?"),
-                            "away": str(row.get("away") or "?"),
-                            "league": str(row.get("league") or ""),
-                            "home_logo_file": str(row.get("home_logo_file") or ""),
-                            "away_logo_file": str(row.get("away_logo_file") or ""),
-                            "home_team_id": str(row.get("home_team_id") or ""),
-                            "away_team_id": str(row.get("away_team_id") or ""),
-                            "home_team_slug": str(row.get("home_team_slug") or ""),
-                            "away_team_slug": str(row.get("away_team_slug") or ""),
-                            "scope": str(lane_row.get("scope") or SCOPE_FULL),
-                            "market_family": str(lane_row.get("market_family") or "match_total"),
-                            "selection": selection,
-                            "direction": direction,
-                            "selection_side": str(parlay_signal.get("selection_side") or lane_row.get("selection_side") or ""),
-                            "line": float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
-                            "odd": float(parlay_signal.get("odd") or 0.0),
-                            "strength": float(parlay_signal.get("strength") or 0.0),
-                            "fair_probability": float(parlay_signal.get("fair_probability") or 0.0),
-                            "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
-                            "market_probability": float(parlay_signal.get("market_probability") or 0.0),
-                            "edge": float(parlay_signal.get("edge") or 0.0),
-                            "data_quality": float(parlay_signal.get("data_quality") or 0.0),
-                            "push_probability": float(parlay_signal.get("push_probability") or 0.0),
-                            "start_ts": float(row.get("start_ts") or 0.0),
-                            "scheduled_start_ts": float(row.get("start_ts") or 0.0),
-                            "parlay_safe": True,
-                        })
-                row["parlay_candidates"] = parlay_candidates
+                            parlay_candidates.append({
+                                "entry_id": (
+                                    f"{cfg.key}:parlay-safe:{row.get('flashscore_event_id') or row.get('event_id')}:"
+                                    f"{lane_row.get('scope')}:{lane_row.get('market_family')}:{selection}"
+                                ),
+                                "event_id": str(row.get("event_id") or ""),
+                                "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
+                                "sport": cfg.key,
+                                "phase": "PREMATCH",
+                                "result": "pending",
+                                "home": str(row.get("home") or "?"),
+                                "away": str(row.get("away") or "?"),
+                                "league": str(row.get("league") or ""),
+                                "home_logo_file": str(row.get("home_logo_file") or ""),
+                                "away_logo_file": str(row.get("away_logo_file") or ""),
+                                "home_team_id": str(row.get("home_team_id") or ""),
+                                "away_team_id": str(row.get("away_team_id") or ""),
+                                "home_team_slug": str(row.get("home_team_slug") or ""),
+                                "away_team_slug": str(row.get("away_team_slug") or ""),
+                                "scope": str(lane_row.get("scope") or SCOPE_FULL),
+                                "market_family": str(lane_row.get("market_family") or "match_total"),
+                                "selection": selection,
+                                "direction": direction,
+                                "selection_side": str(parlay_signal.get("selection_side") or lane_row.get("selection_side") or ""),
+                                "line": float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                                "odd": float(parlay_signal.get("odd") or 0.0),
+                                "strength": float(parlay_signal.get("strength") or 0.0),
+                                "fair_probability": float(parlay_signal.get("fair_probability") or 0.0),
+                                "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
+                                "market_probability": float(parlay_signal.get("market_probability") or 0.0),
+                                "edge": float(parlay_signal.get("edge") or 0.0),
+                                "data_quality": float(parlay_signal.get("data_quality") or 0.0),
+                                "push_probability": float(parlay_signal.get("push_probability") or 0.0),
+                                "start_ts": float(row.get("start_ts") or 0.0),
+                                "scheduled_start_ts": float(row.get("start_ts") or 0.0),
+                                "parlay_safe": True,
+                            })
+                deduped_parlay = {
+                    (
+                        str(candidate.get("scope") or ""),
+                        str(candidate.get("market_family") or ""),
+                        str(candidate.get("selection") or ""),
+                        round(float(candidate.get("odd") or 0.0), 4),
+                    ): candidate
+                    for candidate in parlay_candidates
+                }
+                row["parlay_candidates"] = list(deduped_parlay.values())
 
                 signals: list[dict[str, Any]] = []
                 primary = select_prematch_primary(candidates, recent_families, cfg.key)
@@ -4605,6 +4684,22 @@ class MultiSportSteamWorker:
             if start_ts <= now or start_ts - now > horizon:
                 cache.pop(event_id, None)
         visible = sorted(cache.values(), key=lambda row: float(row.get("start_ts") or 0.0))[:80]
+        # Telegram displays a compact recent 80, but SUPER 10 must not inherit
+        # the display limit. Include every *freshly priced* fixture whose
+        # independent PREMATCH Brain has supplied a qualified parlay market.
+        # Never reuse an old, already-started or outdated 1xBet price.
+        max_parlay_age = max(60.0, _float_env("GOOL_SUPER_PARLAY_PRICE_MAX_AGE_SECONDS", 1800.0))
+        all_day_parlay: list[dict[str, Any]] = []
+        for match in cache.values():
+            if now - float(match.get("ts") or 0) > max_parlay_age:
+                continue
+            if float(match.get("start_ts") or 0) <= now + 300:
+                continue
+            all_day_parlay.extend(
+                dict(candidate)
+                for candidate in (match.get("parlay_candidates") or [])
+                if isinstance(candidate, dict)
+            )
         return {
             "enabled": True,
             "flashscore_prematch": len(fs_upcoming),
@@ -4619,6 +4714,7 @@ class MultiSportSteamWorker:
             "prematch_policy_blocked": policy_blocked,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
             "matches": visible,
+            "all_day_parlay_candidates": all_day_parlay,
         }
 
     def _prepare_flashscore_sport(self, cfg: SportConfig) -> dict[str, Any]:
@@ -4651,6 +4747,7 @@ class MultiSportSteamWorker:
             "live_analysis": live_analysis,
             "live_candidates": live_candidates,
             "prematch_candidates": prematch_candidates,
+            "fs_upcoming": fs_upcoming,
         }
 
     @staticmethod
@@ -4969,6 +5066,76 @@ class MultiSportSteamWorker:
             out.append(row)
         return out
 
+    def _archive_all_day_markets(
+        self,
+        cfg: SportConfig,
+        fs_today: list[dict[str, Any]],
+        xbet_prematch: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Market sampling does NOT depend on Brain PASS or the 10/16 pricing limit."""
+        if not _truthy("GOOL_DAILY_ALL_MARKETS_ENABLED", True):
+            return {"enabled": False}
+        now = time.time()
+        horizon = max(900.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 108000.0))
+        fixtures = [row for row in fs_today if
+                    str(row.get("coarse_status") or "") == "1" and
+                    now < float(row.get("start_ts") or 0) <= now + horizon]
+        mapped = map_xbet_to_flashscore(xbet_prematch, fixtures)
+        # Prevent same-name events from different dates being treated as one.
+        def same_kickoff(item):
+            try:
+                timestamp = float(item[0].get("S") or 0)
+                if timestamp > 10**12:
+                    timestamp /= 1000
+                return timestamp <= 0 or abs(timestamp - float(item[1].get("start_ts") or 0)) <= 4 * 3600
+            except (ValueError, TypeError):
+                return True
+        mapped = [item for item in mapped if same_kickoff(item)]
+        previously = self._daily_odds_archive.last_seen(cfg.key, [str(item[0].get("I") or "") for item in mapped])
+        due = select_due_events(
+            mapped, previously, now=now,
+            limit=max(1, min(80, _int_env("GOOL_DAILY_MARKET_BATCH_SIZE", 12))),
+            refresh_seconds=max(60.0, _float_env("GOOL_DAILY_MARKET_REFRESH_SECONDS", 900.0)),
+        )
+        archived = quotes = changed = failed = 0
+        workers = max(1, min(4, _int_env("GOOL_DAILY_MARKET_WORKERS", 3)))
+        def fetch(item):
+            event, fs, _reversed, _score = item
+            game = self._prematch_game(str(event.get("I") or ""), cfg)
+            if not game:
+                return fs, event, None
+            decoded, _meta = self._market_tree(game, cfg, prematch=True)
+            return fs, event, decoded
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for future in as_completed([pool.submit(fetch, item) for item in due]):
+                try:
+                    fs, event, decoded = future.result(timeout=24)
+                    if not decoded:
+                        failed += 1
+                        continue
+                    result = self._daily_odds_archive.record(
+                        sport=cfg.key, event_id=str(event["I"]), fs=fs, decoded=decoded,
+                        heartbeat_seconds=max(300, _float_env("GOOL_DAILY_MARKET_HEARTBEAT_SECONDS", 1800)),
+                    )
+                    archived += int(result["quotes"] > 0)
+                    quotes += result["quotes"]
+                    changed += result["changes"]
+                    failed += int(result["quotes"] == 0)
+                except Exception:
+                    failed += 1
+        if now - self._last_daily_odds_prune > 86400:
+            self._daily_odds_archive.prune(_int_env("GOOL_DAILY_ODDS_RETENTION_DAYS", 14), now=now)
+            self._last_daily_odds_prune = now
+        today = match_day(now)
+        coverage = self._daily_odds_archive.coverage(cfg.key, today)
+        matched_today = sum(1 for _event, fs, _rev, _quality in mapped if match_day(float(fs.get("start_ts") or 0)) == today)
+        coverage["day"] = today
+        coverage["matched_today"] = matched_today
+        coverage["coverage_rate"] = round(min(1.0, coverage["archived_matches"] / matched_today), 4) if matched_today else 0.0
+        return {"enabled": True, "flashscore_upcoming": len(fixtures),
+                "xbet_matched": len(mapped), "sampled": archived, "sample_failures": failed,
+                "quotes": quotes, "changes": changed, **coverage}
+
     def _scan_sport(
         self,
         cfg: SportConfig,
@@ -4996,6 +5163,24 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
+        if _truthy("GOOL_DAILY_MARKET_EMBEDDED_ENABLED", False):
+            # Testing/staging only. Production uses a separate child process so
+            # full-market fetching cannot stall quarter/period LIVE signals.
+            try:
+                daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
+            except Exception as exc:
+                print(f"GOOL_DAILY_MARKET_ARCHIVE_ERROR sport={cfg.key} error={type(exc).__name__}:{exc}", flush=True)
+                daily_market_coverage = {"enabled": True, "error": type(exc).__name__}
+        else:
+            archive_path = Path(os.getenv(
+                "GOOL_DAILY_MARKET_STATE",
+                str(Path(os.getenv("RUNTIME_DATA_DIR", "data")) / "live" / "daily_market_archive_state.json"),
+            ))
+            try:
+                archive_state = json.loads(archive_path.read_text(encoding="utf-8"))
+                daily_market_coverage = dict((archive_state.get("sports") or {}).get(cfg.key) or {})
+            except Exception:
+                daily_market_coverage = {"enabled": True, "error": "archive_warming"}
         # Parlays are built from the current PREMATCH market tree, not from
         # previously recorded singles. This prevents started matches from being
         # reused and lets the parlay choose a safer alternate line.
@@ -5006,8 +5191,11 @@ class MultiSportSteamWorker:
                 for item in (match.get("parlay_candidates") or [])
                 if isinstance(item, dict)
             )
+        # The global pool includes fresh qualified markets across the *whole*
+        # rolling priced field, not just the closest 80 displayed in Telegram.
+        super_parlay_source = list(prematch.get("all_day_parlay_candidates", parlay_source))
         global_super_published = (
-            publish_global_super_candidates(cfg.key, parlay_source)
+            publish_global_super_candidates(cfg.key, super_parlay_source)
             if global_super_enabled()
             else 0
         )
@@ -5281,6 +5469,7 @@ class MultiSportSteamWorker:
             "prematch_parlays": prematch_parlays,
             "prematch_parlay_delivered": parlay_delivered,
             "global_super10_pool": global_super_published,
+            "daily_market_coverage": daily_market_coverage,
             "flashscore_live": len(fs_live),
             "live_brain_candidates": len(live_candidates),
             "flashscore_analysis_matches": live_analysis[:120],
@@ -5367,7 +5556,7 @@ class MultiSportSteamWorker:
                     jobs[pool.submit(self._xbet_index, cfg)] = ("live", key)
                 else:
                     prefetched_live[key] = []
-                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True) and prep.get("prematch_candidates"):
+                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True) and (prep.get("prematch_candidates") or prep.get("fs_upcoming")):
                     jobs[pool.submit(self._xbet_prematch_index, cfg)] = ("prematch", key)
                 else:
                     prefetched_prematch[key] = []

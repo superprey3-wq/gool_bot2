@@ -187,6 +187,8 @@ def prematch_signal(
     features: dict[str, Any],
     league: str,
     segment_memory: dict[str, Any] | None = None,
+    *,
+    odds_range: tuple[float, float] | None = None,
 ) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
     scope = str(lane.get("scope") or "FULL_MATCH")
@@ -244,6 +246,10 @@ def prematch_signal(
             (over_p - market_p, "over", over_p, market_p, _num(lane.get("over"), 0.0) or 0.0),
             (under_p - (1.0 - market_p), "under", under_p, 1.0 - market_p, _num(lane.get("under"), 0.0) or 0.0),
         ]
+        if odds_range is not None:
+            candidates = [choice for choice in candidates if odds_range[0] <= choice[-1] <= odds_range[1]]
+            if not candidates:
+                return None
         _, direction, model_p, market_p, odd = max(candidates, key=lambda x: x[0])
     elif family in {"home_total", "away_total"}:
         mu = mu_home if family == "home_total" else mu_away
@@ -254,6 +260,10 @@ def prematch_signal(
             (over_p - market_p, "over", over_p, market_p, _num(lane.get("over"), 0.0) or 0.0),
             (under_p - (1.0 - market_p), "under", under_p, 1.0 - market_p, _num(lane.get("under"), 0.0) or 0.0),
         ]
+        if odds_range is not None:
+            candidates = [choice for choice in candidates if odds_range[0] <= choice[-1] <= odds_range[1]]
+            if not candidates:
+                return None
         _, direction, model_p, market_p, odd = max(candidates, key=lambda x: x[0])
     elif family == "moneyline" and selection_side in {"home", "away"}:
         home_p = _normal_over(0.0, mu_home - mu_away, sigma_margin)
@@ -271,7 +281,11 @@ def prematch_signal(
     else:
         return None
 
-    if not (_env_float("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)):
+    min_odd, max_odd = odds_range if odds_range is not None else (
+        _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50),
+        _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25),
+    )
+    if not (min_odd <= odd <= max_odd):
         return None
     edge = model_p - market_p
     if edge < 0.055 or model_p < 0.55:

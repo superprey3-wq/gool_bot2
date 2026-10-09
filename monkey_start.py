@@ -213,6 +213,24 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
             "--interval",
             os.environ.get("GOOL_MULTISPORT_INTERVAL_SECONDS", "20"),
         ],
+        # Independent football book-catalog sampler. Its state is separate from
+        # the football betting daemon's shortlist state to prevent lost writes.
+        "prematch_market_archive": [
+            sys.executable,
+            "-m",
+            "gool_bot2.xbet_prematch_market",
+            "--interval",
+            os.environ.get("XBET_PREMATCH_ARCHIVE_INTERVAL_SECONDS", "120"),
+            "--state",
+            str(Path(os.environ.get("RUNTIME_DATA_DIR", "data")) / "live" / "xbet_prematch_archive_state.json"),
+        ],
+        "daily_market_archive": [
+            sys.executable,
+            "-m",
+            "gool_bot2.daily_market_collector",
+            "--interval",
+            os.environ.get("GOOL_DAILY_MARKET_INTERVAL_SECONDS", "40"),
+        ],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }
@@ -282,6 +300,9 @@ def main() -> None:
     # Monkey is the production runtime: multisport signals must be live here.
     os.environ["GOOL_MULTISPORT_MODE"] = "active"
     os.environ.setdefault("GOOL_MULTISPORT_INTERVAL_SECONDS", "20")
+    # Keep the expensive all-day bookmaker crawler outside the LIVE process.
+    os.environ["GOOL_DAILY_MARKET_EMBEDDED_ENABLED"] = "0"
+    os.environ.setdefault("GOOL_DAILY_MARKET_INTERVAL_SECONDS", "40")
     os.environ.setdefault("GOOL_HOCKEY_ENABLED", "1")
     os.environ.setdefault("GOOL_BASKETBALL_ENABLED", "1")
     os.environ.setdefault("GOOL_MULTISPORT_MIN_ODD", "1.50")
@@ -316,6 +337,10 @@ def main() -> None:
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")
     os.environ.setdefault("XBET_PREMATCH_TRACK_MAX_EVENTS", "2000")
     os.environ.setdefault("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "32")
+    # SUPER 10 is once a day: wait for the broad archived bookmaker field.
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", "1")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE", "0.85")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", "1")
     os.environ.setdefault("XBET_MARKET_MEMORY_EPHEMERAL", "1")
     os.environ.setdefault("XBET_MARKET_MEMORY_RETENTION_DAYS", "2")
     os.environ.setdefault("XBET_MARKET_MEMORY_MAX_BYTES", str(160 * 1024 * 1024))

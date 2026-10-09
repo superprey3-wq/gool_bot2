@@ -398,3 +398,21 @@ def test_zero_recent_sog_delta_is_wait_even_when_stats_arrays_exist():
         _live_lane(line=1.5, market_over=0.70),
     )
     assert signal is None
+
+
+def test_super_odd_1_40_is_independent_of_single_minimum(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.50")
+    lane = {
+        "market_family": "moneyline",
+        "selection_side": "home",
+        "choice_key": "home",
+        "line": 0.0,
+        "odd": 1.40,
+        "probability": 0.58,
+    }
+    # A safe low-odds SUPER option must not pass as a regular single.
+    assert prematch_signal(lane, _strong_features(), "KHL") is None
+    super_pick = prematch_signal(lane, _strong_features(), "KHL", odds_range=(1.30, 1.50))
+    assert super_pick is not None
+    assert super_pick["odd"] == 1.40
+    assert super_pick["model_probability"] > super_pick["market_probability"]

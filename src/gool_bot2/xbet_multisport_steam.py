@@ -5116,12 +5116,24 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
-        try:
-            daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
-        except Exception as exc:
-            # Archive failures must never stop LIVE or regular PREMATCH signals.
-            print(f"GOOL_DAILY_MARKET_ARCHIVE_ERROR sport={cfg.key} error={type(exc).__name__}:{exc}", flush=True)
-            daily_market_coverage = {"enabled": True, "error": type(exc).__name__}
+        if _truthy("GOOL_DAILY_MARKET_EMBEDDED_ENABLED", False):
+            # Testing/staging only. Production uses a separate child process so
+            # full-market fetching cannot stall quarter/period LIVE signals.
+            try:
+                daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
+            except Exception as exc:
+                print(f"GOOL_DAILY_MARKET_ARCHIVE_ERROR sport={cfg.key} error={type(exc).__name__}:{exc}", flush=True)
+                daily_market_coverage = {"enabled": True, "error": type(exc).__name__}
+        else:
+            archive_path = Path(os.getenv(
+                "GOOL_DAILY_MARKET_STATE",
+                str(Path(os.getenv("RUNTIME_DATA_DIR", "data")) / "live" / "daily_market_archive_state.json"),
+            ))
+            try:
+                archive_state = json.loads(archive_path.read_text(encoding="utf-8"))
+                daily_market_coverage = dict((archive_state.get("sports") or {}).get(cfg.key) or {})
+            except Exception:
+                daily_market_coverage = {"enabled": True, "error": "archive_warming"}
         # Parlays are built from the current PREMATCH market tree, not from
         # previously recorded singles. This prevents started matches from being
         # reused and lets the parlay choose a safer alternate line.

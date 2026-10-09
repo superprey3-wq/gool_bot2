@@ -92,6 +92,10 @@ def basketball_historical_market_signal(
     strength = round(min(89.0, 75.0 + 3.0 * (min_hits - 7) + min(8.0, candidate["margin"])), 1)
     direction = str(candidate["direction"])
     odd = float(candidate["odd"])
+    # Conservative Beta(4,4)-style shrinkage of the historical hit count.
+    # This is a RANKING PROXY, not a calibrated probability of winning.
+    proxy = (min_hits + 4.0) / 18.0
+    implied = 1.0 / odd
     return {
         "phase": phase, "brain_mode": "basketball_historical_v3",
         "direction": direction, "line": float(candidate["line"]), "odd": odd,
@@ -106,12 +110,12 @@ def basketball_historical_market_signal(
         "historical_coefficient_home": candidate["coefficient_home"],
         "historical_coefficient_away": candidate["coefficient_away"],
         "market_confirmed": True,
-        # Use the bookmaker implied probability for display purposes only.
-        # No fake 0.8/0.9 calibrated win probability is assigned to hit counts.
-        "market_probability": round(1.0 / odd, 5),
-        "fair_probability": round(1.0 / odd, 5),
-        "model_probability": round(1.0 / odd, 5),
-        "edge": 0.0,
+        # A shrunk historical ranking proxy, NEVER 8/10 => 80% true chance.
+        "market_probability": round(implied, 5),
+        "fair_probability": round(proxy, 5),
+        "model_probability": round(proxy, 5),
+        "historical_probability_uncalibrated": True,
+        "edge": round(proxy - implied, 5),
         "start": {}, "end": dict(lane),
     }
 

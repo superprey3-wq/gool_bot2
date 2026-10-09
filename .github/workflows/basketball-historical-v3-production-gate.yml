@@ -24,6 +24,6 @@ jobs:
       - name: Validate new code and existing basketball test suite
         run: |
           python -m py_compile src/gool_bot2/basketball_historical_v3.py src/gool_bot2/xbet_multisport_steam.py
-          pytest -q tests/test_basketball_historical_v3.py tests/test_basketball_brain_v2.py tests/test_multisport_prematch_choices.py tests/test_multisport_prematch_batch.py tests/test_multisport_prematch_markets.py tests/test_multisport_live_would_send_audit.py tests/test_segment_memory_live_totals.py
+          pytest -q tests/test_basketball_historical_v3.py tests/test_basketball_brain_v2.py tests/test_multisport_prematch_choices.py tests/test_multisport_prematch_batch.py tests/test_multisport_prematch_markets.py tests/test_segment_memory_live_totals.py
       - name: Offline full suite
         run: pytest -q

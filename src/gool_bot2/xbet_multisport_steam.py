@@ -5163,7 +5163,7 @@ class MultiSportSteamWorker:
             )
         # The global pool includes fresh qualified markets across the *whole*
         # rolling priced field, not just the closest 80 displayed in Telegram.
-        super_parlay_source = list(prematch.get("all_day_parlay_candidates") or parlay_source)
+        super_parlay_source = list(prematch.get("all_day_parlay_candidates", parlay_source))
         global_super_published = (
             publish_global_super_candidates(cfg.key, super_parlay_source)
             if global_super_enabled()

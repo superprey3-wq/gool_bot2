@@ -204,6 +204,56 @@ def publish_candidates(sport: str, rows: Iterable[dict[str, Any]]) -> int:
         if value is not None:
             normalized.append(value)
 
+    # Score eligible-priced selections BEFORE the publication cap.
+    # Previously [:120] kept the first ~few fixtures' line variants and could
+    # discard every good market from later matches in the day.
+    price_floor = min(
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODD"), 1.30),
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.30),
+    )
+    price_ceiling = max(
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_MAX_ODD"), 1.50),
+        _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.50),
+    )
+    relevant = [
+        row for row in normalized
+        if bool(row.get("parlay_safe"))
+        and price_floor <= float(row.get("odd") or 0.0) <= price_ceiling
+    ]
+    max_per_fixture = max(1, min(12, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_PUBLISH_PER_FIXTURE"), 4))))
+    max_pool = max(100, min(8000, int(_num(os.getenv("GOOL_GLOBAL_SUPER10_PUBLISH_POOL_CAP"), 2000))))
+    unique: dict[str, dict[str, Any]] = {}
+    for row in relevant:
+        key = "|".join((
+            str(row.get("event_id") or ""),
+            str(row.get("scope") or ""),
+            str(row.get("market_family") or ""),
+            str(row.get("selection") or ""),
+            str(row.get("line") or ""),
+        ))
+        previous = unique.get(key)
+        if previous is None or (
+            _candidate_score(row), _num(row.get("edge"))
+        ) > (
+            _candidate_score(previous), _num(previous.get("edge"))
+        ):
+            unique[key] = row
+    by_fixture: dict[str, list[dict[str, Any]]] = {}
+    for row in unique.values():
+        by_fixture.setdefault(str(row.get("event_id") or ""), []).append(row)
+    reduced: list[dict[str, Any]] = []
+    for markets in by_fixture.values():
+        markets.sort(key=lambda row: (
+            _candidate_score(row),
+            _num(row.get("edge")),
+            _num(row.get("data_quality")),
+        ), reverse=True)
+        reduced.extend(markets[:max_per_fixture])
+    reduced.sort(key=lambda row: (
+        _candidate_score(row), _num(row.get("edge")), _num(row.get("data_quality"))
+    ), reverse=True)
+    published = reduced[:max_pool]
+
     path = pool_path()
     with _locked(path):
         payload = _read_json(path, {})
@@ -214,7 +264,11 @@ def publish_candidates(sport: str, rows: Iterable[dict[str, Any]]) -> int:
             sources = {}
         sources[sport] = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "candidates": normalized[:120],
+            "candidates": published,
+            "raw_input": len(normalized),
+            "price_eligible": len(relevant),
+            "fixtures_priced": len(by_fixture),
+            "published_count": len(published),
         }
         payload = {
             "updated_at": datetime.now(timezone.utc).isoformat(),

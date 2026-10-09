@@ -416,3 +416,12 @@ def test_super_odd_1_40_is_independent_of_single_minimum(monkeypatch):
     assert super_pick is not None
     assert super_pick["odd"] == 1.40
     assert super_pick["model_probability"] > super_pick["market_probability"]
+
+
+
+def test_hockey_live_no_full_match_or_team_total_signal():
+    brain = _live_brain(scope="PERIOD_2", recent_shot_rate=2.6)
+    for family in ("match_total", "home_total", "away_total"):
+        lane = _live_lane(scope="FULL_MATCH", line=4.5)
+        lane["market_family"] = family
+        assert live_signal(brain, lane) is None

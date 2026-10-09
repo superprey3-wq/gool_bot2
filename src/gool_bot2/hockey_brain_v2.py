@@ -423,10 +423,12 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     family = str(lane.get("market_family") or "")
     lane_scope = str(lane.get("scope") or "")
     current_scope = str(brain.get("scope") or "")
-    segment_market = family == "match_total" and lane_scope == current_scope
-    full_market = lane_scope == "FULL_MATCH" and family in {"match_total", "home_total", "away_total"}
-    if not (segment_market or full_market):
+    segment_market = family == "match_total" and lane_scope == current_scope and current_scope.startswith("PERIOD_")
+    # Public LIVE hockey policy: totals ONLY for the current period.
+    # Full-match/team totals remain available solely in PREMATCH.
+    if not segment_market:
         return None
+    full_market = False
     segment_memory = dict(brain.get("segment_memory") or {})
     memory_quality = _clamp(_num(segment_memory.get("quality"), 0.0) or 0.0, 0.0, 1.0)
     if full_market and memory_quality < _env_float("GOOL_HOCKEY_LIVE_FULL_MIN_MEMORY_QUALITY", 0.45):
@@ -629,7 +631,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ):
         return None
 
-    if scope == "PERIOD_3" and direction == "under" and remaining <= 330 and margin <= 2:
+    if scope == "PERIOD_3" and direction == "under" and remaining <= 420 and margin <= 2:
         return None
 
     agreements = 1
@@ -732,7 +734,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         "recent_blocked_rate_per_min": round(recent_blocked_rate, 3),
         "probability_delta_pp": 0.0,
         "line_delta": 0.0,
-        "moves": max(0, int(brain.get("history_points") or 1) - 1),
+        # Snapshots are not bookmaker odds movements.
+        "moves": 0,
         "age_seconds": 0.0,
         "strength": round(strength, 1),
         "market_confirmed": edge >= 0.055,

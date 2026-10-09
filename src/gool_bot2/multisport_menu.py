@@ -290,6 +290,19 @@ def multisport_status_text() -> str:
             f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · mapped {int(row.get('prematch_mapped') or 0)} · scan {int(row.get('prematch_scanned') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
             f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · 1xBet {int(row.get('xbet_live') or 0)} · mapped {int(row.get('mapped') or 0)} · decoded {int(row.get('decoded') or 0)} · mismatch {int(row.get('score_mismatch') or 0)} · decode_fail {int(row.get('market_decode_failed') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
+        coverage = row.get("daily_market_coverage") or {}
+        if coverage.get("enabled"):
+            if coverage.get("error"):
+                lines.append(f"  ⚠️ АРХИВ КЭФОВ · ошибка {coverage['error']}")
+            else:
+                lines.append(
+                    f"  📥 ВСЯ ЛИНИЯ · FS {int(coverage.get('flashscore_upcoming') or 0)} · "
+                    f"1xBet matched {int(coverage.get('xbet_matched') or 0)} · "
+                    f"сохранено сегодня {int(coverage.get('archived_matches') or 0)} матчей / "
+                    f"{int(coverage.get('latest_quotes') or 0)} рынков · "
+                    f"обновлено за цикл {int(coverage.get('sampled') or 0)} · "
+                    f"изменений {int(coverage.get('changes') or 0)}"
+                )
 
     super10 = (state or {}).get("global_super10") if isinstance(state, dict) else {}
     if isinstance(super10, dict):

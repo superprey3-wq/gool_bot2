@@ -1,0 +1,115 @@
+name: Basketball PREMATCH 7-8 opponent form quarter and game audit Oct 9
+
+on:
+  push:
+    branches: [audit/basketball-prematch-7-8-20261009]
+    paths:
+      - scripts/basketball_prematch_7_8_20261009.py
+      - .github/workflows/basketball-prematch-7-8-20261009.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  frozen-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: october9-basketball-stable-quarter-now
+          repository: superprey3-wq/gool_bot2
+          run-id: 37942410974
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts/basketball_prematch_7_8_20261009/baseline
+      - name: Verify 72 frozen October 9 pre-kickoff fixtures
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("artifacts/basketball_prematch_7_8_20261009/baseline")
+          games=json.loads((p/"all_fixtures.json").read_text(encoding="utf8"))
+          manifest=json.loads((p/"manifest.json").read_text(encoding="utf8"))
+          assert len(games)==len(manifest["fixtures"])==72
+          assert sum(x.get("status")=="HISTORY_READY" for x in games)==48
+          print("FROZEN_PREMATCH_BASELINE_READY 72 fixtures 48 with 10+10 prior complete games")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prematch-7-8-frozen-baseline
+          path: |
+            artifacts/basketball_prematch_7_8_20261009/baseline/manifest.json
+            artifacts/basketball_prematch_7_8_20261009/baseline/all_fixtures.json
+          retention-days: 10
+
+  history:
+    needs: frozen-history
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: prematch-7-8-frozen-baseline
+          path: artifacts/basketball_prematch_7_8_20261009/baseline
+      - name: Reconstruct individual scored and conceded points from past 10 games
+        env:
+          GOOL_FLASHSCORE_SEGMENT_TIMEOUT: "9"
+          GOOL_FLASHSCORE_SEGMENT_MAX_HOSTS: "2"
+        run: python scripts/basketball_prematch_7_8_20261009.py shard --index ${{ matrix.shard }} --total 12 --workers 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prematch-7-8-shard-${{ matrix.shard }}
+          path: artifacts/basketball_prematch_7_8_20261009/shard_${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 10
+
+  report:
+    if: always() && needs.frozen-history.result == 'success'
+    needs: [frozen-history, history]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: prematch-7-8-frozen-baseline
+          path: artifacts/basketball_prematch_7_8_20261009/baseline
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prematch-7-8-shard-*
+          merge-multiple: true
+          path: artifacts/basketball_prematch_7_8_20261009
+      - name: Check actual upcoming 1xBet markets on historical match and quarter scopes
+        env:
+          XBET_MULTISPORT_TELEGRAM_ENABLED: "0"
+          GOOL_MULTISPORT_MODE: "shadow"
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+        run: python scripts/basketball_prematch_7_8_20261009.py report
+      - name: Show result
+        if: success()
+        run: cat artifacts/basketball_prematch_7_8_20261009/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basketball-prematch-7-8-opponent-results
+          path: artifacts/basketball_prematch_7_8_20261009/
+          retention-days: 10

@@ -4654,6 +4654,22 @@ class MultiSportSteamWorker:
             if start_ts <= now or start_ts - now > horizon:
                 cache.pop(event_id, None)
         visible = sorted(cache.values(), key=lambda row: float(row.get("start_ts") or 0.0))[:80]
+        # Telegram displays a compact recent 80, but SUPER 10 must not inherit
+        # the display limit. Include every *freshly priced* fixture whose
+        # independent PREMATCH Brain has supplied a qualified parlay market.
+        # Never reuse an old, already-started or outdated 1xBet price.
+        max_parlay_age = max(60.0, _float_env("GOOL_SUPER_PARLAY_PRICE_MAX_AGE_SECONDS", 1800.0))
+        all_day_parlay: list[dict[str, Any]] = []
+        for match in cache.values():
+            if now - float(match.get("ts") or 0) > max_parlay_age:
+                continue
+            if float(match.get("start_ts") or 0) <= now + 300:
+                continue
+            all_day_parlay.extend(
+                dict(candidate)
+                for candidate in (match.get("parlay_candidates") or [])
+                if isinstance(candidate, dict)
+            )
         return {
             "enabled": True,
             "flashscore_prematch": len(fs_upcoming),
@@ -4668,6 +4684,7 @@ class MultiSportSteamWorker:
             "prematch_policy_blocked": policy_blocked,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
             "matches": visible,
+            "all_day_parlay_candidates": all_day_parlay,
         }
 
     def _prepare_flashscore_sport(self, cfg: SportConfig) -> dict[str, Any]:
@@ -5144,8 +5161,11 @@ class MultiSportSteamWorker:
                 for item in (match.get("parlay_candidates") or [])
                 if isinstance(item, dict)
             )
+        # The global pool includes fresh qualified markets across the *whole*
+        # rolling priced field, not just the closest 80 displayed in Telegram.
+        super_parlay_source = list(prematch.get("all_day_parlay_candidates") or parlay_source)
         global_super_published = (
-            publish_global_super_candidates(cfg.key, parlay_source)
+            publish_global_super_candidates(cfg.key, super_parlay_source)
             if global_super_enabled()
             else 0
         )

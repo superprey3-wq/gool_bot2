@@ -16,7 +16,7 @@ from .providers.common import pair_score
 from .xbet_market_pressure import _http_json
 from .xbet_market_robust import decode_standard_markets
 from .xbet_market_memory import record_market_snapshot
-from .daily_odds_archive import DailyOddsArchive
+from .daily_odds_archive import DailyOddsArchive, match_day
 from .xbet_multisport_markets import iter_market_selections
 
 
@@ -341,6 +341,11 @@ class XBetPrematchCollector:
                 continue
             candidates.append({"event": event, "event_id": event_id, "home": home, "away": away})
 
+        today = match_day(now)
+        catalog_today = sum(1 for row in candidates
+                            if (start := _event_start(row.get("event") or {}))
+                            and start > now and match_day(start) == today)
+
         if targets:
             # Fixture discovery is already complete before this stage. Resolve bookmaker
             # addresses concurrently so pricing cannot serialize the full daily field.
@@ -503,6 +508,9 @@ class XBetPrematchCollector:
             "track_cap": track_cap,
             "tracked_catalog_events": min(len(candidates) if targets else len(index), track_cap),
             "refreshed": refreshed,
+            "archive_day": today,
+            "archive_catalog_today": catalog_today,
+            "archive_coverage": self.daily_archive.coverage("football", today),
             "matches": kept,
         }
         _write(self.state_path, state)

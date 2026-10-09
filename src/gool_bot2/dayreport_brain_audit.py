@@ -58,15 +58,19 @@ def _phase(value: Any) -> str:
 
 
 def _direction(row: dict[str, Any]) -> str:
+    # On total markets the user-visible selection is the settlement contract.
+    # Some older journal rows had technical direction mismatching card text.
+    selection = str(row.get("selection") or "").lower()
+    family = str(row.get("market_family") or "")
+    if family in {"match_total", "home_total", "away_total"}:
+        if "итм" in selection or "тм" in selection or "under" in selection:
+            return "under"
+        if "итб" in selection or "тб" in selection or "over" in selection:
+            return "over"
     direction = str(row.get("direction") or "").lower()
     if direction in {"over", "under", "home", "away"}:
         return direction
-    selection = str(row.get("selection") or "").lower()
-    if "итм" in selection or "тм" in selection or "under" in selection:
-        return "under"
-    if "итб" in selection or "тб" in selection or "over" in selection:
-        return "over"
-    return direction
+    return ""
 
 
 def _pct(rows: list[dict[str, Any]]) -> str:
@@ -211,7 +215,7 @@ def _group_table(grouped: dict[str, list[dict[str, Any]]]) -> str:
 
 def _serialize(row: dict[str, Any]) -> str:
     # Raw snapshot is complete and shareable for downstream AI audit.
-    value = json.dumps(row, ensure_ascii=False, indent=2, sort_keys=True, default=str, allow_nan=False)
+    value = json.dumps(row, ensure_ascii=False, indent=2, sort_keys=True, default=str, allow_nan=True)
     return html.escape(value)
 
 

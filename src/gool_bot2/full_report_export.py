@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from .journal import load_signal_journal
 from .multi_delivery import was_publicly_sent
 from .multisport_journal import load_journal as load_multisport_journal
+from .dayreport_brain_audit import basketball_detail_html, raw_evidence_html
 
 
 FINAL_RESULTS = {"won", "lost", "push", "void"}
@@ -143,7 +144,12 @@ def _match_text(row: dict[str, Any]) -> str:
 def _score_text(row: dict[str, Any]) -> str:
     score = row.get("settled_score") or row.get("final_score")
     if isinstance(score, (list, tuple)) and len(score) >= 2:
-        return f"{score[0]}:{score[1]}"
+        scoped = f"{score[0]}:{score[1]}"
+        match = row.get("settled_match_score")
+        scope = str(row.get("scope") or "")
+        if scope and scope != "FULL_MATCH" and isinstance(match, (list, tuple)) and len(match) >= 2:
+            return f"{scoped} ({scope}); матч {match[0]}:{match[1]}"
+        return scoped
     return "—"
 
 
@@ -183,7 +189,10 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
     )
     if probability is not None:
         probability = probability * 100.0 if probability <= 1.0 else probability
-        bits.append(f"P={probability:.1f}%")
+        if bool(row.get("historical_probability_uncalibrated")):
+            bits.append(f"P≈{probability:.1f}% (НЕ КАЛИБРОВАНА)")
+        else:
+            bits.append(f"P={probability:.1f}%")
 
     edge = _number(row.get("edge") or row.get("edge_pp") or row.get("market_edge"))
     if edge is not None:
@@ -201,6 +210,26 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
     scope = str(row.get("scope") or row.get("period") or "").strip()
     if scope:
         bits.append(f"scope={scope}")
+    # Explicit stored Brain identity prevents retrospectively crediting all
+    # correct bets to V3 merely because a historical model could select them.
+    brain_mode = str(row.get("brain_mode") or row.get("signal_type") or "").strip()
+    if brain_mode:
+        bits.append(f"Brain={brain_mode}")
+    elif _sport(row) == "basketball":
+        bits.append("Brain=не записан")
+    if _sport(row) == "basketball":
+        tier = str(row.get("historical_tier") or "").strip()
+        h, a = row.get("historical_home_hits"), row.get("historical_away_hits")
+        if tier and h is not None and a is not None:
+            bits.append(f"{tier} ({h}/10 + {a}/10)")
+        coef = row.get("historical_coefficient_available")
+        if coef is True:
+            bits.append("H2H=поправка применена")
+        elif coef is False:
+            bits.append("H2H=нет подтверждённой поправки")
+        correction = _number(row.get("historical_correction_points"))
+        if correction is not None:
+            bits.append(f"H2HΔ={correction:+.2f} оч")
 
     projected = _number(row.get("projected_total"))
     if projected is not None:
@@ -297,7 +326,7 @@ def _table(rows: list[dict[str, Any]], tz: Any) -> str:
     out = [
         "<table><thead><tr>",
         "<th>Время</th><th>Спорт</th><th>Фаза</th><th>Тип</th><th>Матч / экспресс</th>",
-        "<th>Турнир</th><th>Ставка</th><th>Кэф</th><th>Результат</th><th>Счёт</th><th>P/L</th><th>Диагностика</th>",
+        "<th>Турнир</th><th>Ставка</th><th>Кэф</th><th>Результат</th><th>Счёт</th><th>P/L</th><th>Диагностика</th><th>Сырой JSON</th>",
         "</tr></thead><tbody>",
     ]
     icons = {"football": "⚽", "hockey": "🏒", "basketball": "🏀"}
@@ -319,6 +348,7 @@ def _table(rows: list[dict[str, Any]], tz: Any) -> str:
             f"<td>{html.escape(_score_text(row))}</td>"
             f"<td>{'—' if profit is None else f'{profit:+.2f}u'}</td>"
             f"<td>{html.escape(_diagnostic_text(row))}</td>"
+            f"<td>{raw_evidence_html(row)}</td>"
             "</tr>"
         )
     out.append("</tbody></table>")
@@ -454,8 +484,11 @@ def _runtime_live_audit_html(
             f"{html.escape(label)}: <b>{count}</b>" for label, count in wait_buckets.most_common()
         ) or "WAIT-наблюдений нет"
         alert = ""
-        if fs_ids and not cand_ids:
-            alert = "<p><b>⚠️ Все увиденные LIVE-матчи были отсечены до запроса 1xBet.</b></p>"
+        # In Basketball Historical V3 the legacy Flashscore tempo PASS/WAIT
+        # does NOT gate 1xBet. The actual live_brain_candidates runtime counter
+        # is authoritative, not the legacy per-match brain_state.
+        if fs_ids and not cand_ids and peak("live_brain_candidates") == 0:
+            alert = "<p><b>⚠️ Не найдено кандидатов для запроса 1xBet; для Basketball V3 причина может быть в данных четверти.</b></p>"
         elif cand_ids and peak("xbet_live") == 0:
             alert = "<p><b>⚠️ Brain дал кандидатов, но 1xBet LIVE вернул 0 матчей.</b></p>"
         elif peak("mapped") == 0 and peak("xbet_live") > 0 and cand_ids:
@@ -658,6 +691,8 @@ def build_daily_report(
     table{width:100%;border-collapse:collapse;background:white;font-size:12.5px;margin:12px 0 28px}
     th,td{border:1px solid #dde1e7;padding:8px;vertical-align:top;text-align:left}
     th{background:#eef1f5;position:sticky;top:0}.section{margin-top:32px;overflow-x:auto}
+    .raw-json{white-space:pre-wrap;overflow-wrap:anywhere;max-height:450px;overflow:auto;padding:10px;background:#f1f3f7}
+    details>summary{cursor:pointer;font-weight:bold;padding:8px 0}
     ol,ul{margin-bottom:0}li{margin:6px 0}
     """
     html_doc = [
@@ -694,6 +729,9 @@ def build_daily_report(
         "</div>",
         "<div class='section'><h2>Контроль и проблемные места</h2>",
         _audit_html(rows),
+        "</div>",
+        "<div class='section'><h2>🏀 Дневной аудит Brain · все факты по каждой баскетбольной ставке</h2>",
+        basketball_detail_html([*basketball_pre, *basketball_live]),
         "</div>",
         "<div class='section'><h2>Все ординары и LIVE за день</h2>",
         _table(singles_rows, tz),

@@ -4560,6 +4560,19 @@ class MultiSportSteamWorker:
                 # same event. It never records a second single.
                 parlay_candidates: list[dict[str, Any]] = []
                 if cfg.key in {"hockey", "basketball"}:
+                    # Singles and LIVE keep their separate 1.50+ odds policy.
+                    # A SUPER-10 leg is evaluated *at its own* 1.30-1.50 price
+                    # without letting the singles gate discard it in advance.
+                    parlay_min_odd = min(
+                        _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.45),
+                        _float_env("GOOL_GLOBAL_SUPER10_MIN_ODD", 1.30),
+                        _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30),
+                    )
+                    parlay_max_odd = max(
+                        _float_env("GOOL_MULTISPORT_PARLAY_MAX_ODD", 1.70),
+                        _float_env("GOOL_GLOBAL_SUPER10_MAX_ODD", 1.50),
+                        _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50),
+                    )
                     for parlay_lane in row.get("parlay_market_lanes") or []:
                         allowed, _ = lane_phase_policy(cfg.key, "PREMATCH", parlay_lane, row.get("period"))
                         if not allowed:
@@ -4571,6 +4584,7 @@ class MultiSportSteamWorker:
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
                                 dict(row.get("segment_memory") or {}),
+                                odds_range=(parlay_min_odd, parlay_max_odd),
                             )
                         else:
                             parlay_signal = basketball_prematch_v2_signal(
@@ -4578,6 +4592,7 @@ class MultiSportSteamWorker:
                                 dict(row.get("sport_context") or {}),
                                 str(row.get("league") or ""),
                                 dict(row.get("segment_memory") or {}),
+                                odds_range=(parlay_min_odd, parlay_max_odd),
                             )
                         if parlay_signal is None:
                             continue

@@ -1550,7 +1550,7 @@ def test_basketball_live_full_projection_seen_blocks_second_full_family(tmp_path
         "QUARTER_2",
         "match_total",
         "fs1",
-    ) is False
+    ) is True
 
 
 def test_basketball_live_quarter_pick_count_caps_match_at_two_quarters(tmp_path):
@@ -1592,7 +1592,7 @@ def test_basketball_live_quarter_pick_count_caps_match_at_two_quarters(tmp_path)
     assert worker._basketball_live_quarter_pick_count("xb1", "fs1") == 2
 
 
-def test_basketball_live_same_quarter_is_seen_but_new_second_quarter_is_allowed(tmp_path):
+def test_basketball_live_one_match_one_signal_even_across_quarters(tmp_path):
     import json
 
     worker = MultiSportSteamWorker(tmp_path)
@@ -1616,7 +1616,7 @@ def test_basketball_live_same_quarter_is_seen_but_new_second_quarter_is_allowed(
     ) is True
     assert worker._already_seen(
         "basketball", "xb1", "LIVE", "QUARTER_2", "match_total", "fs1"
-    ) is False
+    ) is True
     assert worker._basketball_live_quarter_pick_count("xb1", "fs1") == 1
 
 

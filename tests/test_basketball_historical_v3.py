@@ -194,3 +194,35 @@ def test_all_basketball_singles_have_final_140_delivery_gate(capsys):
         assert result == (False, 0)  # stopped only by synthetic duplicate guard
         assert stub.lookups > 0
         assert "GOOL_BASKETBALL_SINGLE_ODD_REJECT" not in capsys.readouterr().out
+
+
+
+def test_v3_proxy_value_gate_rejects_negative_edge_even_at_8_of_10(monkeypatch):
+    p = build_profile(FakeFlashscore(), "target", "A", "B", 1000)
+    from gool_bot2.xbet_multisport_steam import basketball_historical_market_signal
+    for row in p["home_history"][-2:]:
+        row["total"][0] = 0
+    for row in p["away_history"][-2:]:
+        row["total"][0] = 0
+    lane = {"scope": "QUARTER_2", "market_family": "match_total", "line": 38.5, "over": 1.40, "under": 2.00}
+    candidate = screen_market(p, lane, "over")
+    assert candidate["home_hits"] == candidate["away_hits"] == 10  # adjusted by H2H
+    # At 1.40 a synthetic 8/10 profile must still be price-gated.
+    for row in p["home_history"][0:2]:
+        row["total"][1] = 0
+    for row in p["away_history"][0:2]:
+        row["total"][1] = 0
+    candidate = screen_market(p, lane, "over")
+    assert candidate["home_hits"] == candidate["away_hits"] == 8
+    assert basketball_historical_market_signal(p, lane, phase="PREMATCH") is None
+
+
+def test_v3_live_context_uses_elapsed_clock_and_score():
+    from gool_bot2.xbet_multisport_steam import basketball_v3_live_context_gate
+    signal = {"line": 39.5, "direction": "over", "projected_total": 44.0}
+    row = {"scope": "QUARTER_2", "clock_seconds": 240, "score": [14, 12]}
+    passed = basketball_v3_live_context_gate(signal, row, "Euroleague")
+    assert passed and passed["historical_inplay_projected_total"] > 39.5
+    assert basketball_v3_live_context_gate(signal, {**row, "clock_seconds": 50}, "Euroleague") is None
+    assert basketball_v3_live_context_gate(signal, {**row, "clock_seconds": 550}, "Euroleague") is None
+    assert basketball_v3_live_context_gate(signal, {**row, "score": [8, 8]}, "Euroleague") is None

@@ -929,7 +929,7 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             if _truthy("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", False):
                 completeness = day_market_readiness(now_ts=now)
                 if not completeness["ready"]:
-                    return {"status": "warming_odds_archive", "day": day, "market_coverage": completeness}
+                    return {"status": "warming_odds_archive", "day": day, **readiness_snapshot(now_ts=now), "market_coverage": completeness}
             ticket = build_global_super10(now_ts=now)
             retrying = False
             if ticket is None:

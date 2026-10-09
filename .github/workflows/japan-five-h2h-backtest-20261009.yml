@@ -1,0 +1,33 @@
+name: Japan five H2H backtest October 9
+
+on:
+  push:
+    branches: [audit/h2h-five-games-20261009]
+    paths:
+      - 'scripts/japan_five_h2h_backtest_20261009.py'
+      - '.github/workflows/japan-five-h2h-backtest-20261009.yml'
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - name: Fetch 5 historical head-to-head games for 5 Oct-09 fixtures
+        env:
+          GOOL_FLASHSCORE_SEGMENT_TIMEOUT: '10'
+          GOOL_FLASHSCORE_SEGMENT_MAX_HOSTS: '2'
+        run: python scripts/japan_five_h2h_backtest_20261009.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: japan-five-h2h-backtest-20261009
+          path: artifacts/h2h_20261009/
+          if-no-files-found: warn
+          retention-days: 14

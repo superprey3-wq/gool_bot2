@@ -203,14 +203,26 @@ def shard(index,total,workers):
     dump(f"shard_{index}.json",results)
     print("SHARD_DONE "+json.dumps({"index":index,"count":len(results),"states":dict(Counter(x["status"] for x in results))},ensure_ascii=False),flush=True)
 
-def count_hits(p, direction, line):
+def count_hits(p, direction, line, *, adjust_for_opponent=False):
+    """Check the SAME bookmaker quarter line on both teams' independent last 10 games.
+
+    First compute the per-team opponent coefficient from the last five H2Hs.
+    Its bounded half-strength impact moves the projected match-quarter mean.
+    Apply that SAME translation (delta points) to the 10 historical quarter
+    totals from EACH team's past games, preserving the variation. In other
+    words the threshold test is run on opponent-adjusted historical evidence,
+    not the raw games. Without five valid H2H games this mode is not eligible.
+    """
+    delta=(float(p["adjusted_expected"])-float(p["predicted"])) if adjust_for_opponent else 0.0
     h=p["home_totals"];a=p["away_totals"]
-    predicate=(lambda v:v>line) if direction=="OVER" else (lambda v:v<line)
+    predicate=(lambda v:v+delta>line) if direction=="OVER" else (lambda v:v+delta<line)
     return sum(predicate(x) for x in h),sum(predicate(x) for x in a)
 
 def price(history,manifest):
     output={"status":"NOT_CHECKED","xbet_index":0,"mapped":0,"priced_fixtures":0,"diagnostic":{},"prices":[]}
-    eligible=[x for x in history if x["status"]=="HISTORY_READY" and int(x["start_ts"])>int(time.time())+120]
+    eligible=[x for x in history if x["status"]=="HISTORY_READY"
+              and x.get("h2h_coefficient_available") is True
+              and int(x["start_ts"])>int(time.time())+120]
     if not eligible:return output
     try:
         os.environ["GOOL_MULTISPORT_PREMATCH_INDEX_COUNT"]="1000"
@@ -246,12 +258,25 @@ def price(history,manifest):
                 for direction in ("OVER","UNDER"):
                     odd=float(lane["over"] if direction=="OVER" else lane["under"])
                     if not 1.30<=odd<=4.0:continue
-                    hits_a,hits_b=count_hits(pred,direction,line)
-                    gap=(float(pred.get("adjusted_expected",pred["predicted"]))-line)*(1 if direction=="OVER" else -1)
-                    if min(hits_a,hits_b)<8:continue
+                    raw_a,raw_b=count_hits(pred,direction,line,adjust_for_opponent=False)
+                    hits_a,hits_b=count_hits(pred,direction,line,adjust_for_opponent=True)
+                    gap=(float(pred["adjusted_expected"])-line)*(1 if direction=="OVER" else -1)
+                    raw_gap=(float(pred["predicted"])-line)*(1 if direction=="OVER" else -1)
+                    # Comparable original/adjusted screen against EXACT same quote.
+                    old_8=min(raw_a,raw_b)>=8 and raw_gap>0
+                    new_8=min(hits_a,hits_b)>=8 and gap>0
+                    if not (old_8 or new_8):continue
                     accepted.append({"quarter":q,"direction":direction,"line":line,"odd":odd,
-                        "home_hits":hits_a,"away_hits":hits_b,"strong_9_each":min(hits_a,hits_b)>=9,
-                        "forecast":pred.get("adjusted_expected",pred["predicted"]),
+                        "home_hits":hits_a,"away_hits":hits_b,"strong_9_each":min(hits_a,hits_b)>=9 and gap>0,
+                        "raw_home_hits":raw_a,"raw_away_hits":raw_b,
+                        "raw_strong_9_each":min(raw_a,raw_b)>=9 and raw_gap>0,
+                        "old_8":old_8,"new_8":new_8,
+                        "opponent_adjustment_points":round(float(pred["adjusted_expected"])-float(pred["predicted"]),3),
+                        "coefficient_home":pred["coefficient_home"],
+                        "coefficient_away":pred["coefficient_away"],
+                        "unadjusted_forecast":pred["predicted"],
+                        "forecast":pred["adjusted_expected"],
+                        "raw_forecast_edge":round(raw_gap,2),
                         "forecast_edge":round(gap,2),"fs_match":row["home"]+" — "+row["away"],
                         "event_id":row["event_id"],"xbet_event_id":eid,
                         "start_msk":row["start_msk"],
@@ -269,16 +294,24 @@ def price(history,manifest):
 
 def report():
     manifest=load("manifest.json")
-    targets=[]
-    for path in sorted(ROOT.glob("shard_*.json")):
-        targets+=json.loads(path.read_text(encoding="utf-8"))
+    # Reuse the previous day's SAME frozen dataset, so both screen versions
+    # are compared without rerunning or changing any historical features.
+    if (ROOT/"all_fixtures.json").exists():
+        targets=load("all_fixtures.json")
+    else:
+        targets=[]
+        for path in sorted(ROOT.glob("shard_*.json")):
+            targets+=json.loads(path.read_text(encoding="utf-8"))
     if len(targets)!=len(manifest["fixtures"]) or len({x["event_id"] for x in targets})!=len(targets):
         raise SystemExit("INCOMPLETE_DISCOVERY_COVERAGE")
     eligible=[r for r in targets if r["status"]=="HISTORY_READY"]
     price_data=price(eligible,manifest)
     priced=[lane for item in price_data["prices"] for lane in item["eligible_lanes"]]
     strict=[x for x in priced if x["strong_9_each"]]
-    moderate=[x for x in priced if not x["strong_9_each"]]
+    old_strict=[x for x in priced if x["raw_strong_9_each"]]
+    moderate=[x for x in priced if x["new_8"] and not x["strong_9_each"]]
+    newly_qualified=[x for x in strict if not x["raw_strong_9_each"]]
+    no_longer_qualified=[x for x in old_strict if not x["strong_9_each"]]
     def rank(x):
         return (min(x["home_hits"],x["away_hits"]),x["home_hits"]+x["away_hits"],
                 x["forecast_edge"],x["odd"])
@@ -303,12 +336,26 @@ def report():
         "synthetic_9of10_thresholds":len(synthetic),"synthetic_examples":synthetic[:30],
         "xbet":price_data,"book_confirmed_9of10_bets":sorted(selected.values(),key=lambda x:x["start_msk"]),
         "book_confirmed_8of10_not_9":len(moderate),
+        "original_raw_9of10_same_games_and_quotes":len(old_strict),
+        "new_opponent_adjusted_9of10":len(strict),
+        "newly_promoted_by_opponent_coefficient":newly_qualified,
+        "demoted_by_opponent_coefficient":no_longer_qualified,
+        "compare_note":"Both model versions checked on the same currently published bookmaker lines and same frozen October 9 history. 10-game quarter totals translated by the quarter-specific half-strength capped H2H correction (in points). 5 verified H2H games required; no fallback to unadjusted model on missing H2H.",
+
         "warning":"Only bookmaker-verified prices can be actual bets; historical thresholds have NO verified bookmaker quote. LIVE quarter price may differ after match starts. No odds guarantee or ROI claim."}
     dump("full_report.json",result)
     dump("all_fixtures.json",sorted(targets,key=lambda x:x["start_ts"]))
     lean={k:v for k,v in result.items() if k not in ("xbet","synthetic_examples")}
     print("TODAY_FINAL "+json.dumps(lean,ensure_ascii=False),flush=True)
     print("XBET_STATUS "+json.dumps({"status":price_data["status"],"events":price_data["xbet_index"],"mapped":price_data["mapped"],"priced":price_data["priced_fixtures"],"diag":price_data["diagnostic"],"error":price_data.get("error")},ensure_ascii=False),flush=True)
+    print("CORRECTION_COMPARE "+json.dumps({"old_raw_9of10":len(old_strict),"corrected_9of10":len(strict),
+        "promoted":len(newly_qualified),"demoted":len(no_longer_qualified),"corrected_8only":len(moderate)},ensure_ascii=False),flush=True)
+    for v in newly_qualified:
+        print("COEFFICIENT_PROMOTED "+json.dumps(v,ensure_ascii=False),flush=True)
+    for v in no_longer_qualified:
+        print("COEFFICIENT_DEMOTED "+json.dumps(v,ensure_ascii=False),flush=True)
+    for v in moderate:
+        print("CORRECTION_BORDERLINE "+json.dumps(v,ensure_ascii=False),flush=True)
     for v in sorted(selected.values(),key=lambda x:x["start_msk"]):
         print("TODAY_REAL_PRICE_PICK "+json.dumps(v,ensure_ascii=False),flush=True)
     for r in sorted(eligible,key=lambda x:x["start_ts"])[:40]:
@@ -320,12 +367,17 @@ def report():
         f"Captured MSK: {result['captured_msk']}",
         f"Upcoming games: {len(targets)}; history ready: {len(eligible)}; H2H correction available: {result['h2h_adjustment_ready']}",
         f"1xBet: {price_data['status']} | index={price_data['xbet_index']} mapped={price_data['mapped']} priced={price_data['priced_fixtures']}",
-        f"**Book-confirmed 9/10 candidate matches: {len(selected)}**",
+        f"**Book-confirmed 9/10 candidate matches (corrected): {len(selected)}**",
+        f"Unadjusted same-market 9/10 candidates: {len(old_strict)}; adjusted: {len(strict)}",
+        f"Newly promoted: {len(newly_qualified)}; removed: {len(no_longer_qualified)}",
         "",
         "| Time MSK | Match | Quarter | Pick | Price | History team A / B |",
         "|---|---|---:|---|---:|---|"]
     for x in sorted(selected.values(),key=lambda x:x["start_msk"]):
         md.append(f"| {x['start_msk']} | {x['fs_match']} | {x['quarter']} | {x['direction']} {x['line']:g} | {x['odd']:.2f} | {x['home_hits']}/10, {x['away_hits']}/10 |")
+    md.extend(["","### Borderline adjusted 8/10 quotes (NOT strong signals)"])
+    for x in moderate[:20]:
+        md.append(f"- {x['start_msk']} | {x['fs_match']} | Q{x['quarter']} {x['direction']} {x['line']:g} @{x['odd']:.2f} | adjusted {x['home_hits']}/10, {x['away_hits']}/10 vs raw {x['raw_home_hits']}/10, {x['raw_away_hits']}/10; delta {x['opponent_adjustment_points']:+.2f} pts")
     md.extend(["","Synthetic historical thresholds are NOT bookmaker selections and cannot be placed without fresh price verification.","See full_report.json and all_fixtures.json for all diagnostics and historical averages."])
     (ROOT/"report.md").write_text("\n".join(md),encoding="utf-8")
 

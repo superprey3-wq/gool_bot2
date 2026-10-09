@@ -5,6 +5,7 @@ from pathlib import Path
 from gool_bot2.xbet_multisport_steam import (
     MultiSportSteamWorker,
     SPORTS,
+    basketball_live_price_sync_check,
     _infer_flashscore_scope,
     _flashscore_scoped_scores,
     detect_live_segment_stats,
@@ -525,6 +526,9 @@ def test_flashscore_numeric_status_is_match_minute_with_score_parts_crosscheck()
     ) == "QUARTER_4"
 
 def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3(monkeypatch):
+    # Isolate clock-source regression from the separate early-UNDER policy.
+    # Current-quarter UNDERs before 3:00 are blocked in production.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "0")
     monkeypatch.setenv("GOOL_BASKETBALL_LIVE_SEGMENT_MIN_STAT_EDGE", "2.5")
     brain = {
         "brain_state": "PASS",
@@ -922,3 +926,68 @@ def test_usable_market_game_rejects_nonempty_shell_without_market_tree():
     assert MultiSportSteamWorker._usable_market_game({"I": 1, "O1": "A", "O2": "B", "SC": {}}) is False
     assert MultiSportSteamWorker._usable_market_game({"I": 1, "GE": [{"G": 4}]}) is True
     assert MultiSportSteamWorker._usable_market_game({"I": 1, "SG": [{"I": 2, "PN": "4th quarter"}]}) is True
+
+
+def test_basketball_live_blocks_stale_flashscore_score_against_newer_1xbet_quote():
+    # Older Flashscore total 18 and newer bookmaker total 24 is small enough
+    # to pass fixture mapping; it MUST NOT manufacture an UNDER in LIVE pricing.
+    snap = {
+        "sport": "basketball",
+        "score_sync_mode": "bounded_provider_lag",
+        "score_sync_delta": [-3, -3],
+        "book_current_scope": "QUARTER_2",
+        "clock_seconds": 300,
+        "league": "Euroleague",
+    }
+    brain = {"scope": "QUARTER_2", "segment_score_verified": True, "break_transition": False}
+    ok, reason = basketball_live_price_sync_check(snap, brain)
+    assert not ok and reason == "score_lag_between_providers"
+    assert basketball_live_price_sync_check(
+        {**snap, "score_sync_mode": "exact"}, brain
+    ) == (True, "exact_score_quarter_clock_synced")
+
+
+def test_basketball_live_blocks_wrong_quarter_or_invalid_clock_even_at_equal_score():
+    snap = {
+        "score_sync_mode": "exact",
+        "book_current_scope": "QUARTER_3",
+        "clock_seconds": 310,
+        "league": "Euroleague",
+    }
+    brain = {"scope": "QUARTER_2", "segment_score_verified": True, "break_transition": False}
+    assert basketball_live_price_sync_check(snap, brain) == (False, "current_quarter_mismatch")
+    assert basketball_live_price_sync_check({**snap, "book_current_scope": "QUARTER_2", "clock_seconds": 0}, brain) == (
+        False, "book_quarter_clock_outside_play"
+    )
+    assert basketball_live_price_sync_check(
+        {**snap, "book_current_scope": "QUARTER_2"}, {**brain, "segment_score_verified": False}
+    ) == (False, "flashscore_quarter_score_unverified")
+
+
+def test_basketball_live_synced_nba_quarter_uses_twelve_minute_clock():
+    snap = {"score_sync_mode": "exact", "book_current_scope": "QUARTER_4", "clock_seconds": 660, "league": "NBA"}
+    brain = {"scope": "QUARTER_4", "segment_score_verified": True, "break_transition": False}
+    assert basketball_live_price_sync_check(snap, brain)[0]
+    assert basketball_live_price_sync_check({**snap, "league": "Euroleague"}, brain) == (
+        False, "book_quarter_clock_outside_play"
+    )
+
+
+def test_basketball_live_blocks_quarter_score_mismatch_even_if_match_score_equal():
+    # Q1 -2 and Q2 +2 cancel in the full match, so global score can equal
+    # while the CURRENT QUARTER used to price an UNDER is still behind.
+    snap = {
+        "score_sync_mode": "exact",
+        "book_segment_score": [15, 14],
+        "flashscore_segment_score": [13, 14],
+        "book_current_scope": "QUARTER_2",
+        "clock_seconds": 240,
+        "league": "Euroleague",
+    }
+    brain = {"scope": "QUARTER_2", "segment_score_verified": True, "break_transition": False}
+    assert basketball_live_price_sync_check(snap, brain) == (
+        False, "quarter_points_mismatch"
+    )
+    assert basketball_live_price_sync_check(
+        {**snap, "flashscore_segment_score": [15, 14]}, brain
+    )[0]

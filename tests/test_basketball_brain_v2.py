@@ -817,3 +817,57 @@ def test_super_odd_1_40_does_not_loosen_regular_basketball_signals(monkeypatch):
     assert super_pick is not None
     assert super_pick["odd"] == 1.40
     assert super_pick["model_probability"] > super_pick["market_probability"]
+
+
+def test_basketball_live_rejects_under_from_first_two_minutes_of_quarter(monkeypatch):
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(2, 1), recent_poss=0.0, recent_score=0.4, payload=payload)
+    brain.update({
+        "history_points": 4,
+        "recent_window_seconds": 90.0,
+        "recent_activity_available": True,
+    })
+    # Without the guard this early quiet opening really qualifies as UNDER.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "0")
+    premature = live_signal(brain, _lane(score=(2, 1), elapsed=68, line=55.5))
+    assert premature is not None and premature["direction"] == "under"
+
+    # With guard, do not misread 01:08 of game time as a quarter-long trend.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
+    assert live_signal(
+        brain, _lane(score=(2, 1), elapsed=68, line=55.5)
+    ) is None
+    assert live_signal(
+        brain, _lane(score=(2, 1), elapsed=120, line=55.5)
+    ) is None
+
+    # A valid slow quarter may still qualify after three minutes.
+    mature = {**brain, "current_segment_score": [6, 5]}
+    later = live_signal(mature, _lane(score=(6, 5), elapsed=190, line=55.5))
+    assert later is not None
+    assert later["direction"] == "under"
+
+
+def test_basketball_live_early_over_remains_possible(monkeypatch):
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(12, 12), recent_poss=0.0, recent_score=6.0, payload=payload)
+    brain.update({
+        "history_points": 4,
+        "recent_window_seconds": 90.0,
+        "recent_activity_available": True,
+    })
+    early = live_signal(brain, _lane(score=(12, 12), elapsed=120, line=34.5))
+    assert early is not None
+    assert early["direction"] == "over"

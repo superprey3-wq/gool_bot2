@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import defaultdict
 from typing import Any
@@ -294,7 +295,9 @@ def market_lanes(decoded_by_scope: dict[str, dict[str, Any]]) -> list[dict[str, 
                     under = float(row["under"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                if not (1.02 < over < 20.0 and 1.02 < under < 20.0):
+                # No artificial min/max bookmaker odds at decoding time.
+                # Reject only invalid or unavailable two-way decimal prices.
+                if not (math.isfinite(over) and math.isfinite(under) and over > 1.0 and under > 1.0):
                     continue
                 p_over, _ = _fair_two_way(over, under)
                 lanes.append({
@@ -340,7 +343,9 @@ def prematch_parlay_market_lanes(decoded_by_scope: dict[str, dict[str, Any]], sp
                     under = float(row["under"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                if not (1.02 < over < 20.0 and 1.02 < under < 20.0):
+                # No artificial min/max bookmaker odds at decoding time.
+                # Reject only invalid or unavailable two-way decimal prices.
+                if not (math.isfinite(over) and math.isfinite(under) and over > 1.0 and under > 1.0):
                     continue
                 p_over, _ = _fair_two_way(over, under)
                 lanes.append({

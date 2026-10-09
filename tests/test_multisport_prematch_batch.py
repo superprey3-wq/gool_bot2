@@ -28,3 +28,35 @@ def test_prematch_batch_rotates_without_dropping_total_coverage(tmp_path: Path, 
     assert ids2 == {"4", "5", "6", "7"}
     assert ids3 == {"8", "9", "0", "1"}
     assert ids1 | ids2 | ids3 == {str(i) for i in range(10)}
+
+
+def test_super_pool_includes_more_than_80_fresh_priced_matches(tmp_path: Path):
+    import time
+
+    worker = MultiSportSteamWorker(tmp_path)
+    cfg = SPORTS["hockey"]
+    now = time.time()
+    for i in range(85):
+        worker._prematch_latest[cfg.key][str(i)] = {
+            "event_id": str(i),
+            "start_ts": now + 7200 + i,
+            "ts": now - 30,
+            "parlay_candidates": [{"event_id": str(i), "odd": 1.40}],
+        }
+    result = worker._scan_prematch(
+        cfg,
+        fs_today=[],
+        xbet_prematch_prefetched=[],
+        fs_price_candidates=[],
+    )
+    assert len(result["matches"]) == 80  # Telegram display only
+    assert len(result["all_day_parlay_candidates"]) == 85  # SUPER full field
+
+    worker._prematch_latest[cfg.key]["84"]["ts"] = now - 3600
+    second = worker._scan_prematch(
+        cfg,
+        fs_today=[],
+        xbet_prematch_prefetched=[],
+        fs_price_candidates=[],
+    )
+    assert len(second["all_day_parlay_candidates"]) == 84  # stale prices excluded

@@ -412,6 +412,65 @@ def reserve_candidates(*, now_ts: float | None = None) -> list[dict[str, Any]]:
     )
 
 
+def publication_funnel(*, now_ts: float | None = None) -> dict[str, dict[str, int]]:
+    """Explain why a sport has zero SUPER legs without relaxing any safety gate."""
+    now = float(now_ts or time.time())
+    payload = _read_json(pool_path(), {})
+    sources = payload.get("sources") if isinstance(payload, dict) else {}
+    sources = sources if isinstance(sources, dict) else {}
+    min_lead = max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_LEAD_SECONDS"), 300))
+    horizon = max(3600.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_HORIZON_SECONDS"), 129600))
+    require_day = _truthy("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", False)
+    today = _moscow_day(now)
+    floor = max(1.30, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD"), 1.30))
+    ceiling = min(1.50, _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD"), 1.50))
+    probability = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_PROBABILITY"), 0.68)
+    edge = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EDGE"), 0.055)
+    min_ev = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_EV"), 0.01)
+    quality = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_QUALITY"), 0.55)
+    strength = _num(os.getenv("GOOL_GLOBAL_SUPER10_RESERVE_MIN_STRENGTH"), 74)
+    stats = {}
+    for sport in SPORTS:
+        source = sources.get(sport) or {}
+        rows = source.get("candidates") or []
+        c = {
+            "raw_input": int(source.get("raw_input") or 0),
+            "price_eligible_before_cap": int(source.get("price_eligible") or 0),
+            "published": len(rows), "upcoming": 0, "in_odds": 0,
+            "probability_ok": 0, "edge_ok": 0, "ev_ok": 0,
+            "quality_ok": 0, "strength_ok": 0,
+        }
+        for row in rows:
+            start = _num(row.get("start_ts"))
+            if not (now + min_lead < start <= now + horizon):
+                continue
+            if require_day and _moscow_day(start) != today:
+                continue
+            c["upcoming"] += 1
+            odd = _num(row.get("odd"))
+            if not floor <= odd <= ceiling:
+                continue
+            c["in_odds"] += 1
+            p = _num(row.get("model_probability"))
+            if p < probability:
+                continue
+            c["probability_ok"] += 1
+            if _num(row.get("edge")) < edge:
+                continue
+            c["edge_ok"] += 1
+            if _num(row.get("expected_value"), p * odd - 1) < min_ev:
+                continue
+            c["ev_ok"] += 1
+            if _num(row.get("data_quality")) < quality:
+                continue
+            c["quality_ok"] += 1
+            if sport != "football" and _num(row.get("strength")) < strength:
+                continue
+            c["strength_ok"] += 1
+        stats[sport] = c
+    return stats
+
+
 def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
     strict = eligible_candidates(now_ts=now_ts)
     reserve = reserve_candidates(now_ts=now_ts)
@@ -433,6 +492,7 @@ def readiness_snapshot(*, now_ts: float | None = None) -> dict[str, Any]:
         "available_by_sport": merged_by,
         "missing_sports": [sport for sport in SPORTS if merged_by.get(sport, 0) <= 0],
         "need_more": max(0, target - len(merged)),
+        "publication_funnel": publication_funnel(now_ts=now_ts),
     }
 
 

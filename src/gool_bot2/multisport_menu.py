@@ -1213,9 +1213,9 @@ def _basketball_live_direction_report(rows: list[dict[str, Any]]) -> str:
     over = groups["over"]
     under = groups["under"]
     return (
-        f"↔️ <b>Направления LIVE (весь журнал)</b> · {total} ставок\\n"
+        f"↔️ <b>Направления LIVE (весь журнал)</b> · {total} ставок\n"
         f"⬆️ ТБ: {over['bets']} ({over['bets'] / total:.0%}) · ✅{over['won']}/❌{over['lost']} "
-        f"· P/L {over['profit']:+.2f}u\\n"
+        f"· P/L {over['profit']:+.2f}u\n"
         f"⬇️ ТМ: {under['bets']} ({under['bets'] / total:.0%}) · ✅{under['won']}/❌{under['lost']} "
         f"· P/L {under['profit']:+.2f}u"
     )

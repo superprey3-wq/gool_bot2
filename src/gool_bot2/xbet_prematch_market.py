@@ -16,6 +16,8 @@ from .providers.common import pair_score
 from .xbet_market_pressure import _http_json
 from .xbet_market_robust import decode_standard_markets
 from .xbet_market_memory import record_market_snapshot
+from .daily_odds_archive import DailyOddsArchive
+from .xbet_multisport_markets import iter_market_selections
 
 
 ROOTS = (
@@ -176,6 +178,8 @@ class XBetPrematchCollector:
         self.active_root = ROOTS[0]
         self._stop = threading.Event()
         self._next_poll_at: dict[str, float] = {}
+        runtime = Path(os.getenv('RUNTIME_DATA_DIR', 'data'))
+        self.daily_archive = DailyOddsArchive(Path(os.getenv('GOOL_DAILY_ODDS_DB', str(runtime / 'live' / 'daily_odds.sqlite'))))
 
     def stop(self, *_: object) -> None:
         self._stop.set()
@@ -202,7 +206,7 @@ class XBetPrematchCollector:
         *,
         known_event_ids: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        horizon = max(6 * 3600, int(os.getenv("XBET_PREMATCH_TRACK_HORIZON_SECONDS", str(26 * 3600))))
+        horizon = max(6 * 3600, int(os.getenv("XBET_PREMATCH_TRACK_HORIZON_SECONDS", str(30 * 3600))))
         maximum = max(8, min(80, int(os.getenv("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "32"))))
         known = known_event_ids or set()
         due: list[tuple[int, float, dict[str, Any]]] = []
@@ -386,8 +390,9 @@ class XBetPrematchCollector:
             # production betting shortlist. Rotate through the whole available
             # bookmaker catalogue in bounded batches; do not truncate to the
             # first 80/120 events.
-            indexed = [{**row, "root": root} for row in candidates[:track_cap]]
+            indexed = [{**row, "root": root} for row in candidates]
             indexed.sort(key=lambda row: _event_start(row.get("event") or {}) or float("inf"))
+            indexed = indexed[:track_cap]
             candidates = self._due_prematch_candidates(
                 indexed,
                 now,
@@ -414,6 +419,27 @@ class XBetPrematchCollector:
                     if not game:
                         price_failures += 1
                     else:
+                        if str(os.getenv("GOOL_DAILY_ALL_MARKETS_ENABLED", "1")).casefold() not in {"0", "false", "no", "off"}:
+                            try:
+                                # Store the RAW market groups, even when football
+                                # prediction does not support the bet type.
+                                raw_scopes = {"FULL_MATCH": {"raw": iter_market_selections(game)}}
+                                for idx, sub in enumerate(game.get("SG") or []):
+                                    if not isinstance(sub, dict):
+                                        continue
+                                    part = iter_market_selections(sub)
+                                    if part:
+                                        raw_scopes[f"SUBGAME_{sub.get('I') or idx}"] = {"raw": part}
+                                event = row.get("event") or {}
+                                self.daily_archive.record(
+                                    sport="football", event_id=str(row["event_id"]),
+                                    fs={"flashscore_event_id": "", "start_ts": _event_start(event) or 0,
+                                        "home": row["home"], "away": row["away"]},
+                                    decoded=raw_scopes,
+                                    heartbeat_seconds=max(300, float(os.getenv("GOOL_DAILY_MARKET_HEARTBEAT_SECONDS", "1800"))),
+                                )
+                            except Exception as exc:
+                                print(f"GOOL_FOOTBALL_DAILY_ARCHIVE_ERROR event={row.get('event_id')} {type(exc).__name__}:{exc}", flush=True)
                         markets = decode_standard_markets(game)
                         if not _usable_snapshot(markets):
                             price_failures += 1

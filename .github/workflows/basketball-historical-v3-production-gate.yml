@@ -8,6 +8,7 @@ on:
       - src/gool_bot2/hockey_brain_v2.py
       - tests/test_hockey_brain_v2.py
       - tests/test_xbet_multisport_steam.py
+      - tests/test_segment_memory_live_totals.py
       - src/gool_bot2/xbet_multisport_steam.py
       - tests/test_basketball_historical_v3.py
       - .github/workflows/basketball-historical-v3-production-gate.yml

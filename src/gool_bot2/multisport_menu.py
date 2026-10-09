@@ -1186,6 +1186,41 @@ def basketball_journal_text(limit: int = 16, phase: str | None = None) -> str:
     return sport_journal_text("basketball", limit=limit, phase=phase)
 
 
+def _basketball_live_direction_report(rows: list[dict[str, Any]]) -> str:
+    """Historical published basketball LIVE ТБ/ТМ balance and settlement."""
+    groups = {
+        "over": {"bets": 0, "won": 0, "lost": 0, "pending": 0, "profit": 0.0},
+        "under": {"bets": 0, "won": 0, "lost": 0, "pending": 0, "profit": 0.0},
+    }
+    for row in rows:
+        selection = str(row.get("selection") or "").upper()
+        direction = str(row.get("direction") or "").casefold()
+        if direction not in groups:
+            direction = "under" if "ТМ" in selection else "over" if "ТБ" in selection else ""
+        if direction not in groups:
+            continue
+        bucket = groups[direction]
+        bucket["bets"] += 1
+        status = str(row.get("result") or "").lower()
+        if status in {"won", "lost"}:
+            bucket[status] += 1
+            bucket["profit"] += float(row.get("profit_units") or 0.0)
+        elif status == "pending":
+            bucket["pending"] += 1
+    total = groups["over"]["bets"] + groups["under"]["bets"]
+    if total == 0:
+        return "↔️ Направления LIVE: опубликованных ТБ/ТМ пока нет."
+    over = groups["over"]
+    under = groups["under"]
+    return (
+        f"↔️ <b>Направления LIVE (весь журнал)</b> · {total} ставок\\n"
+        f"⬆️ ТБ: {over['bets']} ({over['bets'] / total:.0%}) · ✅{over['won']}/❌{over['lost']} "
+        f"· P/L {over['profit']:+.2f}u\\n"
+        f"⬇️ ТМ: {under['bets']} ({under['bets'] / total:.0%}) · ✅{under['won']}/❌{under['lost']} "
+        f"· P/L {under['profit']:+.2f}u"
+    )
+
+
 def sport_phase_report_text(sport: str) -> str:
     if sport not in SPORT_META:
         return multisport_report_text()
@@ -1201,12 +1236,14 @@ def sport_phase_report_text(sport: str) -> str:
         if _row_phase(row) == "LIVE" and not _is_parlay_row(row)
     ]
     prematch_policy, live_policy = policy_text_ru(sport)
+    directions = _basketball_live_direction_report(live) if sport == "basketball" else ""
     return (
         f"📊 <b>{icon} {title} · ОТДЕЛЬНЫЙ ОТЧЁТ</b>\n\n"
         f"🟡 <b>PREMATCH</b> · {_record_text(prematch)}\n"
         f"Рынки: {prematch_policy}\n\n"
         f"🔴 <b>LIVE</b> · {_record_text(live)}\n"
-        f"Рынки: {live_policy}\n\n"
+        f"Рынки: {live_policy}\n"
+        f"{directions}\n\n"
         f"🔗 <b>ЭКСПРЕССЫ</b> · {_record_text(parlays)}"
     )
 

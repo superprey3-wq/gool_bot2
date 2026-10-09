@@ -258,6 +258,3 @@ def test_hockey_live_rejects_full_match_total_even_with_period_memory():
     }
     signal = hockey_live_signal(brain, lane)
     assert signal is None  # LIVE policy: only current-period totals
-    assert signal["direction"] == "under"
-    assert signal["projected_total"] < 8.5
-    assert signal["segment_h2h_n"] == 4

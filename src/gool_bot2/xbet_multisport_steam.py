@@ -27,6 +27,7 @@ from .storage_runtime import trim_file_tail
 from .multisport_journal import append_unique, load_journal, save_journal
 from .multisport_parlay import build_sport_parlays
 from .multisport_parlay_card import render_multisport_parlay_card
+from .daily_odds_archive import DailyOddsArchive, match_day, select_due_events
 from .global_super10 import (
     enabled as global_super_enabled,
     publish_candidates as publish_global_super_candidates,
@@ -1720,6 +1721,11 @@ class MultiSportSteamWorker:
         self._subgame_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._scope_scores: dict[str, dict[str, tuple[int, int]]] = defaultdict(dict)
         self._prematch_cursor: dict[str, int] = defaultdict(int)
+        self._fs_prematch_cursor: dict[str, int] = defaultdict(int)
+        self._fs_prematch_candidate_cache: dict[str, dict[str, tuple[float, dict[str, Any]]]] = defaultdict(dict)
+        self._super_price_cursor: dict[str, int] = defaultdict(int)
+        self._daily_odds_archive = DailyOddsArchive(Path(os.getenv("GOOL_DAILY_ODDS_DB", str(runtime / "live" / "daily_odds.sqlite"))))
+        self._last_daily_odds_prune = 0.0
         self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
         self._fs_live_stats_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -1824,6 +1830,7 @@ class MultiSportSteamWorker:
             f"f_{cfg.flashscore_id}_-1_3_en_1",
             f"f_{cfg.flashscore_id}_0_3_en_1",
             f"f_{cfg.flashscore_id}_0_0_en_1",
+            f"f_{cfg.flashscore_id}_1_3_en_1",  # include tomorrow for midnight rollover
         ):
             body = self._flashscore._feed(path)
             if not body:
@@ -2379,11 +2386,27 @@ class MultiSportSteamWorker:
             else 32
         )
         price_max = max(1, min(scan_max, _int_env("GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT", price_default)))
-        rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))[:scan_max]
-        if not rows:
+        # Survey the complete upcoming field over successive cycles. Retain recent
+        # Brain results so the shortlist is ranked across the day, not merely the
+        # earliest scan_max fixtures. Deep history still has a bounded budget.
+        all_rows = sorted(fs_upcoming, key=lambda row: float(row.get("start_ts") or 0.0))
+        if not all_rows:
+            self._fs_prematch_candidate_cache[cfg.key].clear()
             return []
+        cursor = self._fs_prematch_cursor[cfg.key] % len(all_rows)
+        chunk = (all_rows + all_rows)[cursor:cursor + min(scan_max, len(all_rows))]
+        self._fs_prematch_cursor[cfg.key] = (cursor + len(chunk)) % len(all_rows)
+        cache = self._fs_prematch_candidate_cache[cfg.key]
+        valid_ids = {str(row.get("flashscore_event_id") or "") for row in all_rows}
+        for event_id in list(cache):
+            if event_id not in valid_ids:
+                cache.pop(event_id, None)
+        refresh_age = max(120.0, _float_env("GOOL_MULTISPORT_PREMATCH_BRAIN_REFRESH_SECONDS", 1800.0))
+        now_mono = time.monotonic()
+        rows = [row for row in chunk if
+                str(row.get("flashscore_event_id") or "") not in cache
+                or now_mono - cache[str(row.get("flashscore_event_id") or "")][0] >= refresh_age]
         workers = max(2, min(12, _int_env("GOOL_MULTISPORT_PREMATCH_FS_BRAIN_WORKERS", 6)))
-        analysed: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(self._flashscore_prematch_candidate, row, cfg) for row in rows]
             for future in as_completed(futures):
@@ -2392,10 +2415,13 @@ class MultiSportSteamWorker:
                 except Exception:
                     continue
                 if item:
-                    analysed.append(item)
+                    event_id = str(item.get("flashscore_event_id") or "")
+                    if event_id:
+                        cache[event_id] = (time.monotonic(), item)
         interesting = [
-            row for row in analysed
-            if str((row.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
+            item for checked, item in cache.values()
+            if time.monotonic() - checked < 2 * refresh_age
+            and str((item.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
         ]
         interesting.sort(
             key=lambda row: (
@@ -2404,7 +2430,19 @@ class MultiSportSteamWorker:
             ),
             reverse=True,
         )
-        selected = interesting[:price_max]
+        # Constantly price the strongest candidates; rotate remaining acceptable
+        # Brain fixtures so SUPER can discover better alternate markets later.
+        priority_count = min(len(interesting), max(1, price_max // 2))
+        priority = interesting[:priority_count]
+        remainder = interesting[priority_count:]
+        remaining_slots = max(0, price_max - len(priority))
+        if remainder and remaining_slots:
+            offset = self._super_price_cursor[cfg.key] % len(remainder)
+            rotated = (remainder + remainder)[offset:offset + min(remaining_slots, len(remainder))]
+            self._super_price_cursor[cfg.key] = (offset + len(rotated)) % len(remainder)
+        else:
+            rotated = []
+        selected = priority + rotated
 
         # Warm the expensive Q/P history before kickoff for the strongest
         # PREMATCH candidates. The same cache is then reused by LIVE during
@@ -4651,6 +4689,7 @@ class MultiSportSteamWorker:
             "live_analysis": live_analysis,
             "live_candidates": live_candidates,
             "prematch_candidates": prematch_candidates,
+            "fs_upcoming": fs_upcoming,
         }
 
     @staticmethod
@@ -4969,6 +5008,64 @@ class MultiSportSteamWorker:
             out.append(row)
         return out
 
+    def _archive_all_day_markets(
+        self,
+        cfg: SportConfig,
+        fs_today: list[dict[str, Any]],
+        xbet_prematch: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Market sampling does NOT depend on Brain PASS or the 10/16 pricing limit."""
+        if not _truthy("GOOL_DAILY_ALL_MARKETS_ENABLED", True):
+            return {"enabled": False}
+        now = time.time()
+        horizon = max(900.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 108000.0))
+        fixtures = [row for row in fs_today if
+                    str(row.get("coarse_status") or "") == "1" and
+                    now < float(row.get("start_ts") or 0) <= now + horizon]
+        mapped = map_xbet_to_flashscore(xbet_prematch, fixtures)
+        # Prevent same-name events from different dates being treated as one.
+        mapped = [item for item in mapped if not item[0].get("S") or
+                  abs(float(item[0].get("S") or 0) - float(item[1].get("start_ts") or 0)) <= 4 * 3600]
+        previously = self._daily_odds_archive.last_seen(cfg.key, [str(item[0].get("I") or "") for item in mapped])
+        due = select_due_events(
+            mapped, previously, now=now,
+            limit=max(1, min(80, _int_env("GOOL_DAILY_MARKET_BATCH_SIZE", 12))),
+            refresh_seconds=max(60.0, _float_env("GOOL_DAILY_MARKET_REFRESH_SECONDS", 900.0)),
+        )
+        archived = quotes = changed = failed = 0
+        workers = max(1, min(4, _int_env("GOOL_DAILY_MARKET_WORKERS", 3)))
+        def fetch(item):
+            event, fs, _reversed, _score = item
+            game = self._prematch_game(str(event.get("I") or ""), cfg)
+            if not game:
+                return fs, event, None
+            decoded, _meta = self._market_tree(game, cfg, prematch=True)
+            return fs, event, decoded
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for future in as_completed([pool.submit(fetch, item) for item in due]):
+                try:
+                    fs, event, decoded = future.result(timeout=24)
+                    if not decoded:
+                        failed += 1
+                        continue
+                    result = self._daily_odds_archive.record(
+                        sport=cfg.key, event_id=str(event["I"]), fs=fs, decoded=decoded,
+                        heartbeat_seconds=max(300, _float_env("GOOL_DAILY_MARKET_HEARTBEAT_SECONDS", 1800)),
+                    )
+                    archived += int(result["quotes"] > 0)
+                    quotes += result["quotes"]
+                    changed += result["changes"]
+                    failed += int(result["quotes"] == 0)
+                except Exception:
+                    failed += 1
+        if now - self._last_daily_odds_prune > 86400:
+            self._daily_odds_archive.prune(_int_env("GOOL_DAILY_ODDS_RETENTION_DAYS", 14), now=now)
+            self._last_daily_odds_prune = now
+        coverage = self._daily_odds_archive.coverage(cfg.key, match_day(now))
+        return {"enabled": True, "flashscore_upcoming": len(fixtures),
+                "xbet_matched": len(mapped), "sampled": archived, "sample_failures": failed,
+                "quotes": quotes, "changes": changed, **coverage}
+
     def _scan_sport(
         self,
         cfg: SportConfig,
@@ -4996,6 +5093,7 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
+        daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
         # Parlays are built from the current PREMATCH market tree, not from
         # previously recorded singles. This prevents started matches from being
         # reused and lets the parlay choose a safer alternate line.
@@ -5281,6 +5379,7 @@ class MultiSportSteamWorker:
             "prematch_parlays": prematch_parlays,
             "prematch_parlay_delivered": parlay_delivered,
             "global_super10_pool": global_super_published,
+            "daily_market_coverage": daily_market_coverage,
             "flashscore_live": len(fs_live),
             "live_brain_candidates": len(live_candidates),
             "flashscore_analysis_matches": live_analysis[:120],
@@ -5367,7 +5466,7 @@ class MultiSportSteamWorker:
                     jobs[pool.submit(self._xbet_index, cfg)] = ("live", key)
                 else:
                     prefetched_live[key] = []
-                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True) and prep.get("prematch_candidates"):
+                if _truthy("GOOL_MULTISPORT_PREMATCH_ENABLED", True) and (prep.get("prematch_candidates") or prep.get("fs_upcoming")):
                     jobs[pool.submit(self._xbet_prematch_index, cfg)] = ("prematch", key)
                 else:
                     prefetched_prematch[key] = []

@@ -801,7 +801,7 @@ def test_active_early_window_can_surface_over_but_not_under():
     assert signal["direction"] == "over"
 
 
-def test_basketball_singles_accept_1_40_independently_of_super_limits(monkeypatch):
+def test_basketball_singles_minimum_1_40_independently_of_super_limits(monkeypatch):
     monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.50")
     lane = {
         "market_family": "moneyline",
@@ -809,17 +809,22 @@ def test_basketball_singles_accept_1_40_independently_of_super_limits(monkeypatc
         "choice_key": "home",
         "scope": "FULL_MATCH",
         "line": 0.0,
-        "odd": 1.40,
+        "odd": 1.29,
         "probability": 0.58,
     }
-    # Generic singles are no longer blocked by legacy odds thresholds.
+    assert prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig") is None
+    lane["odd"] = 1.39
+    assert prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig") is None
+    lane["odd"] = 1.40
     normal_pick = prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig")
-    assert normal_pick is not None
-    assert normal_pick["odd"] == 1.40
-    # Explicit SUPER-only ranges still apply only when that pool requests them.
+    assert normal_pick is not None and normal_pick["odd"] == 1.40
+    lane["odd"] = 9.50
+    high_pick = prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig")
+    assert high_pick is not None and high_pick["odd"] == 9.50
+    lane["odd"] = 1.40
+    # Explicit SUPER-only odds ranges stay independent.
     super_pick = prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig", odds_range=(1.30, 1.50))
-    assert super_pick is not None
-    assert super_pick["odd"] == 1.40
+    assert super_pick is not None and super_pick["odd"] == 1.40
     assert super_pick["model_probability"] > super_pick["market_probability"]
 
 

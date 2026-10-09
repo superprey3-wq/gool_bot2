@@ -1,0 +1,90 @@
+name: Basketball all matches five H2H historical backtest Oct 8
+
+on:
+  push:
+    branches:
+      - audit/basketball-all-h2h-20261008
+    paths:
+      - scripts/basketball_all_h2h_backtest_20261008.py
+      - .github/workflows/basketball-all-h2h-backtest-20261008.yml
+  workflow_dispatch:
+
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - name: List every completed four-quarter basketball game from Oct 8 (Moscow)
+        run: python scripts/basketball_all_h2h_backtest_20261008.py discover
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basketball-oct8-manifest
+          path: artifacts/basket_all_h2h_20261008/manifest.json
+          retention-days: 14
+  backtest:
+    needs: discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: basketball-oct8-manifest
+          path: artifacts/basket_all_h2h_20261008
+      - name: Backtest historical five-head-to-head matches for assigned fixtures
+        env:
+          GOOL_FLASHSCORE_SEGMENT_TIMEOUT: '9'
+          GOOL_FLASHSCORE_SEGMENT_MAX_HOSTS: '2'
+        run: python scripts/basketball_all_h2h_backtest_20261008.py shard --index ${{ matrix.shard }} --total 12 --workers 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basketball-oct8-shard-${{ matrix.shard }}
+          path: artifacts/basket_all_h2h_20261008/shard_${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 14
+  report:
+    if: always() && needs.discovery.result == 'success'
+    needs: [discovery, backtest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: basketball-oct8-manifest
+          path: artifacts/basket_all_h2h_20261008
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: basketball-oct8-shard-*
+          merge-multiple: true
+          path: artifacts/basket_all_h2h_20261008
+      - name: Aggregate every evaluated fixture and audit missing history
+        run: python scripts/basketball_all_h2h_backtest_20261008.py summary
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basketball-oct8-all-results
+          path: artifacts/basket_all_h2h_20261008/
+          retention-days: 14

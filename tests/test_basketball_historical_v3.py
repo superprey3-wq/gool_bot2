@@ -109,3 +109,49 @@ def test_shrinkage_does_not_overreact_to_five_head_to_head_matches():
     assert opponent_weight(1.5)==1.125
     assert opponent_weight(.5)==.875
     assert opponent_weight(1.0)==1.0
+
+
+def test_basketball_historical_no_minimum_or_maximum_bookmaker_odds():
+    p = build_profile(FakeFlashscore(), "target", "A", "B", 1000)
+    from gool_bot2.xbet_multisport_markets import market_lanes, prematch_market_lanes
+    for odd in (1.001, 1.01, 1.2, 4.5, 25.0, 101.0):
+        lane = {
+            "scope": "QUARTER_2", "market_family": "match_total",
+            "line": 38.5, "over": odd, "under": 2.0,
+        }
+        assert screen_market(p, lane, "over")["tier"] == "PASS_8"
+        assert best_market(p, lane, phase="LIVE")["odd"] == odd
+        assert best_market(p, lane, phase="PREMATCH")["odd"] == odd
+        assert basketball_historical_market_signal(p, lane, phase="LIVE")["odd"] == odd
+        assert basketball_historical_market_signal(p, lane, phase="PREMATCH")["odd"] == odd
+        decoded = {"QUARTER_2": {"match_total": [
+            {"line": 38.5, "over": odd, "under": 2.0},
+        ]}}
+        assert len(market_lanes(decoded)) == 1
+        assert any(v["market_family"] == "match_total" for v in prematch_market_lanes(decoded, "basketball"))
+
+
+def test_invalid_odds_are_not_treated_as_available_prices():
+    p = build_profile(FakeFlashscore(), "target", "A", "B", 1000)
+    from gool_bot2.xbet_multisport_markets import market_lanes
+    for bad in (0, 0.9, 1.0, float("inf"), float("-inf"), float("nan")):
+        lane = {
+            "scope": "QUARTER_2", "market_family": "match_total",
+            "line": 38.5, "over": bad, "under": 2.0,
+        }
+        assert screen_market(p, lane, "over") is None
+        assert basketball_historical_market_signal(p, lane, phase="PREMATCH") is None
+        decoded = {"QUARTER_2": {"match_total": [{"line": 38.5, "over": bad, "under": 2.0}]}}
+        assert market_lanes(decoded) == []
+
+
+def test_parlay_range_stays_explicit_and_independent_of_singles():
+    p = build_profile(FakeFlashscore(), "target", "A", "B", 1000)
+    lane = {
+        "scope": "QUARTER_2", "market_family": "match_total",
+        "line": 38.5, "over": 25.0, "under": 2.0,
+    }
+    assert basketball_historical_market_signal(p, lane, phase="PREMATCH") is not None
+    assert basketball_historical_market_signal(
+        p, lane, phase="PREMATCH", odds_range=(1.30, 1.50),
+    ) is None

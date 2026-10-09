@@ -7,6 +7,7 @@ No in-play possessions, shot tempo or results from the fixture being predicted.
 """
 from __future__ import annotations
 
+import math
 import os
 import statistics
 import time
@@ -174,8 +175,8 @@ def build_profile(
 def screen_market(
     profile: dict[str, Any], lane: dict[str, Any], direction: str, *,
     threshold: int = 8,
-    min_odd: float = 1.45,
-    max_odd: float = 3.25,
+    min_odd: float | None = None,
+    max_odd: float | None = None,
     phase: str = "PREMATCH",
 ) -> dict[str, Any] | None:
     """Screen one actual bookmaker line; always require BOTH 10-game samples."""
@@ -214,7 +215,14 @@ def screen_market(
         odd = float(lane[direction])
     except (ValueError, TypeError, KeyError):
         return None
-    if line <= 0 or not min_odd <= odd <= max_odd:
+    # Odds are NOT a strategy filter for singles/LIVE. Only reject missing,
+    # non-finite or mathematically invalid decimal odds. Explicit ranges are
+    # still respected by the separate parlay builder.
+    if not math.isfinite(line) or line <= 0 or not math.isfinite(odd) or odd <= 1.0:
+        return None
+    if min_odd is not None and odd < min_odd:
+        return None
+    if max_odd is not None and odd > max_odd:
         return None
     groups = [profile["home_history"], profile["away_history"]]
     delta_home = sum(profile["quarters"][i]["home_delta"] for i in indices)
@@ -263,7 +271,7 @@ def screen_market(
 
 def best_market(
     profile: dict[str, Any], lane: dict[str, Any], *,
-    phase: str = "PREMATCH", min_odd: float = 1.45, max_odd: float = 3.25,
+    phase: str = "PREMATCH", min_odd: float | None = None, max_odd: float | None = None,
 ) -> dict[str, Any] | None:
     results = [
         screen_market(profile, lane, direction, phase=phase, min_odd=min_odd, max_odd=max_odd)

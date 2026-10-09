@@ -5111,7 +5111,12 @@ class MultiSportSteamWorker:
             xbet_prematch_prefetched=xbet_prematch_prefetched,
             fs_price_candidates=prematch_candidates,
         )
-        daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
+        try:
+            daily_market_coverage = self._archive_all_day_markets(cfg, fs_today, xbet_prematch_prefetched or [])
+        except Exception as exc:
+            # Archive failures must never stop LIVE or regular PREMATCH signals.
+            print(f"GOOL_DAILY_MARKET_ARCHIVE_ERROR sport={cfg.key} error={type(exc).__name__}:{exc}", flush=True)
+            daily_market_coverage = {"enabled": True, "error": type(exc).__name__}
         # Parlays are built from the current PREMATCH market tree, not from
         # previously recorded singles. This prevents started matches from being
         # reused and lets the parlay choose a safer alternate line.

@@ -742,6 +742,11 @@ def basketball_live_price_sync_check(
     """
     if str(snapshot.get("score_sync_mode") or "") != "exact":
         return False, "score_lag_between_providers"
+    book_segment = snapshot.get("book_segment_score")
+    fs_segment = snapshot.get("flashscore_segment_score")
+    if book_segment is not None and fs_segment is not None:
+        if list(book_segment) != list(fs_segment):
+            return False, "quarter_points_mismatch"
     book_scope = str(snapshot.get("book_current_scope") or "")
     fs_scope = str(brain.get("scope") or "")
     if not book_scope or not fs_scope or book_scope != fs_scope:
@@ -3719,6 +3724,12 @@ class MultiSportSteamWorker:
             "score_parts": [list(part) for part in (fs.get("score_parts") or []) if isinstance(part, (list, tuple)) and len(part) >= 2],
             "scoped_scores": {scope: [score[0], score[1]] for scope, score in scoped_scores.items()},
             "scoped_score_source": "flashscore" if fs_scoped_scores else "1xbet_fallback",
+            "book_segment_score": (
+                list(xbet_scoped_scores[fs_scope]) if fs_scope in xbet_scoped_scores else None
+            ),
+            "flashscore_segment_score": (
+                list(fs_scoped_scores[fs_scope]) if fs_scope in fs_scoped_scores else None
+            ),
             "period": _flashscore_period_label(fs_scope, str(fs.get("status_code") or "")) if fs_scope else current_period,
             "clock_seconds": _segment_clock_seconds(
                 game,

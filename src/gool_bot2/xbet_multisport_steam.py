@@ -729,6 +729,36 @@ def _score_sync_allowed(
     return dh <= side_max and da <= side_max and (dh + da) <= total_max
 
 
+
+def basketball_live_price_sync_check(
+    snapshot: dict[str, Any],
+    brain: dict[str, Any],
+) -> tuple[bool, str]:
+    """Reject unsynchronized basketball LIVE prices, not fixture discovery.
+
+    A small scoreboard drift is tolerable for mapping an event, but *not*
+    for predicting a quarter from a bookmaker's newer (or older) quote.
+    This is direction-neutral: it blocks both spurious UNDERS and OVERS.
+    """
+    if str(snapshot.get("score_sync_mode") or "") != "exact":
+        return False, "score_lag_between_providers"
+    book_scope = str(snapshot.get("book_current_scope") or "")
+    fs_scope = str(brain.get("scope") or "")
+    if not book_scope or not fs_scope or book_scope != fs_scope:
+        return False, "current_quarter_mismatch"
+    try:
+        elapsed = float(snapshot.get("clock_seconds"))
+    except (TypeError, ValueError):
+        return False, "book_quarter_clock_unavailable"
+    if not 0 < elapsed < _segment_duration_seconds(snapshot, SPORTS["basketball"]):
+        return False, "book_quarter_clock_outside_play"
+    if bool(brain.get("break_transition")):
+        return False, "quarter_break_transition"
+    if not bool(brain.get("segment_score_verified")):
+        return False, "flashscore_quarter_score_unverified"
+    return True, "exact_score_quarter_clock_synced"
+
+
 def _period(game: dict[str, Any]) -> str:
     sc = game.get("SC") or {}
     return str(sc.get("CPS") or sc.get("CP") or sc.get("I") or "LIVE").strip() or "LIVE"
@@ -3699,6 +3729,9 @@ class MultiSportSteamWorker:
             "match_clock_seconds": _clock_seconds(game),
             "xbet_score": [int(canonical[0]), int(canonical[1])],
             "score_sync_mode": "exact" if exact_score_sync else "bounded_provider_lag",
+            "book_current_scope": next(
+                iter(sorted(live_scopes_from_period(cfg.key, current_period))), ""
+            ),
             "score_sync_delta": [
                 int(fs_score[0] - canonical[0]),
                 int(fs_score[1] - canonical[1]),
@@ -5256,6 +5289,9 @@ class MultiSportSteamWorker:
 
         decoded = mismatch = failed = detected = delivered = policy_blocked = 0
         pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
+        provider_sync_blocked = 0
+        candidate_directions = {"over": 0, "under": 0}
+        sent_directions = {"over": 0, "under": 0}
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -5279,6 +5315,17 @@ class MultiSportSteamWorker:
                 pending_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 fs_brain = analysis_by_fs.get(str(row.get("flashscore_event_id") or "")) or {}
                 target_scope = str(fs_brain.get("scope") or "")
+                # Mapping may allow a few points of provider lag. LIVE pricing
+                # must not: a stale Flashscore score against a fresh 1xBet
+                # quarter line manufactures an apparent UNDER value.
+                if cfg.key == "basketball":
+                    synchronized, sync_reason = basketball_live_price_sync_check(row, fs_brain)
+                    if not synchronized:
+                        provider_sync_blocked += 1
+                        if len(diagnostics) < 6:
+                            diagnostics.append(f"basketball_live_sync:{sync_reason}")
+                        latest.append(row)
+                        continue
                 for lane in row.get("market_lanes") or []:
                     # LIVE market policy:
                     # - basketball: ONLY the current-quarter match total;
@@ -5392,6 +5439,9 @@ class MultiSportSteamWorker:
                             float(signal.get("line") or 0.0),
                         ),
                     }
+                    direction_key = str(signal.get("direction") or "")
+                    if direction_key in candidate_directions:
+                        candidate_directions[direction_key] += 1
                     pending_live_signals.append((lane_row, signal))
 
                 # Basketball LIVE is intentionally simple: at most one
@@ -5438,6 +5488,9 @@ class MultiSportSteamWorker:
                     recorded, sent = self._record_signal(selected_row, selected_signal, cfg)
                     if recorded:
                         detected += 1
+                        direction_key = str(selected_signal.get("direction") or "")
+                        if direction_key in sent_directions:
+                            sent_directions[direction_key] += 1
                         signals.append(selected_signal)
                     else:
                         duplicate_filtered += 1
@@ -5504,6 +5557,9 @@ class MultiSportSteamWorker:
             "delivered": delivered,
             "policy_blocked": policy_blocked,
             "pricing_rejected": pricing_rejected,
+            "provider_sync_blocked": provider_sync_blocked,
+            "live_direction_candidates": candidate_directions,
+            "live_direction_sent": sent_directions,
             "steam_blocked": steam_blocked,
             "matchbook_blocked": matchbook_blocked_count,
             "duplicate_filtered": duplicate_filtered,
@@ -5595,7 +5651,9 @@ class MultiSportSteamWorker:
                 f"GOOL_{key.upper()} fs={stats['flashscore_live']} brain_cand={stats.get('live_brain_candidates',0)} "
                 f"xbet={stats['xbet_live']} mapped={stats['mapped']} "
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
-                f"price_rej={stats.get('pricing_rejected',0)} steam_block={stats.get('steam_blocked',0)} "
+                f"price_rej={stats.get('pricing_rejected',0)} sync_wait={stats.get('provider_sync_blocked',0)} "
+                f"directions={stats.get('live_direction_candidates',{})}/{stats.get('live_direction_sent',{})} "
+                f"steam_block={stats.get('steam_blocked',0)} "
                 f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "
                 f"prematch={stats['flashscore_prematch']}/{stats['prematch_decoded']} "

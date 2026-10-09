@@ -80,10 +80,10 @@ def basketball_historical_market_signal(
     WATCH_7 is analysis-only. Only 8/10 on both sides can publish a signal.
     No model's statistical hit count is called a calibrated probability.
     """
-    lo, hi = odds_range or (
-        _float_env("GOOL_BASKETBALL_HISTORICAL_MIN_ODD", 1.45),
-        _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25),
-    )
+    # No coefficient/odds cap for basketball singles or LIVE. The bookmaker
+    # can offer any valid decimal odd; only the historical signal gate decides.
+    # Explicit odds_range is retained for independently curated parlay legs.
+    lo, hi = odds_range if odds_range is not None else (None, None)
     candidate = best_market(profile, lane, phase=phase, min_odd=lo, max_odd=hi)
     if not candidate:
         return None

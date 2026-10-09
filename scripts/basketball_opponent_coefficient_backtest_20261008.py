@@ -74,9 +74,24 @@ def forecast(a,b):
         result["status"]="bad_historical_time_window"
         return result
     try:
-        # Fetch team-specific H2H quarters; the original H2H baseline retained only sums.
-        # Recheck every match against the first backtest's frozen quarter totals.
-        rec=[verify_history(fs,r,a["home"],a["away"]) for r in rows]
+        # Original audit saved quarter totals and IDs, not home/away orientation.
+        # Recover it from the original Flashscore H2H event list; never guess.
+        meta=fs.fetch_match_history(a["event_id"],a["home"],a["away"],limit=40)
+        history_by_id={
+            str(m.get("event_id") or ""):m
+            for m in (meta.get("h2h") or [])
+            if m.get("event_id") and m.get("home") and m.get("away")
+        }
+        if any(str(m["event_id"]) not in history_by_id for m in rows):
+            result["status"]="h2h_orientation_metadata_missing"
+            return result
+        oriented=[
+            {**m,"home":history_by_id[str(m["event_id"])]["home"],
+                "away":history_by_id[str(m["event_id"])]["away"]}
+            for m in rows
+        ]
+        # Fetch team-specific quarter scores and verify frozen historical totals.
+        rec=[verify_history(fs,r,a["home"],a["away"]) for r in oriented]
         if any(x is None for x in rec):
             result["status"]="h2h_segment_unavailable_or_team_mismatch"
             return result

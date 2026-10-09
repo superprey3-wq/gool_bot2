@@ -213,6 +213,17 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
             "--interval",
             os.environ.get("GOOL_MULTISPORT_INTERVAL_SECONDS", "20"),
         ],
+        # Independent football book-catalog sampler. Its state is separate from
+        # the football betting daemon's shortlist state to prevent lost writes.
+        "prematch_market_archive": [
+            sys.executable,
+            "-m",
+            "gool_bot2.xbet_prematch_market",
+            "--interval",
+            os.environ.get("XBET_PREMATCH_ARCHIVE_INTERVAL_SECONDS", "120"),
+            "--state",
+            str(Path(os.environ.get("RUNTIME_DATA_DIR", "data")) / "live" / "xbet_prematch_archive_state.json"),
+        ],
         "worker": [sys.executable, "-m", "gool_bot2.storage_market_signal_worker_var"],
         "prematch": [sys.executable, "-m", "gool_bot2.v4_prematch_daemon"],
     }

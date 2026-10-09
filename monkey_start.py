@@ -330,6 +330,7 @@ def main() -> None:
     # SUPER 10 is once a day: wait for the broad archived bookmaker field.
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", "1")
     os.environ.setdefault("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE", "0.85")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", "1")
     os.environ.setdefault("XBET_MARKET_MEMORY_EPHEMERAL", "1")
     os.environ.setdefault("XBET_MARKET_MEMORY_RETENTION_DAYS", "2")
     os.environ.setdefault("XBET_MARKET_MEMORY_MAX_BYTES", str(160 * 1024 * 1024))

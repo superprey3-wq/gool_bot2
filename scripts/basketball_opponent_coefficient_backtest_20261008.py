@@ -37,17 +37,25 @@ def verify_history(fs, row, home, away):
     eid=str(row["event_id"])
     segments=fs.fetch_segment_scores(eid,"basketball")
     expected=list(row.get("quarter_totals") or [])
-    if len(expected)!=4:return None
+    if len(expected)!=4:
+        print(f"COEFF_DIAG {eid} history_missing_expected",flush=True)
+        return None
     team_a,team_b=[],[]
     h,a=str(row.get("home") or ""),str(row.get("away") or "")
     direct=same(fs,h,home) and same(fs,a,away)
     reversed_=same(fs,h,away) and same(fs,a,home)
-    if direct==reversed_:return None
+    if direct==reversed_:
+        print(f"COEFF_DIAG {eid} name_mismatch h={h!r} a={a!r} target_h={home!r} target_a={away!r} direct={direct} reverse={reversed_}",flush=True)
+        return None
     for q in range(1,5):
         pts=segments.get(f"QUARTER_{q}")
-        if not isinstance(pts,(list,tuple)) or len(pts)!=2:return None
+        if not isinstance(pts,(list,tuple)) or len(pts)!=2:
+            print(f"COEFF_DIAG {eid} no_quarter={q} got={pts} keys={list(segments)}",flush=True)
+            return None
         x,y=int(pts[0]),int(pts[1])
-        if min(x,y)<0 or x+y!=int(expected[q-1]):return None
+        if min(x,y)<0 or x+y!=int(expected[q-1]):
+            print(f"COEFF_DIAG {eid} quarter_score_mismatch q={q} fetched={[x,y]} expected={expected[q-1]}",flush=True)
+            return None
         team_a.append(x if direct else y)
         team_b.append(y if direct else x)
     return {"event_id":eid,"a":team_a,"b":team_b}

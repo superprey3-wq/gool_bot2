@@ -281,7 +281,11 @@ def prematch_signal(
     else:
         return None
 
-    min_odd, max_odd = odds_range if odds_range is not None else (\n        _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50),\n        _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25),\n    )\n    if not (min_odd <= odd <= max_odd):\n        return None
+    min_odd, max_odd = odds_range if odds_range is not None else (
+        _env_float("GOOL_MULTISPORT_MIN_ODD", 1.50),
+        _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25),
+    )\n    if not (min_odd <= odd <= max_odd):
+        return None
     edge = model_p - market_p
     if edge < 0.055 or model_p < 0.55:
         return None

@@ -127,7 +127,7 @@ class DailyOddsArchive:
                     odd = float(raw["C"])
                     if odd <= 1.0:
                         continue
-                    key = f"{g}:{'' if gs is None else int(gs)}:{t}:{'' if p is None else float(p):g}" if p is not None else f"{g}:{'' if gs is None else int(gs)}:{t}:"
+                    key = f"{g}:{'' if gs is None else int(gs)}:{t}:{float(p):g}" if p is not None else f"{g}:{'' if gs is None else int(gs)}:{t}:"
                 except (KeyError, TypeError, ValueError):
                     continue
                 yield str(scope), key, odd, int(bool(raw.get("blocked")))
@@ -170,7 +170,10 @@ class DailyOddsArchive:
                 ).fetchone()
                 reason = ("open" if old is None else
                           "change" if (abs(old[3] - odd) > 0.00001 or old[4] != blocked) else
-                          "heartbeat" if now - old[2] >= heartbeat_seconds else None)
+                          "heartbeat" if now - float((self.db.execute(
+                              "SELECT MAX(ts) FROM price_history WHERE sport=? AND xbet_id=? AND scope=? AND market_key=?",
+                              (sport, event_id, scope, key),
+                          ).fetchone() or [0])[0] or 0) >= heartbeat_seconds else None)
                 if old is None:
                     self.db.execute(
                         "INSERT INTO current_prices VALUES (?,?,?,?,?,?,?,?,?)",

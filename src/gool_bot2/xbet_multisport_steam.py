@@ -4857,6 +4857,8 @@ class MultiSportSteamWorker:
                 row for row in live_analysis
                 if str(row.get("scope") or "").startswith("QUARTER_")
                 and row.get("current_segment_score") is not None
+                and bool(row.get("segment_score_verified"))
+                and not bool(row.get("break_transition"))
             ][:live_price_max]
         else:
             live_candidates = [

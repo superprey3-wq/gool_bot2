@@ -81,7 +81,7 @@ def basketball_historical_market_signal(
     No model's statistical hit count is called a calibrated probability.
     """
     lo, hi = odds_range or (
-        _float_env("GOOL_MULTISPORT_MIN_ODD", 1.50),
+        _float_env("GOOL_BASKETBALL_HISTORICAL_MIN_ODD", 1.45),
         _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25),
     )
     candidate = best_market(profile, lane, phase=phase, min_odd=lo, max_odd=hi)
@@ -4355,6 +4355,7 @@ class MultiSportSteamWorker:
             "signal_type": (
                 "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
                 else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
+                else "basketball_historical_v3" if str(signal.get("brain_mode") or "") == "basketball_historical_v3"
                 else "basketball_live_v2" if str(signal.get("brain_mode") or "") == "basketball_live_v2"
                 else "basketball_prematch_v2" if str(signal.get("brain_mode") or "") == "basketball_prematch_v2"
                 else "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
@@ -4403,6 +4404,14 @@ class MultiSportSteamWorker:
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
+            "historical_tier": signal.get("historical_tier"),
+            "historical_home_hits": signal.get("historical_home_hits"),
+            "historical_away_hits": signal.get("historical_away_hits"),
+            "historical_correction_points": signal.get("historical_correction_points"),
+            "historical_coefficient_available": signal.get("historical_coefficient_available"),
+            "historical_coefficient_home": signal.get("historical_coefficient_home"),
+            "historical_coefficient_away": signal.get("historical_coefficient_away"),
+            "historical_probability_uncalibrated": signal.get("historical_probability_uncalibrated"),
             "push_probability": signal.get("push_probability"),
             "push_confidence_penalty": signal.get("push_confidence_penalty"),
             "edge": signal.get("edge"),

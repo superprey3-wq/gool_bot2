@@ -968,3 +968,23 @@ def test_basketball_live_synced_nba_quarter_uses_twelve_minute_clock():
     assert basketball_live_price_sync_check({**snap, "league": "Euroleague"}, brain) == (
         False, "book_quarter_clock_outside_play"
     )
+
+
+def test_basketball_live_blocks_quarter_score_mismatch_even_if_match_score_equal():
+    # Q1 -2 and Q2 +2 cancel in the full match, so global score can equal
+    # while the CURRENT QUARTER used to price an UNDER is still behind.
+    snap = {
+        "score_sync_mode": "exact",
+        "book_segment_score": [15, 14],
+        "flashscore_segment_score": [13, 14],
+        "book_current_scope": "QUARTER_2",
+        "clock_seconds": 240,
+        "league": "Euroleague",
+    }
+    brain = {"scope": "QUARTER_2", "segment_score_verified": True, "break_transition": False}
+    assert basketball_live_price_sync_check(snap, brain) == (
+        False, "quarter_points_mismatch"
+    )
+    assert basketball_live_price_sync_check(
+        {**snap, "flashscore_segment_score": [15, 14]}, brain
+    )[0]

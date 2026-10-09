@@ -488,7 +488,7 @@ def _runtime_live_audit_html(
         # does NOT gate 1xBet. The actual live_brain_candidates runtime counter
         # is authoritative, not the legacy per-match brain_state.
         if fs_ids and not cand_ids and peak("live_brain_candidates") == 0:
-            alert = "<p><b>⚠️ Не найдено кандидатов для запроса 1xBet; для Basketball V3 причина может быть в данных четверти.</b></p>"
+            alert = "<p><b>⚠️ Все увиденные LIVE-матчи были отсечены до запроса 1xBet.</b> Для Basketball V3 проверьте наличие и корректность сегмента.</p>"
         elif cand_ids and peak("xbet_live") == 0:
             alert = "<p><b>⚠️ Brain дал кандидатов, но 1xBet LIVE вернул 0 матчей.</b></p>"
         elif peak("mapped") == 0 and peak("xbet_live") > 0 and cand_ids:

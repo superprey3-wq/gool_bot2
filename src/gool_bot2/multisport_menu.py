@@ -353,6 +353,22 @@ def super10_text() -> str:
             f"🏀 {int(by_sport.get('basketball') or 0)}"
         ),
     ]
+    if str(os.getenv("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", "0")).casefold() in {"1", "true", "yes", "on"}:
+        try:
+            from .global_super10 import day_market_readiness
+            coverage = day_market_readiness()
+            sport_lines = []
+            for sport, icon in (("football", "⚽"), ("hockey", "🏒"), ("basketball", "🏀")):
+                data = (coverage.get("sports") or {}).get(sport) or {}
+                sport_lines.append(
+                    f"{icon} {int(data.get('archived') or 0)}/{int(data.get('expected') or 0)} "
+                    f"({100 * float(data.get('ratio') or 0):.0f}%)"
+                )
+            lines.append("📥 Сбор линии · " + " · ".join(sport_lines))
+            if not coverage.get("ready"):
+                lines.append("⏳ Ждём покрытия 1xBet перед отправкой экспресса.")
+        except Exception:
+            lines.append("⚠️ Статистика полного сбора линии недоступна.")
     if missing:
         names = {"football": "футбол", "hockey": "хоккей", "basketball": "баскетбол"}
         lines.append("⚠️ Нет подходящих ног: " + ", ".join(names.get(x, x) for x in missing))

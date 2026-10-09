@@ -817,3 +817,52 @@ def test_super_odd_1_40_does_not_loosen_regular_basketball_signals(monkeypatch):
     assert super_pick is not None
     assert super_pick["odd"] == 1.40
     assert super_pick["model_probability"] > super_pick["market_probability"]
+
+
+def test_basketball_live_rejects_under_from_first_two_minutes_of_quarter(monkeypatch):
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(4, 3), recent_poss=0.0, recent_score=1.5, payload=payload)
+    brain.update({
+        "history_points": 4,
+        "recent_window_seconds": 90.0,
+        "recent_activity_available": True,
+    })
+    # Exactly the user-reported failure mode: early low score, generous
+    # bookmaker quarter line, and a huge model UNDER edge after 01:08.
+    assert live_signal(
+        brain, _lane(score=(4, 3), elapsed=68, line=55.5)
+    ) is None
+    assert live_signal(
+        brain, _lane(score=(4, 3), elapsed=120, line=55.5)
+    ) is None
+
+    # A valid slow quarter can still produce UNDER after 3 minutes.
+    mature = {**brain, "current_segment_score": [6, 5]}
+    later = live_signal(mature, _lane(score=(6, 5), elapsed=190, line=55.5))
+    assert later is not None
+    assert later["direction"] == "under"
+
+
+def test_basketball_live_early_over_remains_possible(monkeypatch):
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
+    payload = {
+        "current_segment_available": True,
+        "stats_mode": "direct_segment",
+        "segment_stats": {},
+        "segment_attempts": {},
+    }
+    brain = _brain(current=(12, 12), recent_poss=0.0, recent_score=6.0, payload=payload)
+    brain.update({
+        "history_points": 4,
+        "recent_window_seconds": 90.0,
+        "recent_activity_available": True,
+    })
+    early = live_signal(brain, _lane(score=(12, 12), elapsed=120, line=34.5))
+    assert early is not None
+    assert early["direction"] == "over"

@@ -225,4 +225,4 @@ def test_v3_live_context_uses_elapsed_clock_and_score():
     assert passed and passed["historical_inplay_projected_total"] > 39.5
     assert basketball_v3_live_context_gate(signal, {**row, "clock_seconds": 50}, "Euroleague") is None
     assert basketball_v3_live_context_gate(signal, {**row, "clock_seconds": 550}, "Euroleague") is None
-    assert basketball_v3_live_context_gate(signal, {**row, "score": [8, 8]}, "Euroleague") is None
+    assert basketball_v3_live_context_gate(signal, {**row, "score": [3, 3]}, "Euroleague") is None

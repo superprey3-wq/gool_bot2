@@ -4578,72 +4578,95 @@ class MultiSportSteamWorker:
                         if not allowed:
                             continue
                         lane_row = self._lane_row(row, parlay_lane)
-                        if cfg.key == "hockey":
-                            parlay_signal = hockey_prematch_v2_signal(
-                                lane_row,
-                                dict(row.get("sport_context") or {}),
-                                str(row.get("league") or ""),
-                                dict(row.get("segment_memory") or {}),
-                                odds_range=(parlay_min_odd, parlay_max_odd),
+                        # Keep normal sports parlays and GLOBAL SUPER separate:
+                        # regular lines can be 1.45-1.70, global safe lines 1.30-1.50.
+                        super_min_odd = max(1.30, min(
+                            _float_env("GOOL_GLOBAL_SUPER10_MIN_ODD", 1.30),
+                            _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MIN_ODD", 1.30),
+                        ))
+                        super_max_odd = min(1.50, max(
+                            _float_env("GOOL_GLOBAL_SUPER10_MAX_ODD", 1.50),
+                            _float_env("GOOL_GLOBAL_SUPER10_RESERVE_MAX_ODD", 1.50),
+                        ))
+                        model_ranges = [(parlay_min_odd, parlay_max_odd)]
+                        if global_super_enabled():
+                            model_ranges.append((super_min_odd, super_max_odd))
+                        for model_odds_range in model_ranges:
+                            if cfg.key == "hockey":
+                                parlay_signal = hockey_prematch_v2_signal(
+                                    lane_row,
+                                    dict(row.get("sport_context") or {}),
+                                    str(row.get("league") or ""),
+                                    dict(row.get("segment_memory") or {}),
+                                    odds_range=model_odds_range,
+                                )
+                            else:
+                                parlay_signal = basketball_prematch_v2_signal(
+                                    lane_row,
+                                    dict(row.get("sport_context") or {}),
+                                    str(row.get("league") or ""),
+                                    dict(row.get("segment_memory") or {}),
+                                    odds_range=model_odds_range,
+                                )
+                            if parlay_signal is None:
+                                continue
+                            direction = str(parlay_signal.get("direction") or "over")
+                            selection = str(
+                                parlay_signal.get("selection")
+                                or lane_row.get("selection")
+                                or selection_label(
+                                    lane_row,
+                                    direction,
+                                    float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                                )
                             )
-                        else:
-                            parlay_signal = basketball_prematch_v2_signal(
-                                lane_row,
-                                dict(row.get("sport_context") or {}),
-                                str(row.get("league") or ""),
-                                dict(row.get("segment_memory") or {}),
-                                odds_range=(parlay_min_odd, parlay_max_odd),
-                            )
-                        if parlay_signal is None:
-                            continue
-                        direction = str(parlay_signal.get("direction") or "over")
-                        selection = str(
-                            parlay_signal.get("selection")
-                            or lane_row.get("selection")
-                            or selection_label(
-                                lane_row,
-                                direction,
-                                float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
-                            )
-                        )
-                        parlay_candidates.append({
-                            "entry_id": (
-                                f"{cfg.key}:parlay-safe:{row.get('flashscore_event_id') or row.get('event_id')}:"
-                                f"{lane_row.get('scope')}:{lane_row.get('market_family')}:{selection}"
-                            ),
-                            "event_id": str(row.get("event_id") or ""),
-                            "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
-                            "sport": cfg.key,
-                            "phase": "PREMATCH",
-                            "result": "pending",
-                            "home": str(row.get("home") or "?"),
-                            "away": str(row.get("away") or "?"),
-                            "league": str(row.get("league") or ""),
-                            "home_logo_file": str(row.get("home_logo_file") or ""),
-                            "away_logo_file": str(row.get("away_logo_file") or ""),
-                            "home_team_id": str(row.get("home_team_id") or ""),
-                            "away_team_id": str(row.get("away_team_id") or ""),
-                            "home_team_slug": str(row.get("home_team_slug") or ""),
-                            "away_team_slug": str(row.get("away_team_slug") or ""),
-                            "scope": str(lane_row.get("scope") or SCOPE_FULL),
-                            "market_family": str(lane_row.get("market_family") or "match_total"),
-                            "selection": selection,
-                            "direction": direction,
-                            "selection_side": str(parlay_signal.get("selection_side") or lane_row.get("selection_side") or ""),
-                            "line": float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
-                            "odd": float(parlay_signal.get("odd") or 0.0),
-                            "strength": float(parlay_signal.get("strength") or 0.0),
-                            "fair_probability": float(parlay_signal.get("fair_probability") or 0.0),
-                            "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
-                            "market_probability": float(parlay_signal.get("market_probability") or 0.0),
-                            "edge": float(parlay_signal.get("edge") or 0.0),
-                            "data_quality": float(parlay_signal.get("data_quality") or 0.0),
-                            "push_probability": float(parlay_signal.get("push_probability") or 0.0),
-                            "start_ts": float(row.get("start_ts") or 0.0),
-                            "scheduled_start_ts": float(row.get("start_ts") or 0.0),
-                            "parlay_safe": True,
-                        })
-                row["parlay_candidates"] = parlay_candidates
+                            parlay_candidates.append({
+                                "entry_id": (
+                                    f"{cfg.key}:parlay-safe:{row.get('flashscore_event_id') or row.get('event_id')}:"
+                                    f"{lane_row.get('scope')}:{lane_row.get('market_family')}:{selection}"
+                                ),
+                                "event_id": str(row.get("event_id") or ""),
+                                "flashscore_event_id": str(row.get("flashscore_event_id") or ""),
+                                "sport": cfg.key,
+                                "phase": "PREMATCH",
+                                "result": "pending",
+                                "home": str(row.get("home") or "?"),
+                                "away": str(row.get("away") or "?"),
+                                "league": str(row.get("league") or ""),
+                                "home_logo_file": str(row.get("home_logo_file") or ""),
+                                "away_logo_file": str(row.get("away_logo_file") or ""),
+                                "home_team_id": str(row.get("home_team_id") or ""),
+                                "away_team_id": str(row.get("away_team_id") or ""),
+                                "home_team_slug": str(row.get("home_team_slug") or ""),
+                                "away_team_slug": str(row.get("away_team_slug") or ""),
+                                "scope": str(lane_row.get("scope") or SCOPE_FULL),
+                                "market_family": str(lane_row.get("market_family") or "match_total"),
+                                "selection": selection,
+                                "direction": direction,
+                                "selection_side": str(parlay_signal.get("selection_side") or lane_row.get("selection_side") or ""),
+                                "line": float(parlay_signal.get("line") or lane_row.get("line") or 0.0),
+                                "odd": float(parlay_signal.get("odd") or 0.0),
+                                "strength": float(parlay_signal.get("strength") or 0.0),
+                                "fair_probability": float(parlay_signal.get("fair_probability") or 0.0),
+                                "model_probability": float(parlay_signal.get("model_probability") or parlay_signal.get("fair_probability") or 0.0),
+                                "market_probability": float(parlay_signal.get("market_probability") or 0.0),
+                                "edge": float(parlay_signal.get("edge") or 0.0),
+                                "data_quality": float(parlay_signal.get("data_quality") or 0.0),
+                                "push_probability": float(parlay_signal.get("push_probability") or 0.0),
+                                "start_ts": float(row.get("start_ts") or 0.0),
+                                "scheduled_start_ts": float(row.get("start_ts") or 0.0),
+                                "parlay_safe": True,
+                            })
+                deduped_parlay = {
+                    (
+                        str(candidate.get("scope") or ""),
+                        str(candidate.get("market_family") or ""),
+                        str(candidate.get("selection") or ""),
+                        round(float(candidate.get("odd") or 0.0), 4),
+                    ): candidate
+                    for candidate in parlay_candidates
+                }
+                row["parlay_candidates"] = list(deduped_parlay.values())
 
                 signals: list[dict[str, Any]] = []
                 primary = select_prematch_primary(candidates, recent_families, cfg.key)

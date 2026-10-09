@@ -857,6 +857,42 @@ def reconcile_global_super10(*, deliver_result: bool = False) -> dict[str, Any]:
         "delivery_pending": still_pending,
     }
 
+def day_market_readiness(*, now_ts: float | None = None) -> dict[str, Any]:
+    """Require broad bookmaker coverage before assembling a once-per-day SUPER.
+
+    Coverage counts are bookmaker-observed fixtures, not a promise that
+    unavailable/undecoded markets magically have prices.
+    """
+    day = _moscow_day(now_ts)
+    needed = min(1.0, max(0.0, _num(os.getenv("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE"), 0.85)))
+    runtime = _runtime() / "live"
+    football = _read_json(runtime / "xbet_prematch_archive_state.json", {})
+    multi_path = Path(os.getenv("GOOL_MULTISPORT_STATE", str(runtime / "gool_multisport_state.json")))
+    multi = _read_json(multi_path, {})
+    details: dict[str, Any] = {}
+    for sport in SPORTS:
+        if sport == "football":
+            current_day = str(football.get("archive_day") or "")
+            target = int(football.get("archive_catalog_today") or 0)
+            actual = int((football.get("archive_coverage") or {}).get("archived_matches") or 0)
+        else:
+            item = ((multi.get("sports") or {}).get(sport) or {}).get("daily_market_coverage") or {}
+            current_day = str(item.get("day") or "")
+            target = int(item.get("matched_today") or 0)
+            actual = int(item.get("archived_matches") or 0)
+        ratio = min(1.0, actual / target) if target > 0 and current_day == day else 0.0
+        details[sport] = {
+            "expected": target if current_day == day else 0,
+            "archived": actual if current_day == day else 0,
+            "ratio": round(ratio, 4),
+            "ready": current_day == day and target > 0 and ratio >= needed,
+        }
+    return {
+        "day": day, "required_ratio": needed, "ready": all(x["ready"] for x in details.values()),
+        "sports": details,
+    }
+
+
 def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
     reconcile_global_super10(deliver_result=bool(delivery_enabled))
     if not enabled():
@@ -886,6 +922,10 @@ def maybe_deliver_global_super10(*, delivery_enabled: bool) -> dict[str, Any]:
             ticket = pending_ticket
             retrying = True
         else:
+            if _truthy("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", False):
+                completeness = day_market_readiness(now_ts=now)
+                if not completeness["ready"]:
+                    return {"status": "warming_odds_archive", "day": day, "market_coverage": completeness}
             ticket = build_global_super10(now_ts=now)
             retrying = False
             if ticket is None:

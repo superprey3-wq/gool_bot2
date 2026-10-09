@@ -372,6 +372,25 @@ def super10_text() -> str:
     if missing:
         names = {"football": "футбол", "hockey": "хоккей", "basketball": "баскетбол"}
         lines.append("⚠️ Нет подходящих ног: " + ", ".join(names.get(x, x) for x in missing))
+        funnels = readiness.get("publication_funnel") or {}
+        stage_labels = (
+            ("published", "рынки не опубликованы"),
+            ("upcoming", "нет свежих матчей текущего дня"),
+            ("in_odds", "нет коэффициентов 1.30–1.50"),
+            ("probability_ok", "не достигнута вероятность"),
+            ("edge_ok", "не достигнут edge"),
+            ("ev_ok", "не достигнут EV"),
+            ("quality_ok", "не хватает качества статистики"),
+            ("strength_ok", "не хватает силы сигнала"),
+        )
+        for sport in missing:
+            detail = funnels.get(sport) or {}
+            reason = next((title for key, title in stage_labels if int(detail.get(key) or 0) == 0), "дальнейшая фильтрация")
+            lines.append(
+                f"↳ {names.get(sport, sport)}: вход {int(detail.get('raw_input') or 0)}, "
+                f"коэф. в диапазоне {int(detail.get('price_eligible_before_cap') or 0)}, "
+                f"опубликовано {int(detail.get('published') or 0)} · {reason}"
+            )
     need_more = int(readiness.get("need_more") or 0)
     if need_more > 0:
         lines.append(f"⏳ До сборки не хватает: <b>{need_more}</b>")

@@ -1,0 +1,29 @@
+name: Basketball historical v3 production gate
+
+on:
+  push:
+    branches: [feature/basketball-historical-7-8-production]
+    paths:
+      - src/gool_bot2/basketball_historical_v3.py
+      - src/gool_bot2/xbet_multisport_steam.py
+      - tests/test_basketball_historical_v3.py
+      - .github/workflows/basketball-historical-v3-production-gate.yml
+  workflow_dispatch:
+
+jobs:
+  offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Validate new code and existing basketball test suite
+        run: |
+          python -m py_compile src/gool_bot2/basketball_historical_v3.py src/gool_bot2/xbet_multisport_steam.py
+          pytest -q tests/test_basketball_historical_v3.py tests/test_basketball_brain_v2.py tests/test_multisport_prematch_choices.py tests/test_multisport_prematch_batch.py tests/test_multisport_prematch_markets.py tests/test_multisport_live_would_send_audit.py tests/test_segment_memory_live_totals.py
+      - name: Offline full suite
+        run: pytest -q

@@ -2983,6 +2983,17 @@ class MultiSportSteamWorker:
         ]
 
     def _xbet_prematch_index(self, cfg: SportConfig) -> list[dict[str, Any]]:
+        # Index discovery is shared by full-day archiving and signal selection.
+        # Do not hit every LineFeed root on every 20-second brain cycle.
+        cached_at, cached_rows = self._last_prematch_index.get(cfg.key, (0.0, []))
+        refresh = max(30.0, _float_env("GOOL_MULTISPORT_PREMATCH_INDEX_REFRESH_SECONDS", 120.0))
+        if cached_rows and time.monotonic() - cached_at < refresh:
+            self._prematch_index_diag[cfg.key] = {
+                "ok": True, "raw": len(cached_rows), "usable": len(cached_rows),
+                "cache": True, "cache_age_seconds": round(time.monotonic() - cached_at, 1),
+                "root": self._prematch_roots[cfg.key],
+            }
+            return [dict(item) for item in cached_rows]
         roots = [self._prematch_roots[cfg.key], *[root for root in PREMATCH_ROOTS if root != self._prematch_roots[cfg.key]]]
         attempts: list[dict[str, Any]] = []
         merged: dict[str, dict[str, Any]] = {}
@@ -5024,8 +5035,15 @@ class MultiSportSteamWorker:
                     now < float(row.get("start_ts") or 0) <= now + horizon]
         mapped = map_xbet_to_flashscore(xbet_prematch, fixtures)
         # Prevent same-name events from different dates being treated as one.
-        mapped = [item for item in mapped if not item[0].get("S") or
-                  abs(float(item[0].get("S") or 0) - float(item[1].get("start_ts") or 0)) <= 4 * 3600]
+        def same_kickoff(item):
+            try:
+                timestamp = float(item[0].get("S") or 0)
+                if timestamp > 10**12:
+                    timestamp /= 1000
+                return timestamp <= 0 or abs(timestamp - float(item[1].get("start_ts") or 0)) <= 4 * 3600
+            except (ValueError, TypeError):
+                return True
+        mapped = [item for item in mapped if same_kickoff(item)]
         previously = self._daily_odds_archive.last_seen(cfg.key, [str(item[0].get("I") or "") for item in mapped])
         due = select_due_events(
             mapped, previously, now=now,

@@ -5547,20 +5547,11 @@ class MultiSportSteamWorker:
                         and lane_scope == target_scope
                         and lane_family == "match_total"
                     )
-                    is_full_projection = bool(
-                        lane_scope == SCOPE_FULL
-                        and lane_family in {"match_total", "home_total", "away_total"}
-                    )
-                    allowed_live_lane = (
-                        is_current_segment
-                        if cfg.key == "basketball"
-                        else is_current_segment
-                    )
-                    if not allowed_live_lane:
+                    if not is_current_segment:
                         policy_blocked += 1
                         continue
                     policy_reason = "flashscore_brain_current_segment"
-                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
+                    lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history, score_changed_at = self._append_history(lane_row, cfg)
                     market_steam = detect_steam(
                         history,

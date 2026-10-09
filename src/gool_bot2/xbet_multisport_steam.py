@@ -5079,7 +5079,12 @@ class MultiSportSteamWorker:
         if now - self._last_daily_odds_prune > 86400:
             self._daily_odds_archive.prune(_int_env("GOOL_DAILY_ODDS_RETENTION_DAYS", 14), now=now)
             self._last_daily_odds_prune = now
-        coverage = self._daily_odds_archive.coverage(cfg.key, match_day(now))
+        today = match_day(now)
+        coverage = self._daily_odds_archive.coverage(cfg.key, today)
+        matched_today = sum(1 for _event, fs, _rev, _quality in mapped if match_day(float(fs.get("start_ts") or 0)) == today)
+        coverage["day"] = today
+        coverage["matched_today"] = matched_today
+        coverage["coverage_rate"] = round(min(1.0, coverage["archived_matches"] / matched_today), 4) if matched_today else 0.0
         return {"enabled": True, "flashscore_upcoming": len(fixtures),
                 "xbet_matched": len(mapped), "sampled": archived, "sample_failures": failed,
                 "quotes": quotes, "changes": changed, **coverage}

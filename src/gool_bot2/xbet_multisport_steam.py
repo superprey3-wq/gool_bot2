@@ -5307,7 +5307,7 @@ class MultiSportSteamWorker:
         pricing_rejected = steam_blocked = matchbook_blocked_count = duplicate_filtered = 0
         provider_sync_blocked = 0
         candidate_directions = {"over": 0, "under": 0}
-        sent_directions = {"over": 0, "under": 0}
+        recorded_directions = {"over": 0, "under": 0}
         latest: list[dict[str, Any]] = []
         diagnostics: list[str] = []
         workers = max(2, min(16, _int_env("XBET_MULTISPORT_GAME_WORKERS", 8)))
@@ -5505,8 +5505,8 @@ class MultiSportSteamWorker:
                     if recorded:
                         detected += 1
                         direction_key = str(selected_signal.get("direction") or "")
-                        if direction_key in sent_directions:
-                            sent_directions[direction_key] += 1
+                        if direction_key in recorded_directions:
+                            recorded_directions[direction_key] += 1
                         signals.append(selected_signal)
                     else:
                         duplicate_filtered += 1
@@ -5575,7 +5575,7 @@ class MultiSportSteamWorker:
             "pricing_rejected": pricing_rejected,
             "provider_sync_blocked": provider_sync_blocked,
             "live_direction_candidates": candidate_directions,
-            "live_direction_sent": sent_directions,
+            "live_direction_recorded": recorded_directions,
             "steam_blocked": steam_blocked,
             "matchbook_blocked": matchbook_blocked_count,
             "duplicate_filtered": duplicate_filtered,
@@ -5668,7 +5668,7 @@ class MultiSportSteamWorker:
                 f"xbet={stats['xbet_live']} mapped={stats['mapped']} "
                 f"decoded={stats['decoded']} mismatch={stats['score_mismatch']} decode_fail={stats['market_decode_failed']} "
                 f"price_rej={stats.get('pricing_rejected',0)} sync_wait={stats.get('provider_sync_blocked',0)} "
-                f"directions={stats.get('live_direction_candidates',{})}/{stats.get('live_direction_sent',{})} "
+                f"directions={stats.get('live_direction_candidates',{})}/{stats.get('live_direction_recorded',{})} "
                 f"steam_block={stats.get('steam_blocked',0)} "
                 f"matchbook_block={stats.get('matchbook_blocked',0)} dup={stats.get('duplicate_filtered',0)} "
                 f"live_signals={stats['detected']} prematch_signals={stats['prematch_detected']} "

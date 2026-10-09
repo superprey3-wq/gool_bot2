@@ -51,6 +51,7 @@ from .basketball_brain_v2 import (
     recent_possession_metrics as basketball_recent_possession_metrics,
 )
 from .segment_memory import build_segment_memory, segment_prior
+from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
@@ -68,6 +69,55 @@ from .xbet_multisport_markets import (
     scope_from_subgame,
     selection_label,
 )
+
+
+def basketball_historical_market_signal(
+    profile: dict[str, Any], lane: dict[str, Any], *,
+    phase: str, odds_range: tuple[float, float] | None = None,
+) -> dict[str, Any] | None:
+    """Selection uses independent historical A/B totals on the actual 1xBet line.
+
+    WATCH_7 is analysis-only. Only 8/10 on both sides can publish a signal.
+    No model's statistical hit count is called a calibrated probability.
+    """
+    lo, hi = odds_range or (
+        _float_env("GOOL_BASKETBALL_HISTORICAL_MIN_ODD", 1.45),
+        _float_env("GOOL_MULTISPORT_MAX_ODD", 3.25),
+    )
+    candidate = best_market(profile, lane, phase=phase, min_odd=lo, max_odd=hi)
+    if not candidate:
+        return None
+    # Keep strength as ranking only, NOT claimed prediction accuracy.
+    min_hits = min(int(candidate["home_hits"]), int(candidate["away_hits"]))
+    strength = round(min(89.0, 75.0 + 3.0 * (min_hits - 7) + min(8.0, candidate["margin"])), 1)
+    direction = str(candidate["direction"])
+    odd = float(candidate["odd"])
+    # Conservative Beta(4,4)-style shrinkage of the historical hit count.
+    # This is a RANKING PROXY, not a calibrated probability of winning.
+    proxy = (min_hits + 4.0) / 18.0
+    implied = 1.0 / odd
+    return {
+        "phase": phase, "brain_mode": "basketball_historical_v3",
+        "direction": direction, "line": float(candidate["line"]), "odd": odd,
+        "strength": strength, "metric_delta": candidate["margin"],
+        "stat_edge": candidate["margin"],
+        "projected_total": candidate["expected"],
+        "historical_tier": candidate["tier"],
+        "historical_home_hits": candidate["home_hits"],
+        "historical_away_hits": candidate["away_hits"],
+        "historical_coefficient_available": candidate["opponent_coefficient_available"],
+        "historical_correction_points": candidate["correction_points"],
+        "historical_coefficient_home": candidate["coefficient_home"],
+        "historical_coefficient_away": candidate["coefficient_away"],
+        "market_confirmed": True,
+        # A shrunk historical ranking proxy, NEVER 8/10 => 80% true chance.
+        "market_probability": round(implied, 5),
+        "fair_probability": round(proxy, 5),
+        "model_probability": round(proxy, 5),
+        "historical_probability_uncalibrated": True,
+        "edge": round(proxy - implied, 5),
+        "start": {}, "end": dict(lane),
+    }
 
 
 @dataclass(frozen=True)
@@ -1763,6 +1813,7 @@ class MultiSportSteamWorker:
         self._last_daily_odds_prune = 0.0
         self._prematch_latest: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self._flashscore = FlashscoreProvider()
+        self._basketball_historical = HistoricalProfileCache(self._flashscore)
         self._fs_live_stats_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._fs_scope_stat_baseline: dict[str, dict[str, Any]] = {}
         self._fs_scope_stat_samples: dict[str, int] = defaultdict(int)
@@ -2453,10 +2504,14 @@ class MultiSportSteamWorker:
                     event_id = str(item.get("flashscore_event_id") or "")
                     if event_id:
                         cache[event_id] = (time.monotonic(), item)
+        historical_stage_enabled = cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
         interesting = [
             item for checked, item in cache.values()
             if time.monotonic() - checked < 2 * refresh_age
-            and str((item.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
+            and (
+                historical_stage_enabled
+                or str((item.get("prematch_brain") or {}).get("state") or "") in {"PASS", "BORDERLINE"}
+            )
         ]
         interesting.sort(
             key=lambda row: (
@@ -3603,7 +3658,16 @@ class MultiSportSteamWorker:
             (lane for lane in lanes if lane.get("scope") == SCOPE_FULL and lane.get("market_family") == "match_total"),
             lanes[0] if lanes else None,
         )
+        historical_profile = (
+            self._basketball_historical.get(
+                str(fs.get("flashscore_event_id") or ""), str(fs.get("home") or ""),
+                str(fs.get("away") or ""), int(start_ts),
+            )
+            if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
+            else {}
+        )
         return {
+            "basketball_historical_profile": historical_profile,
             "ts": now,
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "phase": "PREMATCH",
@@ -4291,6 +4355,7 @@ class MultiSportSteamWorker:
             "signal_type": (
                 "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
                 else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
+                else "basketball_historical_v3" if str(signal.get("brain_mode") or "") == "basketball_historical_v3"
                 else "basketball_live_v2" if str(signal.get("brain_mode") or "") == "basketball_live_v2"
                 else "basketball_prematch_v2" if str(signal.get("brain_mode") or "") == "basketball_prematch_v2"
                 else "live_segment_stats" if phase == "LIVE" and str(signal.get("brain_mode") or "") == "segment_stats"
@@ -4339,6 +4404,14 @@ class MultiSportSteamWorker:
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
+            "historical_tier": signal.get("historical_tier"),
+            "historical_home_hits": signal.get("historical_home_hits"),
+            "historical_away_hits": signal.get("historical_away_hits"),
+            "historical_correction_points": signal.get("historical_correction_points"),
+            "historical_coefficient_available": signal.get("historical_coefficient_available"),
+            "historical_coefficient_home": signal.get("historical_coefficient_home"),
+            "historical_coefficient_away": signal.get("historical_coefficient_away"),
+            "historical_probability_uncalibrated": signal.get("historical_probability_uncalibrated"),
             "push_probability": signal.get("push_probability"),
             "push_confidence_penalty": signal.get("push_confidence_penalty"),
             "edge": signal.get("edge"),
@@ -4531,12 +4604,21 @@ class MultiSportSteamWorker:
                         candidates.append((lane_row, signal))
                         continue
                     if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
-                        signal = basketball_prematch_v2_signal(
-                            lane_row,
-                            dict(row.get("sport_context") or {}),
-                            str(row.get("league") or ""),
-                            dict(row.get("segment_memory") or {}),
-                        )
+                        if (
+                            _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
+                            and str(lane_row.get("market_family") or "") in {"match_total", "home_total", "away_total"}
+                        ):
+                            signal = basketball_historical_market_signal(
+                                dict(row.get("basketball_historical_profile") or {}),
+                                lane_row, phase="PREMATCH",
+                            )
+                        else:
+                            signal = basketball_prematch_v2_signal(
+                                lane_row,
+                                dict(row.get("sport_context") or {}),
+                                str(row.get("league") or ""),
+                                dict(row.get("segment_memory") or {}),
+                            )
                         if signal is None:
                             continue
                         signal = {
@@ -4642,13 +4724,22 @@ class MultiSportSteamWorker:
                                     odds_range=model_odds_range,
                                 )
                             else:
-                                parlay_signal = basketball_prematch_v2_signal(
-                                    lane_row,
-                                    dict(row.get("sport_context") or {}),
-                                    str(row.get("league") or ""),
-                                    dict(row.get("segment_memory") or {}),
-                                    odds_range=model_odds_range,
-                                )
+                                if (
+                                    _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
+                                    and str(lane_row.get("market_family") or "") in {"match_total", "home_total", "away_total"}
+                                ):
+                                    parlay_signal = basketball_historical_market_signal(
+                                        dict(row.get("basketball_historical_profile") or {}),
+                                        lane_row, phase="PREMATCH", odds_range=model_odds_range,
+                                    )
+                                else:
+                                    parlay_signal = basketball_prematch_v2_signal(
+                                        lane_row,
+                                        dict(row.get("sport_context") or {}),
+                                        str(row.get("league") or ""),
+                                        dict(row.get("segment_memory") or {}),
+                                        odds_range=model_odds_range,
+                                    )
                             if parlay_signal is None:
                                 continue
                             direction = str(parlay_signal.get("direction") or "over")
@@ -4772,10 +4863,21 @@ class MultiSportSteamWorker:
         fs_live = [row for row in fs_today if str(row.get("coarse_status") or "") == "2"]
         live_analysis = self._flashscore_live_analysis(fs_live, cfg)
         live_price_max = max(1, min(80, _int_env("GOOL_MULTISPORT_LIVE_PRICE_MAX_PER_SPORT", 24)))
-        live_candidates = [
-            row for row in live_analysis
-            if str(row.get("brain_state") or "") in {"PASS", "BORDERLINE"}
-        ][:live_price_max]
+        if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True):
+            # Historical signals cannot be gated out by the old tempo Brain
+            # before a bookmaker's current-quarter line has been inspected.
+            live_candidates = [
+                row for row in live_analysis
+                if str(row.get("scope") or "").startswith("QUARTER_")
+                and row.get("current_segment_score") is not None
+                and bool(row.get("segment_score_verified"))
+                and not bool(row.get("break_transition"))
+            ][:live_price_max]
+        else:
+            live_candidates = [
+                row for row in live_analysis
+                if str(row.get("brain_state") or "") in {"PASS", "BORDERLINE"}
+            ][:live_price_max]
 
         now = time.time()
         horizon = max(15 * 60.0, _float_env("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", 30 * 60 * 60.0))
@@ -5342,6 +5444,14 @@ class MultiSportSteamWorker:
                             diagnostics.append(f"basketball_live_sync:{sync_reason}")
                         latest.append(row)
                         continue
+                historical_live_profile = {}
+                if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True):
+                    fixture = states.get(str(row.get("flashscore_event_id") or "")) or {}
+                    historical_live_profile = self._basketball_historical.get(
+                        str(row.get("flashscore_event_id") or ""),
+                        str(row.get("home") or ""), str(row.get("away") or ""),
+                        int(fixture.get("start_ts") or 0),
+                    )
                 for lane in row.get("market_lanes") or []:
                     # LIVE market policy:
                     # - basketball: ONLY the current-quarter match total;
@@ -5378,7 +5488,23 @@ class MultiSportSteamWorker:
                         now=float(lane_row["ts"]),
                         score_changed_at=score_changed_at,
                     )
-                    signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
+                    if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True):
+                        signal = basketball_historical_market_signal(
+                            historical_live_profile, lane_row, phase="LIVE",
+                        )
+                        if signal is not None:
+                            # Must be a still-open current-quarter market. A line
+                            # already beaten by points on the scoreboard is not
+                            # a real outstanding total bet. Avoid last 2 minutes
+                            # when unconditional historical totals are misleading.
+                            current_total = sum(int(v) for v in (lane_row.get("score") or [0, 0])[:2])
+                            clock = lane_row.get("clock_seconds")
+                            if current_total >= float(signal["line"]) or (
+                                clock is not None and float(clock) < 120
+                            ):
+                                signal = None
+                    else:
+                        signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
                     if signal is None:
                         pricing_rejected += 1
                         continue

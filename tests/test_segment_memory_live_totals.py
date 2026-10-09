@@ -201,7 +201,7 @@ def test_basketball_live_can_take_full_match_team_under_from_remaining_schedule(
     assert signal["historical_confirmation"] is True
 
 
-def test_hockey_live_can_price_full_match_total_from_period_memory():
+def test_hockey_live_rejects_full_match_total_even_with_period_memory():
     memory = {
         "sport": "hockey",
         "quality": 0.85,
@@ -257,7 +257,7 @@ def test_hockey_live_can_price_full_match_total_from_period_memory():
         "under": 1.90,
     }
     signal = hockey_live_signal(brain, lane)
-    assert signal is not None
+    assert signal is None  # LIVE policy: only current-period totals
     assert signal["direction"] == "under"
     assert signal["projected_total"] < 8.5
     assert signal["segment_h2h_n"] == 4

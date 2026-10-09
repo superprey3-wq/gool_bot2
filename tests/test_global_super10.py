@@ -762,3 +762,28 @@ def test_initial_super10_card_retries_after_render_exception(tmp_path: Path, mon
     state = json.loads(gs.sent_path().read_text("utf-8"))
     assert state["sent"] is True
     assert state["send_attempts"] == 2
+
+
+def test_super_publisher_does_not_truncate_late_fixtures_behind_120_lines(tmp_path: Path, monkeypatch):
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+    # Early game has hundreds of market lines. Later games must still be
+    # available for one-match-one-leg SUPER selection.
+    markets = []
+    for i in range(155):
+        row = _candidate("hockey", 1, now, odd=1.40, p=0.72)
+        row["line"] = i / 2
+        row["selection"] = f"TOTAL {i}"
+        markets.append(row)
+    markets.extend(
+        _candidate("hockey", n, now, odd=1.40, p=0.85)
+        for n in range(2, 15)
+    )
+    published = gs.publish_candidates("hockey", markets)
+    assert published > 10
+    snap = gs._read_json(gs.pool_path(), {})
+    entries = snap["sources"]["hockey"]["candidates"]
+    ids = {entry["event_id"] for entry in entries}
+    assert ids == {f"hockey-{i}" for i in range(1, 15)}
+    assert sum(entry["event_id"] == "hockey-1" for entry in entries) <= 4
+    assert snap["sources"]["hockey"]["raw_input"] == 168

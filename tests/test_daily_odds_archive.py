@@ -78,3 +78,39 @@ def test_failed_empty_market_does_not_mark_scanned(archive):
         "quotes": 0, "changes": 0
     }
     assert archive.last_seen("hockey", ["123"]) == {}
+
+def test_super_waits_until_bookmaker_market_coverage_is_warmed(tmp_path, monkeypatch):
+    import json
+
+    from gool_bot2.global_super10 import day_market_readiness
+
+    now = 1791500000.0
+    day = match_day(now)
+    live = tmp_path / "live"
+    live.mkdir()
+    multi_path = live / "gool_multisport_state.json"
+    football_path = live / "xbet_prematch_archive_state.json"
+    monkeypatch.setenv("RUNTIME_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GOOL_MULTISPORT_STATE", str(multi_path))
+    monkeypatch.setenv("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE", "0.85")
+
+    football_path.write_text(json.dumps({
+        "archive_day": day,
+        "archive_catalog_today": 10,
+        "archive_coverage": {"archived_matches": 9},
+    }))
+    multi_path.write_text(json.dumps({"sports": {
+        "hockey": {"daily_market_coverage": {"day": day, "matched_today": 10, "archived_matches": 8}},
+        "basketball": {"daily_market_coverage": {"day": day, "matched_today": 10, "archived_matches": 9}},
+    }}))
+    before = day_market_readiness(now_ts=now)
+    assert not before["ready"]
+    assert not before["sports"]["hockey"]["ready"]
+    payload = json.loads(multi_path.read_text())
+    payload["sports"]["hockey"]["daily_market_coverage"]["archived_matches"] = 9
+    multi_path.write_text(json.dumps(payload))
+    after = day_market_readiness(now_ts=now)
+    assert after["ready"]
+    assert {key: row["ratio"] for key, row in after["sports"].items()} == {
+        "football": 0.9, "hockey": 0.9, "basketball": 0.9
+    }

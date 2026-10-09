@@ -1032,6 +1032,15 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     # analysis window before any basketball LIVE UNDER can be published.
     if direction == "under" and str(readiness.get("mode") or "") != "strict":
         return None
+    # Quiet first possessions are not a reliable full-quarter UNDER trend.
+    # An early 1:08 Q4 score gap can look like an enormous edge while the
+    # forecast is still dominated by a small sample and historical prior.
+    # Keep fast early OVERS possible, but wait for real game time before
+    # publishing any quarter UNDER.
+    if segment_market and direction == "under" and elapsed < max(
+        0.0, _env_float("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", 180.0)
+    ):
+        return None
 
     if not (_env_float("GOOL_MULTISPORT_MIN_ODD", 1.50) <= odd <= _env_float("GOOL_MULTISPORT_MAX_ODD", 3.25)):
         return None

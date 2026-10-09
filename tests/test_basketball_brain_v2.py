@@ -827,22 +827,27 @@ def test_basketball_live_rejects_under_from_first_two_minutes_of_quarter(monkeyp
         "segment_stats": {},
         "segment_attempts": {},
     }
-    brain = _brain(current=(4, 3), recent_poss=0.0, recent_score=1.5, payload=payload)
+    brain = _brain(current=(2, 1), recent_poss=0.0, recent_score=0.4, payload=payload)
     brain.update({
         "history_points": 4,
         "recent_window_seconds": 90.0,
         "recent_activity_available": True,
     })
-    # Exactly the user-reported failure mode: early low score, generous
-    # bookmaker quarter line, and a huge model UNDER edge after 01:08.
+    # Without the guard this early quiet opening really qualifies as UNDER.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "0")
+    premature = live_signal(brain, _lane(score=(2, 1), elapsed=68, line=55.5))
+    assert premature is not None and premature["direction"] == "under"
+
+    # With guard, do not misread 01:08 of game time as a quarter-long trend.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "180")
     assert live_signal(
-        brain, _lane(score=(4, 3), elapsed=68, line=55.5)
+        brain, _lane(score=(2, 1), elapsed=68, line=55.5)
     ) is None
     assert live_signal(
-        brain, _lane(score=(4, 3), elapsed=120, line=55.5)
+        brain, _lane(score=(2, 1), elapsed=120, line=55.5)
     ) is None
 
-    # A valid slow quarter can still produce UNDER after 3 minutes.
+    # A valid slow quarter may still qualify after three minutes.
     mature = {**brain, "current_segment_score": [6, 5]}
     later = live_signal(mature, _lane(score=(6, 5), elapsed=190, line=55.5))
     assert later is not None

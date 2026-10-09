@@ -278,6 +278,8 @@ def _eligible_candidates(
             start_ts = _num(row.get("start_ts"), 0.0)
             if start_ts <= now + min_lead or start_ts - now > horizon:
                 continue
+            if _truthy("GOOL_GLOBAL_SUPER10_SAME_MOSCOW_DAY", False) and _moscow_day(start_ts) != _moscow_day(now):
+                continue
             odd = _num(row.get("odd"))
             p = _num(row.get("model_probability"))
             edge = _num(row.get("edge"))
@@ -869,6 +871,8 @@ def day_market_readiness(*, now_ts: float | None = None) -> dict[str, Any]:
     football = _read_json(runtime / "xbet_prematch_archive_state.json", {})
     multi_path = Path(os.getenv("GOOL_MULTISPORT_STATE", str(runtime / "gool_multisport_state.json")))
     multi = _read_json(multi_path, {})
+    if not multi and multi_path != runtime / "gool_multisport_state.json":
+        multi = _read_json(runtime / "gool_multisport_state.json", {})
     details: dict[str, Any] = {}
     for sport in SPORTS:
         if sport == "football":

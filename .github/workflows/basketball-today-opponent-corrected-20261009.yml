@@ -1,0 +1,82 @@
+name: GOOL Oct 9 historical opponent coefficient -- refreshed market comparison
+
+on:
+  push:
+    branches: [audit/basketball-today-opponent-adjusted-20261009]
+    paths:
+      - scripts/basketball_today_stable_20261009.py
+      - .github/workflows/basketball-today-opponent-corrected-20261009.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  opponent-adjusted-live-quote-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: october9-basketball-stable-quarter-now
+          repository: superprey3-wq/gool_bot2
+          run-id: 37942410974
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts/basketball_today_stable_20261009
+      - name: Verify locked Oct 9 fixtures and both histories against original audit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("artifacts/basketball_today_stable_20261009")
+          m=json.loads((p/"manifest.json").read_text(encoding="utf-8"))
+          a=json.loads((p/"all_fixtures.json").read_text(encoding="utf-8"))
+          assert len(m["fixtures"])==len(a)==72, (len(m["fixtures"]),len(a))
+          assert len({x["event_id"] for x in a})==72
+          assert sum(x.get("h2h_coefficient_available") is True for x in a)==35
+          print("FROZEN_BASELINE_READY fixtures=72 coefficient_available=35")
+          PY
+      - name: Test opponent distribution shift before calling bookmaker
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path("scripts/basketball_today_stable_20261009.py")
+          spec=importlib.util.spec_from_file_location("today_mod",p)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          q={"home_totals":[40]*10,"away_totals":[40]*10,
+              "predicted":40.0,"adjusted_expected":45.0}
+          assert mod.count_hits(q,"OVER",43,adjust_for_opponent=False)==(0,0)
+          assert mod.count_hits(q,"OVER",43,adjust_for_opponent=True)==(10,10)
+          assert mod.count_hits(q,"UNDER",43,adjust_for_opponent=False)==(10,10)
+          assert mod.count_hits(q,"UNDER",43,adjust_for_opponent=True)==(0,0)
+          print("UNIT_OPPONENT_SHIFT_PASS: both OVER/UNDER quarters adjust exactly, not only displayed means")
+          PY
+      - name: Recheck upcoming 1xBet quarter lines on same 35 H2H-ready fixtures
+        env:
+          XBET_MULTISPORT_TELEGRAM_ENABLED: "0"
+          GOOL_MULTISPORT_MODE: "shadow"
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+        run: python scripts/basketball_today_stable_20261009.py report
+      - name: Show comparison
+        if: success()
+        run: cat artifacts/basketball_today_stable_20261009/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oct9-opponent-corrected-screen-results
+          path: |
+            artifacts/basketball_today_stable_20261009/report.md
+            artifacts/basketball_today_stable_20261009/full_report.json
+            artifacts/basketball_today_stable_20261009/all_fixtures.json
+            artifacts/basketball_today_stable_20261009/manifest.json
+          if-no-files-found: warn
+          retention-days: 10

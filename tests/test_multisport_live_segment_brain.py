@@ -526,6 +526,9 @@ def test_flashscore_numeric_status_is_match_minute_with_score_parts_crosscheck()
     ) == "QUARTER_4"
 
 def test_priced_projection_ignores_absurd_flashscore_ao_age_for_realistic_nba_q3(monkeypatch):
+    # Isolate clock-source regression from the separate early-UNDER policy.
+    # Current-quarter UNDERs before 3:00 are blocked in production.
+    monkeypatch.setenv("GOOL_BASKETBALL_LIVE_UNDER_MIN_ELAPSED_SECONDS", "0")
     monkeypatch.setenv("GOOL_BASKETBALL_LIVE_SEGMENT_MIN_STAT_EDGE", "2.5")
     brain = {
         "brain_state": "PASS",

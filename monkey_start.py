@@ -327,6 +327,9 @@ def main() -> None:
     os.environ.setdefault("XBET_PREMATCH_FETCH_EVENTS", "120")
     os.environ.setdefault("XBET_PREMATCH_TRACK_MAX_EVENTS", "2000")
     os.environ.setdefault("XBET_PREMATCH_MAX_DUE_PER_CYCLE", "32")
+    # SUPER 10 is once a day: wait for the broad archived bookmaker field.
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_REQUIRE_DAY_MARKET_COVERAGE", "1")
+    os.environ.setdefault("GOOL_GLOBAL_SUPER10_MIN_ODDS_COVERAGE", "0.85")
     os.environ.setdefault("XBET_MARKET_MEMORY_EPHEMERAL", "1")
     os.environ.setdefault("XBET_MARKET_MEMORY_RETENTION_DAYS", "2")
     os.environ.setdefault("XBET_MARKET_MEMORY_MAX_BYTES", str(160 * 1024 * 1024))

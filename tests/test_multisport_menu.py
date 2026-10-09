@@ -1440,3 +1440,26 @@ def test_in_game_keeps_started_basketball_prematch_full_match_pick(tmp_path: Pat
     assert "Paris — Lyon" in text
     assert "ТБ 170.5 @ 1.75" in text
     assert "🟡 PREMATCH" in text
+
+
+def test_basketball_report_exposes_real_over_under_selection_and_pl(tmp_path: Path, monkeypatch):
+    journal = tmp_path / "journal.json"
+    monkeypatch.setenv("GOOL_MULTISPORT_JOURNAL", str(journal))
+    _write(journal, [
+        {"sport": "basketball", "phase": "LIVE", "event_id": "b1", "direction": "under",
+         "selection": "1-я четверть: ТМ 40.5", "result": "lost", "profit_units": -1.0},
+        {"sport": "basketball", "phase": "LIVE", "event_id": "b2", "direction": "under",
+         "selection": "2-я четверть: ТМ 41.5", "result": "won", "profit_units": 0.75},
+        {"sport": "basketball", "phase": "LIVE", "event_id": "b3", "direction": "under",
+         "selection": "3-я четверть: ТМ 42.5", "result": "pending", "profit_units": 0.0},
+        {"sport": "basketball", "phase": "LIVE", "event_id": "b4", "direction": "over",
+         "selection": "4-я четверть: ТБ 42.5", "result": "won", "profit_units": 0.80},
+        {"sport": "basketball", "phase": "PREMATCH", "event_id": "b5", "direction": "under",
+         "selection": "Матч: ТМ 160.5", "result": "lost", "profit_units": -1.0},
+    ])
+    report = sport_phase_report_text("basketball")
+    assert "Направления LIVE" in report
+    assert "ТБ: 1 (25%)" in report
+    assert "ТМ: 3 (75%)" in report
+    assert "P/L -0.25u" in report
+    assert "P/L +0.80u" in report

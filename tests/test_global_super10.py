@@ -787,3 +787,24 @@ def test_super_publisher_does_not_truncate_late_fixtures_behind_120_lines(tmp_pa
     assert ids == {f"hockey-{i}" for i in range(1, 15)}
     assert sum(entry["event_id"] == "hockey-1" for entry in entries) <= 4
     assert snap["sources"]["hockey"]["raw_input"] == 168
+
+
+def test_super_funnel_explains_why_hockey_has_zero_candidates(tmp_path: Path, monkeypatch):
+    _paths(tmp_path, monkeypatch)
+    now = time.time()
+    gs.publish_candidates("hockey", [
+        _candidate("hockey", 1, now, odd=1.75, p=0.78),
+        _candidate("hockey", 2, now, odd=1.40, p=0.60),
+        _candidate("hockey", 3, now, odd=1.40, p=0.79),
+    ])
+    diag = gs.publication_funnel(now_ts=now)["hockey"]
+    assert diag["raw_input"] == 3
+    assert diag["price_eligible_before_cap"] == 2
+    assert diag["published"] == 2
+    assert diag["in_odds"] == 2
+    assert diag["probability_ok"] == 1
+    assert diag["strength_ok"] == 1
+    gs.publish_candidates("basketball", [])
+    empty = gs.publication_funnel(now_ts=now)["basketball"]
+    assert empty["raw_input"] == 0
+    assert empty["published"] == 0

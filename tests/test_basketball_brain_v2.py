@@ -799,3 +799,21 @@ def test_active_early_window_can_surface_over_but_not_under():
     )
     assert signal is not None
     assert signal["direction"] == "over"
+
+
+def test_super_odd_1_40_does_not_loosen_regular_basketball_signals(monkeypatch):
+    monkeypatch.setenv("GOOL_MULTISPORT_MIN_ODD", "1.50")
+    lane = {
+        "market_family": "moneyline",
+        "selection_side": "home",
+        "choice_key": "home",
+        "scope": "FULL_MATCH",
+        "line": 0.0,
+        "odd": 1.40,
+        "probability": 0.58,
+    }
+    assert prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig") is None
+    super_pick = prematch_signal(lane, _strong_home_features(), "TURKEY: Super Lig", odds_range=(1.30, 1.50))
+    assert super_pick is not None
+    assert super_pick["odd"] == 1.40
+    assert super_pick["model_probability"] > super_pick["market_probability"]

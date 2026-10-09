@@ -1,0 +1,107 @@
+name: Basketball selective stable quarter backtest Oct 8
+
+on:
+  push:
+    branches: [audit/basketball-selective-quarter-20261008]
+    paths:
+      - scripts/basketball_selective_quarter_20261008.py
+      - .github/workflows/basketball-selective-quarter-20261008.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: basketball-team-form-5v10-comparison
+          repository: superprey3-wq/gool_bot2
+          run-id: 37935650250
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts/selective_quarter_20261008/baseline
+      - name: Verify original sample
+        run: |
+          python - <<'PY'
+          import json
+          p='artifacts/selective_quarter_20261008/baseline/all_form_games.json'
+          rows=json.load(open(p,encoding='utf-8'))
+          assert len(rows)==81, len(rows)
+          print('BASELINE_REUSED=', len(rows))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basket-selective-baseline
+          path: artifacts/selective_quarter_20261008/baseline/all_form_games.json
+          retention-days: 14
+
+  quarter-stability:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: basket-selective-baseline
+          path: artifacts/selective_quarter_20261008/baseline
+      - name: Check per-quarter 10-game history on each side
+        env:
+          GOOL_FLASHSCORE_SEGMENT_TIMEOUT: '8'
+          GOOL_FLASHSCORE_SEGMENT_MAX_HOSTS: '2'
+        run: python scripts/basketball_selective_quarter_20261008.py shard --index ${{ matrix.shard }} --total 12 --workers 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basket-selective-shard-${{ matrix.shard }}
+          path: artifacts/selective_quarter_20261008/shard_${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  report:
+    if: always() && needs.baseline.result == 'success'
+    needs: [baseline, quarter-stability]
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: basket-selective-baseline
+          path: artifacts/selective_quarter_20261008/baseline
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: basket-selective-shard-*
+          merge-multiple: true
+          path: artifacts/selective_quarter_20261008
+      - name: Aggregate selective signal backtest
+        run: python scripts/basketball_selective_quarter_20261008.py summary
+      - name: Show report
+        if: success()
+        run: cat artifacts/selective_quarter_20261008/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: basketball-stable-quarter-selection-results
+          path: artifacts/selective_quarter_20261008/
+          if-no-files-found: warn
+          retention-days: 14

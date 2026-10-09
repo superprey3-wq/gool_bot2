@@ -281,11 +281,14 @@ def prematch_signal(
     else:
         return None
 
-    # No price caps for basketball PREMATCH singles. Separate parlay calls
-    # may still pass an explicit odds_range to select their own safe legs.
+    # Singles reject <1.40; explicit odds_range belongs only to parlays.
     if not math.isfinite(odd) or odd <= 1.0:
         return None
-    if odds_range is not None and not (odds_range[0] <= odd <= odds_range[1]):
+    if odds_range is None:
+        min_odd = max(1.40, _env_float("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40))
+        if odd < min_odd:
+            return None
+    elif not (odds_range[0] <= odd <= odds_range[1]):
         return None
     edge = model_p - market_p
     if edge < 0.055 or model_p < 0.55:
@@ -1042,8 +1045,8 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ):
         return None
 
-    # No odds threshold for basketball LIVE; a valid available line is enough.
-    if not math.isfinite(odd) or odd <= 1.0:
+    # Basketball LIVE singles are priced only at 1.40 or higher; no max cap.
+    if not math.isfinite(odd) or odd < max(1.40, _env_float("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40)):
         return None
     if edge < 0.055 or model_p < 0.56:
         return None

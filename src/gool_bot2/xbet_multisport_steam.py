@@ -80,10 +80,11 @@ def basketball_historical_market_signal(
     WATCH_7 is analysis-only. Only 8/10 on both sides can publish a signal.
     No model's statistical hit count is called a calibrated probability.
     """
-    # No coefficient/odds cap for basketball singles or LIVE. The bookmaker
-    # can offer any valid decimal odd; only the historical signal gate decides.
-    # Explicit odds_range is retained for independently curated parlay legs.
-    lo, hi = odds_range if odds_range is not None else (None, None)
+    # Singles/LIVE require decimal odds >=1.40, with no maximum cap.
+    # Explicit parlay odds ranges stay independent from singles.
+    lo, hi = odds_range if odds_range is not None else (
+        max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40)), None,
+    )
     candidate = best_market(profile, lane, phase=phase, min_odd=lo, max_odd=hi)
     if not candidate:
         return None
@@ -4300,6 +4301,24 @@ class MultiSportSteamWorker:
         return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
+        # Final safety gate for ALL basketball LIVE/PREMATCH singles, including
+        # handicaps and moneylines still handled by legacy Basketball Brain V2.
+        # Apply BEFORE Telegram delivery and journal write, never to parlay legs.
+        if cfg.key == "basketball":
+            import math
+            try:
+                odd = float(signal.get("odd") or 0.0)
+            except (TypeError, ValueError):
+                odd = 0.0
+            floor = max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40))
+            if not math.isfinite(odd) or odd < floor:
+                print(
+                    f"GOOL_BASKETBALL_SINGLE_ODD_REJECT odd={odd} min_odd={floor:.2f} "
+                    f"phase={str(row.get('phase') or 'LIVE').upper()} "
+                    f"match={row.get('home')}--{row.get('away')}",
+                    flush=True,
+                )
+                return False, 0
         event_id = str(row.get("event_id") or "")
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)

@@ -310,6 +310,31 @@ def _production_brain_audit(
         out["live_consensus"] = consensus
         selection._sync_expert(experts, out)
 
+    # Add correlated V3/V4/goal-hazard diagnostic only. It must never
+    # change status, policy blocks, selection, or active Telegram delivery.
+    if str(os.getenv("GOOL_FOOTBALL_LIVE_V6_SHADOW_ENABLED", "1")).casefold() in {"1", "true", "yes", "on"}:
+        try:
+            from .football_live_v6_shadow import football_live_v6_shadow
+            v6_shadow = football_live_v6_shadow(record, out)
+            out["football_live_v6_shadow"] = v6_shadow
+            record["football_live_v6_shadow"] = v6_shadow
+            print(
+                f"GOOL_FOOTBALL_LIVE_V6_SHADOW match={match_id} "
+                f"minute={match.get('minute')} "
+                f"status={v6_shadow.get('status')} "
+                f"reason={v6_shadow.get('reason')} "
+                f"v3={v6_shadow.get('brain_v3_bet')} "
+                f"v4={v6_shadow.get('live_v4_bet')} "
+                f"hazard={v6_shadow.get('hazard_passed')}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                f"GOOL_FOOTBALL_LIVE_V6_SHADOW_ERROR match={match_id} "
+                f"error={type(exc).__name__}:{exc}",
+                flush=True,
+            )
+
     record["brain_v3_decision"] = out
     print(
         f"GOOL_BRAIN_V3_THROUGHPUT match={match_id} stage={pre_status}->{out.get('status')} "

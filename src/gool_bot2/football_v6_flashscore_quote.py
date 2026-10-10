@@ -25,6 +25,11 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
         return None
     rows = [row for row in data["odds"] if isinstance(row, dict)]
     home_id, away_id = _find_participant_ids(rows)
+    # Without a verified home/away participant mapping, team-specific totals
+    # can be silently misclassified as match totals by the shared decoder.
+    # Fail closed rather than advertise those quotes as an honest market.
+    if not home_id or not away_id or home_id == away_id:
+        return None
     observations = _selection_observations(data, home_id, away_id)
 
     # Each bookmaker gets only its own offerings; pairs are taken from the
@@ -69,7 +74,7 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
                 # A one-sided quote cannot verify the opposing line.
                 continue
             book = str(item.get("bookmaker") or "").strip()
-            if not book:
+            if not book or book.casefold() in {"none", "null", "unknown"}:
                 continue
             options = books.setdefault(book, {}).setdefault(group, {})
             options[selection] = max(options.get(selection, 0.0), odd)

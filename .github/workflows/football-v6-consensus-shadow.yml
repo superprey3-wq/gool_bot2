@@ -8,6 +8,14 @@ on:
       - "scripts/gool_football_v5_weekend.py"
       - "tests/test_football_v6_consensus_shadow.py"
       - ".github/workflows/football-v6-consensus-shadow.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/gool_bot2/football_v6_consensus_shadow.py"
+      - "scripts/gool_flashscore_today.py"
+      - "scripts/gool_football_v5_weekend.py"
+      - "tests/test_football_v6_consensus_shadow.py"
+      - ".github/workflows/football-v6-consensus-shadow.yml"
   workflow_dispatch:
 
 jobs:
@@ -35,7 +43,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/football_v6
-          python scripts/gool_football_v5_weekend.py --days 0,1 --max-total 48 --max-per-day 30 --workers 8 --price-limit 12 --output artifacts/football_v6/weekend.jsonl 2>&1 | tee artifacts/football_v6/run.log
+          if [[ "${GITHUB_EVENT_NAME}" == "push" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            ARGS="--days 0,1 --max-total 1600 --max-per-day 1100 --workers 18 --price-limit 100"
+          else
+            ARGS="--days 0,1 --max-total 48 --max-per-day 30 --workers 8 --price-limit 12"
+          fi
+          python scripts/gool_football_v5_weekend.py $ARGS --output artifacts/football_v6/weekend.jsonl 2>&1 | tee artifacts/football_v6/run.log
           grep -q "FOOTBALL_V5_WEEKEND_DONE" artifacts/football_v6/run.log
       - name: Audit outcome summary
         if: always()

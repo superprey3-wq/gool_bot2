@@ -100,3 +100,18 @@ def test_production_and_weekend_pipeline_use_flashscore_fallback():
     assert "market or flashscore_fulltime_quote(odds_payload)" in production
     assert "fs_quote_available" in weekend
     assert "get_fs_quote" in weekend
+
+
+def test_no_participant_mapping_means_no_ambiguous_team_total_or_match_total():
+    # O/U rows may refer to team or FT total. Without an independently
+    # verified home/away participant mapping the decoder cannot tell.
+    assert flashscore_fulltime_quote({
+        "settings": {"bookmakers": [_bookmaker("Book A", "A")]},
+        "odds": [_total("A")],
+    }) is None
+
+
+def test_bookmaker_identity_cannot_be_missing():
+    hda = _hda(None)
+    total = _total(None)
+    assert flashscore_fulltime_quote({"odds": [hda, total]}) is None

@@ -55,6 +55,7 @@ from .segment_memory import build_segment_memory, segment_prior
 from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
 from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
+from .hockey_prematch_ev_shadow import evaluate_hockey_prematch_ev_shadow
 from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
@@ -4489,6 +4490,7 @@ class MultiSportSteamWorker:
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
             "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
+            "hockey_prematch_ev_shadow": signal.get("hockey_prematch_ev_shadow"),
             "historical_tier": signal.get("historical_tier"),
             "historical_home_hits": signal.get("historical_home_hits"),
             "historical_away_hits": signal.get("historical_away_hits"),
@@ -4664,12 +4666,25 @@ class MultiSportSteamWorker:
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
                     if cfg.key == "hockey":
+                        sport_features = dict(row.get("sport_context") or {})
+                        sport_memory = dict(row.get("segment_memory") or {})
                         signal = hockey_prematch_v2_signal(
                             lane_row,
-                            dict(row.get("sport_context") or {}),
+                            sport_features,
                             str(row.get("league") or ""),
-                            dict(row.get("segment_memory") or {}),
+                            sport_memory,
                         )
+                        # Compare economic value on *both* quoted sides,
+                        # including bookmaker pushes on integer totals.
+                        # Shadow never changes the active V2 selection.
+                        if _truthy("GOOL_HOCKEY_PREMATCH_EV_SHADOW_ENABLED", True):
+                            ev_shadow = evaluate_hockey_prematch_ev_shadow(
+                                lane_row, sport_features, str(row.get("league") or ""),
+                                sport_memory, active_signal=signal,
+                            )
+                            row.setdefault("hockey_prematch_ev_shadow_candidates", []).append(ev_shadow)
+                            if signal is not None:
+                                signal = {**signal, "hockey_prematch_ev_shadow": ev_shadow}
                         if signal is None:
                             continue
                         signal = {

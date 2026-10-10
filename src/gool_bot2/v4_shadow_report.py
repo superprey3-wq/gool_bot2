@@ -18,6 +18,7 @@ from .v4_prematch_engine import (
 )
 from .xbet_prematch_market import XBetPrematchCollector
 from .pinnacle_prematch_market import pinnacle_market_for_match
+from .football_v5_shadow import forecast_from_history
 from .football_model_challengers import poisson_profile_challenger, challenger_market_candidates, rank_challenger, build_challenger_double, choose_challenger_delivery, dixon_coles_profile_challenger, model_market_candidates, consensus_candidates
 
 
@@ -300,6 +301,11 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
         try:
             history = local_fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
             history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
+            v5 = forecast_from_history(
+                home=match.home, away=match.away,
+                kickoff=float((match.meta or {}).get("scheduled_start_ts") or 0),
+                context=history,
+            )
             profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0])
@@ -311,7 +317,7 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
             score = _brain_score(profile, quality)
             trends = _trend_signals(profile, quality)
             primary_trend = _primary_trend(trends)
-            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "trends": trends, "primary_trend": primary_trend, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
+            return {"match": match, "profile": profile, "sample": sample, "quality": quality, "brain_score": score, "trends": trends, "primary_trend": primary_trend, "football_v5_shadow": v5, "sources": history.get("sources") or [], "source_coverage": history.get("source_coverage") or {}}, None
         except Exception as exc:
             return None, f"PROFILE_{type(exc).__name__}"
 

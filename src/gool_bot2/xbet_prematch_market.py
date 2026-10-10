@@ -146,14 +146,21 @@ def find_prematch_market(
     *,
     path: Path | None = None,
     min_score: float | None = None,
+    kickoff_ts: float | None = None,
 ) -> dict[str, Any] | None:
     state = load_prematch_market_state(path)
     rows = state.get("matches") or {}
     threshold = float(os.getenv("XBET_PREMATCH_MATCH_MIN_SCORE", "0.72")) if min_score is None else float(min_score)
     best: dict[str, Any] | None = None
     best_score = 0.0
+    target_start = _parse_ts(kickoff_ts)
     for row in rows.values() if isinstance(rows, dict) else []:
         if not isinstance(row, dict):
+            continue
+        # Old lookup used team names alone, so Saturday's snapshot could be
+        # priced as Sunday's rematch. Reject known cross-day mismatches.
+        book_start = _parse_ts(row.get("scheduled_start_ts"))
+        if target_start is not None and book_start is not None and abs(target_start - book_start) > 3 * 3600:
             continue
         score = pair_score(home, away, str(row.get("home") or ""), str(row.get("away") or ""))
         if score > best_score:

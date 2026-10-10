@@ -81,8 +81,11 @@ def test_prematch_game_uses_current_betb2b_parameters(monkeypatch, tmp_path):
     monkeypatch.setattr(prematch, "_http_json", lambda url: seen.append(url) or {"Value": {"E": []}})
     collector = prematch.XBetPrematchCollector(tmp_path / "state.json")
     assert collector._game("https://1xbet.com/service-api/LineFeed", "123") == {"E": []}
-    assert len(seen) == 1
+    # A shell response without supported prices gets a second, minimal
+    # API parameter attempt before GOOL refuses the fixture.
+    assert len(seen) == 2
     assert "grMode=4" in seen[0]
+    assert "grMode=" not in seen[1]
     assert "marketType=1" in seen[0]
     assert "isNewBuilder=true" in seen[0]
     assert "isSubGames=true" in seen[0]
@@ -160,3 +163,60 @@ def test_background_tracking_does_not_truncate_catalog_to_120(monkeypatch, tmp_p
     state = collector.collect_once()
     assert seen["count"] == 180
     assert state["index_events"] == 180
+
+
+def test_prematch_cross_day_same_teams_rejected_even_if_names_exact(tmp_path):
+    import json
+    path = tmp_path / "collision.json"
+    original = 1791702000.0
+    path.write_text(json.dumps({"matches": {
+        "yesterday": {
+            "event_id": "yesterday", "home": "Alpha", "away": "Beta",
+            "scheduled_start_ts": original - 86400,
+            "match_totals": [{"line": 2.5, "over": 1.9, "under": 1.9}],
+        },
+        "today": {
+            "event_id": "today", "home": "Alpha", "away": "Beta",
+            "scheduled_start_ts": original,
+            "match_totals": [{"line": 2.5, "over": 1.8, "under": 2.0}],
+        },
+    }}), encoding="utf-8")
+    matched = find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original)
+    assert matched and matched["event_id"] == "today"
+    # The lookup must NOT silently borrow a stale bookmaker quote.
+    matched_other = find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original + 86400)
+    assert matched_other is None
+    assert find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original * 1000)["event_id"] == "today"
+
+
+def test_prematch_game_minimal_fallback_recovers_markets(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    queried = []
+    def fake_http(url):
+        queried.append(url)
+        if "grMode=" in url:
+            return {"Value": {"I": "123", "E": []}}
+        return {"Value": {"I": "123", "E": [{"G": 1, "C": 2.0}]}}
+
+    def fake_decode(game):
+        return {"match_1x2": (
+            {"home": 2.0, "draw": 3.0, "away": 4.0}
+            if game.get("E") else {}
+        )}
+    monkeypatch.setattr(prematch, "_http_json", fake_http)
+    monkeypatch.setattr(prematch, "decode_standard_markets", fake_decode)
+    collector = prematch.XBetPrematchCollector(tmp_path / "price.json")
+    assert collector._game(prematch.ROOTS[0], "123")["E"]
+    assert len(queried) == 2
+
+
+def test_prematch_game_rejects_mismatched_bookmaker_event_id(monkeypatch, tmp_path):
+    from gool_bot2 import xbet_prematch_market as prematch
+
+    monkeypatch.setattr(
+        prematch, "_http_json",
+        lambda url: {"Value": {"I": "wrong", "GE": [{"fake": True}]}},
+    )
+    collector = prematch.XBetPrematchCollector(tmp_path / "price.json")
+    assert collector._game(prematch.ROOTS[0], "123") is None

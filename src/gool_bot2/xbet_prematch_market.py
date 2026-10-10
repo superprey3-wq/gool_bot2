@@ -146,14 +146,21 @@ def find_prematch_market(
     *,
     path: Path | None = None,
     min_score: float | None = None,
+    kickoff_ts: float | None = None,
 ) -> dict[str, Any] | None:
     state = load_prematch_market_state(path)
     rows = state.get("matches") or {}
     threshold = float(os.getenv("XBET_PREMATCH_MATCH_MIN_SCORE", "0.72")) if min_score is None else float(min_score)
     best: dict[str, Any] | None = None
     best_score = 0.0
+    target_start = _parse_ts(kickoff_ts)
     for row in rows.values() if isinstance(rows, dict) else []:
         if not isinstance(row, dict):
+            continue
+        # Old lookup used team names alone, so Saturday's snapshot could be
+        # priced as Sunday's rematch. Reject known cross-day mismatches.
+        book_start = _parse_ts(row.get("scheduled_start_ts"))
+        if target_start is not None and book_start is not None and abs(target_start - book_start) > 3 * 3600:
             continue
         score = pair_score(home, away, str(row.get("home") or ""), str(row.get("away") or ""))
         if score > best_score:
@@ -320,9 +327,32 @@ class XBetPrematchCollector:
             "marketType": 1,
             "isNewBuilder": "true",
         }
-        payload = _http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}")
-        value = payload.get("Value") if isinstance(payload, dict) else None
-        return value if isinstance(value, dict) else None
+        # Some LineFeed mirrors return a match shell (teams but no
+        # decodable markets) for the newer expanded parameter set. Retry
+        # the documented minimal GetGameZip form; never invent prices.
+        basic = {
+            "id": event_id,
+            "lng": "en",
+            "cfview": 0,
+            "isSubGames": "true",
+            "GroupEvents": "true",
+            "countevents": 250,
+        }
+        partial: dict[str, Any] | None = None
+        for variant in (params, basic):
+            payload = _http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(variant)}")
+            value = payload.get("Value") if isinstance(payload, dict) else None
+            if not isinstance(value, dict):
+                continue
+            # A bare response with the wrong event ID must not be quoted.
+            returned_id = str(value.get("I") or "").strip()
+            if returned_id and returned_id != str(event_id):
+                continue
+            if partial is None:
+                partial = value
+            if _usable_snapshot(decode_standard_markets(value)):
+                return value
+        return partial
 
     def collect_once(self, targets: list[Any] | None = None) -> dict[str, Any]:
         started = time.time()
@@ -405,6 +435,8 @@ class XBetPrematchCollector:
             )
 
         refreshed = 0
+        price_transport_empty = 0
+        price_no_supported_markets = 0
         if candidates:
             price_total = len(candidates)
             price_done = 0
@@ -423,6 +455,7 @@ class XBetPrematchCollector:
                         game = None
                     if not game:
                         price_failures += 1
+                        price_transport_empty += 1
                     else:
                         if str(os.getenv("GOOL_DAILY_ALL_MARKETS_ENABLED", "1")).casefold() not in {"0", "false", "no", "off"}:
                             try:
@@ -448,6 +481,7 @@ class XBetPrematchCollector:
                         markets = decode_standard_markets(game)
                         if not _usable_snapshot(markets):
                             price_failures += 1
+                            price_no_supported_markets += 1
                             game = None
                     price_done += 1
                     if price_done % 25 == 0 or price_done == price_total:
@@ -488,6 +522,15 @@ class XBetPrematchCollector:
                         scheduled_start_ts=snapshot["scheduled_start_ts"],
                     )
                     refreshed += 1
+
+        if candidates:
+            print(
+                f"GOOL_XBET_PREMATCH_PRICE_HEALTH requested={len(candidates)} "
+                f"usable={refreshed} transport_empty={price_transport_empty} "
+                f"no_supported_markets={price_no_supported_markets} "
+                "fallback=minimal_GetGameZip_on_empty_markets",
+                flush=True,
+            )
 
         # Retain disappeared prematch snapshots long enough for a live match to
         # use them, but do not let a persistent server accumulate months of data.

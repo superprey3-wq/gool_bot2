@@ -291,7 +291,7 @@ except Exception as exc:
 
 def one(r):
  m=r["match"]; kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
- market=find_prematch_market(m.home,m.away,path=xbet_state)
+ market=find_prematch_market(m.home,m.away,path=xbet_state,kickoff_ts=kick)
  picks=[]
  info=None
  odds_payload=None

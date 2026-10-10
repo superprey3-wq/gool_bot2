@@ -54,6 +54,7 @@ from .basketball_brain_v2 import (
 from .segment_memory import build_segment_memory, segment_prior
 from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
+from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
 from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
@@ -87,6 +88,14 @@ def basketball_historical_market_signal(
     lo, hi = odds_range if odds_range is not None else (
         max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40)), None,
     )
+    anomaly = basketball_points_market_anomaly(lane)
+    if anomaly:
+        print(
+            f"GOOL_BASKETBALL_MARKET_INTEGRITY_WAIT reason={anomaly} "
+            f"scope={lane.get('scope')} family={lane.get('market_family')} line={lane.get('line')}",
+            flush=True,
+        )
+        return None
     candidate = best_market(profile, lane, phase=phase, min_odd=lo, max_odd=hi)
     if not candidate:
         return None
@@ -1757,6 +1766,8 @@ def map_xbet_to_flashscore(
         if not _event_allowed(xbet):
             continue
         for fi, fs in enumerate(flashscore_events):
+            if not bookmaker_kickoff_compatible(xbet, fs):
+                continue
             quality, reversed_order, weakest = _match_quality(xbet, fs)
             if quality >= threshold and weakest >= side_floor:
                 candidates.append((quality, xi, fi, reversed_order))

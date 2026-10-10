@@ -574,7 +574,10 @@ def signal_tier(
     min_quality: float = 0.55,
 ) -> str | None:
     """Two-tier throughput gate: reject junk without starving useful signals."""
-    if pick.data_quality < min_quality or pick.odds < 1.50 or pick.odds > 3.25:
+    v5_active = os.getenv("GOOL_FOOTBALL_V5_ACTIVE", "0").strip().lower() in {"1", "true", "yes", "on"}
+    low = 1.40 if v5_active else 1.50
+    high = float("inf") if v5_active else 3.25
+    if pick.data_quality < min_quality or pick.odds < low or pick.odds > high:
         return None
     if (
         pick.model_probability >= strong_min_probability

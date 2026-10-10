@@ -347,6 +347,9 @@ def main() -> None:
     # Keep enough multisport state snapshots for a full next-morning LIVE funnel audit.
     os.environ.setdefault("XBET_MULTISPORT_HISTORY_KEEP_BYTES", str(64 * 1024 * 1024))
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
+    os.environ["GOOL_FOOTBALL_V5_ACTIVE"] = "1"
+    os.environ.setdefault("GOOL_FOOTBALL_V5_MIN_ODD", "1.40")
+    os.environ.setdefault("GOOL_FOOTBALL_V5_SHORTLIST_CAP", "240")
     os.environ["GOOL_PREMATCH_DELIVER"] = "1"
     os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")
     os.environ["GOOL_PREMATCH_FULL_MARKET_ACTIVE"] = "1"

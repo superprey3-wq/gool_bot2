@@ -109,6 +109,7 @@ def entry_from_decision(
         "expert_passed": bool(winner.expert_passed),
         "expert_blocks": list(winner.expert_blocks),
         "experts": experts,
+        "football_live_v6_shadow": dict(record.get("football_live_v6_shadow") or {}),
         "alternatives": [row.to_dict() for row in decision.alternatives],
         "flashscore_meta": flashscore_meta(record),
         "stats_snapshot": stats_snapshot(record),

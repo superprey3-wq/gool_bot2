@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history, price_shadow, score_grid
 from gool_bot2.football_model_challengers import poisson_profile_challenger
+from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector, find_prematch_market
@@ -73,6 +74,43 @@ def settle(path: Path, days: list[int], output: Path) -> None:
             key: (float(baseline_probabilities[key])-won)**2
             for key, _p, won in predictions if key in baseline_probabilities
         }
+        v6 = row.get("v6") or {}
+        v6_grades = []
+        for candidate in v6.get("candidates") or []:
+            if not isinstance(candidate, dict):
+                continue
+            family, choice = str(candidate.get("market") or ""), str(candidate.get("selection") or "")
+            outcome = None
+            if family == "match_1x2":
+                outcome = int(choice == ("home" if score[0] > score[1] else "away" if score[1] > score[0] else "draw"))
+            elif family == "btts" and choice in {"yes", "no"}:
+                both = score[0] > 0 and score[1] > 0
+                outcome = int(both if choice == "yes" else not both)
+            elif family in {"match_total", "home_total", "away_total"}:
+                parts = choice.split()
+                if len(parts) == 2 and parts[0] in {"over", "under"}:
+                    try:
+                        bound = float(parts[1])
+                        actual = (
+                            sum(score) if family == "match_total"
+                            else score[0] if family == "home_total" else score[1]
+                        )
+                        if abs(actual - bound) > 1e-9:
+                            outcome = int((actual > bound) if parts[0] == "over" else (actual < bound))
+                    except ValueError:
+                        pass
+            if outcome is None:
+                continue
+            entry_grade = {
+                "market": family, "selection": choice, "hit": outcome,
+                "state": candidate.get("state"),
+                "v5_brier": (float(candidate["v5_probability_uncalibrated"]) - outcome) ** 2,
+                "independent_brier": (float(candidate["independent_probability_uncalibrated"]) - outcome) ** 2,
+                "v6_shrunk_brier": (float(candidate["market_shrunk_probability_heuristic"]) - outcome) ** 2,
+                "bookmaker_brier": (float(candidate["bookmaker_fair_probability"]) - outcome) ** 2,
+                "pnl_units": (float(candidate["odd"]) - 1.0) if outcome else -1.0,
+            }
+            v6_grades.append(entry_grade)
         selection = row.get("shadow_price_candidate")
         pnl = None
         if selection:
@@ -84,6 +122,7 @@ def settle(path: Path, days: list[int], output: Path) -> None:
             "brier_by_market": brier,
             "baseline_brier_by_market": baseline_brier,
             "shadow_price_candidate": selection, "selection_profit_units": pnl,
+            "v6_grades": v6_grades,
         })
         counts["settled"] += 1
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -97,8 +136,23 @@ def settle(path: Path, days: list[int], output: Path) -> None:
         for key in metrics
         if any(key in r["baseline_brier_by_market"] for r in evaluated)
     }
+    qualified_v6 = [
+        item for row in evaluated for item in row.get("v6_grades") or []
+        if item.get("state") == "PASS_SHADOW"
+    ]
+    v6_brier = {
+        label: round(sum(float(item[label]) for item in qualified_v6) / len(qualified_v6), 5)
+        for label in ("v5_brier", "independent_brier", "v6_shrunk_brier", "bookmaker_brier")
+    } if qualified_v6 else {}
     summary = {
         "settled": len(evaluated),
+        "v6_qualified_selections_settled": len(qualified_v6),
+        "v6_qualified_brier_comparison": v6_brier,
+        "v6_qualified_profit_units": round(sum(float(item["pnl_units"]) for item in qualified_v6), 4),
+        "v6_qualified_roi": (
+            round(sum(float(item["pnl_units"]) for item in qualified_v6) / len(qualified_v6), 5)
+            if qualified_v6 else None
+        ),
         "not_finished_or_not_in_feed": counts["not_finished_or_not_in_feed"],
         "v5_brier_by_market": metrics,
         "existing_poisson_baseline_brier": baseline_metrics,
@@ -222,6 +276,19 @@ def main():
                 quote = find_prematch_market(m.home,m.away,path=book_path)
                 if not quote:
                     continue
+                # V6 compares two historical approaches on this identical
+                # bookmaker snapshot. It NEVER alters V5 or sends a bet.
+                b = entry.get("poisson_baseline") or {}
+                alt_profile = {"full_match": {
+                    "home_expected_goals": b.get("home_lambda"),
+                    "away_expected_goals": b.get("away_lambda"),
+                }}
+                v6 = evaluate_football_v6_prematch(
+                    entry["v5"], alt_profile, quote, event_id=entry["event_id"],
+                )
+                entry["v6"] = v6
+                counts["v6_quoted"] += 1
+                counts["v6_pass_shadow"] += int(v6.get("status") == "PASS_SHADOW")
                 priced = price_shadow(entry["v5"], quote)
                 if priced:
                     entry["shadow_price_candidate"] = priced[0]

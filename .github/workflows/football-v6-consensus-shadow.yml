@@ -1,0 +1,64 @@
+name: Football V6 real fixture consensus shadow
+
+on:
+  pull_request:
+    paths:
+      - "src/gool_bot2/football_v6_consensus_shadow.py"
+      - "scripts/gool_flashscore_today.py"
+      - "scripts/gool_football_v5_weekend.py"
+      - "tests/test_football_v6_consensus_shadow.py"
+      - ".github/workflows/football-v6-consensus-shadow.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/gool_bot2/football_v6_consensus_shadow.py"
+      - "scripts/gool_flashscore_today.py"
+      - "scripts/gool_football_v5_weekend.py"
+      - "tests/test_football_v6_consensus_shadow.py"
+      - ".github/workflows/football-v6-consensus-shadow.yml"
+  workflow_dispatch:
+
+jobs:
+  v6-real-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GOOL_PREMATCH_DELIVER: "0"
+      GOOL_VALUE_HUNTER_ACTIVE: "0"
+      GOOL_FOOTBALL_V6_SHADOW_ENABLED: "1"
+      GOOL_MULTISPORT_MODE: "shadow"
+      RUNTIME_DATA_DIR: "artifacts/football_v6/runtime"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: V6 unit tests and PREMATCH pipeline compile
+        run: |
+          python -m py_compile src/gool_bot2/football_v6_consensus_shadow.py scripts/gool_flashscore_today.py scripts/gool_football_v5_weekend.py
+          pytest -q tests/test_football_v6_consensus_shadow.py tests/test_football_v5_production.py
+      - name: Real Flashscore fixtures and actual bookmaker quotes, no Telegram
+        shell: bash
+        run: |
+          mkdir -p artifacts/football_v6
+          if [[ "${GITHUB_EVENT_NAME}" == "push" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            ARGS="--days 0,1 --max-total 1600 --max-per-day 1100 --workers 18 --price-limit 100"
+          else
+            ARGS="--days 0,1 --max-total 48 --max-per-day 30 --workers 8 --price-limit 12"
+          fi
+          python scripts/gool_football_v5_weekend.py $ARGS --output artifacts/football_v6/weekend.jsonl 2>&1 | tee artifacts/football_v6/run.log
+          grep -q "FOOTBALL_V5_WEEKEND_DONE" artifacts/football_v6/run.log
+      - name: Audit outcome summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## GOOL Football V6 shadow pilot" >> "$GITHUB_STEP_SUMMARY"
+          cat artifacts/football_v6/summary.json >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: football-v6-consensus-${{ github.run_id }}
+          path: artifacts/football_v6/
+          retention-days: 14

@@ -15,6 +15,7 @@ from gool_bot2.providers.prematch_fusion import PrematchDataFusion
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
+from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
@@ -310,6 +311,21 @@ def one(r):
    league=m.league or "",kickoff_ts=kick,
    xbet=market,full_analysis=full_analysis,
   )
+  if str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
+   try:
+    v6_shadow=evaluate_football_v6_prematch(
+     forecast,r.get("profile") or {},market,
+     event_id=str(m.provider_match_id),active_picks=picks,
+    )
+    r={**r,"football_v6_shadow":v6_shadow}
+    print("FOOTBALL_V6_SHADOW",m.home,"-",m.away,
+     "state",v6_shadow.get("status"),
+     "checked",v6_shadow.get("quoted_markets_checked",0),
+     "qualified",v6_shadow.get("qualified_shadow_markets",0),
+     "reason",v6_shadow.get("reason",""),flush=True)
+   except Exception as exc:
+    print("FOOTBALL_V6_SHADOW_WAIT",m.home,"-",m.away,
+     type(exc).__name__,str(exc),flush=True)
   if picks:
    print("FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
     "candidates",len(picks),"best",picks[0].market,picks[0].selection,
@@ -477,6 +493,7 @@ def value_only(r):
  return r,value_pick,value_diag
 
 priced=[]; meta={}; value_candidates=[]
+football_v6_rows=[]
 value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":Counter()}
 with ThreadPoolExecutor(max_workers=20) as pool:
  for ftr in as_completed([pool.submit(one,r) for r in rows]):
@@ -487,6 +504,14 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   value_diag_total["qualified"]+=int(value_diag.get("qualified") or 0)
   value_diag_total["rejects"].update(value_diag.get("rejects") or {})
   m=r["match"]; fs_meta=dict(m.meta or {})
+  v6_shadow=r.get("football_v6_shadow")
+  if isinstance(v6_shadow,dict):
+   football_v6_rows.append({
+    "event_id":str(m.provider_match_id),
+    "home":m.home,"away":m.away,"league":m.league or "",
+    "kickoff":float((m.meta or {}).get("scheduled_start_ts") or 0),
+    "v6":v6_shadow,
+   })
   home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
   if home_logo: fs_meta["home_logo_url"]=home_logo
@@ -501,6 +526,16 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    priced.append(p)
    kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
+
+# Immutable pre-kickoff V6 comparison records; these never send Telegram.
+if football_v6_rows:
+ v6_path=runtime/"football_v6"/f"prematch_{day.isoformat()}.jsonl"
+ v6_saved=append_first_snapshots(v6_path,football_v6_rows)
+ print("FOOTBALL_V6_SHADOW_SUMMARY",{
+  "evaluated":len(football_v6_rows),"first_snapshots_saved":v6_saved,
+  "qualified":sum(int((r.get("v6") or {}).get("qualified_shadow_markets") or 0) for r in football_v6_rows),
+  "path":str(v6_path),
+ },flush=True)
 
 # VALUE scans a wider post-Fusion pool without widening ordinary PREMATCH.
 normal_ids={str(r["match"].provider_match_id) for r in rows}

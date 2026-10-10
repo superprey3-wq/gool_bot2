@@ -414,7 +414,7 @@ def main() -> None:
             "telegram_not_configured: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
             f"in {ENV_FILE} or in the server environment"
         )
-    print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
+    print(f"GOOL_BOOT config=ok models=ok telegram=configured football_prematch={'V5' if _truthy('GOOL_FOOTBALL_V5_ACTIVE', True) else 'V4'} live=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
         f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} "

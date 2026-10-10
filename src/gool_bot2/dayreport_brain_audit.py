@@ -183,6 +183,23 @@ def _model_evidence(row: dict[str, Any]) -> list[str]:
         lines.append("Движение 1xBet: " + ("совпадает" if row["market_steam_agrees"] else "против направления"))
     if row.get("matchbook_money_flow_agrees") is not None:
         lines.append("Matchbook: " + ("совпадает" if row["matchbook_money_flow_agrees"] else "против направления"))
+    shadow = row.get("basketball_v4_shadow")
+    if isinstance(shadow, dict):
+        shadow_state = str(shadow.get("state") or "WAIT")
+        shadow_reason = str(shadow.get("reason") or "")
+        if shadow_state == "PASS":
+            lines.append(
+                f"V4 SHADOW (динамический V2, не влияет на ставку): "
+                f"{shadow.get('direction')} · P={_fmt(shadow.get('model_probability_uncalibrated'))} "
+                f"· прогноз={_fmt(shadow.get('projected_total'))} "
+                f"· источник={shadow.get('possession_source') or '—'}"
+            )
+            if shadow.get("agreement_with_v3") is not None:
+                lines.append("V4/V3 направление: " + (
+                    "совпало" if shadow["agreement_with_v3"] else "РАЗОШЛОСЬ"
+                ))
+        else:
+            lines.append(f"V4 SHADOW: WAIT · {shadow_reason or 'нет подтверждения'}")
     return lines
 
 

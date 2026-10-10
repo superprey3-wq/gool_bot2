@@ -200,6 +200,22 @@ def _model_evidence(row: dict[str, Any]) -> list[str]:
                 ))
         else:
             lines.append(f"V4 SHADOW: WAIT · {shadow_reason or 'нет подтверждения'}")
+    hockey_ev = row.get("hockey_prematch_ev_shadow")
+    if isinstance(hockey_ev, dict):
+        state = str(hockey_ev.get("status") or "WAIT")
+        best_ev = hockey_ev.get("best_expected_value_units_uncalibrated")
+        if best_ev is not None:
+            lines.append(
+                f"Hockey PREMATCH EV SHADOW: {state} · направление={hockey_ev.get('direction')} "
+                f"· EV модели={_fmt(best_ev)}u · вероятность НЕ калибрована"
+            )
+            if hockey_ev.get("active_v2_agrees") is not None:
+                lines.append(
+                    "EV/V2 направление: " +
+                    ("совпало" if hockey_ev["active_v2_agrees"] else "РАЗОШЛОСЬ")
+                )
+        else:
+            lines.append(f"Hockey PREMATCH EV SHADOW: WAIT · {hockey_ev.get('reason') or 'не рассчитан'}")
     return lines
 
 

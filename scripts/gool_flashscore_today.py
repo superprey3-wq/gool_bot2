@@ -13,6 +13,7 @@ from gool_bot2.odds_journal import append_price_snapshot,append_sqlite_snapshot
 from gool_bot2.v4_prematch_delivery import emit_delivery_selection,retry_pending_prematch_deliveries
 from gool_bot2.providers.prematch_fusion import PrematchDataFusion
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
+from gool_bot2.football_v5_shadow import append_first_snapshots
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
@@ -75,6 +76,27 @@ update_prematch_status(
  value_hunter_rejects={},
 )
 analysed_rows,fail=_analyse_fixtures(fs,fixtures)
+# V5 SHADOW is independent of published GOOL V4. Persist only the first
+# READY forecast per event, before kickoff, to prevent hindsight bias.
+if str(os.getenv("GOOL_FOOTBALL_V5_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
+ v5_ready=[]
+ v5_states=Counter()
+ for item in analysed_rows:
+  m=item["match"]; v5=dict(item.get("football_v5_shadow") or {})
+  v5_states[str(v5.get("status") or "UNKNOWN")]+=1
+  if v5.get("status")=="READY":
+   v5_ready.append({
+    "event_id":str(m.provider_match_id),"league":str(m.league or ""),
+    "home":m.home,"away":m.away,
+    "kickoff":float((m.meta or {}).get("scheduled_start_ts") or 0),
+    "v5":v5,
+   })
+ v5_path=Path(os.getenv("RUNTIME_DATA_DIR","data"))/"football_v5"/f"prematch_{day.isoformat()}.jsonl"
+ v5_saved=append_first_snapshots(v5_path,v5_ready)
+ print("FOOTBALL_V5_SHADOW",{
+  "scanned":len(analysed_rows),"ready":len(v5_ready),
+  "new_saved":v5_saved,"reasons":dict(v5_states),"path":str(v5_path),
+ },flush=True)
 stage1_rows=[r for r in analysed_rows if r.get("primary_trend")]
 sample_ge6=sum(1 for r in analysed_rows if int(r.get("sample") or 0)>=6)
 profile_available=sum(

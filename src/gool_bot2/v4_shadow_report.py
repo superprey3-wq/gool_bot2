@@ -301,11 +301,16 @@ def _analyse_fixtures(fs: FlashscoreProvider, fixtures: list) -> tuple[list[dict
         try:
             history = local_fs.fetch_match_history(match.provider_match_id, match.home, match.away, limit=10) or {}
             history["sources"] = list(dict.fromkeys([*(history.get("sources") or []), "flashscore_h2h"]))
-            v5 = forecast_from_history(
-                home=match.home, away=match.away,
-                kickoff=float((match.meta or {}).get("scheduled_start_ts") or 0),
-                context=history,
-            )
+            try:
+                v5 = forecast_from_history(
+                    home=match.home, away=match.away,
+                    kickoff=float((match.meta or {}).get("scheduled_start_ts") or 0),
+                    context=history,
+                )
+            except Exception as v5_error:
+                # A shadow diagnostic must never remove a V4 production fixture.
+                v5 = {"model":"football_v5_shadow", "status":"WAIT_ERROR",
+                      "reason":type(v5_error).__name__}
             profile = build_prematch_goal_profile({"match": {"home": match.home, "away": match.away}, "prematch_context": history})
             samples = [int((profile.get(k) or {}).get("pair_sample") or 0) for k in ("first_half", "second_half", "full_match")]
             sample = max(samples or [0])

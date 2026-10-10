@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history, price_shadow, score_grid
 from gool_bot2.football_model_challengers import poisson_profile_challenger
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
+from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
+from gool_bot2.flashscore_odds import fetch_event_odds
 from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector, find_prematch_market
@@ -269,13 +271,56 @@ def main():
             book_path = output.parent / "xbet_snapshot.json"
             XBetPrematchCollector(book_path).collect_once(targets=targets)
             lookup = {r["event_id"]:r for r in records}
+            book_quotes = {
+                str(m.provider_match_id): find_prematch_market(
+                    m.home, m.away, path=book_path,
+                    kickoff_ts=float((m.meta or {}).get("scheduled_start_ts") or 0),
+                )
+                for m in targets
+            }
+
+            # Public LineFeed is frequently blocked in GitHub runners. Use
+            # Flashscore's *real same-event odds* for research when unavailable.
+            # Limit network work independently of the 1600-fixture model scan.
+            fs_limit = max(0, min(100, int(os.getenv("GOOL_FOOTBALL_V6_FS_PRICE_LIMIT", "24"))))
+            fs_targets = [
+                m for m in targets if not book_quotes[str(m.provider_match_id)]
+            ][:fs_limit]
+            fs_quotes = {}
+
+            def get_fs_quote(m):
+                eid = str(m.provider_match_id)
+                try:
+                    quote = flashscore_fulltime_quote(fetch_event_odds(eid))
+                    return eid, quote, None
+                except Exception as exc:
+                    return eid, None, type(exc).__name__
+
+            if fs_targets:
+                with ThreadPoolExecutor(max_workers=min(8, len(fs_targets))) as fs_pool:
+                    for future in as_completed([fs_pool.submit(get_fs_quote, m) for m in fs_targets]):
+                        eid, quote, error = future.result()
+                        if quote:
+                            fs_quotes[eid] = quote
+                            counts["fs_quote_available"] += 1
+                        elif error:
+                            counts["fs_quote_http_error"] += 1
+                        else:
+                            counts["fs_quote_not_paired"] += 1
+                print("FOOTBALL_V6_FS_PRICE_FALLBACK", {
+                    "tried":len(fs_targets), "usable":len(fs_quotes),
+                    "http_error":counts["fs_quote_http_error"],
+                    "no_paired_lines":counts["fs_quote_not_paired"],
+                },flush=True)
+
             for m in targets:
                 entry = lookup.get(str(m.provider_match_id))
                 if not entry:
                     continue
-                quote = find_prematch_market(m.home,m.away,path=book_path,kickoff_ts=float((m.meta or {}).get("scheduled_start_ts") or 0))
+                quote = book_quotes.get(str(m.provider_match_id)) or fs_quotes.get(str(m.provider_match_id))
                 if not quote:
                     continue
+                entry["v6_quote_source"] = "1xbet" if book_quotes.get(str(m.provider_match_id)) else "flashscore"
                 # V6 compares two historical approaches on this identical
                 # bookmaker snapshot. It NEVER alters V5 or sends a bet.
                 b = entry.get("poisson_baseline") or {}
@@ -293,7 +338,9 @@ def main():
                 if priced:
                     entry["shadow_price_candidate"] = priced[0]
                     counts["price_candidates"] += 1
-                counts["book_market_matched"] += 1
+                counts["priced_market_available"] += 1
+                if entry["v6_quote_source"] == "1xbet":
+                    counts["book_market_matched"] += 1
         except Exception as exc:
             print("FOOTBALL_V5_ODDS_UNAVAILABLE",type(exc).__name__,str(exc)[:150],flush=True)
     new = append_first_snapshots(output, sorted(records,key=lambda r:(r["kickoff"],r["event_id"])))

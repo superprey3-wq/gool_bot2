@@ -273,7 +273,7 @@ def main():
                 entry = lookup.get(str(m.provider_match_id))
                 if not entry:
                     continue
-                quote = find_prematch_market(m.home,m.away,path=book_path)
+                quote = find_prematch_market(m.home,m.away,path=book_path,kickoff_ts=float((m.meta or {}).get("scheduled_start_ts") or 0))
                 if not quote:
                     continue
                 # V6 compares two historical approaches on this identical

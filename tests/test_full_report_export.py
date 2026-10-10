@@ -340,3 +340,37 @@ def test_full_report_handles_empty_files(tmp_path: Path):
     assert "Нет записей." in text
     assert "SUPER 10 в этот день не отправлялся." in text
     assert "Ставок: <b>0</b>" in caption
+
+
+def test_unified_dayreport_shows_shadow_comparisons_in_all_sports():
+    from gool_bot2.full_report_export import _diagnostic_text
+    football = _diagnostic_text({
+        "sport": "football",
+        "football_live_v6_shadow": {
+            "status": "COMPARED", "brain_v3_bet": True,
+            "live_v4_bet": False, "hazard_passed": False,
+        },
+    })
+    assert "LIVE V6 SHADOW=COMPARED" in football
+    assert "коррелированные данные" in football
+
+    hockey = _diagnostic_text({
+        "sport": "hockey",
+        "hockey_prematch_ev_shadow": {
+            "status": "PASS_SHADOW",
+            "best_expected_value_units_uncalibrated": 0.071,
+        },
+    })
+    assert "EV SHADOW=PASS_SHADOW" in hockey
+    assert "НЕ КАЛИБРОВАНО" in hockey
+
+    basketball = _diagnostic_text({
+        "sport": "basketball",
+        "basketball_v4_shadow": {
+            "state": "PASS",
+            "direction": "over",
+            "agreement_with_v3": False,
+        },
+    })
+    assert "V4 SHADOW=PASS" in basketball
+    assert "vs V3=False" in basketball

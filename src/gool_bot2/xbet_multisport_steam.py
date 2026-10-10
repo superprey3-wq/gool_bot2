@@ -53,6 +53,7 @@ from .basketball_brain_v2 import (
 )
 from .segment_memory import build_segment_memory, segment_prior
 from .basketball_historical_v3 import HistoricalProfileCache, best_market
+from .basketball_v4_shadow import assess_basketball_v4_live
 from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
@@ -153,7 +154,9 @@ def basketball_v3_live_context_gate(
         expected = float(signal["projected_total"])
     except (KeyError, IndexError, TypeError, ValueError):
         return None
-    nba = "nba" in str(league or "").casefold() or "g league" in str(league or "").casefold()
+    # WNBA includes the substring NBA but plays 10-minute quarters.
+    league_name = str(league or "").casefold()
+    nba = ("nba" in league_name or "g league" in league_name) and "wnba" not in league_name
     duration = 720.0 if nba else 600.0
     if not all(math.isfinite(v) for v in (elapsed, current, line, expected)):
         return None
@@ -4474,6 +4477,7 @@ class MultiSportSteamWorker:
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
+            "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
             "historical_tier": signal.get("historical_tier"),
             "historical_home_hits": signal.get("historical_home_hits"),
             "historical_away_hits": signal.get("historical_away_hits"),
@@ -5570,6 +5574,14 @@ class MultiSportSteamWorker:
                             )
                     else:
                         signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
+
+                    # Parallel V4 evaluation is audit-only: do NOT change the
+                    # public V3/V2 pick, strength, or Telegram delivery.
+                    if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_V4_SHADOW_ENABLED", True):
+                        shadow = assess_basketball_v4_live(fs_brain, lane_row, signal)
+                        row.setdefault("basketball_v4_shadow_candidates", []).append(shadow)
+                        if signal is not None:
+                            signal = {**signal, "basketball_v4_shadow": shadow}
                     if signal is None:
                         pricing_rejected += 1
                         continue

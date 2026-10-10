@@ -104,3 +104,25 @@ def test_v6_live_hook_is_non_veto_audit_only():
     assert "football_live_v6_shadow(record, out)" in source
     assert 'record["brain_v3_decision"] = out' in source
     assert "out[\"football_live_v6_shadow\"] = v6_shadow" in source
+
+
+def test_live_v6_is_persisted_in_match_journal_and_dayreport():
+    import inspect
+    from gool_bot2.multi_journal import entry_from_decision
+    from gool_bot2.dayreport_brain_audit import _model_evidence
+
+    assert '"football_live_v6_shadow"' in inspect.getsource(entry_from_decision)
+    row = {
+        "brain_mode": "brain_v3",
+        "football_live_v6_shadow": {
+            "status": "COMPARED",
+            "brain_v3_bet": True,
+            "live_v4_bet": False,
+            "hazard_passed": False,
+        },
+    }
+    evidence = " ".join(_model_evidence(row))
+    assert "Football LIVE V6 SHADOW" in evidence
+    assert "V3=True" in evidence
+    assert "V4=False" in evidence
+    assert "не калиброваны" in evidence

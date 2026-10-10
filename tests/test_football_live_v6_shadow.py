@@ -108,10 +108,14 @@ def test_v6_live_hook_is_non_veto_audit_only():
 
 def test_live_v6_is_persisted_in_match_journal_and_dayreport():
     import inspect
-    from gool_bot2.multi_journal import entry_from_decision
+    from pathlib import Path
     from gool_bot2.dayreport_brain_audit import _model_evidence
 
-    assert '"football_live_v6_shadow"' in inspect.getsource(entry_from_decision)
+    # At runtime GOOL patches entry_from_decision with a delivery wrapper.
+    # The source file, not the patched wrapper, is the invariant under test.
+    source = (Path(__file__).resolve().parents[1] /
+              "src/gool_bot2/multi_journal.py").read_text("utf-8")
+    assert '"football_live_v6_shadow"' in source
     row = {
         "brain_mode": "brain_v3",
         "football_live_v6_shadow": {

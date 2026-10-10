@@ -16,7 +16,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history, price_shadow
+from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history, price_shadow, score_grid
+from gool_bot2.football_model_challengers import poisson_profile_challenger
+from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector, find_prematch_market
 
@@ -66,6 +68,11 @@ def settle(path: Path, days: list[int], output: Path) -> None:
                                       sum(score) > 0)))
                        for key, p in chances.items()]
         brier = {key: (p - won)**2 for key,p,won in predictions}
+        baseline_probabilities = (row.get("poisson_baseline") or {}).get("probabilities") or {}
+        baseline_brier = {
+            key: (float(baseline_probabilities[key])-won)**2
+            for key, _p, won in predictions if key in baseline_probabilities
+        }
         selection = row.get("shadow_price_candidate")
         pnl = None
         if selection:
@@ -73,7 +80,9 @@ def settle(path: Path, days: list[int], output: Path) -> None:
             hit = sum(score) > float(selection["line"]) if over else sum(score) < float(selection["line"])
             pnl = round(float(selection["odd"]) - 1 if hit else -1, 5)
         evaluated.append({
-            "event_id": eid, "score": score, "brier_by_market": brier,
+            "event_id": eid, "score": score,
+            "brier_by_market": brier,
+            "baseline_brier_by_market": baseline_brier,
             "shadow_price_candidate": selection, "selection_profit_units": pnl,
         })
         counts["settled"] += 1
@@ -82,10 +91,21 @@ def settle(path: Path, days: list[int], output: Path) -> None:
     metrics = {key: round(sum(r["brier_by_market"][key] for r in evaluated) / len(evaluated), 5) for key in (
         evaluated[0]["brier_by_market"] if evaluated else []
     )}
+    baseline_metrics = {
+        key: round(sum(r["baseline_brier_by_market"][key] for r in evaluated if key in r["baseline_brier_by_market"]) /
+                   max(1, sum(key in r["baseline_brier_by_market"] for r in evaluated)), 5)
+        for key in metrics
+        if any(key in r["baseline_brier_by_market"] for r in evaluated)
+    }
     summary = {
         "settled": len(evaluated),
         "not_finished_or_not_in_feed": counts["not_finished_or_not_in_feed"],
-        "brier_by_market": metrics,
+        "v5_brier_by_market": metrics,
+        "existing_poisson_baseline_brier": baseline_metrics,
+        "v5_brier_improvement_positive_is_better": {
+            key: round(baseline_metrics[key] - metrics[key], 5)
+            for key in metrics if key in baseline_metrics
+        },
         "priced_selections_settled": len(rated),
         "priced_selections_profit_units": round(sum(rated), 4),
         "priced_selections_roi": round(sum(rated) / len(rated), 5) if rated else None,
@@ -135,16 +155,31 @@ def main():
 
     def one(m):
         kickoff = float((m.meta or {}).get("scheduled_start_ts") or 0)
-        try:
-            context = FlashscoreProvider().fetch_match_history(str(m.provider_match_id), m.home, m.away, limit=10)
-            pred = forecast_from_history(home=m.home,away=m.away,kickoff=kickoff,context=context)
-        except Exception as exc:
-            pred = {"status":"WAIT_PROVIDER", "reason":type(exc).__name__, "model":"football_v5_shadow"}
+        baseline = {}
+        if kickoff <= time.time():
+            pred = {"status":"WAIT_STARTED","model":"football_v5_shadow"}
+        else:
+            try:
+                context = FlashscoreProvider().fetch_match_history(str(m.provider_match_id), m.home, m.away, limit=10)
+                pred = forecast_from_history(home=m.home,away=m.away,kickoff=kickoff,context=context)
+                prior = build_prematch_goal_profile({
+                    "match":{"home":m.home,"away":m.away},"prematch_context":context,
+                })
+                forecast = poisson_profile_challenger(prior)
+                if forecast is not None:
+                    baseline = {
+                        "model": forecast.name,
+                        "home_lambda": forecast.home_lambda,
+                        "away_lambda": forecast.away_lambda,
+                        "probabilities": score_grid(forecast.home_lambda,forecast.away_lambda),
+                    }
+            except Exception as exc:
+                pred = {"status":"WAIT_PROVIDER", "reason":type(exc).__name__, "model":"football_v5_shadow"}
         return {
             "event_id":str(m.provider_match_id),
             "home":m.home, "away":m.away, "league":m.league or "",
             "kickoff":kickoff, "shadow_created_utc":datetime.now(timezone.utc).isoformat(),
-            "v5":pred,
+            "v5":pred, "poisson_baseline":baseline,
         }
 
     output = Path(args.output)

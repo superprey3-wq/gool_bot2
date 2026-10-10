@@ -160,3 +160,27 @@ def test_background_tracking_does_not_truncate_catalog_to_120(monkeypatch, tmp_p
     state = collector.collect_once()
     assert seen["count"] == 180
     assert state["index_events"] == 180
+
+
+def test_prematch_cross_day_same_teams_rejected_even_if_names_exact(tmp_path):
+    import json
+    path = tmp_path / "collision.json"
+    original = 1791702000.0
+    path.write_text(json.dumps({"matches": {
+        "yesterday": {
+            "event_id": "yesterday", "home": "Alpha", "away": "Beta",
+            "scheduled_start_ts": original - 86400,
+            "match_totals": [{"line": 2.5, "over": 1.9, "under": 1.9}],
+        },
+        "today": {
+            "event_id": "today", "home": "Alpha", "away": "Beta",
+            "scheduled_start_ts": original,
+            "match_totals": [{"line": 2.5, "over": 1.8, "under": 2.0}],
+        },
+    }}), encoding="utf-8")
+    matched = find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original)
+    assert matched and matched["event_id"] == "today"
+    # The lookup must NOT silently borrow a stale bookmaker quote.
+    matched_other = find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original + 86400)
+    assert matched_other is None
+    assert find_prematch_market("Alpha", "Beta", path=path, kickoff_ts=original * 1000)["event_id"] == "today"

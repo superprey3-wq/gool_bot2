@@ -16,6 +16,7 @@ from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
+from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
@@ -313,9 +314,14 @@ def one(r):
   )
   if str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
    try:
+    v6_quote=market or flashscore_fulltime_quote(odds_payload)
     v6_shadow=evaluate_football_v6_prematch(
-     forecast,r.get("profile") or {},market,
+     forecast,r.get("profile") or {},v6_quote,
      event_id=str(m.provider_match_id),active_picks=picks,
+    )
+    v6_shadow["quote_source"]=(
+     "1xbet" if market else
+     "flashscore" if v6_quote else "none"
     )
     r={**r,"football_v6_shadow":v6_shadow}
     print("FOOTBALL_V6_SHADOW",m.home,"-",m.away,

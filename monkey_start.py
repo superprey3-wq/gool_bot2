@@ -347,6 +347,9 @@ def main() -> None:
     # Keep enough multisport state snapshots for a full next-morning LIVE funnel audit.
     os.environ.setdefault("XBET_MULTISPORT_HISTORY_KEEP_BYTES", str(64 * 1024 * 1024))
     os.environ.setdefault("XBET_MARKET_REQUIRED", "1")
+    os.environ.setdefault("GOOL_FOOTBALL_V5_ACTIVE", "1")
+    os.environ.setdefault("GOOL_FOOTBALL_V5_MIN_ODD", "1.40")
+    os.environ.setdefault("GOOL_FOOTBALL_V5_SHORTLIST_CAP", "240")
     os.environ["GOOL_PREMATCH_DELIVER"] = "1"
     os.environ.setdefault("GOOL_PREMATCH_INTERVAL_SECONDS", "10800")
     os.environ["GOOL_PREMATCH_FULL_MARKET_ACTIVE"] = "1"
@@ -411,7 +414,7 @@ def main() -> None:
             "telegram_not_configured: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
             f"in {ENV_FILE} or in the server environment"
         )
-    print("GOOL_BOOT config=ok models=ok telegram=configured brain=V4 mode=active", flush=True)
+    print(f"GOOL_BOOT config=ok models=ok telegram=configured football_prematch={'V5' if _truthy('GOOL_FOOTBALL_V5_ACTIVE', True) else 'V4'} live=V4 mode=active", flush=True)
     print(f"GOOL_BOOT multi_telegram_mode={os.environ['GOOL_MULTI_TELEGRAM_MODE']}", flush=True)
     print(
         f"GOOL_BOOT systems=GOOL_BRAIN+1XBET_STEAM+MULTISPORT multisport_mode={os.environ['GOOL_MULTISPORT_MODE']} "

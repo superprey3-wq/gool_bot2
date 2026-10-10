@@ -1,0 +1,68 @@
+name: Football V5 active production gate
+
+on:
+  push:
+    branches: [main, feature/football-v5-production-20261010]
+    paths:
+      - "src/gool_bot2/football_v5_production.py"
+      - "src/gool_bot2/football_v5_shadow.py"
+      - "src/gool_bot2/v4_prematch_engine.py"
+      - "scripts/gool_flashscore_today.py"
+      - "monkey_start.py"
+      - "tests/test_football_v5_production.py"
+      - ".github/workflows/football-v5-active-production-gate.yml"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Verify V5 active code and rollback
+        run: |
+          python -m py_compile src/gool_bot2/football_v5_production.py scripts/gool_flashscore_today.py monkey_start.py
+          pytest -q tests/test_football_v5_production.py tests/test_football_v5_shadow.py
+          pytest -q
+
+  prematch-active-real-data:
+    runs-on: ubuntu-latest
+    needs: regression
+    timeout-minutes: 35
+    env:
+      GOOL_FOOTBALL_V5_ACTIVE: "1"
+      GOOL_PREMATCH_DELIVER: "0"
+      GOOL_VALUE_HUNTER_ACTIVE: "0"
+      GOOL_PREMATCH_WORKERS: "16"
+      GOOL_FOOTBALL_V5_SHORTLIST_CAP: "24"
+      GOOL_PREMATCH_FUSION_LIMIT: "8"
+      GOOL_PREMATCH_FUSION_RESCUE_TRIGGER: "0"
+      GOOL_PREMATCH_FUSION_WORKERS: "4"
+      GOOL_MULTISPORT_MODE: "shadow"
+      RUNTIME_DATA_DIR: "artifacts/v5_active/runtime"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Full football V5 PREMATCH pipeline without Telegram
+        shell: bash
+        run: |
+          mkdir -p artifacts/v5_active
+          python scripts/gool_flashscore_today.py 2>&1 | tee artifacts/v5_active/prematch.log
+          grep -q "FOOTBALL_BRAIN_ACTIVE V5" artifacts/v5_active/prematch.log
+          grep -q "FOOTBALL_V5_ACTIVE_SHORTLIST" artifacts/v5_active/prematch.log
+          grep -q "=== GOOL DELIVERY" artifacts/v5_active/prematch.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: football-v5-active-real-data-${{ github.run_id }}
+          path: artifacts/v5_active/
+          retention-days: 7

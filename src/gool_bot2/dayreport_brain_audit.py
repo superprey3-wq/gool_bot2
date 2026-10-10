@@ -200,6 +200,20 @@ def _model_evidence(row: dict[str, Any]) -> list[str]:
                 ))
         else:
             lines.append(f"V4 SHADOW: WAIT · {shadow_reason or 'нет подтверждения'}")
+    live_v6 = row.get("football_live_v6_shadow")
+    if isinstance(live_v6, dict) and live_v6:
+        lines.append(
+            "Football LIVE V6 SHADOW: "
+            + str(live_v6.get("status") or "WAIT")
+            + " · V3=" + str(live_v6.get("brain_v3_bet"))
+            + " · V4=" + str(live_v6.get("live_v4_bet"))
+            + " · hazard=" + str(live_v6.get("hazard_passed"))
+            + " · модели используют частично общую статистику"
+        )
+        lines.append(
+            "V6 LIVE: только диагностика, вероятности не калиброваны; "
+            "горизонты V4/hazard могут различаться"
+        )
     hockey_ev = row.get("hockey_prematch_ev_shadow")
     if isinstance(hockey_ev, dict):
         state = str(hockey_ev.get("status") or "WAIT")

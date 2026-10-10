@@ -262,6 +262,33 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
     elif row.get("matchbook_money_flow_agrees") is False:
         bits.append("Matchbook=oppose")
 
+    # Uniform shadow-evidence labels for all sports, not just the special
+    # basketball detail section. Never mistake a shadow model for public BET.
+    basket_v4 = row.get("basketball_v4_shadow")
+    if isinstance(basket_v4, dict) and basket_v4:
+        bits.append(
+            "🏀 V4 SHADOW=" + str(basket_v4.get("state") or "WAIT")
+            + " direction=" + str(basket_v4.get("direction") or "—")
+            + " vs V3=" + str(basket_v4.get("agreement_with_v3"))
+        )
+    hockey_ev = row.get("hockey_prematch_ev_shadow")
+    if isinstance(hockey_ev, dict) and hockey_ev:
+        ev = _number(hockey_ev.get("best_expected_value_units_uncalibrated"))
+        bits.append(
+            "🏒 EV SHADOW=" + str(hockey_ev.get("status") or "WAIT")
+            + (" model_EV=" + f"{ev:+.3f}u" if ev is not None else "")
+            + " (НЕ КАЛИБРОВАНО)"
+        )
+    football_v6 = row.get("football_live_v6_shadow")
+    if isinstance(football_v6, dict) and football_v6:
+        bits.append(
+            "⚽ LIVE V6 SHADOW=" + str(football_v6.get("status") or "WAIT")
+            + " V3=" + str(football_v6.get("brain_v3_bet"))
+            + " V4=" + str(football_v6.get("live_v4_bet"))
+            + " hazard=" + str(football_v6.get("hazard_passed"))
+            + " (коррелированные данные)"
+        )
+
     reason = str(
         row.get("selection_reason")
         or row.get("brain_reason")

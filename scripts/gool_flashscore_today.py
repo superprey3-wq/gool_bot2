@@ -106,7 +106,7 @@ if str(os.getenv("GOOL_FOOTBALL_V5_SHADOW_ENABLED","1")).casefold() in {"1","tru
 stage1_rows=[
  r for r in analysed_rows
  if (r.get("football_v5_shadow") or {}).get("status")=="READY"
-] if V5_ACTIVE else [r for r in analysed_rows if r.get("primary_trend")]
+] if (V5_ACTIVE or V6_ACTIVE) else [r for r in analysed_rows if r.get("primary_trend")]
 sample_ge6=sum(1 for r in analysed_rows if int(r.get("sample") or 0)>=6)
 profile_available=sum(
  1 for r in analysed_rows
@@ -198,12 +198,12 @@ if fusion_rows:
  rescued=[]
  for r in enriched:
   event_id=str(r["match"].provider_match_id)
-  if event_id in existing_ids or (not V5_ACTIVE and not r.get("primary_trend")):
+  if event_id in existing_ids or (not (V5_ACTIVE or V6_ACTIVE) and not r.get("primary_trend")):
    continue
   rows.append(r); existing_ids.add(event_id); rescued.append(r)
  rows=[
   r for r in rows if (r.get("football_v5_shadow") or {}).get("status")=="READY"
- ] if V5_ACTIVE else [r for r in rows if r.get("primary_trend")]
+ ] if (V5_ACTIVE or V6_ACTIVE) else [r for r in rows if r.get("primary_trend")]
  rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
  print(
   "PREMATCH_FUSION",
@@ -231,7 +231,7 @@ for r in rows:
  )
  trends=_trend_signals(r["profile"],evidence_quality)
  primary=_primary_trend(trends)
- if primary is None and not V5_ACTIVE:
+ if primary is None and not (V5_ACTIVE or V6_ACTIVE):
   continue
  normalized_rows.append({
   **r,
@@ -247,8 +247,8 @@ print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter((r.get("primary_trend") or {}).get("name","V5_DIRECT") for r in rows)),flush=True)
 
 brain_eligible_total=len(rows)
-value_scan_rows=[] if V5_ACTIVE else select_value_scan_rows(rows)
-if V5_ACTIVE:
+value_scan_rows=[] if (V5_ACTIVE or V6_ACTIVE) else select_value_scan_rows(rows)
+if V5_ACTIVE or V6_ACTIVE:
  cap=max(1,int(os.getenv("GOOL_FOOTBALL_V5_SHORTLIST_CAP","240")))
  rows.sort(key=lambda r:(
   float((r.get("football_v5_shadow") or {}).get("quality") or 0),
@@ -257,8 +257,8 @@ if V5_ACTIVE:
  ),reverse=True)
  qualified=len(rows)
  rows=rows[:cap]
- shortlist_stats={"cap":cap,"qualified":qualified,"rejected_quality":0,"mode":"FOOTBALL_V5_ACTIVE"}
- print("FOOTBALL_V5_ACTIVE_SHORTLIST",{
+ shortlist_stats={"cap":cap,"qualified":qualified,"rejected_quality":0,"mode":"FOOTBALL_V6_ACTIVE" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE"}
+ print("FOOTBALL_V6_ACTIVE_SHORTLIST" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE_SHORTLIST",{
   "eligible":qualified,"price_shortlist":len(rows),"cap":cap,
  },flush=True)
 else:
@@ -579,7 +579,7 @@ if value_extra_rows:
     vp,vm=value_pick
     value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
 
-print("FOOTBALL_BRAIN_ACTIVE","V6" if V6_ACTIVE else "V5" if V5_ACTIVE else "V4",flush=True)
+print("FOOTBALL_BRAIN_ACTIVE","V6" if V6_ACTIVE else "V5" if (V5_ACTIVE or V6_ACTIVE) else "V4",flush=True)
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
 print("VALUE_HUNTER_SCAN",{
  "scanned_matches":value_diag_total["scanned_matches"],

@@ -182,7 +182,10 @@ def _paired_lines(
 
 
 def _handicap_lines(rows: list[dict[str, Any]]) -> list[dict[str, float]]:
-    by_abs: dict[float, dict[str, float]] = {}
+    # A home -5 and an away +5 are the SAME two-way market. Home +5
+    # and away -5 are a DIFFERENT market. Keying by abs(line) previously
+    # merged and overwrote those two books, losing negative handicaps.
+    by_home_line: dict[float, dict[str, float]] = {}
     for row in rows:
         if int(row.get("G") or -1) not in {2, 3} or row.get("P") is None:
             continue
@@ -190,12 +193,18 @@ def _handicap_lines(rows: list[dict[str, Any]]) -> list[dict[str, float]]:
         side = "home" if t in {4, 7} else "away" if t in {5, 8} else None
         if not side:
             continue
-        line = float(row["P"])
-        key = abs(line)
-        item = by_abs.setdefault(key, {})
+        try:
+            line = float(row["P"])
+            odd = float(row["C"])
+        except (ValueError, TypeError, KeyError):
+            continue
+        if not (math.isfinite(line) and math.isfinite(odd) and odd > 1.0):
+            continue
+        key = round(line if side == "home" else -line, 5)
+        item = by_home_line.setdefault(key, {})
         item[f"{side}_line"] = line
-        item[side] = float(row["C"])
-    return [dict(v) for _, v in sorted(by_abs.items()) if "home" in v and "away" in v]
+        item[side] = odd
+    return [dict(item) for _, item in sorted(by_home_line.items()) if "home" in item and "away" in item]
 
 
 def _moneyline(rows: list[dict[str, Any]], sport: str) -> dict[str, Any]:

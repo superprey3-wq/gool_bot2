@@ -54,6 +54,7 @@ from .basketball_brain_v2 import (
 from .segment_memory import build_segment_memory, segment_prior
 from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
+from .basketball_v5_consensus import basketball_v5_prematch_signal
 from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
 from .hockey_prematch_ev_shadow import evaluate_hockey_prematch_ev_shadow
 from .active_challenger_decisions import hockey_ev_active_signal, basketball_v4_active_signal
@@ -1493,6 +1494,19 @@ def select_prematch_primary(
     """
     if not candidates:
         return None
+    # Hockey Poisson probabilities are uncalibrated: a giant positive
+    # handicap must not win the ranking simply because P approaches 1.
+    if sport == "hockey" and any("value_after_vig_proxy" in sig for _, sig in candidates):
+        def hockey_rank(item):
+            row, sig = item
+            quality = float(sig.get("data_quality") or 0.0)
+            edge = max(0.0, min(0.25, float(sig.get("edge") or 0.0)))
+            ev = max(-0.2, min(0.35, float(sig.get("value_after_vig_proxy") or 0.0)))
+            line = abs(float(sig.get("line") or 0.0)) if row.get("market_family") == "handicap" else 0.0
+            complexity = max(0.0, line - 2.5) * 0.016
+            value = (edge * 0.70 + ev * 0.30) * quality - complexity
+            return (value, quality, float(sig.get("model_probability") or 0.0))
+        return max(candidates, key=hockey_rank)
     return max(candidates, key=lambda item: _signal_confidence_key(item[1]))
 
 
@@ -4689,9 +4703,10 @@ class MultiSportSteamWorker:
                                 sport_memory, active_signal=signal,
                             )
                             row.setdefault("hockey_prematch_ev_shadow_candidates", []).append(ev_shadow)
-                            if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True):
+                            if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True) and str(lane_row.get("market_family") or "") in {"match_total", "home_total", "away_total"}:
                                 signal = hockey_ev_active_signal(signal, ev_shadow)
                             elif signal is not None:
+                                # Totals-only EV challenger cannot veto handicaps.
                                 signal = {**signal, "hockey_prematch_ev_shadow": ev_shadow}
                         if signal is None:
                             continue
@@ -4716,9 +4731,19 @@ class MultiSportSteamWorker:
                         v3_only = v3_enabled and _truthy("GOOL_BASKETBALL_V3_ONLY", True)
                         family = str(lane_row.get("market_family") or "")
                         if v3_enabled and family in {"match_total", "home_total", "away_total"}:
-                            signal = basketball_historical_market_signal(
+                            historical_signal = basketball_historical_market_signal(
                                 dict(row.get("basketball_historical_profile") or {}),
                                 lane_row, phase="PREMATCH",
+                            )
+                            signal = (
+                                basketball_v5_prematch_signal(
+                                    historical_signal, lane_row,
+                                    dict(row.get("sport_context") or {}),
+                                    str(row.get("league") or ""),
+                                    dict(row.get("segment_memory") or {}),
+                                )
+                                if _truthy("GOOL_BASKETBALL_V5_ACTIVE", True)
+                                else historical_signal
                             )
                         elif v3_only:
                             # Legacy handicaps/moneylines are not V3; retain their
@@ -4837,7 +4862,7 @@ class MultiSportSteamWorker:
                                     dict(row.get("segment_memory") or {}),
                                     odds_range=model_odds_range,
                                 )
-                                if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True):
+                                if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True) and str(lane_row.get("market_family") or "") in {"match_total", "home_total", "away_total"}:
                                     parlay_ev = evaluate_hockey_prematch_ev_shadow(
                                         lane_row, dict(row.get("sport_context") or {}),
                                         str(row.get("league") or ""),
@@ -4852,9 +4877,20 @@ class MultiSportSteamWorker:
                                     _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
                                     and str(lane_row.get("market_family") or "") in {"match_total", "home_total", "away_total"}
                                 ):
-                                    parlay_signal = basketball_historical_market_signal(
+                                    historical_parlay = basketball_historical_market_signal(
                                         dict(row.get("basketball_historical_profile") or {}),
                                         lane_row, phase="PREMATCH", odds_range=model_odds_range,
+                                    )
+                                    parlay_signal = (
+                                        basketball_v5_prematch_signal(
+                                            historical_parlay, lane_row,
+                                            dict(row.get("sport_context") or {}),
+                                            str(row.get("league") or ""),
+                                            dict(row.get("segment_memory") or {}),
+                                            odds_range=model_odds_range,
+                                        )
+                                        if _truthy("GOOL_BASKETBALL_V5_ACTIVE", True)
+                                        else historical_parlay
                                     )
                                 elif (
                                     _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)

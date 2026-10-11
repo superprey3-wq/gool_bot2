@@ -31,6 +31,15 @@ def _max_replay_age_hours() -> float:
         return 4.0
 
 
+def _result_replay_age_hours(row: dict[str, Any]) -> float | None:
+    # PREMATCH can be sent many hours before kickoff. Age the SETTLEMENT,
+    # not the original tip, so a fresh result never silently disappears.
+    stamp = _parse_dt(row.get("result_notification_created_at") or row.get("settled_at"))
+    if stamp is None:
+        return _signal_age_hours(row)
+    return max(0.0, (datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)).total_seconds() / 3600.0)
+
+
 def _signal_age_hours(row: dict[str, Any]) -> float | None:
     created = _parse_dt(row.get("created_at") or row.get("telegram_sent_at"))
     if created is None:
@@ -76,7 +85,7 @@ def _suppress_stale_result_replays(journal_path: Path) -> int:
         for row in rows:
             if not bool(row.get("result_notification_pending")):
                 continue
-            age = _signal_age_hours(row)
+            age = _result_replay_age_hours(row)
             explicitly_suppressed = bool(row.get("result_notification_suppressed"))
             too_old = age is not None and age > max_age
             if not (explicitly_suppressed or too_old):

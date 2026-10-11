@@ -5626,7 +5626,7 @@ class MultiSportSteamWorker:
                     if cfg.key == "basketball" and (
                         v4_active or _truthy("GOOL_BASKETBALL_V4_SHADOW_ENABLED", True)
                     ):
-                        dynamic_signal = basketball_v2_live_signal(fs_brain, lane_row) if v4_active else None
+                        dynamic_signal = basketball_live_v2_signal(fs_brain, lane_row) if v4_active else None
                         shadow = assess_basketball_v4_live(fs_brain, lane_row, signal)
                         row.setdefault("basketball_v4_shadow_candidates", []).append(shadow)
                         if v4_active:

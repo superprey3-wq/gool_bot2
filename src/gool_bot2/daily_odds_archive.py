@@ -59,8 +59,14 @@ class DailyOddsArchive:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(str(self.path), timeout=20)
+        # For fresh databases, deleted pages can later be reclaimed without a
+        # full second database copy (unaffordable on a 2 GB storage quota).
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            self.db.execute("PRAGMA auto_vacuum=INCREMENTAL")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA busy_timeout=20000")
+        self._last_prune = 0.0
+        self._last_storage_warning = 0.0
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS fixtures (
                 sport TEXT NOT NULL,
@@ -146,6 +152,35 @@ class DailyOddsArchive:
         start = float(fs.get("start_ts") or 0)
         if not event_id or start <= now:
             return {"quotes": 0, "changes": 0}
+        # Retain a rolling history, not an unlimited SQLite append log.
+        # Expiry happens at most once per 12 hours per collector process.
+        if now - self._last_prune >= 12 * 3600:
+            self.prune(
+                retention_days=max(1, min(14, int(os.getenv("GOOL_DAILY_ODDS_RETENTION_DAYS", "3")))),
+                now=now,
+            )
+            self._last_prune = now
+
+        # Disk quotas are often enforced by the hosting panel, not statvfs.
+        # Bound this one collector by observed DB+WAL+SHM bytes instead of
+        # relying on the host's filesystem-free counter. Stop the archive,
+        # not the LIVE/prematch betting collectors, on budget exhaustion.
+        cap_bytes = max(64, int(os.getenv("GOOL_DAILY_ODDS_MAX_MB", "256"))) * 1024 * 1024
+        used = sum(
+            p.stat().st_size for p in (
+                self.path, Path(str(self.path) + "-wal"), Path(str(self.path) + "-shm"),
+            ) if p.exists()
+        )
+        if used >= cap_bytes:
+            if now - self._last_storage_warning > 600:
+                self._last_storage_warning = now
+                print(
+                    f"GOOL_DAILY_ODDS_STORAGE_PAUSE bytes={used} cap={cap_bytes} "
+                    "reason=disk_quota_guard preserved=existing_history",
+                    flush=True,
+                )
+            return {"quotes": 0, "changes": 0}
+
         quotes = list(dict.fromkeys(self._quotes(decoded)))
         # Never mark an empty/failed market response as successfully scanned.
         if not quotes:
@@ -207,6 +242,14 @@ class DailyOddsArchive:
             self.db.execute("DELETE FROM price_history WHERE ts < ?", (cutoff,))
             self.db.execute("DELETE FROM current_prices WHERE (sport,xbet_id) IN (SELECT sport,xbet_id FROM fixtures WHERE start_ts < ?)", (cutoff,))
             self.db.execute("DELETE FROM fixtures WHERE start_ts < ?", (cutoff,))
+        # For new incremental-vacuum DBs this releases pages to the filesystem,
+        # without the 2x-space temporary copy needed by a full VACUUM.
+        try:
+            mode = self.db.execute("PRAGMA auto_vacuum").fetchone()
+            if mode and int(mode[0]) == 2:
+                self.db.execute("PRAGMA incremental_vacuum(4096)")
+        except sqlite3.DatabaseError:
+            pass
 
     def close(self) -> None:
         self.db.close()

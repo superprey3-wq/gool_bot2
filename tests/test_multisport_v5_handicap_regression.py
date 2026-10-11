@@ -79,7 +79,7 @@ def test_hockey_negative_five_remains_eligible_when_goals_support_it(monkeypatch
     monkeypatch.setattr(hockey, "prematch_lambdas", lambda *args, **kwargs: (9.0, 1.0, 5.6))
     lane = {
         "market_family": "handicap", "selection_side": "home",
-        "line": -5.0, "odd": 1.90, "probability": .54, "selection": "Ф1 -5",
+        "line": -5.0, "odd": 1.90, "probability": .65, "selection": "Ф1 -5",
     }
     signal = hockey_prematch_signal(lane, _hockey_features(), "KHL")
     assert signal is not None

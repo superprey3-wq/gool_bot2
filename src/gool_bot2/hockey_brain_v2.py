@@ -312,6 +312,15 @@ def prematch_signal(
     min_edge = 0.055 if family in {"match_total", "home_total", "away_total"} else 0.060
     if edge < min_edge or model_probability < 0.545:
         return None
+    if family == "handicap":
+        # A giant plus line can look nearly certain under a narrow Poisson
+        # distribution even while the bookmaker strongly disagrees. The model
+        # is not calibrated for blowouts: require plausible score separation.
+        expected_goal_gap = abs(lam_home - lam_away)
+        if abs(line) >= 4.5 and abs(line) > expected_goal_gap + 2.0:
+            return None
+        if edge > _env_float("GOOL_HOCKEY_HANDICAP_MAX_MODEL_MARKET_GAP", 0.25):
+            return None
 
     agreement = 1
     side_threshold = 0.30 * max(0.33, scope_share)
@@ -357,6 +366,8 @@ def prematch_signal(
         "push_probability": round(push, 6),
         "push_confidence_penalty": round(push_confidence_penalty, 2),
         "edge": round(edge, 6),
+        "value_after_vig_proxy": round((1.0 - push) * (model_probability * odd - 1.0), 6),
+        "handicap_expected_goal_gap": round(abs(lam_home - lam_away), 3) if family == "handicap" else None,
         "strength": round(strength, 1),
         "lambda_home": round(lam_home, 3),
         "lambda_away": round(lam_away, 3),

@@ -16,6 +16,7 @@ from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
+from gool_bot2.active_challenger_decisions import football_v6_active_picks
 from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
@@ -29,6 +30,7 @@ import os
 
 MSK=ZoneInfo("Europe/Moscow")
 V5_ACTIVE=str(os.getenv("GOOL_FOOTBALL_V5_ACTIVE","1")).lower() in {"1","true","yes","on"}
+V6_ACTIVE=str(os.getenv("GOOL_FOOTBALL_V6_ACTIVE","1")).lower() in {"1","true","yes","on"}
 def when(p):
  return datetime.fromtimestamp(float(p.kickoff_ts),MSK).strftime("%d.%m %H:%M МСК") if p.kickoff_ts else "время н/д"
 def leg(p,meta):
@@ -298,8 +300,8 @@ def one(r):
  odds_payload=None
  value_pick=None
  value_diag={"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":{}}
- if V5_ACTIVE:
-  # Never silently publish a V4 pick when V5 rejects the fixture.
+ if V5_ACTIVE or V6_ACTIVE:
+  # Never silently publish a V4 pick when V5/V6 rejects the fixture.
   forecast=r.get("football_v5_shadow") or {}
   try:
    odds_payload=fetch_event_odds(m.provider_match_id)
@@ -312,7 +314,7 @@ def one(r):
    league=m.league or "",kickoff_ts=kick,
    xbet=market,full_analysis=full_analysis,
   )
-  if str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
+  if V6_ACTIVE or str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
    try:
     v6_quote=market or flashscore_fulltime_quote(odds_payload)
     v6_shadow=evaluate_football_v6_prematch(
@@ -323,6 +325,7 @@ def one(r):
      "1xbet" if market else
      "flashscore" if v6_quote else "none"
     )
+    v6_shadow["bookmaker"]=str((v6_quote or {}).get("bookmaker") or v6_shadow["quote_source"])
     r={**r,"football_v6_shadow":v6_shadow}
     print("FOOTBALL_V6_SHADOW",m.home,"-",m.away,
      "state",v6_shadow.get("status"),
@@ -332,13 +335,25 @@ def one(r):
    except Exception as exc:
     print("FOOTBALL_V6_SHADOW_WAIT",m.home,"-",m.away,
      type(exc).__name__,str(exc),flush=True)
+  if V6_ACTIVE:
+   # In V6 mode, DO NOT fall back to old V5 picks after V6 declines.
+   # The same real bookmaker quote is mandatory.
+   picks,info=football_v6_active_picks(
+    r.get("football_v6_shadow") or {},
+    event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    league=m.league or "",kickoff_ts=kick,
+   )
+   print("FOOTBALL_V6_ACTIVE",m.home,"-",m.away,
+    "status","BET" if picks else "WAIT",
+    "reject",(info or {}).get("reject",""),
+    "odds",f"{picks[0].odds:.2f}" if picks else "-",flush=True)
   if picks:
-   print("FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
+   print("FOOTBALL_V6_PREMATCH" if V6_ACTIVE else "FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
     "candidates",len(picks),"best",picks[0].market,picks[0].selection,
     f"@{picks[0].odds:.2f}",f"p={picks[0].model_probability:.3f}",
     "opp_cov",forecast.get("opponent_strength_coverage"),flush=True)
   else:
-   print("FOOTBALL_V5_WAIT",m.home,"-",m.away,info.get("reject"),flush=True)
+   print("FOOTBALL_V6_WAIT" if V6_ACTIVE else "FOOTBALL_V5_WAIT",m.home,"-",m.away,info.get("reject"),flush=True)
   return picks,info,r,None,value_diag
 
  # Production priority 1: the tested full-market brain compares the real market
@@ -564,7 +579,7 @@ if value_extra_rows:
     vp,vm=value_pick
     value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
 
-print("FOOTBALL_BRAIN_ACTIVE","V5" if V5_ACTIVE else "V4",flush=True)
+print("FOOTBALL_BRAIN_ACTIVE","V6" if V6_ACTIVE else "V5" if V5_ACTIVE else "V4",flush=True)
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
 print("VALUE_HUNTER_SCAN",{
  "scanned_matches":value_diag_total["scanned_matches"],

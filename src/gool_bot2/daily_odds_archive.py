@@ -138,6 +138,17 @@ class DailyOddsArchive:
                     continue
                 yield str(scope), key, odd, int(bool(raw.get("blocked")))
 
+    def on_disk_bytes(self) -> int:
+        """Size of the archive and associated SQLite WAL files."""
+        return sum(
+            path.stat().st_size
+            for path in (
+                self.path, Path(str(self.path) + "-wal"),
+                Path(str(self.path) + "-shm"),
+            )
+            if path.exists()
+        )
+
     def record(
         self,
         *,
@@ -166,11 +177,7 @@ class DailyOddsArchive:
         # relying on the host's filesystem-free counter. Stop the archive,
         # not the LIVE/prematch betting collectors, on budget exhaustion.
         cap_bytes = max(64, int(os.getenv("GOOL_DAILY_ODDS_MAX_MB", "256"))) * 1024 * 1024
-        used = sum(
-            p.stat().st_size for p in (
-                self.path, Path(str(self.path) + "-wal"), Path(str(self.path) + "-shm"),
-            ) if p.exists()
-        )
+        used = self.on_disk_bytes()
         if used >= cap_bytes:
             if now - self._last_storage_warning > 600:
                 self._last_storage_warning = now

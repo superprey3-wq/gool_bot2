@@ -90,3 +90,63 @@ def test_invalid_snapshot_keeps_working_code(tmp_path):
         updater._install_snapshot(snapshot, root)
     assert (package/'working.py').read_text() == 'VALUE=1\n'
     assert not (package/'broken.py').exists()
+
+
+def test_disk_recovery_removes_only_rebuildable_files(tmp_path: Path):
+    import os
+    import time
+
+    updater = _load()
+    root = tmp_path / "server"
+    (root / ".pip-tmp").mkdir(parents=True)
+    (root / ".pip-tmp" / "pip-download.whl").write_bytes(b"x" * 100)
+    (root / ".cache" / "pip").mkdir(parents=True)
+    (root / ".cache" / "pip" / "old").write_bytes(b"x" * 50)
+    (root / ".cache" / "ms-playwright").mkdir(parents=True)
+    (root / ".cache" / "ms-playwright" / "browser").write_bytes(b"x" * 50)
+    (root / "gool.env").write_text("GOOL_BROWSER_ENABLE=0\nSECRET=preserve\n")
+    data = root / "gool_bot2_data"
+    (data / "live" / "shadow_cards").mkdir(parents=True)
+    (data / "live" / "shadow_cards" / "old.png").write_bytes(b"x" * 80)
+    (data / "raw" / "archive" / "20261001T120000Z").mkdir(parents=True)
+    (data / "raw" / "archive" / "20261001T120000Z" / "snap.jsonl").write_bytes(b"x" * 60)
+    raw = data / "raw" / "live"
+    raw.mkdir(parents=True)
+    old = raw / "old.jsonl"
+    old.write_bytes(b"x" * 100)
+    os.utime(old, (time.time() - 8 * 3600, time.time() - 8 * 3600))
+    recent = raw / "current.jsonl"
+    recent.write_bytes(b"x" * 100)
+    sqlite = data / "live" / "daily_odds.sqlite"
+    sqlite.parent.mkdir(exist_ok=True)
+    sqlite.write_bytes(b"not for deletion")
+    journal = data / "live" / "gool_multi_journal.json"
+    journal.write_text("keep")
+    models = root / "gool_bot2_deploy" / "models"
+    models.mkdir(parents=True)
+    (models / "weights.pkl").write_bytes(b"model")
+
+    result = updater._startup_disk_recovery(root)
+    assert result["removed"] >= 5
+    assert result["freed_bytes"] >= 340
+    assert not (root / ".pip-tmp").exists()
+    assert not (root / ".cache" / "pip").exists()
+    assert not (root / ".cache" / "ms-playwright").exists()
+    assert not (data / "raw" / "archive" / "20261001T120000Z").exists()
+    assert not old.exists()
+    assert recent.exists()
+    assert sqlite.read_bytes() == b"not for deletion"
+    assert journal.read_text() == "keep"
+    assert (models / "weights.pkl").read_bytes() == b"model"
+    assert "SECRET=preserve" in (root / "gool.env").read_text()
+
+
+def test_disk_recovery_keeps_browser_if_enabled(tmp_path: Path, monkeypatch):
+    updater = _load()
+    monkeypatch.setenv("GOOL_BROWSER_ENABLE", "1")
+    root = tmp_path / "server"
+    browser = root / ".cache" / "ms-playwright"
+    browser.mkdir(parents=True)
+    (browser / "chromium").write_bytes(b"x")
+    updater._startup_disk_recovery(root)
+    assert (browser / "chromium").exists()

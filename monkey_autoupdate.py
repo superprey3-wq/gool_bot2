@@ -3,7 +3,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
+import time
 import sys
 import tempfile
 import urllib.parse
@@ -17,6 +19,85 @@ STATE_FILE = RUNTIME_ROOT / ".code_version"
 REPO = "superprey3-wq/gool_bot2"
 REF = "main"
 MAX_ARCHIVE_BYTES = 30 * 1024 * 1024
+_ROTATED_ARCHIVE = re.compile(r"^\d{8}T\d{6}Z$")
+
+
+def _startup_disk_recovery(root: Path) -> dict[str, int]:
+    """Remove only *rebuildable* GOOL files before unzip/install.
+
+    On 2 GB hosting plans the codeload extraction needs free temporary space.
+    Never remove config, real match history/odds, sqlite databases, journals or
+    trained models. This helper intentionally has no package dependencies.
+    """
+    freed = 0
+    removed = 0
+
+    def safe_remove(path: Path) -> None:
+        nonlocal freed, removed
+        try:
+            if path.is_symlink() or not path.exists():
+                return
+            if path.is_file():
+                size = path.stat().st_size
+                path.unlink()
+            elif path.is_dir():
+                size = sum(p.stat().st_size for p in path.rglob("*") if p.is_file() and not p.is_symlink())
+                shutil.rmtree(path)
+            else:
+                return
+            freed += size
+            removed += 1
+        except OSError as exc:
+            print(f"GOOL_DISK_RECOVERY_SKIP path={path} error={type(exc).__name__}:{exc}", flush=True)
+
+    # Pip extraction/downloads and display cards are entirely regenerated.
+    for path in (
+        root / ".pip-tmp",
+        root / ".cache" / "pip",
+    ):
+        safe_remove(path)
+    cards = root / "gool_bot2_data" / "live" / "shadow_cards"
+    if cards.is_dir() and not cards.is_symlink():
+        for card in cards.glob("*.png"):
+            safe_remove(card)
+
+    # Chromium is very large. Monkey defaults its browser worker to disabled.
+    # Honour either the injected env or gool.env if present.
+    browser = os.getenv("GOOL_BROWSER_ENABLE")
+    if browser is None:
+        env_path = root / "gool.env"
+        try:
+            for raw in env_path.read_text("utf-8").splitlines():
+                if raw.strip().startswith("GOOL_BROWSER_ENABLE="):
+                    browser = raw.split("=", 1)[1].strip()
+        except OSError:
+            pass
+    if str(browser or "0").strip().lower() not in {"1", "yes", "true", "on"}:
+        safe_remove(root / ".cache" / "ms-playwright")
+
+    archive_dir = root / "gool_bot2_data" / "raw" / "archive"
+    if archive_dir.is_dir() and not archive_dir.is_symlink():
+        for path in archive_dir.iterdir():
+            if path.is_dir() and _ROTATED_ARCHIVE.fullmatch(path.name):
+                safe_remove(path)
+
+    # Old, already superseded source snapshots; never delete today's active
+    # raw file, market history or any journals.
+    raw_dir = root / "gool_bot2_data" / "raw" / "live"
+    if raw_dir.is_dir() and not raw_dir.is_symlink():
+        now = time.time()
+        files = list(raw_dir.glob("*.jsonl"))
+        newest = max(files, key=lambda p: p.stat().st_mtime, default=None)
+        for path in files:
+            try:
+                if path != newest and now - path.stat().st_mtime > 6 * 3600:
+                    safe_remove(path)
+            except OSError:
+                continue
+
+    print(f"GOOL_DISK_RECOVERY removed={removed} freed_bytes={freed} "
+          "protected=env,journals,sqlite,models", flush=True)
+    return {"removed": removed, "freed_bytes": freed}
 
 
 def _truthy(name: str, default: bool = False) -> bool:
@@ -131,6 +212,11 @@ def update_from_github() -> bool:
     if not _truthy("GOOL_AUTO_UPDATE", True):
         print("GOOL_UPDATE disabled", flush=True)
         return False
+
+    # Run before the GitHub ZIP is downloaded and unpacked: cleanup is also
+    # useful when the previously installed server cannot launch.
+    if _truthy("GOOL_DISK_RECOVERY_ENABLED", True):
+        _startup_disk_recovery(ROOT)
 
     repo = str(os.getenv("GOOL_AUTO_UPDATE_REPO", REPO)).strip() or REPO
     ref = str(os.getenv("GOOL_AUTO_UPDATE_REF", REF)).strip() or REF

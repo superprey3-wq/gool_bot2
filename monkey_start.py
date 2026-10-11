@@ -255,6 +255,13 @@ def _production_commands(browser_enabled: bool) -> dict[str, list[str]]:
 
 def main() -> None:
     load_env(ENV_FILE)
+    # Also recover safe temporary space when launched without the updater.
+    if _truthy("GOOL_DISK_RECOVERY_ENABLED", True):
+        try:
+            from monkey_autoupdate import _startup_disk_recovery
+            _startup_disk_recovery(ROOT)
+        except (OSError, ImportError) as exc:
+            print(f"GOOL_BOOT_DISK_RECOVERY_WARNING {type(exc).__name__}:{exc}", flush=True)
     os.environ["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_ROOT))
 
@@ -392,6 +399,13 @@ def main() -> None:
     multi_journal.parent.mkdir(parents=True, exist_ok=True)
 
     _reset_multi_tracking_once(runtime)
+    # Purge old raw/live diagnostics before pip/Chromium start allocating.
+    try:
+        from gool_bot2.storage_runtime import startup_cleanup
+        cleaned = startup_cleanup()
+        print(f"GOOL_BOOT_STORAGE_CLEANUP {cleaned}", flush=True)
+    except Exception as exc:
+        print(f"GOOL_BOOT_STORAGE_CLEANUP_WARNING {type(exc).__name__}:{exc}", flush=True)
     ensure_deps()
     browser_enabled = _ensure_chromium()
 

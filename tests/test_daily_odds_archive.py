@@ -114,3 +114,28 @@ def test_super_waits_until_bookmaker_market_coverage_is_warmed(tmp_path, monkeyp
     assert {key: row["ratio"] for key, row in after["sports"].items()} == {
         "football": 0.9, "hockey": 0.9, "basketball": 0.9
     }
+
+
+def test_daily_odds_archive_caps_storage_without_erasing_history(archive, monkeypatch, capsys):
+    monkeypatch.setenv("GOOL_DAILY_ODDS_MAX_MB", "64")
+    now = 1791500000.0
+    fs = {"start_ts": now + 3600, "home": "A", "away": "B"}
+    market = {"FULL_MATCH": {"raw": [{"G": 17, "T": 9, "P": 1.5, "C": 1.90}]}}
+    archive.on_disk_bytes = lambda: 65 * 1024 * 1024
+    result = archive.record(sport="football", event_id="B1", fs=fs, decoded=market, ts=now)
+    assert result == {"quotes": 0, "changes": 0}
+    assert archive.coverage("football", match_day(fs["start_ts"]))["archived_matches"] == 0
+    assert "GOOL_DAILY_ODDS_STORAGE_PAUSE" in capsys.readouterr().out
+
+
+def test_daily_odds_archive_prunes_old_history_once_per_twelve_hours(archive, monkeypatch):
+    monkeypatch.setenv("GOOL_DAILY_ODDS_RETENTION_DAYS", "3")
+    now = 1791500000.0
+    market = {"FULL_MATCH": {"raw": [{"G": 17, "T": 9, "P": 1.5, "C": 1.90}]}}
+    old = {"start_ts": now + 3600, "home": "A", "away": "B"}
+    new_time = now + 5 * 86400
+    current = {"start_ts": new_time + 3600, "home": "C", "away": "D"}
+    archive.record(sport="football", event_id="old", fs=old, decoded=market, ts=now)
+    archive.record(sport="football", event_id="current", fs=current, decoded=market, ts=new_time)
+    assert archive.coverage("football", match_day(old["start_ts"]))["archived_matches"] == 0
+    assert archive.coverage("football", match_day(current["start_ts"]))["archived_matches"] == 1

@@ -382,6 +382,15 @@ def _target_aware_brain_entry(
     with primary._LOCK:
         state = primary._load_signal_state(primary._signal_state_path())
         signals = state.get("signals") or {}
+        # Once a LIVE bet was actually delivered, never send a second
+        # market/target for the same Flashscore fixture. Ignore unsent rows.
+        if any(
+            isinstance(existing, dict)
+            and str(existing.get("match_id") or "") == match_id
+            and bool(existing.get("telegram_sent"))
+            for existing in signals.values()
+        ):
+            return None
         if signal_key in signals:
             return None
         # Respect an old-format signal only when it was for this exact target.

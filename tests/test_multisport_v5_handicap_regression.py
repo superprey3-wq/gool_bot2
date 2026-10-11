@@ -101,3 +101,19 @@ def test_hockey_no_longer_ranks_maximum_win_probability_first():
     ]
     row, signal = select_prematch_primary(options, sport="hockey")
     assert signal["line"] == -1.5
+
+
+def test_signed_1xbet_handicaps_do_not_overwrite_one_another():
+    from gool_bot2.xbet_multisport_markets import _handicap_lines, prematch_market_lanes
+    raw = [
+        {"G": 2, "T": 4, "P": -5, "C": 3.1},
+        {"G": 2, "T": 5, "P": +5, "C": 1.4},
+        {"G": 2, "T": 4, "P": +5, "C": 1.32},
+        {"G": 2, "T": 5, "P": -5, "C": 3.8},
+    ]
+    decoded = _handicap_lines(raw)
+    assert len(decoded) == 2
+    assert {(v["home_line"], v["away_line"]) for v in decoded} == {(-5, 5), (5, -5)}
+    lanes = prematch_market_lanes({"FULL_MATCH": {"handicap": decoded}}, "hockey")
+    assert any(row.get("market_family") == "handicap" and row.get("selection_side") == "home" and row.get("line") == -5 for row in lanes)
+    assert any(row.get("market_family") == "handicap" and row.get("selection_side") == "away" and row.get("line") == -5 for row in lanes)

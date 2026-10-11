@@ -80,6 +80,6 @@ def test_v5_minimum_odd_and_existing_delivery(monkeypatch):
 
 def test_v5_script_is_primary_selector():
     script=(Path(__file__).resolve().parents[1]/"scripts/gool_flashscore_today.py").read_text("utf-8")
-    assert "if V5_ACTIVE:" in script
+    assert "if V5_ACTIVE or V6_ACTIVE:" in script
     assert "production_v5_picks(" in script
     assert "return picks,info,r,None,value_diag" in script

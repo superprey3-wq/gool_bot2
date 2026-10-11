@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 35
     env:
       GOOL_FOOTBALL_V5_ACTIVE: "1"
+      GOOL_FOOTBALL_V6_ACTIVE: "0"
       GOOL_PREMATCH_DELIVER: "0"
       GOOL_VALUE_HUNTER_ACTIVE: "0"
       GOOL_PREMATCH_WORKERS: "16"

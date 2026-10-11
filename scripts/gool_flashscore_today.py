@@ -16,6 +16,7 @@ from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
+from gool_bot2.active_challenger_decisions import football_v6_active_picks
 from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
@@ -29,6 +30,7 @@ import os
 
 MSK=ZoneInfo("Europe/Moscow")
 V5_ACTIVE=str(os.getenv("GOOL_FOOTBALL_V5_ACTIVE","1")).lower() in {"1","true","yes","on"}
+V6_ACTIVE=str(os.getenv("GOOL_FOOTBALL_V6_ACTIVE","1")).lower() in {"1","true","yes","on"}
 def when(p):
  return datetime.fromtimestamp(float(p.kickoff_ts),MSK).strftime("%d.%m %H:%M МСК") if p.kickoff_ts else "время н/д"
 def leg(p,meta):
@@ -104,7 +106,7 @@ if str(os.getenv("GOOL_FOOTBALL_V5_SHADOW_ENABLED","1")).casefold() in {"1","tru
 stage1_rows=[
  r for r in analysed_rows
  if (r.get("football_v5_shadow") or {}).get("status")=="READY"
-] if V5_ACTIVE else [r for r in analysed_rows if r.get("primary_trend")]
+] if (V5_ACTIVE or V6_ACTIVE) else [r for r in analysed_rows if r.get("primary_trend")]
 sample_ge6=sum(1 for r in analysed_rows if int(r.get("sample") or 0)>=6)
 profile_available=sum(
  1 for r in analysed_rows
@@ -196,12 +198,12 @@ if fusion_rows:
  rescued=[]
  for r in enriched:
   event_id=str(r["match"].provider_match_id)
-  if event_id in existing_ids or (not V5_ACTIVE and not r.get("primary_trend")):
+  if event_id in existing_ids or (not (V5_ACTIVE or V6_ACTIVE) and not r.get("primary_trend")):
    continue
   rows.append(r); existing_ids.add(event_id); rescued.append(r)
  rows=[
   r for r in rows if (r.get("football_v5_shadow") or {}).get("status")=="READY"
- ] if V5_ACTIVE else [r for r in rows if r.get("primary_trend")]
+ ] if (V5_ACTIVE or V6_ACTIVE) else [r for r in rows if r.get("primary_trend")]
  rows.sort(key=lambda r:(float(r.get("brain_score") or 0),float(r.get("quality") or 0)),reverse=True)
  print(
   "PREMATCH_FUSION",
@@ -229,7 +231,7 @@ for r in rows:
  )
  trends=_trend_signals(r["profile"],evidence_quality)
  primary=_primary_trend(trends)
- if primary is None and not V5_ACTIVE:
+ if primary is None and not (V5_ACTIVE or V6_ACTIVE):
   continue
  normalized_rows.append({
   **r,
@@ -245,8 +247,8 @@ print("BRAIN_ELIGIBLE_AFTER_FUSION",len(rows),flush=True)
 print("PRIMARY_TREND_COUNTS",dict(Counter((r.get("primary_trend") or {}).get("name","V5_DIRECT") for r in rows)),flush=True)
 
 brain_eligible_total=len(rows)
-value_scan_rows=[] if V5_ACTIVE else select_value_scan_rows(rows)
-if V5_ACTIVE:
+value_scan_rows=[] if (V5_ACTIVE or V6_ACTIVE) else select_value_scan_rows(rows)
+if V5_ACTIVE or V6_ACTIVE:
  cap=max(1,int(os.getenv("GOOL_FOOTBALL_V5_SHORTLIST_CAP","240")))
  rows.sort(key=lambda r:(
   float((r.get("football_v5_shadow") or {}).get("quality") or 0),
@@ -255,8 +257,8 @@ if V5_ACTIVE:
  ),reverse=True)
  qualified=len(rows)
  rows=rows[:cap]
- shortlist_stats={"cap":cap,"qualified":qualified,"rejected_quality":0,"mode":"FOOTBALL_V5_ACTIVE"}
- print("FOOTBALL_V5_ACTIVE_SHORTLIST",{
+ shortlist_stats={"cap":cap,"qualified":qualified,"rejected_quality":0,"mode":"FOOTBALL_V6_ACTIVE" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE"}
+ print("FOOTBALL_V6_ACTIVE_SHORTLIST" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE_SHORTLIST",{
   "eligible":qualified,"price_shortlist":len(rows),"cap":cap,
  },flush=True)
 else:
@@ -298,8 +300,8 @@ def one(r):
  odds_payload=None
  value_pick=None
  value_diag={"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":{}}
- if V5_ACTIVE:
-  # Never silently publish a V4 pick when V5 rejects the fixture.
+ if V5_ACTIVE or V6_ACTIVE:
+  # Never silently publish a V4 pick when V5/V6 rejects the fixture.
   forecast=r.get("football_v5_shadow") or {}
   try:
    odds_payload=fetch_event_odds(m.provider_match_id)
@@ -312,7 +314,7 @@ def one(r):
    league=m.league or "",kickoff_ts=kick,
    xbet=market,full_analysis=full_analysis,
   )
-  if str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
+  if V6_ACTIVE or str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
    try:
     v6_quote=market or flashscore_fulltime_quote(odds_payload)
     v6_shadow=evaluate_football_v6_prematch(
@@ -323,6 +325,7 @@ def one(r):
      "1xbet" if market else
      "flashscore" if v6_quote else "none"
     )
+    v6_shadow["bookmaker"]=str((v6_quote or {}).get("bookmaker") or v6_shadow["quote_source"])
     r={**r,"football_v6_shadow":v6_shadow}
     print("FOOTBALL_V6_SHADOW",m.home,"-",m.away,
      "state",v6_shadow.get("status"),
@@ -332,13 +335,25 @@ def one(r):
    except Exception as exc:
     print("FOOTBALL_V6_SHADOW_WAIT",m.home,"-",m.away,
      type(exc).__name__,str(exc),flush=True)
+  if V6_ACTIVE:
+   # In V6 mode, DO NOT fall back to old V5 picks after V6 declines.
+   # The same real bookmaker quote is mandatory.
+   picks,info=football_v6_active_picks(
+    r.get("football_v6_shadow") or {},
+    event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    league=m.league or "",kickoff_ts=kick,
+   )
+   print("FOOTBALL_V6_ACTIVE",m.home,"-",m.away,
+    "status","BET" if picks else "WAIT",
+    "reject",(info or {}).get("reject",""),
+    "odds",f"{picks[0].odds:.2f}" if picks else "-",flush=True)
   if picks:
-   print("FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
+   print("FOOTBALL_V6_PREMATCH" if V6_ACTIVE else "FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
     "candidates",len(picks),"best",picks[0].market,picks[0].selection,
     f"@{picks[0].odds:.2f}",f"p={picks[0].model_probability:.3f}",
     "opp_cov",forecast.get("opponent_strength_coverage"),flush=True)
   else:
-   print("FOOTBALL_V5_WAIT",m.home,"-",m.away,info.get("reject"),flush=True)
+   print("FOOTBALL_V6_WAIT" if V6_ACTIVE else "FOOTBALL_V5_WAIT",m.home,"-",m.away,info.get("reject"),flush=True)
   return picks,info,r,None,value_diag
 
  # Production priority 1: the tested full-market brain compares the real market
@@ -564,7 +579,7 @@ if value_extra_rows:
     vp,vm=value_pick
     value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
 
-print("FOOTBALL_BRAIN_ACTIVE","V5" if V5_ACTIVE else "V4",flush=True)
+print("FOOTBALL_BRAIN_ACTIVE","V6" if V6_ACTIVE else "V5" if (V5_ACTIVE or V6_ACTIVE) else "V4",flush=True)
 print("MULTI_MARKET_PRICED",len(priced),flush=True)
 print("VALUE_HUNTER_SCAN",{
  "scanned_matches":value_diag_total["scanned_matches"],

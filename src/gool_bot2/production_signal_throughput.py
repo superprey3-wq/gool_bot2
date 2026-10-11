@@ -312,7 +312,10 @@ def _production_brain_audit(
 
     # Add correlated V3/V4/goal-hazard diagnostic only. It must never
     # change status, policy blocks, selection, or active Telegram delivery.
-    if str(os.getenv("GOOL_FOOTBALL_LIVE_V6_SHADOW_ENABLED", "1")).casefold() in {"1", "true", "yes", "on"}:
+    if (
+        str(os.getenv("GOOL_FOOTBALL_LIVE_V6_SHADOW_ENABLED", "1")).casefold() in {"1", "true", "yes", "on"}
+        or str(os.getenv("GOOL_FOOTBALL_LIVE_V6_ACTIVE", "1")).casefold() in {"1", "true", "yes", "on"}
+    ):
         try:
             from .football_live_v6_shadow import football_live_v6_shadow
             v6_shadow = football_live_v6_shadow(record, out)
@@ -328,6 +331,21 @@ def _production_brain_audit(
                 f"hazard={v6_shadow.get('hazard_passed')}",
                 flush=True,
             )
+            if (
+                str(os.getenv("GOOL_FOOTBALL_LIVE_V6_ACTIVE", "1")).casefold() in {"1", "true", "yes", "on"}
+                and str(out.get("status") or "") == "BET"
+            ):
+                from .active_challenger_decisions import football_live_v6_veto
+                veto = football_live_v6_veto(v6_shadow)
+                if veto:
+                    out["status"] = "READY"
+                    out["blocks"] = list(dict.fromkeys([
+                        *[str(block) for block in out.get("blocks") or []],
+                        veto,
+                    ]))
+                    out["live_v6_active_veto"] = veto
+                    selection._sync_expert(experts, out)
+                    print(f"GOOL_FOOTBALL_LIVE_V6_VETO match={match_id} veto={veto}", flush=True)
         except Exception as exc:
             print(
                 f"GOOL_FOOTBALL_LIVE_V6_SHADOW_ERROR match={match_id} "

@@ -56,6 +56,7 @@ from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
 from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
 from .hockey_prematch_ev_shadow import evaluate_hockey_prematch_ev_shadow
+from .active_challenger_decisions import hockey_ev_active_signal, basketball_v4_active_signal
 from .multisport_matchbook_flow import apply_matchbook_confirmation, matchbook_money_flow
 from .xbet_multisport_markets import (
     SCOPE_FULL,
@@ -4438,7 +4439,9 @@ class MultiSportSteamWorker:
             "phase": phase,
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
             "signal_type": (
-                "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
+                "hockey_prematch_ev_active" if str(signal.get("brain_mode") or "") == "hockey_prematch_ev_active"
+                else "basketball_live_v4_active" if str(signal.get("brain_mode") or "") == "basketball_live_v4_active"
+                else "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
                 else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
                 else "basketball_historical_v3" if str(signal.get("brain_mode") or "") == "basketball_historical_v3"
                 else "basketball_live_v2" if str(signal.get("brain_mode") or "") == "basketball_live_v2"
@@ -4677,13 +4680,18 @@ class MultiSportSteamWorker:
                         # Compare economic value on *both* quoted sides,
                         # including bookmaker pushes on integer totals.
                         # Shadow never changes the active V2 selection.
-                        if _truthy("GOOL_HOCKEY_PREMATCH_EV_SHADOW_ENABLED", True):
+                        if (
+                            _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True)
+                            or _truthy("GOOL_HOCKEY_PREMATCH_EV_SHADOW_ENABLED", True)
+                        ):
                             ev_shadow = evaluate_hockey_prematch_ev_shadow(
                                 lane_row, sport_features, str(row.get("league") or ""),
                                 sport_memory, active_signal=signal,
                             )
                             row.setdefault("hockey_prematch_ev_shadow_candidates", []).append(ev_shadow)
-                            if signal is not None:
+                            if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True):
+                                signal = hockey_ev_active_signal(signal, ev_shadow)
+                            elif signal is not None:
                                 signal = {**signal, "hockey_prematch_ev_shadow": ev_shadow}
                         if signal is None:
                             continue
@@ -4829,6 +4837,16 @@ class MultiSportSteamWorker:
                                     dict(row.get("segment_memory") or {}),
                                     odds_range=model_odds_range,
                                 )
+                                if _truthy("GOOL_HOCKEY_PREMATCH_EV_ACTIVE", True):
+                                    parlay_ev = evaluate_hockey_prematch_ev_shadow(
+                                        lane_row, dict(row.get("sport_context") or {}),
+                                        str(row.get("league") or ""),
+                                        dict(row.get("segment_memory") or {}),
+                                        active_signal=parlay_signal,
+                                    )
+                                    parlay_signal = hockey_ev_active_signal(
+                                        parlay_signal, parlay_ev, odds_range=model_odds_range,
+                                    )
                             else:
                                 if (
                                     _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True)
@@ -5590,6 +5608,7 @@ class MultiSportSteamWorker:
                         now=float(lane_row["ts"]),
                         score_changed_at=score_changed_at,
                     )
+                    v4_active = cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_V4_ACTIVE", True)
                     if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_HISTORICAL_V3_ENABLED", True):
                         signal = basketball_historical_market_signal(
                             historical_live_profile, lane_row, phase="LIVE",
@@ -5601,12 +5620,18 @@ class MultiSportSteamWorker:
                     else:
                         signal = price_flashscore_live_candidate(fs_brain, lane_row, cfg)
 
-                    # Parallel V4 evaluation is audit-only: do NOT change the
-                    # public V3/V2 pick, strength, or Telegram delivery.
-                    if cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_V4_SHADOW_ENABLED", True):
+                    # V4 actively checks the possession/quarter-clock model,
+                    # while historical V3 is only a disagreement veto.
+                    # No new bet if V4 lacks a matching verified 1xBet line.
+                    if cfg.key == "basketball" and (
+                        v4_active or _truthy("GOOL_BASKETBALL_V4_SHADOW_ENABLED", True)
+                    ):
+                        dynamic_signal = basketball_live_v2_signal(fs_brain, lane_row) if v4_active else None
                         shadow = assess_basketball_v4_live(fs_brain, lane_row, signal)
                         row.setdefault("basketball_v4_shadow_candidates", []).append(shadow)
-                        if signal is not None:
+                        if v4_active:
+                            signal = basketball_v4_active_signal(dynamic_signal, signal, shadow)
+                        elif signal is not None:
                             signal = {**signal, "basketball_v4_shadow": shadow}
                     if signal is None:
                         pricing_rejected += 1

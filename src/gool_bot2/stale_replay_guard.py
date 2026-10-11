@@ -34,7 +34,9 @@ def _max_replay_age_hours() -> float:
 def _result_replay_age_hours(row: dict[str, Any]) -> float | None:
     # PREMATCH can be sent many hours before kickoff. Age the SETTLEMENT,
     # not the original tip, so a fresh result never silently disappears.
-    stamp = _parse_dt(row.get("result_notification_created_at") or row.get("settled_at"))
+    # Notification-created timestamps in legacy rows may be historical import
+    # metadata. Only settled_at is reliable for this freshness policy.
+    stamp = _parse_dt(row.get("settled_at"))
     if stamp is None:
         return _signal_age_hours(row)
     return max(0.0, (datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)).total_seconds() / 3600.0)

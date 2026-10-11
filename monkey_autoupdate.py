@@ -19,7 +19,7 @@ STATE_FILE = RUNTIME_ROOT / ".code_version"
 REPO = "superprey3-wq/gool_bot2"
 REF = "main"
 MAX_ARCHIVE_BYTES = 30 * 1024 * 1024
-_ROTATED_ARCHIVE = re.compile(r"^\\d{8}T\\d{6}Z$")
+_ROTATED_ARCHIVE = re.compile(r"^\d{8}T\d{6}Z$")
 
 
 def _startup_disk_recovery(root: Path) -> dict[str, int]:

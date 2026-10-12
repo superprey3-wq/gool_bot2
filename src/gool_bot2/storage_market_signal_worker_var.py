@@ -213,7 +213,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                     if _direct_send_message(token, chat_id, f"⚠️ {exc}", reply_markup=reply_markup):
                         changed += 1
                     return changed
-                filename, data, caption = build_full_report(report_date=report_day)
+                filename, data, caption = (build_full_report(report_date=report_day) if report_day is not None else build_full_report())
                 sent = telegram_mod.send_document(
                     chat_id,
                     filename,

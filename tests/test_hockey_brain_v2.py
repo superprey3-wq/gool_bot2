@@ -193,6 +193,29 @@ def test_late_close_p3_under_is_blocked_for_empty_net_risk():
     assert signal is None
 
 
+
+def test_close_p3_under_waits_earlier_to_cover_empty_net_risk():
+    # 8 minutes left used to pass (old protection began only at 7 minutes).
+    assert live_signal(
+        _live_brain(scope="PERIOD_3", recent_shot_rate=0.5, match_score=(3, 2)),
+        _live_lane(scope="PERIOD_3", elapsed=720, line=1.5,
+                   market_over=0.70, match_score=(3, 2)),
+    ) is None
+
+
+def test_hockey_under_waits_when_penalty_or_block_pressure_is_rising():
+    lane = _live_lane(scope="PERIOD_2", elapsed=600, line=1.5, market_over=.70)
+    brain = _live_brain(scope="PERIOD_2", recent_shot_rate=.5)
+    assert live_signal(brain, lane) is not None
+    brain["recent_penalty_delta"] = 1
+    assert live_signal(brain, lane) is None
+    brain["recent_penalty_delta"] = 0
+    brain["recent_pp_goal_delta"] = 1
+    assert live_signal(brain, lane) is None
+    brain["recent_pp_goal_delta"] = 0
+    brain["recent_blocked_rate"] = 2.2
+    assert live_signal(brain, lane) is None
+
 def test_late_big_lead_p3_under_can_still_be_evaluated():
     signal = live_signal(
         _live_brain(scope="PERIOD_3", recent_shot_rate=0.5, match_score=(5, 1)),

@@ -129,6 +129,62 @@ def test_basketball_v4_active_quarter_signal_direction_and_market_quality():
     assert basketball_v4_active_signal(None,None,{"state":"PASS","direction":"over"}) is None
 
 
+
+def test_basketball_v4_missing_v3_never_counts_as_under_agreement():
+    dynamic = _basket_dynamic(
+        direction="under", data_quality=.85, possession_source="flashscore_current_quarter",
+        elapsed_seconds=350, remaining_seconds=250, line=39.5,
+    )
+    shadow = {"state": "PASS", "direction": "under"}
+    assert basketball_v4_active_signal(dynamic, None, shadow) is None
+    assert shadow["v3_status"] == "MISSING"
+    assert shadow["active_reject_reason"] == "v3_missing_under"
+    assert shadow["active_gate"] == "WAIT"
+
+
+def test_basketball_v4_under_requires_real_quarter_possessions_and_time():
+    v3 = {"direction": "under", "historical_inplay_projected_total": 37.2}
+    shadow = {"state": "PASS", "direction": "under"}
+    dynamic = _basket_dynamic(
+        direction="under", data_quality=.85, possession_source="flashscore_recent_delta",
+        elapsed_seconds=350, remaining_seconds=250, line=39.5,
+    )
+    assert basketball_v4_active_signal(dynamic, v3, shadow) is None
+    assert shadow["active_reject_reason"] == "under_unverified_quarter_possessions"
+    dynamic["possession_source"] = "flashscore_current_quarter"
+    dynamic["elapsed_seconds"] = 100
+    assert basketball_v4_active_signal(dynamic, v3, shadow) is None
+    assert shadow["active_reject_reason"] == "under_short_quarter_sample"
+    dynamic["elapsed_seconds"] = 350
+    dynamic["remaining_seconds"] = 40
+    assert basketball_v4_active_signal(dynamic, v3, shadow) is None
+    assert shadow["active_reject_reason"] == "under_endgame_variance"
+    dynamic["remaining_seconds"] = 250
+    result = basketball_v4_active_signal(dynamic, v3, shadow)
+    assert result is not None
+    assert result["basketball_v3_agrees"] is True
+    assert shadow["active_gate"] == "PASS"
+    assert shadow["active_reject_reason"] is None
+
+
+def test_basketball_v4_under_blocks_v3_projection_above_same_line():
+    dynamic = _basket_dynamic(
+        direction="under", data_quality=.85, possession_source="flashscore_current_quarter",
+        elapsed_seconds=350, remaining_seconds=250, line=39.5,
+    )
+    shadow = {"state": "PASS", "direction": "under"}
+    v3 = {"direction": "under", "historical_inplay_projected_total": 42.4}
+    assert basketball_v4_active_signal(dynamic, v3, shadow) is None
+    assert shadow["active_reject_reason"] == "under_historical_projection_disagrees"
+
+
+def test_basketball_v4_over_still_possible_with_missing_v3_but_logged():
+    shadow = {"state": "PASS", "direction": "over"}
+    result = basketball_v4_active_signal(_basket_dynamic(), None, shadow)
+    assert result is not None
+    assert shadow["v3_status"] == "MISSING"
+    assert result["basketball_v3_agrees"] is False
+
 def test_football_live_v6_can_veto_clear_weak_goal_hazard_not_create_bets():
     base = {
         "status": "COMPARED",

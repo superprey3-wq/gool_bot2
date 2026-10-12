@@ -538,7 +538,7 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             1.0
             + (recent_shot_rate - expected_shots_per_min) * 0.28
             + recent_blocked_rate * 0.018,
-            0.80,
+            0.88,
             1.25,
         )
 
@@ -642,7 +642,24 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
     ):
         return None
 
-    if scope == "PERIOD_3" and direction == "under" and remaining <= 420 and margin <= 2:
+    # Special-teams activity or a surge of blocked attempts means a quiet SOG
+    # counter does NOT prove a low-event period. Avoid fake UNDER confidence.
+    if direction == "under" and (
+        recent_penalty_delta > 0
+        or recent_pp_goal_delta > 0
+        or recent_blocked_rate >= _env_float("GOOL_HOCKEY_LIVE_UNDER_HIGH_BLOCK_RATE", 2.0)
+    ):
+        return None
+
+    # Empty-net and late-foul variance are especially harmful in third-period
+    # UNDERs. The live feed does not reliably expose a goalie-pulled flag, so
+    # protect close games conservatively rather than assuming both goalies stay.
+    if (
+        scope == "PERIOD_3"
+        and direction == "under"
+        and remaining <= _env_float("GOOL_HOCKEY_LIVE_P3_UNDER_CLOSE_GUARD_SECONDS", 600.0)
+        and margin <= 2
+    ):
         return None
 
     agreements = 1

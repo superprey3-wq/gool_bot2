@@ -324,7 +324,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     except ValueError as exc:
      if send_message(chat_id,f"⚠️ {exc}",reply_markup=MENU_KEYBOARD):changed+=1
      continue
-    filename,data,caption=build_full_report(report_date=report_day)
+    filename,data,caption=(build_full_report(report_date=report_day) if report_day is not None else build_full_report())
     if send_document(chat_id,filename,data,caption=caption,content_type="text/html; charset=utf-8",reply_markup=MENU_KEYBOARD):changed+=1
     else:
      if send_message(chat_id,"⚠️ Не удалось отправить файл отчёта за день.",reply_markup=MENU_KEYBOARD):changed+=1

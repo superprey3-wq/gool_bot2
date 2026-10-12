@@ -146,48 +146,102 @@ def hockey_ev_active_signal(
     }
 
 
-def basketball_v4_active_signal(
+def _basketball_v4_active_reject_reason(
     dynamic: dict[str, Any] | None,
     historical: dict[str, Any] | None,
     shadow: dict[str, Any],
-) -> dict[str, Any] | None:
-    """V4 live possession-priced decision with historical V3 disagreement veto.
+) -> str | None:
+    """Explain why a priced, uncalibrated LIVE V4 candidate must WAIT.
 
-    Shadow V4 is the existing dynamic live V2 hypothesis. Activate it only
-    when its original full quote, quality and clock evidence survive unchanged.
+    An absent historical V3 signal is not an agreeing vote. In particular,
+    an UNDER based on a short/aggregate stats delta is too fragile to publish:
+    require both current-quarter possession data and an independent V3 pick
+    priced for the same quarter/line. OVERS can still pass without V3 when
+    the production clock, data quality and model gates are satisfied.
     """
-    if dynamic is None or shadow.get("state") != "PASS":
-        return None
-    if str(dynamic.get("direction") or "") != str(shadow.get("direction") or ""):
-        return None
-    if historical and str(historical.get("direction") or "") != str(dynamic.get("direction") or ""):
-        return None
+    if dynamic is None:
+        return "dynamic_missing"
+    if shadow.get("state") != "PASS":
+        return "shadow_not_pass"
+    direction = str(dynamic.get("direction") or "")
+    if direction not in {"over", "under"}:
+        return "invalid_direction"
+    if direction != str(shadow.get("direction") or ""):
+        return "shadow_direction_conflict"
+    historical_direction = str((historical or {}).get("direction") or "")
+    if historical_direction and historical_direction != direction:
+        return "v3_direction_conflict"
+    if direction == "under" and not historical_direction:
+        return "v3_missing_under"
+
     quality = _number(dynamic.get("data_quality"))
     prob = _number(dynamic.get("model_probability"))
     edge = _number(dynamic.get("edge"))
     strength = _number(dynamic.get("strength"))
     odd = _number(dynamic.get("odd"))
     if None in (quality, prob, edge, strength, odd):
+        return "incomplete_dynamic_data"
+    if odd < 1.4:
+        return "odd_below_minimum"
+    if quality < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_QUALITY", .65):
+        return "data_quality"
+    if prob < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_PROB", .61):
+        return "uncalibrated_model_probability"
+    if edge < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_EDGE", .075):
+        return "model_market_gap"
+    if strength < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_STRENGTH", 72.0):
+        return "strength"
+    if str(dynamic.get("projection_clock_source") or "") != "1xbet_segment_clock":
+        return "bookmaker_clock_missing"
+    source = str(dynamic.get("possession_source") or "")
+    if source == "points_clock_fallback":
+        return "possessions_missing"
+    if direction == "under":
+        if source != "flashscore_current_quarter":
+            return "under_unverified_quarter_possessions"
+        if quality < _threshold("GOOL_BASKETBALL_V4_UNDER_MIN_QUALITY", .80):
+            return "under_low_quality"
+        elapsed = _number(dynamic.get("elapsed_seconds"))
+        remaining = _number(dynamic.get("remaining_seconds"))
+        if elapsed is None or elapsed < _threshold("GOOL_BASKETBALL_V4_UNDER_MIN_ELAPSED", 240.0):
+            return "under_short_quarter_sample"
+        if remaining is None or remaining < _threshold("GOOL_BASKETBALL_V4_UNDER_MIN_REMAINING", 90.0):
+            return "under_endgame_variance"
+        # V3's adjusted in-play projection is comparable only for the actual
+        # current-quarter market; do not use the full-time prior here.
+        h_projected = _number((historical or {}).get("historical_inplay_projected_total"))
+        quote = _number(dynamic.get("line"))
+        if h_projected is not None and quote is not None and h_projected >= quote:
+            return "under_historical_projection_disagrees"
+    return None
+
+
+def basketball_v4_active_signal(
+    dynamic: dict[str, Any] | None,
+    historical: dict[str, Any] | None,
+    shadow: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Activate a V4 selection only after production data/consensus gates.
+
+    Store a compact reject reason in the existing shadow snapshot. This reuses
+    the in-memory per-event diagnostic record; no new unbounded disk log.
+    """
+    reason = _basketball_v4_active_reject_reason(dynamic, historical, shadow)
+    shadow["active_gate"] = "WAIT" if reason else "PASS"
+    shadow["active_reject_reason"] = reason
+    historical_direction = str((historical or {}).get("direction") or "")
+    shadow["v3_status"] = (
+        "MISSING" if not historical_direction
+        else ("AGREES" if dynamic and historical_direction == dynamic.get("direction") else "CONFLICT")
+    )
+    if reason:
         return None
-    if (
-        odd < 1.4 or
-        quality < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_QUALITY", .65) or
-        prob < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_PROB", .61) or
-        edge < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_EDGE", .075) or
-        strength < _threshold("GOOL_BASKETBALL_V4_ACTIVE_MIN_STRENGTH", 72.0) or
-        str(dynamic.get("projection_clock_source") or "") != "1xbet_segment_clock"
-    ):
-        return None
-    if str(dynamic.get("possession_source") or "") == "points_clock_fallback":
-        return None
+    assert dynamic is not None
     return {
         **dynamic,
         "brain_mode": "basketball_live_v4_active",
         "basketball_v4_shadow": shadow,
-        "basketball_v3_agrees": (
-            str(historical.get("direction")) == str(dynamic.get("direction"))
-            if historical else None
-        ),
+        "basketball_v3_agrees": historical_direction == str(dynamic.get("direction")),
         "basketball_v4_confirmed": True,
     }
 

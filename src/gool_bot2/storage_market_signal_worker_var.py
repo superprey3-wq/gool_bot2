@@ -136,7 +136,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
     changed = 0
     message = update.get("message") or {}
     raw_text = str(message.get("text") or "").strip()
-    text = raw_text.split("@", 1)[0].lower()
+    text = (raw_text.split(maxsplit=1)[0].split("@", 1)[0].lower() if raw_text.startswith("/") else raw_text.lower())
     chat_id = (message.get("chat") or {}).get("id")
 
     if chat_id is not None and text == "/stop":
@@ -206,7 +206,14 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
                 replies = [sport_parlay_text("basketball")]
             elif text in {"/fullreport", "/dayreport"}:
                 from .full_report_export import build_full_report
-                filename, data, caption = build_full_report()
+                from .report_date_request import requested_report_date
+                try:
+                    report_day = requested_report_date(raw_text)
+                except ValueError as exc:
+                    if _direct_send_message(token, chat_id, f"⚠️ {exc}", reply_markup=reply_markup):
+                        changed += 1
+                    return changed
+                filename, data, caption = (build_full_report(report_date=report_day) if report_day is not None else build_full_report())
                 sent = telegram_mod.send_document(
                     chat_id,
                     filename,

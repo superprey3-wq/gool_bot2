@@ -254,7 +254,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
  if not result or not result.get("ok"):return offset,0
  changed=0;next_offset=offset
  for update in result.get("result") or []:
-  next_offset=max(next_offset,int(update.get("update_id") or 0)+1);message=update.get("message") or {};raw_text=str(message.get("text") or "").strip();text=raw_text.split("@",1)[0].lower();chat_id=(message.get("chat") or {}).get("id")
+  next_offset=max(next_offset,int(update.get("update_id") or 0)+1);message=update.get("message") or {};raw_text=str(message.get("text") or "").strip();text=(raw_text.split(maxsplit=1)[0].split("@",1)[0].lower() if raw_text.startswith("/") else raw_text.lower());chat_id=(message.get("chat") or {}).get("id")
   if chat_id is not None and text=="/stop":
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
@@ -318,7 +318,13 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     replies=[sport_parlay_text("basketball")]
    elif text in {"/fullreport","/dayreport"}:
     from .full_report_export import build_full_report
-    filename,data,caption=build_full_report()
+    from .report_date_request import requested_report_date
+    try:
+     report_day = requested_report_date(raw_text)
+    except ValueError as exc:
+     if send_message(chat_id,f"⚠️ {exc}",reply_markup=MENU_KEYBOARD):changed+=1
+     continue
+    filename,data,caption=(build_full_report(report_date=report_day) if report_day is not None else build_full_report())
     if send_document(chat_id,filename,data,caption=caption,content_type="text/html; charset=utf-8",reply_markup=MENU_KEYBOARD):changed+=1
     else:
      if send_message(chat_id,"⚠️ Не удалось отправить файл отчёта за день.",reply_markup=MENU_KEYBOARD):changed+=1

@@ -30,6 +30,10 @@ def _tz() -> ZoneInfo:
     return ZoneInfo("Europe/Moscow")
 
 
+def _now_ts() -> float:
+    return datetime.now(_tz()).timestamp()
+
+
 def state_path() -> Path:
     raw = os.getenv("GOOL_TOURNAMENT_EXPRESS_STATE", "").strip()
     return Path(raw) if raw else Path(os.getenv("RUNTIME_DATA_DIR", "data")) / "live" / "tournament_express_today.json"
@@ -286,7 +290,7 @@ def tournament_details(key: str) -> str:
         else:
             reason = (
                 "матч уже начался / близок к началу" if (
-                    match["status"] == "STARTED" or float(match.get("kickoff_ts") or 0) <= datetime.now(_tz()).timestamp()
+                    match["status"] == "STARTED" or float(match.get("kickoff_ts") or 0) <= _now_ts()
                 )
                 else "ещё проверяем линии" if state.get("scan_status") in {"discovering", "pricing"}
                 else str((match.get("diagnostics") or {}).get("display_reason") or "нет проверенной положительной линии")

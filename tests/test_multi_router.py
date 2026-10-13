@@ -107,10 +107,10 @@ def test_late_router_chooses_best_one_goal_market_and_blocks_two_goal_paths():
     assert decision.winner.family == "team_total"
     late = [row for row in decision.rejected if row.goals_to_win >= 2]
     assert late
-    assert all(any(block.startswith("two_goal_window_closed:74>65") for block in row.blocks) for row in late)
+    assert all(not any("two_goal_window_closed" in block for block in row.blocks) for row in late)
 
 
-def test_another_goal_remains_open_through_85_and_closes_after():
+def test_another_goal_remains_open_after_85_when_market_and_model_allow():
     market = {
         "score_home": 1,
         "score_away": 1,
@@ -136,11 +136,9 @@ def test_another_goal_remains_open_through_85_and_closes_after():
     assert at_85.status == "BET"
     assert at_85.winner is not None
     assert at_85.winner.strategy == "another_goal"
-    assert after_85.status == "WAIT"
-    assert any(
-        any(block.startswith("another_goal_window_closed:86>85") for block in row.blocks)
-        for row in after_85.rejected
-    )
+    assert after_85.status == "BET"
+    assert after_85.winner is not None
+    assert after_85.winner.odd >= 1.70
 
 
 def test_btts_and_scoreless_team_total_share_one_correlation_slot():

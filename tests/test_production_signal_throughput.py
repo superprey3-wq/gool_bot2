@@ -34,7 +34,8 @@ def test_full_match_routing_has_no_old_35_75_dead_zones():
     assert _full_match_strategy({"minute": 85}) == "another_goal"
     assert list(_full_match_routing_experts({"minute": 85}, experts)) == ["another_goal"]
     assert _full_match_strategy({"minute": 45, "is_halftime": True}) is None
-    assert _full_match_strategy({"minute": 96}) is None
+    assert _full_match_strategy({"minute": 96, "is_finished": False}) == "another_goal"
+    assert _full_match_strategy({"minute": 96, "is_finished": True}) is None
 
 
 def test_strong_live_pass_is_not_killed_by_second_fixed_70_gate(monkeypatch):

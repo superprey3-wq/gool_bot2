@@ -28,6 +28,7 @@ from gool_bot2.tournament_express import build_catalog, write_catalog, _priority
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
+import time
 
 MSK=ZoneInfo("Europe/Moscow")
 V5_ACTIVE=str(os.getenv("GOOL_FOOTBALL_V5_ACTIVE","1")).lower() in {"1","true","yes","on"}
@@ -42,6 +43,13 @@ fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); day=datetim
 all_daily_fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
 fixtures=[m for m in all_daily_fixtures if float(m.meta["scheduled_start_ts"])>now]
 print("PIPELINE_START",len(fixtures),flush=True)
+# Telegram's tournament menu must not stay blank for the entire (often long)
+# Brain/history+LineFeed scan. Publish today's calendar immediately.
+initial_catalog,_=build_catalog(
+ all_daily_fixtures,[],now_ts=now,report_date=day.isoformat(),scan_status="discovering",
+)
+write_catalog(initial_catalog)
+print("TOURNAMENT_CALENDAR_READY",{"fixtures":initial_catalog["fixture_count"],"tournaments":len(initial_catalog["tournaments"])},flush=True)
 update_prematch_status(
  stage="brain",
  fixtures=len(fixtures),
@@ -531,6 +539,19 @@ def value_only(r):
 priced=[]; meta={}; value_candidates=[]
 football_v6_rows=[]
 value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":Counter()}
+def _publish_tournament_progress():
+ partial,_=build_catalog(
+  all_daily_fixtures,priced,now_ts=time.time(),report_date=day.isoformat(),
+  scan_status="pricing",processed_count=value_diag_total["scanned_matches"],
+  price_targets=len(rows),
+ )
+ write_catalog(partial)
+ print("TOURNAMENT_PRICING_PROGRESS",{
+  "processed":value_diag_total["scanned_matches"],"targets":len(rows),
+  "priced_events":len({p.event_id for p in priced}),
+ },flush=True)
+# Tell users which phase is active even before the first successful price.
+_publish_tournament_progress()
 with ThreadPoolExecutor(max_workers=20) as pool:
  for ftr in as_completed([pool.submit(one,r) for r in rows]):
   picks,x,r,value_pick,value_diag=ftr.result()
@@ -556,12 +577,18 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    vp,vm=value_pick
    value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
   if not picks or not x:
+   if value_diag_total["scanned_matches"]%12==0:
+    _publish_tournament_progress()
    continue
   meta[str(m.provider_match_id)]={**x,"flashscore_meta":fs_meta}
   for p in picks:
    priced.append(p)
    kw=dict(event_id=p.event_id,home=m.home,away=m.away,league=m.league,kickoff_ts=p.kickoff_ts,trend=p.market,odds=p.odds,bookmaker=x.get("bookmaker") or "1xBet",market_probability=p.market_probability,model_probability=p.model_probability)
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
+  if value_diag_total["scanned_matches"]%12==0:
+   _publish_tournament_progress()
+# Save the last candidates even if the total was not a multiple of 12.
+_publish_tournament_progress()
 
 # Immutable pre-kickoff V6 comparison records; these never send Telegram.
 if football_v6_rows:
@@ -636,7 +663,10 @@ d=choose_delivery(
 )
 # Build full-tournament coupons from the ENTIRE today's fixture universe,
 # not merely from singles or the strongest two matches in the league.
-catalog,tournament_tickets=build_catalog(all_daily_fixtures,priced,now_ts=now,report_date=day.isoformat())
+catalog,tournament_tickets=build_catalog(
+ all_daily_fixtures,priced,now_ts=time.time(),report_date=day.isoformat(),
+ scan_status="complete",processed_count=len(rows),price_targets=len(rows),
+)
 write_catalog(catalog)
 d["tournaments"]=tournament_tickets
 print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets)},flush=True)

@@ -33,7 +33,7 @@ def _goal_probability(lam: float) -> float:
 def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
     match = record.get("match") or {}
     minute = max(1, int(match.get("minute") or 1))
-    if bool(match.get("is_finished")) or minute >= 90 or bool(match.get("is_halftime")):
+    if bool(match.get("is_finished")) or bool(match.get("is_halftime")):
         return []
 
     xh, xa, xg_source, evidence = xg_or_proxy_pair(record)
@@ -89,10 +89,12 @@ def evaluate_live_goals(record: dict[str, Any]) -> list[LiveGoalDecision]:
 
     decisions: list[LiveGoalDecision] = []
     windows: list[tuple[str, int, float]] = []
-    if minute <= 42:
-        windows.append(("GOAL_BEFORE_HT", max(0, 45 - minute), 0.62))
-    if minute <= 82:
-        windows.append(("ANOTHER_GOAL", max(0, 90 - minute), 0.68))
+    if 1 <= minute <= 45:
+        windows.append(("GOAL_BEFORE_HT", max(0, 47 - minute), 0.62))
+    elif minute >= 46:
+        # Model must decay as verified match time disappears. It does not
+        # invent stoppage time beyond its conservative 95' horizon.
+        windows.append(("ANOTHER_GOAL", max(0, 95 - minute), 0.68))
 
     for market, remaining, threshold in windows:
         lam = blended_rate * remaining

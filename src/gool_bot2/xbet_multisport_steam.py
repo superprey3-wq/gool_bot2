@@ -86,10 +86,11 @@ def basketball_historical_market_signal(
     WATCH_7 is analysis-only. Only 8/10 on both sides can publish a signal.
     No model's statistical hit count is called a calibrated probability.
     """
-    # Singles/LIVE require decimal odds >=1.40, with no maximum cap.
-    # Explicit parlay odds ranges stay independent from singles.
+    # Only public singles (LIVE and PREMATCH) use the 1.70 minimum.
+    # Explicit parlay odds ranges stay independent, including 1.40-1.69 legs.
+    from .single_price_policy import minimum_single_odd
     lo, hi = odds_range if odds_range is not None else (
-        max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40)), None,
+        minimum_single_odd(phase=phase, sport="basketball"), None,
     )
     anomaly = basketball_points_market_anomaly(lane)
     if anomaly:
@@ -4382,29 +4383,20 @@ class MultiSportSteamWorker:
         return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
-        # Separate price policies: raise PREMATCH singles without changing
-        # basketball LIVE or the independent parlay market selection.
-        # A price floor is NOT a profitability guarantee; existing Brain gates
-        # still require quality/positive modeled value before this delivery step.
+        # This method publishes only hockey/basketball standalone signals.
+        # All PREMATCH/LIVE singles use the same >=1.70 floor; independently
+        # generated lower-priced parlay legs bypass _record_signal.
+        from .single_price_policy import minimum_single_odd, public_single_allowed
         phase = str(row.get("phase") or "LIVE").upper()
-        if phase == "PREMATCH" or cfg.key == "basketball":
-            import math
-            try:
-                odd = float(signal.get("odd") or 0.0)
-            except (TypeError, ValueError):
-                odd = 0.0
-            floor = (
-                max(1.01, _float_env("GOOL_MULTISPORT_SINGLE_MIN_ODD", 1.70))
-                if phase == "PREMATCH"
-                else max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40))
+        odd = signal.get("odd")
+        floor = minimum_single_odd(phase=phase, sport=cfg.key)
+        if not public_single_allowed(odd, phase=phase, sport=cfg.key):
+            print(
+                f"GOOL_{cfg.key.upper()}_SINGLE_ODD_REJECT odd={odd} min_odd={floor:.2f} "
+                f"phase={phase} match={row.get('home')}--{row.get('away')}",
+                flush=True,
             )
-            if not math.isfinite(odd) or odd < floor:
-                print(
-                    f"GOOL_{cfg.key.upper()}_SINGLE_ODD_REJECT odd={odd} min_odd={floor:.2f} "
-                    f"phase={phase} match={row.get('home')}--{row.get('away')}",
-                    flush=True,
-                )
-                return False, 0
+            return False, 0
         event_id = str(row.get("event_id") or "")
         phase = str(row.get("phase") or "LIVE").upper()
         scope = str(row.get("scope") or SCOPE_FULL)

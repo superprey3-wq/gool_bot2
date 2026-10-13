@@ -61,8 +61,15 @@ def test_post_goal_reset_blocks():
     assert d.decision != "BET"
 
 
-def test_outside_window_returns_none():
-    assert evaluate_argument_judge(_record(minute=44)) is None
+def test_judge_continues_at_44_and_92_until_half_or_match_ends():
+    assert evaluate_argument_judge(_record(minute=44)) is not None
+    assert evaluate_argument_judge(_record(minute=92)) is not None
+    half = _record(minute=45)
+    half["match"]["is_halftime"] = True
+    assert evaluate_argument_judge(half) is None
+    done = _record(minute=92)
+    done["match"]["is_finished"] = True
+    assert evaluate_argument_judge(done) is None
 
 
 def test_acute_five_minute_surge_can_bet_even_if_pressure_state_lags():

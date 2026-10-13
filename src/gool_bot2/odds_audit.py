@@ -40,6 +40,9 @@ def _prematch(row: dict[str, Any]) -> bool:
     phase = str(row.get("phase") or "").upper()
     if "parlay" in origin or str(row.get("market_family") or "") == "parlay":
         return False
+    # The explicit lifecycle takes precedence over a legacy origin label.
+    if phase and phase != "PREMATCH":
+        return False
     return phase == "PREMATCH" or origin in {"prematch", "prematch_value", "multisport_prematch"}
 
 

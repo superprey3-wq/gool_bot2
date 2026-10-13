@@ -160,7 +160,7 @@ def test_multi_signal_photo_has_no_duplicate_caption(monkeypatch) -> None:
         "minute": 50,
         "score": [0, 0],
         "market": "ТБ 0.5",
-        "odd": 1.55,
+        "odd": 1.75,
         "probability": 0.80,
         "reason_tags": ["confidence_metric", "autonomous_steam"],
     }

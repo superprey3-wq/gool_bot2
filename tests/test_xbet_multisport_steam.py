@@ -1146,8 +1146,8 @@ def test_prematch_one_match_one_pick_across_market_families(tmp_path, monkeypatc
 
 def test_hockey_primary_no_longer_uses_family_bias():
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
-        ({"market_family": "match_total"}, {"strength": 95, "model_probability": .57, "fair_probability": .57, "data_quality": .90}),
+        ({"market_family": "handicap"}, {"odd": 1.80, "strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"odd": 1.80, "strength": 95, "model_probability": .57, "fair_probability": .57, "data_quality": .90}),
     ]
     row, signal = select_prematch_primary(candidates, [], "hockey")
     assert row["market_family"] == "handicap"
@@ -1156,8 +1156,8 @@ def test_hockey_primary_no_longer_uses_family_bias():
 
 def test_hockey_primary_still_uses_strength_after_probability_and_quality():
     candidates = [
-        ({"market_family": "handicap"}, {"strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
-        ({"market_family": "match_total"}, {"strength": 84, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
+        ({"market_family": "handicap"}, {"odd": 1.80, "strength": 100, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
+        ({"market_family": "match_total"}, {"odd": 1.80, "strength": 84, "model_probability": .61, "fair_probability": .61, "data_quality": .80}),
     ]
     row, signal = select_prematch_primary(candidates, [], "hockey")
     assert row["market_family"] == "handicap"

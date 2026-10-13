@@ -71,12 +71,13 @@ def test_v5_rejects_asian_whole_and_quarter_totals():
 
 
 def test_v5_minimum_odd_and_existing_delivery(monkeypatch):
-    monkeypatch.setenv("GOOL_FOOTBALL_V5_ACTIVE","1")
+    monkeypatch.setenv("GOOL_FOOTBALL_V5_ACTIVE", "1")
     low=PrematchPick("e","A","B","match_total","over 0.5",1.40,0.91,0.70,0.9)
-    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD","1.40")
-    assert signal_tier(low) is not None  # original V5 supported when configured
-    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD","1.70")
-    assert signal_tier(low) is None  # new user-requested publication floor
+    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.40")
+    # Old 1.40 configuration can no longer override the public 1.70 minimum.
+    assert signal_tier(low) is None
+    allowed=PrematchPick("e","A","B","match_total","over 0.5",1.70,0.91,0.70,0.9)
+    assert signal_tier(allowed) is not None
 
 
 def test_v5_script_is_primary_selector():

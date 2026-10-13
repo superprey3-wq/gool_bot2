@@ -111,10 +111,10 @@ def test_shrinkage_does_not_overreact_to_five_head_to_head_matches():
     assert opponent_weight(1.0)==1.0
 
 
-def test_basketball_historical_singles_min_140_without_max():
+def test_basketball_historical_singles_min_170_without_max():
     p = build_profile(FakeFlashscore(), "target", "A", "B", 1000)
     from gool_bot2.xbet_multisport_markets import market_lanes, prematch_market_lanes
-    for odd in (1.001, 1.01, 1.29, 1.39, 1.40, 1.41, 4.5, 25.0, 101.0):
+    for odd in (1.001, 1.01, 1.29, 1.39, 1.40, 1.41, 1.69, 1.70, 4.5, 25.0, 101.0):
         lane = {
             "scope": "QUARTER_2", "market_family": "match_total",
             "line": 38.5, "over": odd, "under": 2.0,
@@ -124,7 +124,7 @@ def test_basketball_historical_singles_min_140_without_max():
         assert best_market(p, lane, phase="LIVE")["odd"] == odd
         for phase in ("LIVE", "PREMATCH"):
             signal = basketball_historical_market_signal(p, lane, phase=phase)
-            if odd < 1.40:
+            if odd < 1.70:
                 assert signal is None
             else:
                 assert signal is not None and signal["odd"] == odd

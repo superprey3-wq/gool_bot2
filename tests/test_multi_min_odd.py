@@ -20,14 +20,16 @@ def _candidate(odd: float) -> MarketCandidate:
     )
 
 
-def test_multi_router_has_absolute_minimum_odd_1_50():
+def test_multi_router_has_public_live_single_minimum_odd_1_70():
+    # Legacy VALUE calculation can inspect prices from 1.50, but publication
+    # requires >=1.70; lower prices may only feature in parlay products.
     assert ABSOLUTE_MIN_BET_ODD == 1.50
 
-    below = score_candidate(_candidate(1.499), minute=30)
-    boundary = score_candidate(_candidate(1.50), minute=30)
+    below = score_candidate(_candidate(1.69), minute=30)
+    boundary = score_candidate(_candidate(1.70), minute=30)
 
-    assert "price_too_low" in below.blocks
-    assert "price_too_low" not in boundary.blocks
+    assert "live_single_odd_below_1.70" in below.blocks
+    assert "live_single_odd_below_1.70" not in boundary.blocks
     assert boundary.eligible is True
 
 

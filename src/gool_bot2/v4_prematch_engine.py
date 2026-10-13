@@ -578,7 +578,8 @@ def signal_tier(
     # Economic break-even depends on p*odd, not on a magic winning odd.
     # 1.70 is the user-chosen minimum display price; probability/edge/EV
     # checks below remain mandatory and the price floor is configurable.
-    low = max(1.01, float(os.getenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.70")))
+    from .single_price_policy import minimum_single_odd
+    low = minimum_single_odd(phase="PREMATCH", sport="football")
     high = float("inf") if v5_active else 3.25
     if pick.data_quality < min_quality or pick.odds < low or pick.odds > high:
         return None

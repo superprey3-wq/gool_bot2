@@ -3,9 +3,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _legacy_prices_for_engine_logic_unit_tests(monkeypatch):
-    # These tests isolate the V4 market/edge algorithms at their historical
-    # floor. Production uses 1.70; that policy has its own regression tests.
-    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.50")
+    # Public singles cannot be configured below 1.70. Parlay legs retain
+    # their own historical low-odds selection filters.
+    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.70")
 
 
 from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, super_candidate_pool, choose_delivery, signal_tier, global_super_publish_pool
@@ -129,20 +129,18 @@ def test_football_super_pool_can_feed_global_ticket_without_sending_legacy_super
     assert delivery["super"] is None
 
 
-def test_delivery_allows_strong_single_events_in_parlay_but_not_twice_in_same_ticket():
+def test_delivery_keeps_lower_odds_only_in_parlay_not_in_singles():
     picks = [
         PrematchPick("p1", "P1H", "P1A", "goal_1h", "goal 1h", 1.50, .86, .66, .92),
         PrematchPick("p2", "P2H", "P2A", "goal_1h", "goal 1h", 1.50, .85, .65, .91),
         PrematchPick("p3", "P3H", "P3A", "match_total", "over 2.5", 1.49, .83, .63, .90),
     ]
     delivery = choose_delivery(picks, max_singles=3, max_doubles=1)
-    assert delivery["singles"]
+    assert delivery["singles"] == []
     assert delivery["doubles"]
-    single_ids = {p.event_id for p, _tier in delivery["singles"]}
     legs = delivery["doubles"][0]["legs"]
-    parlay_ids = {p.event_id for p in legs}
-    assert parlay_ids & single_ids
-    assert len(parlay_ids) == len(legs)
+    assert len({p.event_id for p in legs}) == len(legs)
+    assert all(p.odds < 1.70 for p in legs)
 
 
 def test_parlay_pool_rejects_expensive_non_single_legs():
@@ -186,7 +184,7 @@ def test_goal_profile_compares_multiple_half_goal_total_lines():
 
 def test_public_prematch_requires_six_point_edge():
     weak_public = PrematchPick("edge-low", "A", "B", "match_total", "over 2.5", 1.65, .70, .65, .90)
-    strong_enough = PrematchPick("edge-ok", "C", "D", "match_total", "over 2.5", 1.65, .72, .64, .90)
+    strong_enough = PrematchPick("edge-ok", "C", "D", "match_total", "over 2.5", 1.75, .72, .64, .90)
     assert signal_tier(weak_public) is None
     assert signal_tier(strong_enough) in {"NORMAL", "STRONG"}
 
@@ -212,13 +210,13 @@ def test_delivery_double_accepts_calibrated_leg_without_old_quality_075_wall():
 
 
 
-def test_delivery_double_keeps_leg_that_already_passed_qualified_pick_at_quality_060():
+def test_delivery_double_keeps_low_odds_qualified_pick_at_quality_060():
     picks = [
         PrematchPick("qa", "A", "B", "match_total", "over 1.5", 1.50, .86, .66, .60),
         PrematchPick("qb", "C", "D", "match_total", "over 1.5", 1.50, .85, .65, .60),
     ]
     delivery = choose_delivery(picks, max_singles=2, max_doubles=1)
-    assert len(delivery["singles"]) == 2
+    assert len(delivery["singles"]) == 0
     assert len(delivery["doubles"]) == 1
 
 

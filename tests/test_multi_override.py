@@ -78,7 +78,7 @@ def test_normal_market_cannot_revive_gool_wait():
     assert any("gool_wait_without_verified_override" in row.blocks for row in decision.rejected)
 
 
-def test_hard_time_window_cannot_be_overridden():
+def test_late_verified_market_override_has_no_arbitrary_minute_rejection():
     match = {"minute": 76, "home_score": 1, "away_score": 1, "is_finished": False}
     market = {
         "score_home": 1,
@@ -105,9 +105,9 @@ def test_hard_time_window_cannot_be_overridden():
 
     decision = analyze_multi_match(match, market, experts, data_quality=0.9)
 
-    assert decision.status == "WAIT"
-    assert decision.rejected
-    assert any(any(block.startswith("entry_window_closed") for block in row.blocks) for row in decision.rejected)
+    assert decision.status == "BET"
+    assert decision.winner is not None
+    assert decision.winner.odd >= 1.70
 
 
 def test_score_desync_is_hard_wait():

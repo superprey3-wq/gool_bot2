@@ -38,8 +38,13 @@ def football_v6_active_picks(
     away: str,
     league: str,
     kickoff_ts: float,
+    return_all: bool = False,
 ) -> tuple[list[PrematchPick], dict[str, Any]]:
-    """Select one same-quote, half-goal/BTTS/1X2 candidate, no V5 fallback."""
+    """Select V6-verified real-quote markets; singles keep only the best.
+
+    Full-tournament parlays explicitly request all qualified alternatives
+    without weakening any of the active V6 model/EV/quote requirements.
+    """
     base = {
         "model": "football_v6_consensus_active",
         "brain_version": "V6",
@@ -92,7 +97,7 @@ def football_v6_active_picks(
         return [], {**base, "reject": "no_live_qualified_candidate"}
     eligible.sort(key=lambda x: (x[0], x[1]), reverse=True)
     best = eligible[0][2]
-    return [best], {
+    return ([x[2] for x in eligible] if return_all else [best]), {
         **base,
         "bookmaker": (
             "1xBet" if shadow.get("quote_source") == "1xbet"

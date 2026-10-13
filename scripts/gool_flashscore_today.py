@@ -366,6 +366,20 @@ def one(r):
     event_id=str(m.provider_match_id),home=m.home,away=m.away,
     league=m.league or "",kickoff_ts=kick,
    )
+   tournament_alternatives,_=football_v6_active_picks(
+    r.get("football_v6_shadow") or {},
+    event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    league=m.league or "",kickoff_ts=kick,return_all=True,
+   )
+   r["tournament_candidates"]=tournament_alternatives
+   r["tournament_diagnostic"]={
+    "reason":str((info or {}).get("reject") or (r.get("football_v6_shadow") or {}).get("reason") or ""),
+    "quoted_markets_checked":int((r.get("football_v6_shadow") or {}).get("quoted_markets_checked") or 0),
+    "qualified_active":len(tournament_alternatives),
+    "quote_source":str((r.get("football_v6_shadow") or {}).get("quote_source") or ""),
+   }
+   print("FOOTBALL_V6_TOURNAMENT",m.home,"-",m.away,
+    "alternatives",len(tournament_alternatives),"quoted",r["tournament_diagnostic"]["quoted_markets_checked"],flush=True)
    print("FOOTBALL_V6_ACTIVE",m.home,"-",m.away,
     "status","BET" if picks else "WAIT",
     "reject",(info or {}).get("reject",""),
@@ -537,13 +551,19 @@ def value_only(r):
  return r,value_pick,value_diag
 
 priced=[]; meta={}; value_candidates=[]
+tournament_priced=[]
+# Fixtures failing the early history/profile gate must remain visible in
+# the tournament report; otherwise 0/7 gives no actionable explanation.
+tournament_diagnostics={str(m.provider_match_id):{"reason":"not_priced"} for m in fixtures}
 football_v6_rows=[]
 value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,"qualified":0,"rejects":Counter()}
 def _publish_tournament_progress():
  partial,_=build_catalog(
-  all_daily_fixtures,priced,now_ts=time.time(),report_date=day.isoformat(),
+  all_daily_fixtures,(tournament_priced if V6_ACTIVE else priced),
+  now_ts=time.time(),report_date=day.isoformat(),
   scan_status="pricing",processed_count=value_diag_total["scanned_matches"],
-  price_targets=len(rows),
+  price_targets=len(rows),already_shrunk=V6_ACTIVE,
+  fixture_diagnostics=tournament_diagnostics,
  )
  write_catalog(partial)
  print("TOURNAMENT_PRICING_PROGRESS",{
@@ -561,6 +581,9 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   value_diag_total["qualified"]+=int(value_diag.get("qualified") or 0)
   value_diag_total["rejects"].update(value_diag.get("rejects") or {})
   m=r["match"]; fs_meta=dict(m.meta or {})
+  tournament_priced.extend(r.get("tournament_candidates") or [])
+  if V6_ACTIVE:
+   tournament_diagnostics[str(m.provider_match_id)]=dict(r.get("tournament_diagnostic") or {"reason":"no_v6_diagnostic"})
   v6_shadow=r.get("football_v6_shadow")
   if isinstance(v6_shadow,dict):
    football_v6_rows.append({
@@ -664,12 +687,14 @@ d=choose_delivery(
 # Build full-tournament coupons from the ENTIRE today's fixture universe,
 # not merely from singles or the strongest two matches in the league.
 catalog,tournament_tickets=build_catalog(
- all_daily_fixtures,priced,now_ts=time.time(),report_date=day.isoformat(),
+ all_daily_fixtures,(tournament_priced if V6_ACTIVE else priced),
+ now_ts=time.time(),report_date=day.isoformat(),
  scan_status="complete",processed_count=len(rows),price_targets=len(rows),
+ already_shrunk=V6_ACTIVE,fixture_diagnostics=tournament_diagnostics,
 )
 write_catalog(catalog)
 d["tournaments"]=tournament_tickets
-print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets)},flush=True)
+print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets),"v6_independent_candidates":len(tournament_priced)},flush=True)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 value_delivered=emit_value_hunter(value_candidates,journal)
 print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)

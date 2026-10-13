@@ -129,3 +129,72 @@ def test_catalog_tracks_progress_without_inventing_prices(tmp_path, monkeypatch)
     assert catalog["price_targets"] == 20
     assert catalog["fixture_count"] == 2
     assert tickets == []
+
+
+def test_preshunk_v6_consensus_is_not_shrunk_twice(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
+    now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()
+    # An already-market-shrunk candidate has enough edge. Shrinking again
+    # erases its advantage. Preserve that evidence without inventing odds.
+    fixture_list = [event("a", "Team A"), event("b", "Team B")]
+    quoted_v6 = [
+        PrematchPick(k, name, name + " away", "match_total", "over 1.5",
+                     1.50, .70, .66, .90, "UEFA Champions League")
+        for k, name in (("a", "Team A"), ("b", "Team B"))
+    ]
+    wrong, wrong_tickets = build_catalog(fixture_list, quoted_v6, now_ts=now,
+                                        report_date="2026-10-13", already_shrunk=False)
+    assert wrong["tournaments"][0]["qualified_count"] == 0
+    assert wrong_tickets == []
+    correct, tickets = build_catalog(fixture_list, quoted_v6, now_ts=now,
+                                    report_date="2026-10-13", already_shrunk=True)
+    assert correct["tournaments"][0]["qualified_count"] == 2
+    assert len(tickets) == 1
+
+
+def test_each_fixture_records_actual_rejection_cause(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
+    now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()
+    fixtures = [event("a", "Team A"), event("b", "Team B"),
+                event("c", "Team C"), event("d", "Team D")]
+    diag = {
+        "a": {"reason": "not_priced"},
+        "b": {"reason": "v5_history_unavailable"},
+        "c": {"reason": "no_live_qualified_candidate", "quoted_markets_checked": 7, "qualified_active": 0},
+        "d": {"reason": "no_live_qualified_candidate", "quoted_markets_checked": 12, "qualified_active": 3},
+    }
+    catalog, tickets = build_catalog(fixtures, [], now_ts=now,
+                                     report_date="2026-10-13", fixture_diagnostics=diag)
+    reasons = [m["diagnostics"]["display_reason"] for m in catalog["tournaments"][0]["matches"]]
+    assert "начальный анализ" in reasons[0]
+    assert "истории" in reasons[1]
+    assert "7 проверено" in reasons[2]
+    assert "3 вариантов V6" in reasons[3]
+    assert tickets == []
+
+
+def test_active_v6_exposes_all_qualified_tournament_alternatives():
+    from gool_bot2.active_challenger_decisions import football_v6_active_picks
+    shadow = {
+        "status": "PASS_SHADOW", "data_quality": .9, "quote_source": "1xbet",
+        "candidates": [
+            {"state": "PASS_SHADOW", "market": "match_total", "selection": "over 0.5",
+             "odd": 1.55, "market_shrunk_probability_heuristic": .78,
+             "bookmaker_fair_probability": .66, "heuristic_ev_units": .209,
+             "model_disagreement_pp": 3.0},
+            {"state": "PASS_SHADOW", "market": "btts", "selection": "yes",
+             "odd": 1.70, "market_shrunk_probability_heuristic": .71,
+             "bookmaker_fair_probability": .59, "heuristic_ev_units": .207,
+             "model_disagreement_pp": 4.0},
+            {"state": "WAIT", "market": "match_total", "selection": "under 2.5",
+             "odd": 1.65, "market_shrunk_probability_heuristic": .85,
+             "bookmaker_fair_probability": .62, "heuristic_ev_units": .403,
+             "model_disagreement_pp": 1.0},
+        ],
+    }
+    kw = dict(event_id="a", home="Team A", away="Team B", league="UEFA Champions League", kickoff_ts=1234567)
+    single, _ = football_v6_active_picks(shadow, **kw)
+    all_markets, _ = football_v6_active_picks(shadow, return_all=True, **kw)
+    assert len(single) == 1
+    assert len(all_markets) == 2
+    assert all(p.selection != "under 2.5" for p in all_markets)

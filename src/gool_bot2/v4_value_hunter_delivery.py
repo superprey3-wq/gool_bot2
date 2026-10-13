@@ -140,6 +140,10 @@ def emit_value_hunter(
         )
         remaining_today = max(0, daily_cap - sent_today)
         for pick, meta in ranked[:remaining_today]:
+            from .single_price_policy import public_single_allowed
+            if not public_single_allowed(pick.odds, phase="PREMATCH", sport="football"):
+                print(f"GOOL_VALUE_SINGLE_ODD_REJECT event={pick.event_id} odd={pick.odds}", flush=True)
+                continue
             event_id = str(pick.event_id)
             if _already_public_single(rows, event_id):
                 sent["skipped_existing"] += 1

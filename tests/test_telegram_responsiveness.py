@@ -58,7 +58,8 @@ def test_super10_is_on_main_keyboard_and_has_inline_actions():
         for row in MENU_KEYBOARD["keyboard"]
         for button in row
     ]
-    assert "🌐 SUPER 10" in texts
+    assert "🏆 Турнирные экспрессы" in texts
+    assert "🌐 SUPER 10" not in texts
     assert "📄 Отчёт за день" not in texts
     assert "📊 Отчёт" in texts
 

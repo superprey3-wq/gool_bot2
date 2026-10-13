@@ -97,6 +97,8 @@ def test_football_single_floor_is_distinct_from_parlay_floor(monkeypatch):
 def test_menu_shows_schedule_during_prematch_scan(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
     # The Telegram keyboard must work immediately, even with zero priced lines.
+    monkeypatch.setattr("gool_bot2.tournament_express._now_ts",
+                        lambda: datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp())
     monkeypatch.setattr("gool_bot2.tournament_express._today_state", lambda: {
         "date": "2026-10-13",
         "fixture_count": 2,

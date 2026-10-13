@@ -69,13 +69,18 @@ def _match_item(match: Any) -> dict[str, Any] | None:
     return {"event_id": event_id, "league": league, "home": home, "away": away, "kickoff_ts": ts}
 
 
-def _leg(pick: PrematchPick) -> dict[str, Any] | None:
+def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] | None:
     try:
-        raw = blend_with_market(pick, model_weight=_f("GOOL_TOURNAMENT_MODEL_WEIGHT", .55))
+        # V6 already shrinks its probability toward bookmaker fair pricing.
+        # Applying blend_with_market again would double-shrink the edge and
+        # silently veto genuine V6-qualified parlay alternatives.
+        raw = pick if already_shrunk else blend_with_market(
+            pick, model_weight=_f("GOOL_TOURNAMENT_MODEL_WEIGHT", .55)
+        )
         price = float(raw.odds)
         probability = float(raw.model_probability)
         min_odd = _f("GOOL_TOURNAMENT_LEG_MIN_ODD", 1.35)
-        max_odd = _f("GOOL_TOURNAMENT_LEG_MAX_ODD", 1.85)
+        max_odd = _f("GOOL_TOURNAMENT_LEG_MAX_ODD", 2.50)
         min_quality = _f("GOOL_TOURNAMENT_MIN_QUALITY", .60)
         min_probability = _f("GOOL_TOURNAMENT_MIN_PROBABILITY", .66)
         edge = probability - float(raw.market_probability)
@@ -85,7 +90,7 @@ def _leg(pick: PrematchPick) -> dict[str, Any] | None:
         if not (min_odd <= price <= max_odd
                 and raw.data_quality >= min_quality
                 and probability >= min_probability
-                and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .04)
+                and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .025)
                 and roi >= _f("GOOL_TOURNAMENT_MIN_EXPECTED_ROI", .02)):
             return None
         return {
@@ -103,7 +108,10 @@ def _leg(pick: PrematchPick) -> dict[str, Any] | None:
 def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                   now_ts: float, report_date: str,
                   scan_status: str = "complete", processed_count: int = 0,
-                  price_targets: int = 0) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+                  price_targets: int = 0,
+                  already_shrunk: bool = False,
+                  fixture_diagnostics: dict[str, dict[str, Any]] | None = None
+                  ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (menu snapshot, complete publishable tournament parlays).
 
     Full coverage is based on today's entire fixture universe, not the
@@ -127,8 +135,9 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
         universe[normalized["event_id"]] = normalized
 
     by_event: dict[str, list[dict[str, Any]]] = {}
+    fixture_diagnostics = fixture_diagnostics or {}
     for pick in picks:
-        leg = _leg(pick)
+        leg = _leg(pick, already_shrunk=already_shrunk)
         if leg is not None:
             by_event.setdefault(leg["event_id"], []).append(leg)
 
@@ -147,7 +156,19 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             # Prefer high-quality, likely selections; do not chase long prices.
             selected = max(alternatives, key=lambda a: (a["model_probability"] * a["quality"], a["expected_roi"]), default=None)
             phase = "STARTED" if float(match["kickoff_ts"]) <= now_ts + 180 else ("READY" if selected else "NO_VERIFIED_MARKET")
-            rendered = {**match, "status": phase, "selection": selected}
+            note = dict(fixture_diagnostics.get(match["event_id"]) or {})
+            if phase == "NO_VERIFIED_MARKET" and note:
+                quote_count = int(note.get("quoted_markets_checked") or 0)
+                active_count = int(note.get("qualified_active") or 0)
+                if note.get("reason") in {"v5_history_unavailable", "independent_profile_unavailable"}:
+                    note["display_reason"] = "недостаточно подтверждённой истории"
+                elif quote_count == 0:
+                    note["display_reason"] = "нет подтверждённых коэффициентов доступных рынков"
+                elif active_count == 0:
+                    note["display_reason"] = f"V6 отвергла предложения букмекера ({quote_count} проверено)"
+                else:
+                    note["display_reason"] = f"дополнительный фильтр экспресса отверг {active_count} вариантов V6"
+            rendered = {**match, "status": phase, "selection": selected, "diagnostics": note}
             matches_out.append(rendered)
             if phase == "READY":
                 chosen.append(selected)
@@ -262,10 +283,12 @@ def tournament_details(key: str) -> str:
             lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · P {leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}%")
         else:
             reason = (
-                "матч уже начался / близок к началу" if match["status"] == "STARTED"
+                "матч уже начался / близок к началу" if (
+                    match["status"] == "STARTED" or float(match.get("kickoff_ts") or 0) <= datetime.now(_tz()).timestamp()
+                )
                 else "ещё проверяем линии" if state.get("scan_status") in {"discovering", "pricing"}
-                else "нет проверенной положительной линии"
+                else str((match.get("diagnostics") or {}).get("display_reason") or "нет проверенной положительной линии")
             )
-            lines.append(f"{title}\n   ⚠️ {reason}")
+            lines.append(f"{title}\n   ⚠️ {html.escape(reason)}")
     lines.append("⚠️ Совместная вероятность оценочная; при корреляции исходов перемножение может быть неверным.")
     return "\n".join(lines)[:3900]

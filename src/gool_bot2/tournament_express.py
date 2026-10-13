@@ -101,7 +101,9 @@ def _leg(pick: PrematchPick) -> dict[str, Any] | None:
 
 
 def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
-                  now_ts: float, report_date: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+                  now_ts: float, report_date: str,
+                  scan_status: str = "complete", processed_count: int = 0,
+                  price_targets: int = 0) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (menu snapshot, complete publishable tournament parlays).
 
     Full coverage is based on today's entire fixture universe, not the
@@ -178,7 +180,9 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
         result.append(group)
     result.sort(key=lambda g: (_priority(g["league"]), -g["fixture_count"], g["league"].casefold()))
     catalog = {"date": report_date, "generated_at": datetime.now(_tz()).isoformat(), "tournaments": result,
-               "fixture_count": len(universe), "ticket_count": len(tickets)}
+               "fixture_count": len(universe), "ticket_count": len(tickets),
+               "scan_status": str(scan_status), "processed_count": int(processed_count),
+               "price_targets": int(price_targets)}
     return catalog, tickets
 
 
@@ -211,7 +215,16 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
         return ("🏆 <b>Экспрессы по турнирам · сегодня</b>\n"
                 "⏳ Нет свежего PREMATCH-сканирования. Проверь /prematchstatus."), None
     tournaments = state.get("tournaments") or []
+    status = str(state.get("scan_status") or "complete").lower()
+    if status == "discovering":
+        scan_line = "⏳ Расписание загружено. Идёт анализ матчей и проверка рынков."
+    elif status == "pricing":
+        scan_line = (f"⏳ Проверка коэффициентов: {int(state.get('processed_count') or 0)}"
+                     f"/{int(state.get('price_targets') or 0)} матчей. Список обновляется.")
+    else:
+        scan_line = "✅ PREMATCH-сканирование завершено; ниже результат отбора."
     lines = [f"🏆 <b>ТУРНИРНЫЕ ЭКСПРЕССЫ · {html.escape(state['date'])}</b>",
+             scan_line,
              f"Найдено матчей: {state.get('fixture_count', 0)} · турниров: {len(tournaments)}",
              "Каждый полный экспресс включает все матчи турнира за сегодня.",
              "Недостаточно данных хотя бы по одной игре → купон не публикуем."]
@@ -238,6 +251,8 @@ def tournament_details(key: str) -> str:
     ]
     if group["complete"]:
         lines.append(f"✅ ПОЛНЫЙ ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · модельная P {group['combined_probability']*100:.2f}%")
+    elif state.get("scan_status") in {"discovering", "pricing"}:
+        lines.append("⏳ Проверка продолжается. Отсутствие линии пока не означает отказ.")
     else:
         lines.append("⏳ НЕТ ПОЛНОГО КУПОНА — есть неподтверждённые рынки или начавшиеся матчи.")
     for i, match in enumerate(group["matches"], 1):
@@ -246,7 +261,11 @@ def tournament_details(key: str) -> str:
         if match["status"] == "READY" and leg:
             lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · P {leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}%")
         else:
-            reason = "матч уже начался / близок к началу" if match["status"] == "STARTED" else "нет проверенной положительной линии"
+            reason = (
+                "матч уже начался / близок к началу" if match["status"] == "STARTED"
+                else "ещё проверяем линии" if state.get("scan_status") in {"discovering", "pricing"}
+                else "нет проверенной положительной линии"
+            )
             lines.append(f"{title}\n   ⚠️ {reason}")
     lines.append("⚠️ Совместная вероятность оценочная; при корреляции исходов перемножение может быть неверным.")
     return "\n".join(lines)[:3900]

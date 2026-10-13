@@ -60,9 +60,9 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _strategy(minute: int) -> str | None:
-    if 1 <= int(minute) <= 35:
+    if 1 <= int(minute) <= 45:
         return "goal_before_ht"
-    if 46 <= int(minute) <= 75:
+    if int(minute) >= 46:
         return "another_goal"
     return None
 

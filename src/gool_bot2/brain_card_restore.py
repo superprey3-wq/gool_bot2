@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 import threading
 from typing import Any
 
@@ -200,14 +201,20 @@ def emit_brain_card_signal(
 
     fallback = brain._brain_text(record, entry)
     original_odd = getattr(winner, "odd", None)
+    from .single_price_policy import minimum_single_odd, public_single_allowed
+    min_public_odd = minimum_single_odd(phase="LIVE", sport="football")
     try:
-        min_public_odd = max(1.40, float(os.getenv("GOOL_LIVE_MIN_PUBLIC_ODD", "1.40") or 1.40))
+        legacy_floor = float(os.getenv("GOOL_LIVE_MIN_PUBLIC_ODD", "1.70"))
+        if math.isfinite(legacy_floor):
+            min_public_odd = max(min_public_odd, legacy_floor)
     except (TypeError, ValueError):
-        min_public_odd = 1.40
-    try:
-        price_available = float(original_odd or 0.0) >= min_public_odd
-    except (TypeError, ValueError):
-        price_available = False
+        pass
+    price_available = public_single_allowed(original_odd, phase="LIVE", sport="football")
+    if price_available:
+        try:
+            price_available = float(original_odd) >= min_public_odd
+        except (TypeError, ValueError):
+            price_available = False
 
     if not price_available:
         print(

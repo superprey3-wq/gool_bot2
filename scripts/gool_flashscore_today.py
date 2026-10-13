@@ -39,7 +39,8 @@ def leg(p,meta):
  return f"{p.league or 'Турнир н/д'} | {when(p)} | {p.home} -- {p.away} | {p.selection} @ {p.odds:.2f} [{x['bookmaker']}] | p={p.model_probability:.3f} edge={p.edge:+.3f}"
 
 fs=FlashscoreProvider(); now=datetime.now(timezone.utc).timestamp(); day=datetime.now(MSK).date()
-fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and float(m.meta["scheduled_start_ts"])>now and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
+all_daily_fixtures=[m for m in fs.scheduled_matches_for_day(0) if (m.meta or {}).get("scheduled_start_ts") and datetime.fromtimestamp(float(m.meta["scheduled_start_ts"]),MSK).date()==day]
+fixtures=[m for m in all_daily_fixtures if float(m.meta["scheduled_start_ts"])>now]
 print("PIPELINE_START",len(fixtures),flush=True)
 update_prematch_status(
  stage="brain",
@@ -635,7 +636,7 @@ d=choose_delivery(
 )
 # Build full-tournament coupons from the ENTIRE today's fixture universe,
 # not merely from singles or the strongest two matches in the league.
-catalog,tournament_tickets=build_catalog(fixtures,priced,now_ts=now,report_date=day.isoformat())
+catalog,tournament_tickets=build_catalog(all_daily_fixtures,priced,now_ts=now,report_date=day.isoformat())
 write_catalog(catalog)
 d["tournaments"]=tournament_tickets
 print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets)},flush=True)

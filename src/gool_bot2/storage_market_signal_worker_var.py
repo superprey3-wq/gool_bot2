@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/tournaments", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🏆 турнирные экспрессы", "🧠 анализ", "🔎 найти матч"}:
         reply_markup = _bot_menu.MENU_KEYBOARD
         try:
             if text == "/start":
@@ -204,6 +204,11 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"/basketparlay", "🔗 баскет экспресс"}:
                 from .multisport_menu import sport_parlay_text
                 replies = [sport_parlay_text("basketball")]
+            elif text in {"/tournaments", "🏆 турнирные экспрессы"}:
+                from .tournament_express import tournament_menu
+                body, inline = tournament_menu()
+                changed += int(bool(_direct_send_message(token, chat_id, body, reply_markup=inline)))
+                return changed
             elif text in {"/fullreport", "/dayreport"}:
                 from .full_report_export import build_full_report
                 from .report_date_request import requested_report_date
@@ -305,6 +310,14 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
 
     callback = update.get("callback_query") or {}
     data = str(callback.get("data") or "")
+    if data.startswith("tx:"):
+        from .tournament_express import tournament_details
+        callback_message = callback.get("message") or {}
+        callback_chat_id = (callback_message.get("chat") or {}).get("id")
+        if callback_chat_id is not None:
+            changed += int(bool(_direct_send_message(token, callback_chat_id, tournament_details(data.split(":", 1)[1]))))
+        _direct_answer_callback(token, str(callback.get("id") or ""), "Турнир GOOL")
+        return changed
     if data.startswith("s10:"):
         callback_message = callback.get("message") or {}
         callback_chat_id = (callback_message.get("chat") or {}).get("id")

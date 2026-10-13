@@ -259,7 +259,7 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
    unsubscribe(chat_id)
    if send_message(chat_id,STOP_TEXT):changed+=1
    continue
-  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","/tournaments","/fullreport","/dayreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","🏆 турнирные экспрессы","🧠 анализ","🔎 найти матч"}:
+  if chat_id is not None and text in {"/start","/prematchaudit","/prematchstatus","/livecheck","/valuehunter","/multisport","/sportreport","/sportjournal","/hockeyjournal","/basketjournal","/hockeyreport","/basketreport","/hockeyparlay","/basketparlay","/hockeyprematch","/basketprematch","/super10","/tournaments","/oddsaudit","/fullreport","/dayreport","📊 отчёт","📊 отчет","🟢 в игре","🎟 ординары","🔗 экспрессы","🏒 хоккей","🏀 баскетбол","📒 хоккей","📒 баскет","🟡 хоккей pre","🟡 баскет pre","🔗 хоккей экспресс","🔗 баскет экспресс","🌐 super 10","🏆 турнирные экспрессы","🧠 анализ","🔎 найти матч"}:
    if text=="/start":subscribe(chat_id)
    if text=="/start":
     replies=[START_TEXT]
@@ -329,6 +329,9 @@ def poll_telegram_updates(journal_path:Path,offset:int=0,timeout:int=0)->tuple[i
     else:
      if send_message(chat_id,"⚠️ Не удалось отправить файл отчёта за день.",reply_markup=MENU_KEYBOARD):changed+=1
     continue
+   elif text=="/oddsaudit":
+    from .odds_audit import odds_audit_text
+    replies=[odds_audit_text()]
    elif text in {"/tournaments","🏆 турнирные экспрессы"}:
     from .tournament_express import tournament_menu
     body, inline=tournament_menu()

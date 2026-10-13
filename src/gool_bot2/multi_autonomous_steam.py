@@ -310,7 +310,7 @@ def build_autonomous_steam_candidates(
     data_quality: float,
 ) -> list[MarketCandidate]:
     match = record.get("match") or {}
-    if not _enabled() or not market_row or bool(match.get("is_finished")):
+    if not _enabled() or not market_row or bool(match.get("is_finished")) or bool(match.get("is_halftime")):
         return []
     if market_row.get("repricing_guard") or market_row.get("score_desync") or market_row.get("timeline_score_desync"):
         return []

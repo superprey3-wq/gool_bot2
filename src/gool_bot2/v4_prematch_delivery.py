@@ -184,6 +184,10 @@ def emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
 
 
 def _emit_prematch_signal(row: dict[str, Any], journal_path: Path) -> int:
+    from .single_price_policy import public_single_allowed
+    if not public_single_allowed(row.get("odd"), phase="PREMATCH", sport="football"):
+        print(f"GOOL_FOOTBALL_PREMATCH_SINGLE_ODD_REJECT entry={row.get('entry_id')} odd={row.get('odd')}", flush=True)
+        return 0
     entry = append_prematch_entry(journal_path, row)
     if entry.get("telegram_sent") or str(entry.get("result") or "pending").lower() != "pending":
         return 0

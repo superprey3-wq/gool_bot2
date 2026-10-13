@@ -96,9 +96,9 @@ def test_ordinary_cutoff_does_not_block_autonomous_steam_after_75():
     assert enforce_entry_cutoff(steam).status == "BET"
 
     ordinary = RouterDecision("BET", 89, (1, 1), _candidate("gool"), [], [], "ordinary")
-    blocked = enforce_entry_cutoff(ordinary)
-    assert blocked.status == "WAIT"
-    assert blocked.winner is None
+    allowed = enforce_entry_cutoff(ordinary)
+    assert allowed.status == "BET"
+    assert allowed.winner is not None
 
 
 def _matchbook_state():

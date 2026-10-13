@@ -91,11 +91,11 @@ def test_hockey_negative_five_remains_eligible_when_goals_support_it(monkeypatch
 def test_hockey_no_longer_ranks_maximum_win_probability_first():
     options = [
         ({"market_family": "handicap"}, {
-            "model_probability": .95, "edge": .08, "value_after_vig_proxy": .08,
+            "odd": 1.80, "model_probability": .95, "edge": .08, "value_after_vig_proxy": .08,
             "line": 4.0, "data_quality": .8, "strength": 88,
         }),
         ({"market_family": "handicap"}, {
-            "model_probability": .72, "edge": .14, "value_after_vig_proxy": .16,
+            "odd": 1.80, "model_probability": .72, "edge": .14, "value_after_vig_proxy": .16,
             "line": -1.5, "data_quality": .9, "strength": 82,
         }),
     ]

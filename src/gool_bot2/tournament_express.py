@@ -160,7 +160,9 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             if phase == "NO_VERIFIED_MARKET" and note:
                 quote_count = int(note.get("quoted_markets_checked") or 0)
                 active_count = int(note.get("qualified_active") or 0)
-                if note.get("reason") in {"v5_history_unavailable", "independent_profile_unavailable"}:
+                if note.get("reason") in {"not_priced", "no_v6_diagnostic"}:
+                    note["display_reason"] = "матч не прошёл начальный анализ / нет полного профиля"
+                elif note.get("reason") in {"v5_history_unavailable", "independent_profile_unavailable"}:
                     note["display_reason"] = "недостаточно подтверждённой истории"
                 elif quote_count == 0:
                     note["display_reason"] = "нет подтверждённых коэффициентов доступных рынков"

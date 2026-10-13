@@ -27,9 +27,9 @@ class LiveV4Decision:
 
 def _window_ok(market: str, minute: int) -> bool:
     if market == "goal_before_ht":
-        return 8 <= minute <= 43
+        return 1 <= minute <= 45
     if market == "another_goal":
-        return 46 <= minute <= 88
+        return minute >= 46
     return False
 
 

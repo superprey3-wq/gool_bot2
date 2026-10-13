@@ -26,6 +26,7 @@ from .post_goal_freshness import post_goal_freshness
 from .multi_router import analyze_multi_match
 from .multi_shadow import append_shadow_snapshot, decision_snapshot
 from .multi_telegram import emit_multi_results, emit_multi_signal
+from .single_price_policy import public_single_rejection
 from .multi_true_prematch import apply_true_prematch_market
 from .prematch_goal_profile import apply_half_goal_prior
 from .journal import load_signal_journal, save_signal_journal
@@ -584,6 +585,22 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
             decision.winner = None
             decision.alternatives = []
             decision.reason = f"WAIT: после гола нужны новые LIVE-данные ({fresh_block})."
+
+    # Last-mile policy also covers separate STEAM/market override decisions
+    # that can replace the router's winner *after* initial score filtering.
+    if decision.status == "BET" and decision.winner is not None:
+        price_block = public_single_rejection(decision.winner.odd, phase="LIVE", sport="football")
+        if price_block:
+            rejected_winner = decision.winner
+            if price_block not in rejected_winner.blocks:
+                rejected_winner.blocks.append(price_block)
+            rejected_winner.eligible = False
+            decision.rejected.append(rejected_winner)
+            decision.winner = None
+            decision.status = "WAIT"
+            decision.alternatives = []
+            decision.reason = f"GOOL LIVE single rejected: {price_block}"
+            print(f"GOOL_FOOTBALL_LIVE_SINGLE_ODD_REJECT match={mid} reason={price_block}", flush=True)
 
     append_shadow_snapshot(
         analysis_path,

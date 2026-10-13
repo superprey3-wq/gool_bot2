@@ -86,6 +86,13 @@ def emit_multi_signal(
 ) -> int:
     if not is_multi_telegram_active() or entry is None or decision.winner is None:
         return 0
+    # Defence in depth: never broadcast an underpriced or unpriced LIVE single,
+    # including text fallback. Parlays use their own independent emitter.
+    from .single_price_policy import public_single_rejection
+    odd_block = public_single_rejection(entry.get("odd"), phase="LIVE", sport="football")
+    if odd_block:
+        print(f"GOOL_FOOTBALL_LIVE_DELIVERY_ODD_REJECT match={entry.get('match_id')} reason={odd_block}", flush=True)
+        return 0
 
     # The production decision/rating gate is authoritative. Do not apply a
     # second hidden "probability >= 70%" gate here: Goal State strength is a

@@ -145,7 +145,7 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             changed += 1
         return changed
 
-    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/tournaments", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🏆 турнирные экспрессы", "🧠 анализ", "🔎 найти матч"}:
+    if chat_id is not None and text in {"/start", "/prematchaudit", "/prematchstatus", "/livecheck", "/livemultishadow", "/valuehunter", "/multisport", "/sportreport", "/sportjournal", "/hockeyjournal", "/basketjournal", "/hockeyreport", "/basketreport", "/hockeyparlay", "/basketparlay", "/hockeyprematch", "/basketprematch", "/super10", "/tournaments", "/oddsaudit", "/fullreport", "/dayreport", "📊 отчёт", "📊 отчет", "🟢 в игре", "🎟 ординары", "🔗 экспрессы", "🏒 хоккей", "🏀 баскетбол", "📒 хоккей", "📒 баскет", "🟡 хоккей pre", "🟡 баскет pre", "🔗 хоккей экспресс", "🔗 баскет экспресс", "🌐 super 10", "🏆 турнирные экспрессы", "🧠 анализ", "🔎 найти матч"}:
         reply_markup = _bot_menu.MENU_KEYBOARD
         try:
             if text == "/start":
@@ -204,6 +204,9 @@ def _handle_direct_telegram_update(token: str, journal_path: Path, update: dict[
             elif text in {"/basketparlay", "🔗 баскет экспресс"}:
                 from .multisport_menu import sport_parlay_text
                 replies = [sport_parlay_text("basketball")]
+            elif text == "/oddsaudit":
+                from .odds_audit import odds_audit_text
+                replies = [odds_audit_text()]
             elif text in {"/tournaments", "🏆 турнирные экспрессы"}:
                 from .tournament_express import tournament_menu
                 body, inline = tournament_menu()

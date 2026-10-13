@@ -92,3 +92,40 @@ def test_football_single_floor_is_distinct_from_parlay_floor(monkeypatch):
     high = PrematchPick("a", "A", "B", "match_total", "over 1.5", 1.75, .89, .62, .9)
     assert signal_tier(low) is None
     assert signal_tier(high) in {"STRONG", "NORMAL"}
+
+
+def test_menu_shows_schedule_during_prematch_scan(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
+    # The Telegram keyboard must work immediately, even with zero priced lines.
+    monkeypatch.setattr("gool_bot2.tournament_express._today_state", lambda: {
+        "date": "2026-10-13",
+        "fixture_count": 2,
+        "scan_status": "discovering",
+        "tournaments": [{
+            "key": league_key("UEFA Champions League"),
+            "league": "UEFA Champions League",
+            "fixture_count": 2, "qualified_count": 0, "complete": False,
+            "matches": [
+                {**event("a", "Team A"), "status": "NO_VERIFIED_MARKET", "selection": None},
+                {**event("b", "Team B"), "status": "NO_VERIFIED_MARKET", "selection": None},
+            ],
+        }],
+    })
+    message, buttons = tournament_menu()
+    assert "Расписание загружено" in message
+    assert "0/2" in message
+    assert buttons["inline_keyboard"][0][0]["callback_data"] == "tx:" + league_key("UEFA Champions League")
+    assert "ещё проверяем линии" in tournament_details(league_key("UEFA Champions League"))
+
+
+def test_catalog_tracks_progress_without_inventing_prices(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
+    now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()
+    fixtures = [event("a", "Team A"), event("b", "Team B")]
+    catalog, tickets = build_catalog(fixtures, [], now_ts=now, report_date="2026-10-13",
+                                     scan_status="pricing", processed_count=4, price_targets=20)
+    assert catalog["scan_status"] == "pricing"
+    assert catalog["processed_count"] == 4
+    assert catalog["price_targets"] == 20
+    assert catalog["fixture_count"] == 2
+    assert tickets == []

@@ -56,9 +56,9 @@ def _active_strategy(match: dict[str, Any]) -> str | None:
     if bool(match.get("is_finished")) or bool(match.get("is_halftime")):
         return None
     minute = int(match.get("minute") or 0)
-    if 1 <= minute <= 35:
+    if 1 <= minute <= 45:
         return "goal_before_ht"
-    if 46 <= minute <= 75:
+    if minute >= 46:
         return "another_goal"
     return None
 
@@ -331,6 +331,11 @@ def emit_brain_or_market_signal(
 ) -> int:
     winner = decision.winner
     if entry is not None and winner is not None and str(winner.source or "").startswith("brain_primary:"):
+        from .single_price_policy import public_single_rejection
+        price_block = public_single_rejection(entry.get("odd"), phase="LIVE", sport="football")
+        if price_block:
+            print(f"GOOL_BRAIN_LIVE_SINGLE_ODD_REJECT match={entry.get('match_id')} odd={entry.get('odd')} reason={price_block}", flush=True)
+            return 0
         from . import telegram
         from .multi_telegram import is_multi_telegram_active
 

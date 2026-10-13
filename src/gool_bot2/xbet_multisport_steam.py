@@ -1493,6 +1493,14 @@ def select_prematch_primary(
     Family diversity and low-odds preferences must never displace a materially
     more reliable candidate. The bookmaker price is already validated upstream.
     """
+    # Price first, reliability second: a 1.55 favourite must not prevent
+    # another independently qualified >=1.70 market from being considered.
+    # Parlay-safe legs are assembled independently and never call this gate.
+    from .single_price_policy import public_single_allowed
+    if sport in {"hockey", "basketball"}:
+        candidates = [item for item in candidates if public_single_allowed(
+            item[1].get("odd"), phase="PREMATCH", sport=sport,
+        )]
     if not candidates:
         return None
     # Hockey Poisson probabilities are uncalibrated: a giant positive
@@ -4827,7 +4835,7 @@ class MultiSportSteamWorker:
                 # same event. It never records a second single.
                 parlay_candidates: list[dict[str, Any]] = []
                 if cfg.key in {"hockey", "basketball"}:
-                    # Singles and LIVE keep their separate 1.50+ odds policy.
+                    # Public singles/LIVE require >=1.70, but safe parlay legs retain lower independent odds.
                     # A SUPER-10 leg is evaluated *at its own* 1.30-1.50 price
                     # without letting the singles gate discard it in advance.
                     parlay_min_odd = _float_env("GOOL_MULTISPORT_PARLAY_MIN_ODD", 1.45)
@@ -5747,6 +5755,14 @@ class MultiSportSteamWorker:
                         candidate_directions[direction_key] += 1
                     pending_live_signals.append((lane_row, signal))
 
+                # Underpriced candidates remain useful for research, but
+                # cannot displace a priced public LIVE single on any sport.
+                from .single_price_policy import public_single_allowed
+                pending_live_signals = [
+                    (candidate_row, candidate_signal)
+                    for candidate_row, candidate_signal in pending_live_signals
+                    if public_single_allowed(candidate_signal.get("odd"), phase="LIVE", sport=cfg.key)
+                ]
                 # Basketball LIVE: one current-quarter candidate per cycle,
                 # and one public LIVE signal across the entire match.
                 selected_live_signals: list[tuple[dict[str, Any], dict[str, Any]]] = []

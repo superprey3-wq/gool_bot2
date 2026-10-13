@@ -85,7 +85,7 @@ def test_production_start_uses_expanded_multisport_keyboard(tmp_path: Path, monk
     )
     assert actions == 1
     labels = [button["text"] for row in sent[0]["keyboard"] for button in row]
-    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🌐 SUPER 10", "🧠 Анализ", "🔎 Найти матч"]
+    assert labels == ["📊 Отчёт", "🟢 В игре", "🎟 Ординары", "🔗 Экспрессы", "🏒 Хоккей", "🏀 Баскетбол", "🟡 Хоккей PRE", "🟡 Баскет PRE", "🔗 Хоккей экспресс", "🔗 Баскет экспресс", "🏆 Турнирные экспрессы", "🧠 Анализ", "🔎 Найти матч"]
 
 
 def test_production_prematch_menu_buttons_are_handled(tmp_path: Path, monkeypatch):

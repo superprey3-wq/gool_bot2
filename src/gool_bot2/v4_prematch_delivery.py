@@ -397,6 +397,10 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         groups.append(("SUPER", delivery["super"]))
     for acc in delivery.get("doubles") or []:
         groups.append(("DOUBLES", acc))
+    # One independent complete coupon per league/day; partial coupons
+    # never enter delivery, so no match can be silently left out.
+    for acc in delivery.get("tournaments") or []:
+        groups.append(("TOURNAMENT", acc))
 
     rows = load_signal_journal(journal_path)
     for idx, (kind, acc) in enumerate(groups, 1):
@@ -413,13 +417,21 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             return sorted((str(x.get("event_id") or ""), str(x.get("market") or ""), str(x.get("selection") or "")) for x in items)
         key = identity(legs)
         digest = sha256(json.dumps(key).encode()).hexdigest()[:24]
-        pid = f"parlay:{kind.lower()}:{digest}"
+        if kind == "TOURNAMENT":
+            from .tournament_express import league_key
+            day = str(acc.get("day") or "")
+            tournament_name = str(acc.get("tournament") or "")
+            pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
+        else:
+            pid = f"parlay:{kind.lower()}:{digest}"
 
         # SUPER is one public daily product, not one message per recalculated
         # composition. PREMATCH discovery reruns during the day and may replace
         # one or more legs; that must not create another public SUPER 10.
         if kind == "SUPER":
             parent = _today_super(rows)
+        elif kind == "TOURNAMENT":
+            parent = next((x for x in rows if str(x.get("entry_id") or "") == pid), None)
         else:
             parent = next(
                 (
@@ -456,7 +468,8 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         else:
             parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
-                "kind": kind, "result": "pending", "lifecycle": "scheduled",
+                "kind": kind, "tournament": str(acc.get("tournament") or ""), "tournament_day": str(acc.get("day") or ""),
+                "result": "pending", "lifecycle": "scheduled",
                 "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
                 "effective_odd": float(acc.get("combined_odds") or 0.0),
                 "probability": float(acc.get("combined_probability") or 0.0),
@@ -466,7 +479,8 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             save_signal_journal(journal_path, rows)
         legs = parent["legs"]
         caption_lines = [
-            f"🔗 <b>{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'} · GOOL V4</b>",
+            (f"🏆 <b>ЭКСПРЕСС НА ВСЕ МАТЧИ · {escape(str(parent.get('tournament') or ''))}</b>"
+             if kind == "TOURNAMENT" else f"🔗 <b>{'SUPER 10' if kind == 'SUPER' else 'ЭКСПРЕСС'} · GOOL V4</b>"),
             f"Общий кэф: <b>{parent['odd']:.2f}</b>", "",
         ]
         for n, leg in enumerate(legs, 1):
@@ -476,6 +490,10 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                 f"{_market_label(str(leg.get('selection') or leg.get('market') or '?'))} @ {leg['odd']:.2f}", "",
             ]
         png = render_v4_parlay_card(parent)
+        # Telegram photo caption limit is 1024 chars. For a many-match
+        # tournament show all legs in the card/menu, without failed delivery.
+        if kind == "TOURNAMENT":
+            caption_lines = caption_lines[:3] + [f"Матчей в купоне: {len(legs)}. Полный список — 🏆 Турнирные экспрессы."]
         delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip())
         if delivered:
             parent["telegram_sent"] = True

@@ -1,3 +1,13 @@
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _legacy_prices_for_engine_logic_unit_tests(monkeypatch):
+    # These tests isolate the V4 market/edge algorithms at their historical
+    # floor. Production uses 1.70; that policy has its own regression tests.
+    monkeypatch.setenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.50")
+
+
 from gool_bot2.v4_prematch_engine import PrematchPick, build_accumulators, devig_two_way, qualified_pick, picks_from_goal_profile, devig_three_way, poisson_1x2, picks_from_1x2_profile, picks_from_btts_profile, build_prematch_candidates, blend_with_market, rank_prematch_singles, build_super_accumulator, super_candidate_pool, choose_delivery, signal_tier, global_super_publish_pool
 
 

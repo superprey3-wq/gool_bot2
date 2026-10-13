@@ -4382,21 +4382,26 @@ class MultiSportSteamWorker:
         return 0
 
     def _record_signal(self, row: dict[str, Any], signal: dict[str, Any], cfg: SportConfig) -> tuple[bool, int]:
-        # Final safety gate for ALL basketball LIVE/PREMATCH singles, including
-        # handicaps and moneylines still handled by legacy Basketball Brain V2.
-        # Apply BEFORE Telegram delivery and journal write, never to parlay legs.
-        if cfg.key == "basketball":
+        # Separate price policies: raise PREMATCH singles without changing
+        # basketball LIVE or the independent parlay market selection.
+        # A price floor is NOT a profitability guarantee; existing Brain gates
+        # still require quality/positive modeled value before this delivery step.
+        phase = str(row.get("phase") or "LIVE").upper()
+        if phase == "PREMATCH" or cfg.key == "basketball":
             import math
             try:
                 odd = float(signal.get("odd") or 0.0)
             except (TypeError, ValueError):
                 odd = 0.0
-            floor = max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40))
+            floor = (
+                max(1.01, _float_env("GOOL_MULTISPORT_SINGLE_MIN_ODD", 1.70))
+                if phase == "PREMATCH"
+                else max(1.40, _float_env("GOOL_BASKETBALL_SINGLE_MIN_ODD", 1.40))
+            )
             if not math.isfinite(odd) or odd < floor:
                 print(
-                    f"GOOL_BASKETBALL_SINGLE_ODD_REJECT odd={odd} min_odd={floor:.2f} "
-                    f"phase={str(row.get('phase') or 'LIVE').upper()} "
-                    f"match={row.get('home')}--{row.get('away')}",
+                    f"GOOL_{cfg.key.upper()}_SINGLE_ODD_REJECT odd={odd} min_odd={floor:.2f} "
+                    f"phase={phase} match={row.get('home')}--{row.get('away')}",
                     flush=True,
                 )
                 return False, 0

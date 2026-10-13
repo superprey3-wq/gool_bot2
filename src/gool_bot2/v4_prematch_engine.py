@@ -575,7 +575,10 @@ def signal_tier(
 ) -> str | None:
     """Two-tier throughput gate: reject junk without starving useful signals."""
     v5_active = os.getenv("GOOL_FOOTBALL_V5_ACTIVE", "0").strip().lower() in {"1", "true", "yes", "on"}
-    low = 1.40 if v5_active else 1.50
+    # Economic break-even depends on p*odd, not on a magic winning odd.
+    # 1.70 is the user-chosen minimum display price; probability/edge/EV
+    # checks below remain mandatory and the price floor is configurable.
+    low = max(1.01, float(os.getenv("GOOL_PREMATCH_SINGLE_MIN_ODD", "1.70")))
     high = float("inf") if v5_active else 3.25
     if pick.data_quality < min_quality or pick.odds < low or pick.odds > high:
         return None

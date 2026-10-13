@@ -26,7 +26,7 @@ def _full_match_strategy(match: dict[str, Any]) -> str | None:
         return None
     if 1 <= minute <= 45:
         return "goal_before_ht"
-    if 46 <= minute <= 95:
+    if minute >= 46:
         return "another_goal"
     return None
 
@@ -86,7 +86,7 @@ def _full_match_routing_experts(
 
 
 def _full_match_entry_cutoff(decision: RouterDecision) -> RouterDecision:
-    """No fixed 35'/75' veto: ordinary GOOL remains eligible through 95'."""
+    """Only a real ended/paused match prevents entry; no arbitrary minute cap."""
     if decision.status != "BET" or decision.winner is None:
         return decision
     winner = decision.winner
@@ -96,7 +96,7 @@ def _full_match_entry_cutoff(decision: RouterDecision) -> RouterDecision:
         minute = int(decision.minute)
     except (TypeError, ValueError):
         minute = 0
-    if 1 <= minute <= 95:
+    if minute >= 1:
         return decision
 
     if "concept_entry_outside_full_match" not in winner.blocks:
@@ -107,7 +107,7 @@ def _full_match_entry_cutoff(decision: RouterDecision) -> RouterDecision:
     decision.status = "WAIT"
     decision.winner = None
     decision.alternatives = []
-    decision.reason = "WAIT: обычный GOOL принимает новые входы только в игровых минутах 1-95."
+    decision.reason = "WAIT: нет положительного игрового времени для нового LIVE входа."
     return decision
 
 
@@ -445,7 +445,7 @@ def install_production_signal_throughput() -> None:
 
     _INSTALLED = True
     print(
-        "GOOL_SIGNAL_THROUGHPUT installed full_match=1-45+46-95 "
+        "GOOL_SIGNAL_THROUGHPUT installed full_match=1-45+46-until-finished "
         "strong_live_dynamic_floor=on xbet_recheck_required=off global_rival_veto=off "
         "dedupe=target_line",
         flush=True,

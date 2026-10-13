@@ -162,7 +162,7 @@ def test_parlay_range_stays_explicit_and_independent_of_singles():
 
 
 
-def test_all_basketball_singles_have_final_140_delivery_gate(capsys):
+def test_all_basketball_prematch_singles_have_final_170_delivery_gate(capsys):
     """Final publication gate catches low-odd handicap/choice signals too."""
     from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker, SPORTS
 
@@ -180,14 +180,14 @@ def test_all_basketball_singles_have_final_140_delivery_gate(capsys):
         "market_family": "handicap", "scope": "FULL_MATCH",
         "home": "Vienna Timberwolves W", "away": "UBSC-DBBC Graz W",
     }
-    for odd in (1.01, 1.29, 1.39):
+    for odd in (1.01, 1.29, 1.39, 1.40, 1.69):
         result = MultiSportSteamWorker._record_signal(
             stub, row, {"odd": odd, "direction": "away"}, SPORTS["basketball"],
         )
         assert result == (False, 0)
         assert stub.lookups == 0
         assert "GOOL_BASKETBALL_SINGLE_ODD_REJECT" in capsys.readouterr().out
-    for odd in (1.40, 1.41, 9.99):
+    for odd in (1.70, 1.71, 9.99):
         result = MultiSportSteamWorker._record_signal(
             stub, row, {"odd": odd, "direction": "away"}, SPORTS["basketball"],
         )

@@ -47,9 +47,9 @@ def evaluate_argument_judge(record: dict[str, Any]) -> LiveArgumentDecision | No
     minute = int(match.get("minute") or 0)
     if bool(match.get("is_halftime")) or bool(match.get("is_finished")):
         return None
-    if 8 <= minute <= 43:
+    if 1 <= minute <= 45:
         market = "GOAL_BEFORE_HT"
-    elif 46 <= minute <= 85:
+    elif minute >= 46:
         market = "ANOTHER_GOAL"
     else:
         return None

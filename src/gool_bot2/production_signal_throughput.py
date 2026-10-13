@@ -372,6 +372,11 @@ def _target_aware_brain_entry(
     winner = decision.winner
     if winner is None or not str(winner.source or "").startswith("brain_primary:"):
         return None
+    # Brain-only Telegram signals bypass the ordinary multi_telegram function;
+    # this pre-journal check keeps the same 1.70 rule on both paths.
+    from .single_price_policy import public_single_allowed
+    if not public_single_allowed(winner.odd, phase="LIVE", sport="football"):
+        return None
     match = record.get("match") or {}
     match_id = str(match.get("flashscore_event_id") or "")
     if not match_id:

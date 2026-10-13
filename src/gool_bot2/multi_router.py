@@ -407,30 +407,19 @@ def build_goal_market_candidates(
 
 
 def _time_hard_block(candidate: MarketCandidate, minute: int) -> str | None:
-    if minute < 10:
-        return f"warmup_until_10:{minute}"
-    if candidate.strategy == "goal_before_ht":
-        if minute > 45:
-            return f"first_half_window_closed:{minute}>45"
-        return None
-    if candidate.strategy == "two_more_goals":
-        if minute > 65:
-            return f"two_goal_window_closed:{minute}>65"
-        return None
-    if candidate.strategy == "another_goal":
-        if minute > 85:
-            return f"another_goal_window_closed:{minute}>85"
-        return None
-    if minute > 75:
-        return f"entry_window_closed:{minute}>75"
+    # No arbitrary LIVE match-minute cutoff, including stoppage time.
+    # Rejected late bets must fail the actual quote, probability, integrity,
+    # current-half validity or LIVE-stat freshness tests instead.
+    if minute <= 0:
+        return "live_not_started"
+    if candidate.strategy in {"goal_before_ht", "steam_goal_before_ht"} and minute > 45:
+        return "first_half_closed"
     return None
 
 
 def _override_allowed(candidate: MarketCandidate, minute: int) -> bool:
     if candidate.expert_passed:
         return True
-    if candidate.strategy == "two_more_goals" and minute > 60:
-        return False
     return bool(candidate.market_override or candidate.value_override)
 
 
@@ -519,7 +508,7 @@ def _winner_reason(candidate: MarketCandidate, minute: int) -> str:
     if candidate.family == "btts":
         return "ОЗ даёт лучший баланс цены и вероятности среди связанных голевых рынков."
     if candidate.strategy == "another_goal" and minute > 75:
-        return "Позднее окно ещё одного гола активно до 85-й минуты; рынок проходит VALUE и LIVE-проверки."
+        return "Поздний рынок на ещё один гол проходит реальные LIVE-данные, VALUE и подтверждение коэффициента."
     if candidate.goals_to_win == 1 and minute >= 61:
         return "На этой минуте один гол надёжнее агрессивного сценария +2."
     if candidate.goals_to_win >= 2:

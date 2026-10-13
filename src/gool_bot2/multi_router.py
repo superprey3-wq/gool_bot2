@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 from .market_override_policy import can_override_another_goal, decorate_market_info
 from .value_bet_policy import ABSOLUTE_MIN_BET_ODD, attach_value
+from .single_price_policy import minimum_single_odd
 from .xbet_market_pressure import evaluate_system
 
 
@@ -468,8 +470,9 @@ def score_candidate(candidate: MarketCandidate, minute: int) -> MarketCandidate:
     elif candidate.market_age_seconds > max_age:
         candidate.blocks.append(f"market_stale:{candidate.market_age_seconds:.1f}>{max_age:.1f}")
 
-    if candidate.odd < ABSOLUTE_MIN_BET_ODD:
-        candidate.blocks.append("price_too_low")
+    live_single_min = minimum_single_odd(phase="LIVE", sport="football")
+    if not math.isfinite(candidate.odd) or candidate.odd < live_single_min:
+        candidate.blocks.append(f"live_single_odd_below_{live_single_min:.2f}")
     if candidate.data_quality < 0.35:
         candidate.blocks.append("data_quality_too_low")
     if candidate.expected_roi < 0.01:

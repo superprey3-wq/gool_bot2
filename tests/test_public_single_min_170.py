@@ -107,3 +107,20 @@ def test_football_express_legs_still_can_use_149(monkeypatch):
     assert selection["singles"] == []
     assert selection["doubles"]
     assert all(p.odds == 1.49 for p in selection["doubles"][0]["legs"])
+
+
+@pytest.mark.parametrize("sport", ("hockey", "basketball"))
+def test_multisport_prematch_primary_skips_best_ranked_low_price(sport):
+    from gool_bot2.xbet_multisport_steam import select_prematch_primary
+    short = ({"market_family": "match_total"}, {
+        "odd": 1.50, "model_probability": .90,
+        "data_quality": .90, "strength": 90, "edge": .20,
+    })
+    priced = ({"market_family": "home_total"}, {
+        "odd": 1.72, "model_probability": .75,
+        "data_quality": .85, "strength": 84, "edge": .10,
+    })
+    selected = select_prematch_primary([short, priced], sport=sport)
+    assert selected is not None
+    assert selected[1]["odd"] == 1.72
+    assert select_prematch_primary([short], sport=sport) is None

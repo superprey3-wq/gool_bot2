@@ -24,6 +24,7 @@ from gool_bot2.prematch_confidence import select_confident_prematch_rows
 from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
 from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows,select_value_scan_rows
+from gool_bot2.tournament_express import build_catalog, write_catalog, _priority as tournament_priority
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
@@ -256,7 +257,20 @@ if V5_ACTIVE or V6_ACTIVE:
   float(r.get("quality") or 0),
  ),reverse=True)
  qualified=len(rows)
+ # Large tournament coverage is independent of the global daily shortlist:
+ # every READY Champions/Europa/Conference/major international fixture can
+ # be priced for the all-matches coupon, even if outside the top cap.
+ whole_pool=list(rows)
  rows=rows[:cap]
+ selected_ids={str(r["match"].provider_match_id) for r in rows}
+ promoted=[]
+ for r in whole_pool:
+  event_id=str(r["match"].provider_match_id)
+  if event_id not in selected_ids and tournament_priority(str(r["match"].league or "")) < 4:
+   promoted.append(r)
+   selected_ids.add(event_id)
+ rows.extend(promoted)
+ print("TOURNAMENT_PRICE_PROMOTION",len(promoted),"shortlist",len(rows),flush=True)
  shortlist_stats={"cap":cap,"qualified":qualified,"rejected_quality":0,"mode":"FOOTBALL_V6_ACTIVE" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE"}
  print("FOOTBALL_V6_ACTIVE_SHORTLIST" if V6_ACTIVE else "FOOTBALL_V5_ACTIVE_SHORTLIST",{
   "eligible":qualified,"price_shortlist":len(rows),"cap":cap,
@@ -619,6 +633,12 @@ d=choose_delivery(
  max_doubles=None if max_doubles<=0 else max_doubles,
  include_super=not global_super_on,
 )
+# Build full-tournament coupons from the ENTIRE today's fixture universe,
+# not merely from singles or the strongest two matches in the league.
+catalog,tournament_tickets=build_catalog(fixtures,priced,now_ts=now,report_date=day.isoformat())
+write_catalog(catalog)
+d["tournaments"]=tournament_tickets
+print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets)},flush=True)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 value_delivered=emit_value_hunter(value_candidates,journal)
 print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)

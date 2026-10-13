@@ -310,7 +310,7 @@ def build_autonomous_steam_candidates(
     data_quality: float,
 ) -> list[MarketCandidate]:
     match = record.get("match") or {}
-    if not _enabled() or not market_row or bool(match.get("is_finished")):
+    if not _enabled() or not market_row or bool(match.get("is_finished")) or bool(match.get("is_halftime")):
         return []
     if market_row.get("repricing_guard") or market_row.get("score_desync") or market_row.get("timeline_score_desync"):
         return []
@@ -341,7 +341,7 @@ def build_autonomous_steam_candidates(
 
     common = {"row": market_row, "age": age, "quality": data_quality, "hs": hs, "aws": aws}
 
-    if 10 <= minute <= _i("XBET_STEAM_ANOTHER_GOAL_MAX_MINUTE", 90):
+    if minute >= 1:
         line = total + 0.5
         target = _line(list(markets.get("match_total") or []), line)
         if target and target.get("over") is not None:
@@ -358,7 +358,7 @@ def build_autonomous_steam_candidates(
                 correlation="any_next_goal",
             ))
 
-    if 10 <= minute <= _i("XBET_STEAM_TWO_MORE_MAX_MINUTE", 60):
+    if minute >= 1:
         line = total + 1.5
         target = _line(list(markets.get("match_total") or []), line)
         if target and target.get("over") is not None:
@@ -375,7 +375,7 @@ def build_autonomous_steam_candidates(
                 correlation="two_goal_path",
             ))
 
-    if 10 <= minute <= _i("XBET_STEAM_TEAM_GOAL_MAX_MINUTE", 75):
+    if minute >= 1:
         for side, score, name, prefix in (
             ("home", hs, "home_total", "ИТБ1"),
             ("away", aws, "away_total", "ИТБ2"),
@@ -396,7 +396,7 @@ def build_autonomous_steam_candidates(
                     correlation=f"{side}_next_goal",
                 ))
 
-    if 10 <= minute <= _i("XBET_STEAM_BTTS_MAX_MINUTE", 72) and not (hs > 0 and aws > 0):
+    if minute >= 1 and not (hs > 0 and aws > 0):
         btts = markets.get("btts") or {}
         if btts.get("yes") is not None:
             correlation = "home_next_goal" if hs == 0 < aws else (
@@ -415,7 +415,7 @@ def build_autonomous_steam_candidates(
                 correlation=correlation,
             ))
 
-    if 10 <= minute <= _i("XBET_STEAM_FIRST_HALF_MAX_MINUTE", 40) and not bool(match.get("is_halftime")):
+    if 1 <= minute <= 45 and not bool(match.get("is_halftime")):
         line = total + 0.5
         target = _line(list(markets.get("first_half_total") or []), line)
         if target and target.get("over") is not None:

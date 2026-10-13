@@ -30,7 +30,7 @@ telegram.START_TEXT = (
 
 
 def _first_half_live_analysis_40(record: dict[str, Any]) -> dict[str, float | None]:
-    """GOOL live pressure for one more goal before HT, active through 40'."""
+    """GOOL live pressure for one more goal while first half is in play."""
     match = record.get("match") or {}
     minute = float(match.get("minute") or 0.0)
     is_halftime = bool(match.get("is_halftime"))
@@ -46,8 +46,7 @@ def _first_half_live_analysis_40(record: dict[str, Any]) -> dict[str, float | No
         "dangerous_attacks_total": local_ensemble._pair_total(record, "dangerous_attacks"),
         "baseline_auc": local_ensemble.GOAL_BEFORE_HT_BASELINE_AUC,
     }
-    max_minute = float(os.getenv("GOAL_BEFORE_HT_MAX_MINUTE", "40"))
-    if is_halftime or minute <= 0 or minute > max_minute:
+    if is_halftime or minute <= 0 or minute > 45:
         return output
 
     progress = max(0.08, min(1.0, minute / 45.0))

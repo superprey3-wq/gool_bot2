@@ -50,12 +50,12 @@ def test_second_half_demand_starts_at_46_and_first_half_runs_through_35(tmp_path
 
     assert ordinary_strategy(_record(35)["match"]) == "goal_before_ht"
     assert request_live_market(_record(35), experts)["strategy"] == "goal_before_ht"
-    assert ordinary_strategy(_record(36)["match"]) is None
-    assert request_live_market(_record(36), experts) is None
+    assert ordinary_strategy(_record(36)["match"]) == "goal_before_ht"
+    assert request_live_market(_record(36), experts)["strategy"] == "goal_before_ht"
     assert ordinary_strategy(_record(46)["match"]) == "another_goal"
     assert request_live_market(_record(46), experts)["strategy"] == "another_goal"
     assert ordinary_strategy(_record(75)["match"]) == "another_goal"
-    assert ordinary_strategy(_record(76)["match"]) is None
+    assert ordinary_strategy(_record(76)["match"]) == "another_goal"
     assert MIN_BET_ODD == 1.50
 
 

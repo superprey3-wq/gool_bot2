@@ -49,11 +49,10 @@ def test_first_half_routes_only_goal_before_ht_through_35() -> None:
         assert set(routing_experts(match, _experts())) == {"goal_before_ht"}
 
 
-def test_first_half_has_no_new_ordinary_entry_after_35() -> None:
+def test_first_half_goes_to_actual_halftime() -> None:
     for minute in (36, 40, 45):
         match = {"minute": minute, "is_halftime": False, "is_finished": False}
-        assert ordinary_strategy(match) is None
-        assert routing_experts(match, _experts()) == {}
+        assert ordinary_strategy(match) == FIRST_HALF_STRATEGY
 
 
 def test_halftime_routes_no_ordinary_system() -> None:
@@ -69,10 +68,11 @@ def test_second_half_routes_only_another_goal_from_46_through_75() -> None:
         assert set(routing_experts(match, _experts())) == {"another_goal"}
 
 
-def test_after_75_no_ordinary_gool_entry() -> None:
-    match = {"minute": 76, "is_halftime": False, "is_finished": False}
-    assert ordinary_strategy(match) is None
-    assert routing_experts(match, _experts()) == {}
+def test_late_ordinary_gool_remains_eligible_during_play() -> None:
+    for minute in (76, 85, 92, 97):
+        match = {"minute": minute, "is_halftime": False, "is_finished": False}
+        assert ordinary_strategy(match) == SECOND_HALF_STRATEGY
+        assert set(routing_experts(match, _experts())) == {"another_goal"}
 
 
 def test_global_cutoff_allows_entry_at_75() -> None:
@@ -81,12 +81,11 @@ def test_global_cutoff_allows_entry_at_75() -> None:
     assert decision.winner is not None
 
 
-def test_global_cutoff_blocks_ordinary_entry_after_75() -> None:
-    decision = enforce_entry_cutoff(_decision(76))
-    assert decision.status == "WAIT"
-    assert decision.winner is None
-    assert decision.rejected
-    assert "concept_entry_after_75" in decision.rejected[0].blocks
+def test_global_cutoff_does_not_block_ordinary_late_live_entry() -> None:
+    for minute in (76, 88, 95, 97):
+        decision = enforce_entry_cutoff(_decision(minute))
+        assert decision.status == "BET"
+        assert decision.winner is not None
 
 
 def test_global_cutoff_never_blocks_autonomous_steam_after_75() -> None:

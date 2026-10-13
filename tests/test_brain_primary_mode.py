@@ -425,3 +425,40 @@ def test_routing_experts_installs_brain_primary_runtime_and_card(monkeypatch):
 
     assert called == ["runtime", "card"]
     assert set(routed) == {"another_goal"}
+
+
+def test_brain_png_live_delivery_rejects_169_and_allows_170(tmp_path, monkeypatch):
+    """The real production card emitter must obey 1.70 despite legacy 1.40."""
+    monkeypatch.setenv("GOOL_BRAIN_SIGNAL_STATE_PATH", str(tmp_path / "state.json"))
+    monkeypatch.setenv("GOOL_MULTI_TELEGRAM_MODE", "active")
+    monkeypatch.setenv("GOOL_LIVE_MIN_PUBLIC_ODD", "1.40")
+    monkeypatch.setattr("gool_bot2.multi_telegram.is_multi_telegram_active", lambda: True)
+    monkeypatch.setattr(card_restore, "_fresh_flashscore_state",
+                        lambda mid: {"event_id": mid, "is_live": True,
+                                     "is_finished": False, "home_score": 1, "away_score": 0})
+    record = {"match": _match(minute=92)}
+    decision = mode.analyze_brain_primary_match(
+        record["match"], None, {"another_goal": _experts(.92)["another_goal"]},
+        data_quality=.95,
+    )
+    assert decision.winner is not None
+    _, entry = mode.sync_brain_or_market_journal(
+        record, decision, _experts(.92), tmp_path / "journal.json", data_quality=.95,
+    )
+    assert entry is not None
+    calls = []
+    monkeypatch.setattr("gool_bot2.multi_steam_card.render_multi_signal_card",
+                        lambda *_a, **_k: b"late-brain-png")
+    monkeypatch.setattr("gool_bot2.telegram.broadcast_photo",
+                        lambda png: calls.append(png) or 1)
+    monkeypatch.setattr("gool_bot2.telegram.broadcast", lambda *_a: 0)
+
+    decision.winner.odd = 1.69
+    entry["odd"] = 1.69
+    assert card_restore.emit_brain_card_signal(record, decision, entry) == 0
+    assert calls == []
+
+    decision.winner.odd = 1.70
+    entry["odd"] = 1.70
+    assert card_restore.emit_brain_card_signal(record, decision, entry) == 1
+    assert calls == [b"late-brain-png"]

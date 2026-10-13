@@ -34,9 +34,9 @@ def ordinary_strategy(match: dict[str, Any]) -> str | None:
     except (TypeError, ValueError):
         minute = 0
 
-    if 0 < minute <= FIRST_HALF_MAX_MINUTE:
+    if 0 < minute <= 45:
         return FIRST_HALF_STRATEGY
-    if SECOND_HALF_MIN_MINUTE <= minute <= SECOND_HALF_MAX_MINUTE:
+    if minute >= SECOND_HALF_MIN_MINUTE:
         return SECOND_HALF_STRATEGY
     return None
 
@@ -58,14 +58,14 @@ def routing_experts(match: dict[str, Any], experts: dict[str, Any]) -> dict[str,
 
 
 def enforce_entry_cutoff(decision: RouterDecision) -> RouterDecision:
-    """Keep the 75' cutoff for ordinary GOOL, never for autonomous STEAM."""
+    """No fixed match minute cap: price, live-status and model decide."""
     if decision.status != "BET" or decision.winner is None:
         return decision
 
     winner = decision.winner
     if str(getattr(winner, "source", "")).startswith("1xbet:autonomous_steam"):
         return decision
-    if int(decision.minute) <= SECOND_HALF_MAX_MINUTE:
+    if int(decision.minute) >= 1:
         return decision
 
     if "concept_entry_after_75" not in winner.blocks:

@@ -16,7 +16,11 @@ def full_match_strategy(minute: int, halftime: bool) -> tuple[str | None, str | 
         return None, None, 0
     if 1 <= int(minute) <= 45:
         return "goal_before_ht", "1H", 47
-    if 46 <= int(minute) <= 95:
+    if int(minute) >= 46:
+        # Do not assume a referee's final whistle from a fixed 95' clock.
+        # After the conservative 95' modelling horizon, remaining-time goal
+        # probability becomes zero unless a later horizon is independently
+        # evidenced. Never invent extra stoppage time to produce a BET.
         return "another_goal", "2H", 95
     return None, None, 0
 
@@ -96,7 +100,7 @@ def install_brain_v3_full_match() -> None:
     _install_selection_clock_patch()
     _INSTALLED = True
     print(
-        "GOOL_BRAIN_V3_FULL_MATCH installed first_half=1-45 second_half=46-95 halftime=paused fixed_clock_veto=off",
+        "GOOL_BRAIN_V3_FULL_MATCH installed first_half=1-45 second_half=46-until-finished halftime=paused fixed_clock_veto=off",
         flush=True,
     )
 
@@ -123,7 +127,7 @@ def apply_full_match_strong_live(
         return _apply_strong_live_entry(record, experts, decision)
 
     period = str(decision.get("period") or "")
-    if period != "2H" or actual_minute > 95:
+    if period != "2H":
         return decision
 
     # The old helper has exactly one hard late-time gate (minute < 70). Feeding

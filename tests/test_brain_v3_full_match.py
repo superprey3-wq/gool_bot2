@@ -22,4 +22,6 @@ def test_brain_v3_analyzes_entire_second_half_and_stoppage() -> None:
 def test_brain_v3_pauses_only_for_halftime_or_outside_match() -> None:
     assert full_match_strategy(45, True) == (None, None, 0)
     assert full_match_strategy(0, False) == (None, None, 0)
-    assert full_match_strategy(96, False) == (None, None, 0)
+    # Still analyzed if Flashscore confirms that the match is LIVE. Brain
+    # does not invent extra stoppage time: modelling horizon remains 95'.
+    assert full_match_strategy(96, False) == ("another_goal", "2H", 95)

@@ -388,7 +388,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
        second half through 75';
     2) autonomous 1xBet steam: exceptional market-only bypass with hard guards.
 
-    Only ordinary GOOL uses the 35'/75' entry windows; autonomous market
+    Both ordinary GOOL and autonomous market systems follow match status rather than fixed entry windows;
     systems remain live for the whole match while their markets are tradable.
     The bookmaker remains mandatory for the actual tradable market and price.
 
@@ -531,7 +531,7 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     )
 
     exchange = record.get("matchbook_exchange") or {}
-    active_strategy = "goal_before_ht" if 1 <= minute <= 35 else "another_goal" if 46 <= minute <= 75 else ""
+    active_strategy = "goal_before_ht" if 1 <= minute <= 45 else "another_goal" if minute >= 46 else ""
     exchange_active = ((exchange.get("systems") or {}).get(active_strategy) or {}) if active_strategy else {}
     if exchange.get("available"):
         print(
@@ -563,8 +563,8 @@ def observe_multi_shadow(worker: Any, record: dict[str, Any]) -> None:
     # score-epoch evidence only.
     decision = enforce_match_suitability(decision, record)
 
-    # Autonomous STEAM is a separate all-LIVE market hunter. The cutoff below
-    # applies only to ordinary GOOL; enforce_entry_cutoff explicitly bypasses STEAM.
+    # No arbitrary 75'/95' clock veto: model, LIVE status and verified quote
+    # decide whether a late bet can be published.
     decision = apply_autonomous_steam(decision, record, market, data_quality=quality)
     decision = enforce_entry_cutoff(decision)
 

@@ -98,7 +98,7 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] 
         if not (min_odd <= price <= max_odd
                 and raw.data_quality >= min_quality
                 and probability >= min_probability
-                and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .025)
+                and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .010)
                 and roi >= _f("GOOL_TOURNAMENT_MIN_EXPECTED_ROI", .02)):
             return None
         return {

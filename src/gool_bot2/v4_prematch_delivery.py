@@ -443,6 +443,17 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             # still prevents a duplicate on every PREMATCH rerun.
             old_pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
             pid = f"{old_pid}:elite_safe_v1"
+            # An old, already-sent ticket with EXACTLY the same selections
+            # does not need another Telegram notification merely because the
+            # price-policy source code changed.
+            old_published = next(
+                (x for x in rows if str(x.get("entry_id") or "") == old_pid and x.get("telegram_sent")),
+                None,
+            )
+            existing_upgrade = any(str(x.get("entry_id") or "") == pid for x in rows)
+            if old_published is not None and not existing_upgrade and identity(old_published.get("legs") or []) == key:
+                print("TOURNAMENT_SAFE_REVISION_SKIP unchanged_legs", old_pid, flush=True)
+                continue
         else:
             pid = f"parlay:{kind.lower()}:{digest}"
 
@@ -490,7 +501,10 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             # Preserve the originally published ticket as its own historical
             # record (the user may have used it). The corrected card is a new
             # ticket, not a rewrite of the old wager or settled result.
-            prior_parent = next((x for x in rows if str(x.get("entry_id") or "") == old_pid), None) if kind == "TOURNAMENT" else None
+            prior_parent = next(
+                (x for x in rows if str(x.get("entry_id") or "") == old_pid and x.get("telegram_sent")),
+                None,
+            ) if kind == "TOURNAMENT" else None
             parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
                 "replaces_entry_id": str(prior_parent.get("entry_id") or "") if prior_parent is not None else "",
@@ -525,7 +539,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         if kind == "TOURNAMENT":
             reserve_count = int(parent.get("coverage_only_count") or 0)
             caption_lines = caption_lines[:3] + [
-                *([f"🔄 ОБНОВЛЁННЫЙ КУПОН: заменяет предыдущую рекомендацию по турниру."] if parent.get("replaces_entry_id") else []),
+                *(["🔄 ОБНОВЛЁННЫЙ КУПОН. Старый прогноз больше не актуален, но уже сделанные ставки не отменяются."] if parent.get("replaces_entry_id") else []),
                 f"Матчей в купоне: {len(legs)}. Резервных плечей без подтверждённого преимущества: {reserve_count}.",
                 "⚠️ Резервные плечи — оценка по букмекерской линии, не подтверждённый моделью value.",
                 "Полный список — 🏆 Турнирные экспрессы.",
@@ -535,6 +549,17 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             parent["telegram_sent"] = True
             parent["telegram_sent_at"] = _now()
             parent["telegram_delivery_count"] = int(delivered)
+            if kind == "TOURNAMENT" and parent.get("replaces_entry_id"):
+                prior = next(
+                    (x for x in rows if str(x.get("entry_id") or "") == str(parent["replaces_entry_id"])),
+                    None,
+                )
+                if prior is not None:
+                    # Informational metadata only: user may have placed a real
+                    # bet on that earlier ticket. Never void/rewrite its result.
+                    prior["superseded_by"] = parent["entry_id"]
+                    prior["suggestion_status"] = "previous_version"
+                    prior["superseded_at"] = _now()
             save_signal_journal(journal_path, rows)
             sent["parlays"] += 1
             sent["cards"] += 1

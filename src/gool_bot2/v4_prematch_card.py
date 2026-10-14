@@ -235,7 +235,9 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         accent = ACCENT if final == "won" else RED if final == "lost" else NEUTRAL
     else:
         is_super = kind in {"SUPER", "GLOBAL_SUPER"}
-        title = "SUPER 10 · 3 SPORTS" if kind == "GLOBAL_SUPER" else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС")
+        title = ("SUPER 10 · 3 SPORTS" if kind == "GLOBAL_SUPER" else
+                 "SUPER 10" if kind == "SUPER" else
+                 "ТУРНИРНЫЙ ЭКСПРЕСС" if kind == "TOURNAMENT" else "ЭКСПРЕСС")
         accent = GOLD if is_super else ACCENT
 
     row_h = 152
@@ -250,9 +252,15 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
     _center_in_box(draw, title, (760, 34, 1025, 88), sc._font(18, True), accent)
 
     odd = float(row.get("effective_odd") or row.get("odd") or 0.0)
-    headline = "ИТОГ ЭКСПРЕССА" if result else ("GLOBAL SUPER 10" if kind == "GLOBAL_SUPER" else ("SUPER 10" if kind == "SUPER" else "ЭКСПРЕСС"))
+    headline = ("ИТОГ ЭКСПРЕССА" if result else
+                "GLOBAL SUPER 10" if kind == "GLOBAL_SUPER" else
+                "SUPER 10" if kind == "SUPER" else
+                "ТУРНИРНЫЙ ЭКСПРЕСС" if kind == "TOURNAMENT" else "ЭКСПРЕСС")
     _center(draw, headline, 125, sc._font(31, True), TEXT)
     _center(draw, f"Общий коэффициент · {odd:.2f}", 168, sc._font(22, True), accent)
+    if kind == "TOURNAMENT" and odd > 1 and not result:
+        implied = f"Безубыточная частота: {100.0 / odd:.2f}% · НЕ прогноз прохода"
+        _center(draw, implied, 199, sc._font(14, True), MUTED)
 
     y = 220
     status_labels = {"won":"✓ ЗАШЛА","lost":"✕ НЕ ЗАШЛА","push":"↩ ВОЗВРАТ","void":"↩ ВОЗВРАТ","pending":"ЖДЁМ"}
@@ -280,7 +288,8 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         draw.text((245, y + 45), tournament, font=_fit(draw, tournament, 585, 14, True), fill=MUTED)
         timing = f"СТАРТ · {kickoff}"
         draw.text((245, y + 72), timing, font=_fit(draw, timing, 400, 14, True), fill=MUTED)
-        bet = f"{market}  @ {leg_odd:.2f}"
+        is_reserve = kind == "TOURNAMENT" and str(leg.get("leg_qualification") or "") == "COVERAGE_ONLY"
+        bet = f"{market}  @ {leg_odd:.2f}" + (" · РЕЗЕРВ (без +EV)" if is_reserve else "")
         draw.text((245, y + 99), bet, font=_fit(draw, bet, 520, 18, True), fill=leg_accent if result else accent)
         if result:
             label = status_labels.get(lr, "ЖДЁМ")
@@ -296,7 +305,9 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
     footer = (
         "РЕЗУЛЬТАТ ЭКСПРЕССА ПОДТВЕРЖДЁН"
         if result
-        else ("⚽ ФУТБОЛ · 🏒 ХОККЕЙ · 🏀 БАСКЕТБОЛ" if kind == "GLOBAL_SUPER" else "PREMATCH · ВСЕ НОГИ ЗАФИКСИРОВАНЫ")
+        else ("⚽ ФУТБОЛ · 🏒 ХОККЕЙ · 🏀 БАСКЕТБОЛ" if kind == "GLOBAL_SUPER"
+              else f"РЕЗЕРВНЫХ ПЛЕЧЕЙ: {int(row.get('coverage_only_count') or 0)} · +EV НЕ ПОДТВЕРЖДЕН" if kind == "TOURNAMENT" and int(row.get("coverage_only_count") or 0)
+              else "PREMATCH · ВСЕ НОГИ ЗАФИКСИРОВАНЫ")
     )
     _center_in_box(draw, footer, (235, footer_top, 845, height - 35), _fit(draw, footer, 560, 15, True), BG)
     return sc._save(img)

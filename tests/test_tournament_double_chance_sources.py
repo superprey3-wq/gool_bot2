@@ -119,3 +119,54 @@ def test_full_nine_match_coupon_can_use_two_sources_and_dc_leg():
     assert len(tickets) == 1
     assert len(tickets[0]["legs"]) == 9
     assert tickets[0]["leg_bookmakers"]["m1"] == "Book B"
+
+
+def test_coverage_checks_every_supported_scope_and_settleable_market():
+    quote = {
+        "bookmaker": "SameBook",
+        "match_1x2": {"home": 1.55, "draw": 4.40, "away": 6.0},
+        "double_chance": {"home_or_draw": 1.30},
+        "draw_no_bet": {"home": 1.32, "away": 3.70},
+        "match_totals": [{"line": 1.5, "over": 1.34, "under": 3.70}],
+        "home_totals": [{"line": .5, "over": 1.34, "under": 3.70}],
+        "away_totals": [{"line": .5, "over": 1.35, "under": 3.60}],
+        "first_half_totals": [{"line": .5, "over": 1.65, "under": 2.28}],
+        "second_half_totals": [{"line": .5, "over": 1.42, "under": 3.10}],
+        "asian_handicaps": [{
+            "home_line": +.5, "away_line": -.5,
+            "home": 1.38, "away": 3.12,
+        }],
+        "btts": {"yes": 1.76, "no": 2.16},
+    }
+    picks = bookmaker_coverage_picks(quote, quote_source="flashscore", **_kw())
+    markets = {p.market for p in picks}
+    assert {
+        "match_total", "home_total", "away_total", "match_1x2",
+        "double_chance", "draw_no_bet", "asian_handicap", "btts",
+        "1H_OVER_UNDER", "2H_OVER_UNDER",
+    } <= markets
+    assert any(p.selection == "home +0.5" for p in picks if p.market == "asian_handicap")
+    assert all(p.odds >= 1.30 for p in picks)
+
+    from gool_bot2.v4_prematch_settlement import settle_prematch_pick
+    for market, selection, expected in (
+        ("draw_no_bet", "home", "push"),
+        ("asian_handicap", "home +0.5", "won"),
+        ("1H_OVER_UNDER", "over 0.5", "won"),
+        ("2H_OVER_UNDER", "under 0.5", "lost"),
+        ("double_chance", "home or draw", "won"),
+    ):
+        row = {"market": market, "selection": selection}
+        assert settle_prematch_pick(row, 1, 1, half_time_score=(1, 0)) == expected
+
+
+def test_asian_quarter_and_whole_handicaps_excluded_until_push_fraction_settlement():
+    quote = {"asian_handicaps": [
+        {"home_line": .25, "away_line": -.25, "home": 1.60, "away": 2.20},
+        {"home_line": 1.0, "away_line": -1.0, "home": 1.65, "away": 2.15},
+        {"home_line": +.5, "away_line": -.5, "home": 1.38, "away": 3.12},
+    ]}
+    picks = bookmaker_coverage_picks(quote, quote_source="flashscore", **_kw())
+    handi = [p for p in picks if p.market == "asian_handicap"]
+    assert len(handi) == 2
+    assert {p.selection for p in handi} == {"home +0.5", "away -0.5"}

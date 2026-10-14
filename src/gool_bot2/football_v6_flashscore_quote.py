@@ -1,8 +1,8 @@
-"""Convert real Flashscore odds observations to V6 comparable bookmaker pairs.
+"""Convert actual, same-bookmaker Flashscore quotes for V6 and tournament legs.
 
-Observation only: this does not place, invent, or adjust public betting odds.
-Never combine the OVER from one bookmaker with an UNDER from another.
-Only full-time, simple binary half-goal totals, BTTS and 1X2 are supported.
+The V6 wrapper still uses supported full-time markets only. Tournament-only
+quotes can include correctly scoped half totals and non-push half-line handicaps.
+Never combine market sides from separate books or synthesize public odds.
 """
 from __future__ import annotations
 
@@ -37,9 +37,12 @@ def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, An
     books: dict[str, dict[tuple[str, str, float | None], dict[str, float]]] = {}
     for key, items in observations.items():
         scope, typ, side, line = key
-        if str(scope).upper() != "FULL_TIME":
+        scope = str(scope).upper()
+        if scope not in {"FULL_TIME", "FIRST_HALF", "SECOND_HALF"}:
             continue
-        if typ not in {"OVER_UNDER", "HOME_DRAW_AWAY", "BOTH_TEAMS_TO_SCORE", "DOUBLE_CHANCE"}:
+        if typ not in {"OVER_UNDER", "HOME_DRAW_AWAY", "BOTH_TEAMS_TO_SCORE", "DOUBLE_CHANCE", "DRAW_NO_BET", "ASIAN_HANDICAP"}:
+            continue
+        if scope != "FULL_TIME" and typ != "OVER_UNDER":
             continue
         if typ == "OVER_UNDER":
             try:
@@ -56,7 +59,32 @@ def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, An
                 family, selection = "away_total", selection[5:]
             if selection not in {"OVER", "UNDER"}:
                 continue
+            if scope == "FIRST_HALF":
+                if family != "match_total":
+                    continue
+                family = "first_half_total"
+            elif scope == "SECOND_HALF":
+                if family != "match_total":
+                    continue
+                family = "second_half_total"
             group = (family, "total", line_value)
+        elif typ == "ASIAN_HANDICAP":
+            selection = str(side).upper()
+            try:
+                value = float(line)
+            except (TypeError, ValueError):
+                continue
+            # Quarter-line Asian handicaps require partial settlement, whole
+            # handicaps may push: only non-push ±x.5 choices are supported.
+            if selection not in {"HOME", "AWAY"} or not math.isfinite(value) or abs(value % 1.0 - .5) > 1e-8:
+                continue
+            orientation = value if selection == "HOME" else -value
+            group = ("asian_handicap", "full", round(orientation, 5))
+        elif typ == "DRAW_NO_BET":
+            selection = str(side).upper()
+            if selection not in {"HOME", "AWAY"}:
+                continue
+            group = ("draw_no_bet", "full", None)
         elif typ == "HOME_DRAW_AWAY":
             selection = str(side).upper()
             if selection not in {"HOME", "DRAW", "AWAY"}:
@@ -91,19 +119,32 @@ def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, An
             "match_totals": [],
             "home_totals": [],
             "away_totals": [],
+            "first_half_totals": [],
+            "second_half_totals": [],
+            "asian_handicaps": [],
+            "draw_no_bet": {},
             "match_1x2": {},
             "double_chance": {},
             "btts": {},
         }
         for (family, _kind, line), sides in markets.items():
-            if family in {"match_total", "home_total", "away_total"} and {"OVER", "UNDER"} <= sides.keys():
+            if family in {"match_total", "home_total", "away_total", "first_half_total", "second_half_total"} and {"OVER", "UNDER"} <= sides.keys():
                 output[{
                     "match_total": "match_totals",
                     "home_total": "home_totals",
                     "away_total": "away_totals",
+                    "first_half_total": "first_half_totals",
+                    "second_half_total": "second_half_totals",
                 }[family]].append({
                     "line": line, "over": sides["OVER"], "under": sides["UNDER"],
                 })
+            elif family == "asian_handicap" and {"HOME", "AWAY"} <= sides.keys():
+                output["asian_handicaps"].append({
+                    "home_line": line, "away_line": -line,
+                    "home": sides["HOME"], "away": sides["AWAY"],
+                })
+            elif family == "draw_no_bet" and {"HOME", "AWAY"} <= sides.keys():
+                output["draw_no_bet"] = {"home": sides["HOME"], "away": sides["AWAY"]}
             elif family == "match_1x2" and {"HOME", "DRAW", "AWAY"} <= sides.keys():
                 output["match_1x2"] = {s.lower(): sides[s] for s in ("HOME", "DRAW", "AWAY")}
             elif family == "double_chance":
@@ -111,19 +152,22 @@ def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, An
                     for label in ("HOME_OR_DRAW", "DRAW_OR_AWAY", "HOME_OR_AWAY") if label in sides}
             elif family == "btts" and {"YES", "NO"} <= sides.keys():
                 output["btts"] = {s.lower(): sides[s] for s in ("YES", "NO")}
-        for family in ("match_totals", "home_totals", "away_totals"):
+        for family in ("match_totals", "home_totals", "away_totals", "first_half_totals", "second_half_totals"):
             output[family].sort(key=lambda x: x["line"])
         return output
 
     offers = [build(book, raw) for book, raw in books.items()]
     offers.sort(key=lambda q: (
         len(q["match_totals"]) + len(q["home_totals"]) + len(q["away_totals"])
-        + int(bool(q["match_1x2"])) + int(bool(q["double_chance"])) + int(bool(q["btts"])),
+        + len(q["first_half_totals"]) + len(q["second_half_totals"]) + len(q["asian_handicaps"])
+        + int(bool(q["draw_no_bet"])) + int(bool(q["match_1x2"])) + int(bool(q["double_chance"])) + int(bool(q["btts"])),
         len(q["match_totals"]),
         q["bookmaker"],
     ), reverse=True)
     return [offer for offer in offers if (
         offer["match_totals"] or offer["home_totals"] or offer["away_totals"]
+        or offer["first_half_totals"] or offer["second_half_totals"]
+        or offer["asian_handicaps"] or offer["draw_no_bet"]
         or offer["match_1x2"] or offer["double_chance"] or offer["btts"]
     )]
 

@@ -84,9 +84,13 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] 
         price = float(raw.odds)
         probability = float(raw.model_probability)
         min_odd = _f("GOOL_TOURNAMENT_LEG_MIN_ODD", 1.35)
-        max_odd = _f("GOOL_TOURNAMENT_LEG_MAX_ODD", 2.50)
+        # Full-fixture express legs must not inherit an arbitrary fixed 66% p
+        # or 2.50 maximum odd from the standalone product. Profitability is
+        # tested by the real, quoted price: p*odd >= 1 + required_roi.
+        # The V6 model/odds/quality checks remain upstream and below.
+        max_odd = _f("GOOL_TOURNAMENT_LEG_MAX_ODD", float("inf"))
         min_quality = _f("GOOL_TOURNAMENT_MIN_QUALITY", .60)
-        min_probability = _f("GOOL_TOURNAMENT_MIN_PROBABILITY", .66)
+        min_probability = _f("GOOL_TOURNAMENT_MIN_PROBABILITY", 0.0)
         edge = probability - float(raw.market_probability)
         roi = probability * price - 1.0
         if not all(math.isfinite(x) for x in (price, probability, edge, roi, raw.data_quality)):
@@ -171,9 +175,29 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                 elif quote_count == 0:
                     note["display_reason"] = "нет подтверждённых коэффициентов доступных рынков"
                 elif active_count == 0:
-                    note["display_reason"] = f"V6 отвергла предложения букмекера ({quote_count} проверено)"
+                    codes = dict(note.get("rejection_reasons") or {})
+                    top_reasons = sorted(codes.items(), key=lambda item: -item[1])[:2]
+                    labels = {
+                        "models_disagree_with_bookmaker": "модели не согласны с линией",
+                        "large_historical_model_disagreement": "модели сильно расходятся",
+                        "dixon_coles_low_score_sensitivity": "высокая чувствительность к точному счёту",
+                        "not_enough_value_after_conservative_shrinkage": "нет достаточного преимущества по коэффициенту",
+                    }
+                    explanation = "; ".join(
+                        f"{labels.get(key, key)} — {value}" for key, value in top_reasons
+                    )
+                    note["display_reason"] = (
+                        f"V6 не подтвердила преимущество ({quote_count} рынков)"
+                        + (f": {explanation}" if explanation else "")
+                    )
                 else:
                     note["display_reason"] = f"дополнительный фильтр экспресса отверг {active_count} вариантов V6"
+            if selected:
+                promoted = set(note.get("tournament_value_promotions") or [])
+                selected["qualification"] = (
+                    "TOURNAMENT_VALUE" if f"{selected['market']}|{selected['selection']}" in promoted
+                    else "V6_ACTIVE"
+                )
             rendered = {**match, "status": phase, "selection": selected, "diagnostics": note}
             matches_out.append(rendered)
             if phase == "READY":
@@ -286,7 +310,8 @@ def tournament_details(key: str) -> str:
         leg = match.get("selection") or {}
         title = f"{i}. {html.escape(match['home'])} — {html.escape(match['away'])}"
         if match["status"] == "READY" and leg:
-            lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · P {leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}%")
+            tier = "· V6" if leg.get("qualification") == "V6_ACTIVE" else "· турнирный value" if leg.get("qualification") == "TOURNAMENT_VALUE" else ""
+            lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · P {leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}% {tier}")
         else:
             reason = (
                 "матч уже начался / близок к началу" if (

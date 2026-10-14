@@ -96,7 +96,10 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False, coverage: bool = F
         roi = probability * price - 1.0
         if not all(math.isfinite(x) for x in (price, probability, edge, roi, raw.data_quality)):
             return None
-        if not (min_odd <= price <= max_odd and raw.data_quality >= min_quality):
+        # Verified bookmaker-only coverage does not have an independently
+        # scored model-quality/long-price gate. Its risk is labelled, not
+        # silently hidden by a server-wide model-only quality override.
+        if not (price >= min_odd and (coverage or (price <= max_odd and raw.data_quality >= min_quality))):
             return None
         if not coverage and not (
             probability >= min_probability

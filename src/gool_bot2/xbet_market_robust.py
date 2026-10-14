@@ -243,9 +243,16 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                         if not isinstance(payload, dict):
                             continue
                         converted = _v3_to_legacy_market_game(payload, str(event_id))
-                        # In a v3 converted market the group identifier sits
-                        # on the parent. Legacy _nodes expects G on each price.
-                        for group in converted.get("GE") or []:
+                        # v3 converter returns group id on AE/SG parent; the
+                        # football _nodes decoder expects it on each quoted
+                        # T/C selection. Preserve original price/parameter.
+                        groups = list(converted.get("AE") or []) + list(converted.get("GE") or [])
+                        for sub in converted.get("SG") or []:
+                            if isinstance(sub, dict):
+                                groups.extend(sub.get("AE") or [])
+                        for group in groups:
+                            if not isinstance(group, dict):
+                                continue
                             for node in group.get("ME") or []:
                                 if isinstance(node, dict):
                                     node.setdefault("G", group.get("G"))

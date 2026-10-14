@@ -174,6 +174,16 @@ def live_data_check_text(runtime: Path | None = None) -> str:
         f"track cap: <b>{xbet_state.get('track_cap') or '—'}</b> · "
         f"refreshed last cycle: <b>{xbet_state.get('refreshed') if xbet_state.get('refreshed') is not None else '—'}</b>",
         f"last state: <code>{xbet_state.get('captured_at') or '—'}</code>",
+        f"индекс 1xBet: источник <b>{xbet_state.get('index_source') or 'не записан старой версией'}</b> "
+        f"· FS LIVE {xbet_state.get('flashscore_live', '—')} "
+        f"· индекс {xbet_state.get('index_events', '—')} "
+        f"· сопоставлено {xbet_state.get('mapped_events', '—')} "
+        f"· без рынков {xbet_state.get('game_market_unavailable', '—')}",
+        f"резерв v3: <code>{str(xbet_state.get('index_v3_attempts') or [])[:280]}</code>",
+        *([
+            "⚠️ 1xBet LIVE: новые проверенные рынки отсутствуют. "
+            "Проверь индекс → сопоставление → ответы GetGameZip (в строке выше)."
+        ] if live_rows and not xbet_with_markets else []),
         "",
         "<b>Market Memory</b>",
         f"матчей: <b>{len(memory_matches)}</b> · PREMATCH {phases.get('PREMATCH',0)} · LIVE {phases.get('LIVE',0)}",

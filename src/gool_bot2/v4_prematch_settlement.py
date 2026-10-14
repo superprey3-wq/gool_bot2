@@ -28,11 +28,22 @@ def _line(row: dict[str, Any]) -> float | None:
 
 
 def _side(row: dict[str, Any]) -> str:
-    text = " ".join(str(row.get(k) or "") for k in ("market", "selection")).casefold()
-    if any(x in text for x in ("over", "тб", "больше")):
-        return "over"
-    if any(x in text for x in ("under", "тм", "меньше")):
+    # The family may literally be named OVER_UNDER or 1H_OVER_UNDER.
+    # NEVER let both direction tokens in the market name override the
+    # actual side selected by the bettor; this previously graded UNDER as
+    # OVER on half-time total bets.
+    selection = str(row.get("selection") or "").casefold()
+    if any(x in selection for x in ("under", "тм", "меньше")):
         return "under"
+    if any(x in selection for x in ("over", "тб", "больше")):
+        return "over"
+    market = str(row.get("market") or "").casefold()
+    if "over_under" in market or "under_over" in market:
+        return ""
+    if any(x in market for x in ("under", "тм", "меньше")):
+        return "under"
+    if any(x in market for x in ("over", "тб", "больше")):
+        return "over"
     return ""
 
 

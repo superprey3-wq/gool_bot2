@@ -17,7 +17,7 @@ from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_h
 from gool_bot2.football_v5_production import production_v5_picks
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
 from gool_bot2.active_challenger_decisions import football_v6_tournament_picks, football_v6_active_picks
-from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
+from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote, flashscore_fulltime_quotes
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
 from gool_bot2.prematch_confidence import select_confident_prematch_rows
@@ -25,7 +25,7 @@ from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
 from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows,select_value_scan_rows
 from gool_bot2.tournament_express import build_catalog, write_catalog, _priority as tournament_priority
-from gool_bot2.tournament_coverage import bookmaker_coverage_picks
+from gool_bot2.tournament_coverage import choose_quote_coverage
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
@@ -349,21 +349,17 @@ def one(r):
    try:
     v6_quote=market or flashscore_fulltime_quote(odds_payload)
     quote_source="1xbet" if market else "flashscore" if v6_quote else "none"
-    coverage=bookmaker_coverage_picks(
-     v6_quote,quote_source=quote_source,
-     event_id=str(m.provider_match_id),home=m.home,away=m.away,
+    quote_offers=([(market,"1xbet")] if market else [])+[
+     (item,"flashscore") for item in flashscore_fulltime_quotes(odds_payload)
+    ]
+    coverage,coverage_source,coverage_book,coverage_diag=choose_quote_coverage(
+     quote_offers,event_id=str(m.provider_match_id),home=m.home,away=m.away,
      league=m.league or "",kickoff_ts=kick,
     )
-    if not coverage and market:
-     flashscore_quote=flashscore_fulltime_quote(odds_payload)
-     coverage=bookmaker_coverage_picks(
-      flashscore_quote,quote_source="flashscore",
-      event_id=str(m.provider_match_id),home=m.home,away=m.away,
-      league=m.league or "",kickoff_ts=kick,
-     )
-     if coverage:quote_source="flashscore"
     r["tournament_coverage_candidates"]=coverage
-    r["tournament_coverage_quote_source"]=quote_source
+    r["tournament_coverage_quote_source"]=coverage_source
+    r["tournament_coverage_bookmaker"]=coverage_book
+    r["tournament_coverage_diagnostic"]=coverage_diag
     v6_shadow=evaluate_football_v6_prematch(
      forecast,r.get("profile") or {},v6_quote,
      event_id=str(m.provider_match_id),active_picks=picks,
@@ -404,6 +400,9 @@ def one(r):
     "tournament_value_promotions":list(tournament_meta.get("tournament_value_promotions") or []),
     "rejection_reasons":dict((r.get("football_v6_shadow") or {}).get("rejection_reasons") or {}),
     "quote_source":str((r.get("football_v6_shadow") or {}).get("quote_source") or ""),
+    "coverage_source":str(r.get("tournament_coverage_quote_source") or ""),
+    "coverage_bookmaker":str(r.get("tournament_coverage_bookmaker") or ""),
+    "coverage_diagnostic":dict(r.get("tournament_coverage_diagnostic") or {}),
    }
    print("FOOTBALL_V6_TOURNAMENT",m.home,"-",m.away,
     "alternatives",len(tournament_alternatives),"quoted",r["tournament_diagnostic"]["quoted_markets_checked"],flush=True)
@@ -638,7 +637,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   if r.get("tournament_coverage_candidates") and not r.get("tournament_candidates"):
    quote_source=str(r.get("tournament_coverage_quote_source") or "")
    meta[str(m.provider_match_id)]={
-    "bookmaker":"1xBet" if quote_source=="1xbet" else "Flashscore odds" if quote_source=="flashscore" else "",
+    "bookmaker":str(r.get("tournament_coverage_bookmaker") or ("1xBet" if quote_source=="1xbet" else "Flashscore odds")),
     "flashscore_meta":fs_meta,
    }
   if value_pick:
@@ -662,27 +661,20 @@ if coverage_only_matches:
  def collect_reserve(m):
   kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
   market=find_prematch_market(m.home,m.away,path=xbet_state,kickoff_ts=kick)
-  out=bookmaker_coverage_picks(
-   market,quote_source="1xbet" if market else "none",
-   event_id=str(m.provider_match_id),home=m.home,away=m.away,
-   league=m.league or "",kickoff_ts=kick,
+  quote_offers=([(market,"1xbet")] if market else [])
+  try:
+   odds=fetch_event_odds(m.provider_match_id)
+   quote_offers.extend((item,"flashscore") for item in flashscore_fulltime_quotes(odds))
+  except Exception as exc:
+   print("TOURNAMENT_COVERAGE_ODDS_MISSING",m.home,m.away,type(exc).__name__,flush=True)
+  out,source,book,stats=choose_quote_coverage(
+   quote_offers,event_id=str(m.provider_match_id),
+   home=m.home,away=m.away,league=m.league or "",kickoff_ts=kick,
   )
-  source="1xbet" if out else ""
-  if not out:
-   try:
-    odds=fetch_event_odds(m.provider_match_id)
-    full_quote=flashscore_fulltime_quote(odds)
-    out=bookmaker_coverage_picks(
-     full_quote,quote_source="flashscore",event_id=str(m.provider_match_id),
-     home=m.home,away=m.away,league=m.league or "",kickoff_ts=kick,
-    )
-    if out:source="flashscore"
-   except Exception as exc:
-    print("TOURNAMENT_COVERAGE_ODDS_MISSING",m.home,m.away,type(exc).__name__,flush=True)
-  return m,out,source
+  return m,out,source,book,stats
  with ThreadPoolExecutor(max_workers=min(8,len(coverage_only_matches))) as coverage_pool:
   for fut in as_completed([coverage_pool.submit(collect_reserve,m) for m in coverage_only_matches]):
-   m,candidates,source=fut.result()
+   m,candidates,source,book,stats=fut.result()
    tournament_coverage_priced.extend(candidates)
    event_id=str(m.provider_match_id)
    tournament_diagnostics[event_id]={
@@ -690,6 +682,9 @@ if coverage_only_matches:
     "quoted_markets_checked":len(candidates),
     "qualified_active":0,
     "coverage_candidates":len(candidates),
+    "coverage_bookmaker":book,
+    "coverage_source":source,
+    "coverage_diagnostic":stats,
    }
    fs_meta=dict(m.meta or {})
    home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
@@ -697,9 +692,11 @@ if coverage_only_matches:
    if home_logo:fs_meta["home_logo_url"]=home_logo
    if away_logo:fs_meta["away_logo_url"]=away_logo
    if candidates:
-    meta[event_id]={"bookmaker":"1xBet" if source=="1xbet" else "Flashscore odds",
+    meta[event_id]={"bookmaker":book or ("1xBet" if source=="1xbet" else "Flashscore odds"),
                     "flashscore_meta":fs_meta}
-   print("TOURNAMENT_COVERAGE_RESERVE",m.home,m.away,"real_quotes",len(candidates),flush=True)
+   print("TOURNAMENT_COVERAGE_RESERVE",m.home,m.away,
+    "real_quotes",len(candidates),"books_checked",stats["books_checked"],
+    "all_candidates",stats["all_candidates"],"safe_candidates",stats["safe_candidates"],flush=True)
 # Save the last candidates even if the total was not a multiple of 12.
 _publish_tournament_progress()
 

@@ -194,10 +194,17 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             )
             phase = "STARTED" if float(match["kickoff_ts"]) <= now_ts + 180 else ("READY" if selected else "NO_VERIFIED_MARKET")
             note = dict(fixture_diagnostics.get(match["event_id"]) or {})
+            reserve_stats = dict(note.get("coverage_diagnostic") or {})
             if phase == "NO_VERIFIED_MARKET" and note:
                 quote_count = int(note.get("quoted_markets_checked") or 0)
                 active_count = int(note.get("qualified_active") or 0)
-                if note.get("reason") in {"not_priced", "no_v6_diagnostic"}:
+                if int(reserve_stats.get("books_checked") or 0) and int(reserve_stats.get("safe_candidates") or 0) == 0:
+                    note["display_reason"] = (
+                        f"проверено {reserve_stats['books_checked']} букмекерских предложений, "
+                        f"{reserve_stats.get('all_candidates', 0)} реальных исходов — "
+                        "без подходящей осторожной линии 1.30–1.85"
+                    )
+                elif note.get("reason") in {"not_priced", "no_v6_diagnostic"}:
                     note["display_reason"] = "матч не прошёл начальный анализ / нет полного профиля"
                 elif note.get("reason") in {"v5_history_unavailable", "independent_profile_unavailable"}:
                     note["display_reason"] = "недостаточно подтверждённой истории"
@@ -265,6 +272,10 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                     "combined_probability": group["combined_probability"],
                     "coverage_only_count": unverified,
                     "verified_value_count": len(chosen) - unverified,
+                    "leg_bookmakers": {
+                        x["event_id"]: str((fixture_diagnostics.get(x["event_id"]) or {}).get("coverage_bookmaker") or "")
+                        for x in chosen if x["qualification"] == "COVERAGE_ONLY"
+                    },
                     "coverage_only_legs": [
                         (x["event_id"], x["market"], x["selection"])
                         for x in chosen if x["qualification"] == "COVERAGE_ONLY"

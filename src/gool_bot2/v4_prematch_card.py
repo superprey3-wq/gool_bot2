@@ -5,6 +5,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from . import signal_cards as sc
+from .football_prematch_localization import football_selection_ru
 
 W = 1080
 BG = (5, 10, 18)
@@ -87,7 +88,7 @@ def render_v4_prematch_card(
     is_value = product == "value_hunter" or tier == "VALUE"
     accent = GOLD if tier == "STRONG" or is_value else ACCENT
     odd = float(row.get("odd") or 0.0)
-    market = _market_label(str(row.get("selection") or row.get("market") or "?"))
+    market = football_selection_ru(row.get("market"), row.get("selection") or row.get("market"))
     probability = float(row.get("probability") or row.get("model_probability") or 0.0)
     edge = float(row.get("edge") or row.get("value_edge") or 0.0)
     market_probability = float(row.get("market_probability") or max(0.0, probability - edge))
@@ -162,7 +163,7 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     settled = list(row.get("settled_score") or row.get("current_score") or [0, 0])
     while len(settled) < 2:
         settled.append(0)
-    market = _market_label(str(row.get("market") or row.get("selection") or "?"))
+    market = football_selection_ru(row.get("market"), row.get("selection") or row.get("market"))
     odd = float(row.get("odd") or 0.0)
 
     img = Image.new("RGBA", (W, 900), BG + (255,))
@@ -272,7 +273,7 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         away = str(leg.get("away") or "?")
         league = str(leg.get("league") or "FOOTBALL")
         kickoff = str(leg.get("scheduled_start") or "Время не указано")
-        market = _market_label(str(leg.get("selection") or leg.get("market") or "?"))
+        market = football_selection_ru(leg.get("market"), leg.get("selection") or leg.get("market"))
         leg_odd = float(leg.get("odd") or 0.0)
 
         draw.rounded_rectangle((45, y, 1035, y + 132), 22, fill=PANEL2, outline=leg_accent if result else (42,59,75), width=2)
@@ -289,7 +290,7 @@ def render_v4_parlay_card(row: dict[str, Any], *, result: bool = False) -> str:
         timing = f"СТАРТ · {kickoff}"
         draw.text((245, y + 72), timing, font=_fit(draw, timing, 400, 14, True), fill=MUTED)
         is_reserve = kind == "TOURNAMENT" and str(leg.get("leg_qualification") or "") == "COVERAGE_ONLY"
-        bet = f"{market}  @ {leg_odd:.2f}" + (" · РЕЗЕРВ (без +EV)" if is_reserve else "")
+        bet = f"{market}  @ {leg_odd:.2f}" + (" · РЕЗЕРВ (без подтверждения)" if is_reserve else "")
         draw.text((245, y + 99), bet, font=_fit(draw, bet, 520, 18, True), fill=leg_accent if result else accent)
         if result:
             label = status_labels.get(lr, "ЖДЁМ")

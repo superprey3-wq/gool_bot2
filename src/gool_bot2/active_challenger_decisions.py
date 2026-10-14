@@ -109,6 +109,89 @@ def football_v6_active_picks(
     }
 
 
+
+def football_v6_tournament_picks(
+    shadow: dict[str, Any],
+    *,
+    event_id: str,
+    home: str,
+    away: str,
+    league: str,
+    kickoff_ts: float,
+) -> tuple[list[PrematchPick], dict[str, Any]]:
+    """Independent market-priced express legs, including genuine positive-value near-misses.
+
+    V6 standalone signals stay strict. For a tournament leg, a candidate whose
+    ONLY V6 objection was insufficient *degree* of value may qualify if BOTH
+    independently constructed football models still beat bookmaker fair odds,
+    actual post-shrink EV stays positive with at least a modest buffer,
+    Dixon-Coles risk and model disagreement remain bounded, and the quote is
+    supported. Opposite-model disagreements are never promoted.
+    Probabilities remain uncalibrated heuristic estimates, not guarantees.
+    """
+    strict, meta = football_v6_active_picks(
+        shadow, event_id=event_id, home=home, away=away,
+        league=league, kickoff_ts=kickoff_ts, return_all=True,
+    )
+    extras: list[PrematchPick] = []
+    promotions: list[str] = []
+    if (
+        str(shadow.get("quote_source") or "") not in {"1xbet", "flashscore"}
+        or _number(shadow.get("data_quality")) is None
+        or float(shadow["data_quality"]) < _threshold("GOOL_TOURNAMENT_MIN_QUALITY", .60)
+        or not _number(kickoff_ts) or float(kickoff_ts) <= 0
+    ):
+        return strict, {**meta, "tournament_value_promotions": promotions}
+    existing = {(p.market, p.selection) for p in strict}
+    for candidate in shadow.get("candidates") or []:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("state") != "WAIT" or candidate.get("reason") != "not_enough_value_after_conservative_shrinkage":
+            continue
+        market, selection = str(candidate.get("market") or ""), str(candidate.get("selection") or "")
+        if market not in {"match_total", "home_total", "away_total", "match_1x2", "btts"}:
+            continue
+        if market in {"match_total", "home_total", "away_total"}:
+            direction, _, line_txt = selection.partition(" ")
+            line = _number(line_txt)
+            if direction not in {"over", "under"} or line is None or abs(line % 1.0 - .5) > 1e-9:
+                continue
+        elif market == "match_1x2" and selection not in {"home", "draw", "away"}:
+            continue
+        elif market == "btts" and selection not in {"yes", "no"}:
+            continue
+        if (market, selection) in existing:
+            continue
+        odd = _number(candidate.get("odd"))
+        fair = _number(candidate.get("bookmaker_fair_probability"))
+        p = _number(candidate.get("market_shrunk_probability_heuristic"))
+        independent = _number(candidate.get("independent_probability_uncalibrated"))
+        v5 = _number(candidate.get("v5_probability_uncalibrated"))
+        diff = _number(candidate.get("model_disagreement_pp"))
+        dc = _number(candidate.get("dixon_coles_sensitivity"))
+        if any(x is None for x in (odd, fair, p, independent, v5, diff)):
+            continue
+        if (
+            odd < 1.40 or not (0 < p < 1 and 0 < fair < 1)
+            or v5 <= fair or independent <= fair
+            or diff > 14.0
+            or (dc is not None and abs(dc) > .07)
+            or p - fair < _threshold("GOOL_TOURNAMENT_VALUE_MIN_EDGE", .010)
+            or p * odd - 1.0 < _threshold("GOOL_TOURNAMENT_MIN_EXPECTED_ROI", .02)
+        ):
+            continue
+        extras.append(PrematchPick(
+            str(event_id), str(home), str(away), market, selection,
+            odd, p, fair, float(shadow["data_quality"]), str(league), float(kickoff_ts),
+        ))
+        promotions.append(f"{market}|{selection}")
+        existing.add((market, selection))
+    return [*strict, *extras], {
+        **meta,
+        "qualified_tournament_value": len(extras),
+        "tournament_value_promotions": promotions,
+    }
+
 def hockey_ev_active_signal(
     previous: dict[str, Any] | None,
     ev_shadow: dict[str, Any],

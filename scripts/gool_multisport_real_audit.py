@@ -69,6 +69,9 @@ def main() -> None:
                 f"prematch_quote_fails={_n(row.get('prematch_market_decode_failed'))}"
             )
             print(f"WOULD_SEND_NOW sport={sport} phase=LIVE bets={would_live}")
+            if sport == "basketball":
+                print("BASKETBALL_V5_REJECTION_REASONS " + json.dumps(
+                    row.get("prematch_basketball_v5_reasons") or {}, ensure_ascii=False, separators=(",", ":")))
             print("INDEX_DIAG " + json.dumps({
                 "sport": sport, "live": row.get("xbet_diag") or {},
                 "prematch": (row.get("prematch") or {}).get("xbet_prematch_diag") or {},

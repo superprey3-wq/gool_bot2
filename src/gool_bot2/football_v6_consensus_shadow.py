@@ -186,6 +186,12 @@ def evaluate_football_v6_prematch(
 
     candidates.sort(key=lambda item: (item["state"] == "PASS_SHADOW", item["heuristic_ev_units"]), reverse=True)
     qualified = sum(r["state"] == "PASS_SHADOW" for r in candidates)
+    # Preserve the complete rejection histogram, not just top-12 examples.
+    reason_counts: dict[str, int] = {}
+    for candidate in candidates:
+        if candidate["state"] != "PASS_SHADOW":
+            code = str(candidate.get("reason") or "unknown")
+            reason_counts[code] = reason_counts.get(code, 0) + 1
     return {
         **base,
         "status": "PASS_SHADOW" if qualified else "WAIT",
@@ -196,5 +202,6 @@ def evaluate_football_v6_prematch(
         "dixon_coles_used_only_for_sensitivity": dixon is not None,
         "quoted_markets_checked": len(candidates),
         "qualified_shadow_markets": qualified,
+        "rejection_reasons": reason_counts,
         "candidates": candidates[:12],
     }

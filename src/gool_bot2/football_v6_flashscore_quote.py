@@ -173,6 +173,9 @@ def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, An
 
 
 def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | None:
-    """The canonical single same-bookmaker quote for V6 remains unchanged."""
+    """V6 must use a bookmaker with a real FULL_TIME market, not only HT lines."""
     quotes = flashscore_fulltime_quotes(data)
-    return quotes[0] if quotes else None
+    return next((q for q in quotes if (
+        q["match_totals"] or q["home_totals"] or q["away_totals"]
+        or q["match_1x2"] or q["btts"]
+    )), None)

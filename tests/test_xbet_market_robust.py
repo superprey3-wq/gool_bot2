@@ -118,7 +118,8 @@ def test_empty_index_cycle_reuses_recent_ids_but_not_old_market_data(monkeypatch
                 return {"Value": []}
             return _payload(("42", "Alpha", "Beta"))
         if "GetGameZip" in url:
-            return {"Value": {"I": "42", "SC": {"FS": {"S1": 0, "S2": 0}}, "GE": []}}
+            return {"Value": {"I": "42", "SC": {"FS": {"S1": 0, "S2": 0}},
+                              "GE": [{"G": 4, "ME": [{"T": 9, "P": 1.5, "C": 1.75, "G": 4}]}]}}
         return None
 
     monkeypatch.setattr(market, "_http_json", fake_http)

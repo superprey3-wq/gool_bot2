@@ -260,7 +260,7 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
     caption = (
         f"{icon} <b>{result_title}</b>\n"
         f"{escape(str(row.get('home','?')))} — {escape(str(row.get('away','?')))}\n"
-        f"<b>{escape(football_selection_ru(row.get("market"), row.get("selection") or row.get("market")))} @ {float(row.get('odd') or 0):.2f}</b>"
+        f"<b>{escape(football_selection_ru(row.get('market'), row.get('selection') or row.get('market')))} @ {float(row.get('odd') or 0):.2f}</b>"
     )
     return telegram.broadcast_photo(png, caption=caption)
 

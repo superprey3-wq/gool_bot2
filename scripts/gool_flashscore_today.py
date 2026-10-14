@@ -599,6 +599,15 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
   if home_logo: fs_meta["home_logo_url"]=home_logo
   if away_logo: fs_meta["away_logo_url"]=away_logo
+  if V6_ACTIVE and r.get("tournament_candidates"):
+   # Independent tournament legs can exist even when the ordinary standalone
+   # candidate is absent. Preserve the verified bookmaker and crests so the
+   # complete coupon doesn't show a blank source or pretend to be priced by GOOL.
+   quote_source=str((r.get("football_v6_shadow") or {}).get("quote_source") or "")
+   meta[str(m.provider_match_id)]={
+    "bookmaker":"1xBet" if quote_source=="1xbet" else "Flashscore odds" if quote_source=="flashscore" else "",
+    "flashscore_meta":fs_meta,
+   }
   if value_pick:
    vp,vm=value_pick
    value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))

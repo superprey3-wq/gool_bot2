@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from . import telegram
 from .journal import load_signal_journal, save_signal_journal
 from .v4_prematch_card import render_v4_parlay_card, render_v4_prematch_card, render_v4_prematch_result_card
+from .football_prematch_localization import football_selection_ru
 
 
 def _now() -> str:
@@ -259,7 +260,7 @@ def emit_prematch_result(row: dict[str, Any], record: dict[str, Any] | None = No
     caption = (
         f"{icon} <b>{result_title}</b>\n"
         f"{escape(str(row.get('home','?')))} — {escape(str(row.get('away','?')))}\n"
-        f"<b>{escape(_market_label(str(row.get('selection') or row.get('market') or '?')))} @ {float(row.get('odd') or 0):.2f}</b>"
+        f"<b>{escape(football_selection_ru(row.get('market'), row.get('selection') or row.get('market')))} @ {float(row.get('odd') or 0):.2f}</b>"
     )
     return telegram.broadcast_photo(png, caption=caption)
 

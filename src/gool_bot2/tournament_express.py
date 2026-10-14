@@ -17,6 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .v4_prematch_engine import PrematchPick, blend_with_market
+from .football_prematch_localization import football_selection_ru
 from .elite_tournament_policy import elite_tournament_tier, is_elite_tournament
 
 
@@ -378,7 +379,7 @@ def tournament_details(key: str) -> str:
                     else "· V6" if leg.get("qualification") == "V6_ACTIVE"
                     else "· турнирный value")
             prob_name = "Рынок≈" if leg.get("qualification") == "COVERAGE_ONLY" else "P≈"
-            lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · {prob_name}{leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}% {tier}")
+            lines.append(f"{title}\n   {html.escape(football_selection_ru(leg.get('market'), leg.get('selection')))} @ {leg['odd']:.2f} · {prob_name}{leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}% {tier}")
         else:
             reason = (
                 "матч уже начался / близок к началу" if (

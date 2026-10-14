@@ -401,10 +401,14 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         groups.append(("SUPER", delivery["super"]))
     for acc in delivery.get("doubles") or []:
         groups.append(("DOUBLES", acc))
-    # One independent complete coupon per league/day; partial coupons
-    # never enter delivery, so no match can be silently left out.
+    # Even if a stale producer or old state supplies a non-elite league,
+    # the last-mile Telegram emitter will not send its tournament coupon.
+    from .elite_tournament_policy import is_elite_tournament
     for acc in delivery.get("tournaments") or []:
-        groups.append(("TOURNAMENT", acc))
+        if is_elite_tournament(str(acc.get("tournament") or "")):
+            groups.append(("TOURNAMENT", acc))
+        else:
+            print(f"TOURNAMENT_PUBLISH_SKIP league_not_allowed={acc.get('tournament')}", flush=True)
 
     rows = load_signal_journal(journal_path)
     for idx, (kind, acc) in enumerate(groups, 1):

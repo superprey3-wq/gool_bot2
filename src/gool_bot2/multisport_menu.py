@@ -290,6 +290,18 @@ def multisport_status_text() -> str:
             f"├ PREMATCH · FS {int(row.get('flashscore_prematch') or 0)} · mapped {int(row.get('prematch_mapped') or 0)} · scan {int(row.get('prematch_scanned') or 0)} · decoded {int(row.get('prematch_decoded') or 0)} · signals {int(row.get('prematch_detected') or 0)}\n"
             f"└ LIVE · FS {int(row.get('flashscore_live') or 0)} · 1xBet {int(row.get('xbet_live') or 0)} · mapped {int(row.get('mapped') or 0)} · decoded {int(row.get('decoded') or 0)} · mismatch {int(row.get('score_mismatch') or 0)} · decode_fail {int(row.get('market_decode_failed') or 0)} · signals {int(row.get('detected') or 0)} · policy skip {int(row.get('policy_blocked') or 0)}"
         )
+        lines.append(
+            f"  🔎 ДОП. ДИАГНОСТИКА · PRE brain {int(row.get('prematch_brain_candidates') or 0)} "
+            f"· book {int(row.get('xbet_prematch') or 0)} · lanes {int(row.get('prematch_evaluated_lanes') or 0)} "
+            f"· model WAIT {int(row.get('prematch_model_rejected') or 0)} "
+            f"· pre decode fail {int(row.get('prematch_market_decode_failed') or 0)}"
+        )
+        lines.append(
+            f"  🔎 LIVE · Brain {int(row.get('live_brain_candidates') or 0)} "
+            f"· sync WAIT {int(row.get('provider_sync_blocked') or 0)} "
+            f"· price WAIT {int(row.get('pricing_rejected') or 0)} "
+            f"· index {str((row.get('xbet_diag') or {}).get('source') or ('ok' if (row.get('xbet_diag') or {}).get('ok') else 'unavailable'))}"
+        )
         coverage = row.get("daily_market_coverage") or {}
         if coverage.get("enabled"):
             if coverage.get("error"):

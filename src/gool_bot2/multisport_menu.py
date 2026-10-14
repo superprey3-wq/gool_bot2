@@ -302,6 +302,9 @@ def multisport_status_text() -> str:
             f"· price WAIT {int(row.get('pricing_rejected') or 0)} "
             f"· index {str((row.get('xbet_diag') or {}).get('source') or ('ok' if (row.get('xbet_diag') or {}).get('ok') else 'unavailable'))}"
         )
+        if sport == "basketball" and row.get("prematch_basketball_v5_reasons"):
+            top = sorted((row.get("prematch_basketball_v5_reasons") or {}).items(), key=lambda x: -x[1])[:5]
+            lines.append("  🏀 V5 PREMATCH: " + ", ".join(f"{reason} {count}" for reason, count in top))
         coverage = row.get("daily_market_coverage") or {}
         if coverage.get("enabled"):
             if coverage.get("error"):

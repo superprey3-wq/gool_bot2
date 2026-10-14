@@ -223,3 +223,174 @@ def test_fixture_is_not_reused_across_public_doubles_same_day(tmp_path, monkeypa
     assert out1["parlays"] == 1
     assert out2["parlays"] == 0
     assert len(sent) == 1
+
+
+def test_elite_safe_tournament_resends_new_revision_once_without_erasing_old(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.journal import load_signal_journal, save_signal_journal
+    from gool_bot2.v4_prematch_engine import PrematchPick
+    from gool_bot2.tournament_express import league_key
+
+    path = tmp_path / "journal.json"
+    day = "2026-10-14"
+    league = "EUROPE: Champions League - League phase"
+    legacy_id = f"parlay:tournament:{day}:{league_key(league)}"
+    original = {
+        "entry_id": legacy_id, "origin": "prematch_parlay",
+        "kind": "TOURNAMENT", "tournament": league, "telegram_sent": True,
+        "result": "pending", "odd": 168.24,
+        "legs": [{"event_id": "a", "selection": "under 1.5", "odd": 2.33}],
+    }
+    save_signal_journal(path, [original])
+    cards = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda parent, **kw: b"new-png")
+    monkeypatch.setattr(
+        delivery.telegram, "broadcast_photo",
+        lambda png, caption="", **kw: cards.append((png, caption)) or 1,
+    )
+    picks = [
+        PrematchPick(f"id{i}", f"Home{i}", f"Away{i}", "match_total",
+                    "over 1.5", 1.30, .73, .73, .60, league, 1792000000.0)
+        for i in range(3)
+    ]
+    product = {"mode": "SINGLES", "singles": [], "doubles": [],
+               "tournaments": [{
+                   "kind": "TOURNAMENT", "day": day,
+                   "tournament": league, "legs": picks,
+                   "combined_odds": round(1.30**3, 3),
+                   "combined_probability": round(.73**3, 6),
+                   "coverage_only_count": 3, "verified_value_count": 0,
+                   "coverage_only_legs": [(p.event_id, p.market, p.selection) for p in picks],
+               }]}
+    meta = {p.event_id: {"bookmaker": "1xBet"} for p in picks}
+
+    first = delivery.emit_delivery_selection(product, meta, path)
+    second = delivery.emit_delivery_selection(product, meta, path)
+    assert first["parlays"] == 1
+    assert second["parlays"] == 0
+    assert len(cards) == 1
+    assert "ОБНОВЛЁННЫЙ КУПОН" in cards[0][1]
+    rows = load_signal_journal(path)
+    assert len(rows) == 2
+    old = next(x for x in rows if x["entry_id"] == legacy_id)
+    updated = next(x for x in rows if x["entry_id"] != legacy_id)
+    assert old["odd"] == 168.24 and old["telegram_sent"] is True
+    assert updated["replaces_entry_id"] == legacy_id
+    assert updated["ticket_revision"] == "elite_safe_v1"
+    assert updated["telegram_sent"] is True
+    assert updated["odd"] < 3.0
+    assert all(l["leg_qualification"] == "COVERAGE_ONLY" for l in updated["legs"])
+
+
+def test_stale_nonelite_tournament_delivery_is_blocked_before_telegram(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    cards = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *a, **kw: b"png")
+    monkeypatch.setattr(delivery.telegram, "broadcast_photo",
+                        lambda *a, **kw: cards.append(a) or 1)
+    pick = PrematchPick("e", "A", "B", "match_total", "over 1.5",
+                       1.35, .75, .70, .70, "BRAZIL: Serie A")
+    delivery_payload = {"singles": [], "doubles": [], "tournaments": [{
+        "tournament": "BRAZIL: Serie A", "day": "2026-10-14",
+        "legs": [pick], "combined_odds": 1.35, "combined_probability": .75,
+    }]}
+    result = delivery.emit_delivery_selection(delivery_payload, {}, tmp_path/"journal.json")
+    assert result["parlays"] == 0
+    assert cards == []
+
+
+
+def test_safe_release_resends_one_revised_tournament_and_keeps_old_wager(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.journal import load_signal_journal, save_signal_journal
+    from gool_bot2.tournament_express import league_key
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    journal = tmp_path / "journal.json"
+    league = "EUROPE: Champions League - League phase"
+    old_id = f"parlay:tournament:2026-10-14:{league_key(league)}"
+    old_legs = [
+        delivery.prematch_row_from_pick(PrematchPick(
+            str(i), f"Home {i}", f"Away {i}", "match_total", "under 1.5",
+            2.33, .7, .4, .85, league, 1800000000.0
+        ))
+        for i in range(2)
+    ]
+    save_signal_journal(journal, [{
+        "entry_id": old_id, "origin": "prematch_parlay",
+        "kind": "TOURNAMENT", "result": "pending", "telegram_sent": True,
+        "legs": old_legs, "odd": 5.43,
+    }])
+    new_picks = [
+        PrematchPick(str(i), f"Home {i}", f"Away {i}", "match_total",
+                     "over 1.5", 1.35, .76, .72, .85, league, 1800000000.0)
+        for i in range(2)
+    ]
+    ticket = {
+        "mode": "NO_BET", "singles": [], "doubles": [],
+        "tournaments": [{
+            "tournament": league, "day": "2026-10-14", "legs": new_picks,
+            "coverage_only_count": 2,
+            "coverage_only_legs": [(p.event_id, p.market, p.selection) for p in new_picks],
+            "verified_value_count": 0,
+            "combined_odds": 1.8225, "combined_probability": .5,
+        }],
+    }
+    messages = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *_a, **_kw: b"png")
+    monkeypatch.setattr(delivery.telegram, "broadcast_photo",
+                        lambda _png, caption="", **_kw: messages.append(caption) or 1)
+
+    first = delivery.emit_delivery_selection(ticket, {}, journal)
+    second = delivery.emit_delivery_selection(ticket, {}, journal)
+    assert first["parlays"] == 1
+    assert second["parlays"] == 0
+    assert len(messages) == 1
+    assert "ОБНОВЛЁННЫЙ" in messages[0]
+    assert "уже сделанные ставки не отменяются" in messages[0]
+    rows = load_signal_journal(journal)
+    assert len(rows) == 2
+    old = next(row for row in rows if row["entry_id"] == old_id)
+    new = next(row for row in rows if row["entry_id"] != old_id)
+    assert new["telegram_sent"] is True
+    assert new["replaces_entry_id"] == old_id
+    assert old["suggestion_status"] == "previous_version"
+    assert old["superseded_by"] == new["entry_id"]
+    assert old["odd"] == 5.43 and old["result"] == "pending"
+    assert [x["selection"] for x in old["legs"]] == ["under 1.5", "under 1.5"]
+    assert [x["selection"] for x in new["legs"]] == ["over 1.5", "over 1.5"]
+
+
+def test_safe_release_does_not_resend_identical_existing_tournament(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.journal import load_signal_journal, save_signal_journal
+    from gool_bot2.tournament_express import league_key
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    path = tmp_path / "journal.json"
+    league = "ENGLAND: Premier League"
+    old_id = f"parlay:tournament:2026-10-14:{league_key(league)}"
+    picks = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5",
+                     1.40, .75, .68, .85, league, 1800000000.0)
+        for i in range(2)
+    ]
+    save_signal_journal(path, [{
+        "entry_id": old_id, "origin": "prematch_parlay",
+        "kind": "TOURNAMENT", "result": "pending", "telegram_sent": True,
+        "legs": [delivery.prematch_row_from_pick(p) for p in picks], "odd": 1.96,
+    }])
+    calls = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *_a, **_kw: b"png")
+    monkeypatch.setattr(delivery.telegram, "broadcast_photo",
+                        lambda *args, **kw: calls.append(args) or 1)
+    input_ = {"tournaments": [{
+        "tournament": league, "day": "2026-10-14", "legs": picks,
+        "combined_odds": 1.96, "combined_probability": .5,
+    }]}
+    result = delivery.emit_delivery_selection(input_, {}, path)
+    assert result["parlays"] == 0
+    assert calls == []
+    assert len(load_signal_journal(path)) == 1

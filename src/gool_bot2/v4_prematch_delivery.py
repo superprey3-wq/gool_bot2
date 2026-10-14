@@ -401,10 +401,14 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         groups.append(("SUPER", delivery["super"]))
     for acc in delivery.get("doubles") or []:
         groups.append(("DOUBLES", acc))
-    # One independent complete coupon per league/day; partial coupons
-    # never enter delivery, so no match can be silently left out.
+    # Even if a stale producer or old state supplies a non-elite league,
+    # the last-mile Telegram emitter will not send its tournament coupon.
+    from .elite_tournament_policy import is_elite_tournament
     for acc in delivery.get("tournaments") or []:
-        groups.append(("TOURNAMENT", acc))
+        if is_elite_tournament(str(acc.get("tournament") or "")):
+            groups.append(("TOURNAMENT", acc))
+        else:
+            print(f"TOURNAMENT_PUBLISH_SKIP league_not_allowed={acc.get('tournament')}", flush=True)
 
     rows = load_signal_journal(journal_path)
     for idx, (kind, acc) in enumerate(groups, 1):
@@ -433,7 +437,23 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             from .tournament_express import league_key
             day = str(acc.get("day") or "")
             tournament_name = str(acc.get("tournament") or "")
-            pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
+            # Deliberate one-off new public coupon for the reviewed elite/safe
+            # policy. The previous unversioned daily id was already sent and
+            # must NOT suppress the corrected one. A stable version suffix
+            # still prevents a duplicate on every PREMATCH rerun.
+            old_pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
+            pid = f"{old_pid}:elite_safe_v1"
+            # An old, already-sent ticket with EXACTLY the same selections
+            # does not need another Telegram notification merely because the
+            # price-policy source code changed.
+            old_published = next(
+                (x for x in rows if str(x.get("entry_id") or "") == old_pid and x.get("telegram_sent")),
+                None,
+            )
+            existing_upgrade = any(str(x.get("entry_id") or "") == pid for x in rows)
+            if old_published is not None and not existing_upgrade and identity(old_published.get("legs") or []) == key:
+                print("TOURNAMENT_SAFE_REVISION_SKIP unchanged_legs", old_pid, flush=True)
+                continue
         else:
             pid = f"parlay:{kind.lower()}:{digest}"
 
@@ -478,8 +498,17 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                     )
                 continue
         else:
+            # Preserve the originally published ticket as its own historical
+            # record (the user may have used it). The corrected card is a new
+            # ticket, not a rewrite of the old wager or settled result.
+            prior_parent = next(
+                (x for x in rows if str(x.get("entry_id") or "") == old_pid and x.get("telegram_sent")),
+                None,
+            ) if kind == "TOURNAMENT" else None
             parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
+                "replaces_entry_id": str(prior_parent.get("entry_id") or "") if prior_parent is not None else "",
+                "ticket_revision": "elite_safe_v1" if kind == "TOURNAMENT" else "",
                 "kind": kind, "tournament": str(acc.get("tournament") or ""), "tournament_day": str(acc.get("day") or ""),
                 "coverage_only_count": int(acc.get("coverage_only_count") or 0),
                 "verified_value_count": int(acc.get("verified_value_count") or 0),
@@ -510,6 +539,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         if kind == "TOURNAMENT":
             reserve_count = int(parent.get("coverage_only_count") or 0)
             caption_lines = caption_lines[:3] + [
+                *(["🔄 ОБНОВЛЁННЫЙ КУПОН. Старый прогноз больше не актуален, но уже сделанные ставки не отменяются."] if parent.get("replaces_entry_id") else []),
                 f"Матчей в купоне: {len(legs)}. Резервных плечей без подтверждённого преимущества: {reserve_count}.",
                 "⚠️ Резервные плечи — оценка по букмекерской линии, не подтверждённый моделью value.",
                 "Полный список — 🏆 Турнирные экспрессы.",
@@ -519,6 +549,17 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             parent["telegram_sent"] = True
             parent["telegram_sent_at"] = _now()
             parent["telegram_delivery_count"] = int(delivered)
+            if kind == "TOURNAMENT" and parent.get("replaces_entry_id"):
+                prior = next(
+                    (x for x in rows if str(x.get("entry_id") or "") == str(parent["replaces_entry_id"])),
+                    None,
+                )
+                if prior is not None:
+                    # Informational metadata only: user may have placed a real
+                    # bet on that earlier ticket. Never void/rewrite its result.
+                    prior["superseded_by"] = parent["entry_id"]
+                    prior["suggestion_status"] = "previous_version"
+                    prior["superseded_at"] = _now()
             save_signal_journal(journal_path, rows)
             sent["parlays"] += 1
             sent["cards"] += 1

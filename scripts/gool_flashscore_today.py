@@ -276,7 +276,7 @@ if V5_ACTIVE or V6_ACTIVE:
  promoted=[]
  for r in whole_pool:
   event_id=str(r["match"].provider_match_id)
-  if event_id not in selected_ids and tournament_priority(str(r["match"].league or "")) < 4:
+  if event_id not in selected_ids and tournament_priority(str(r["match"].league or "")) < 10:
    promoted.append(r)
    selected_ids.add(event_id)
  rows.extend(promoted)
@@ -291,7 +291,7 @@ else:
 # enough observations for V6. Every tournament fixture must have its genuine
 # bookmaker-quote families checked, even if stage1/cap excluded the event.
 selected_ids={str(r["match"].provider_match_id) for r in rows}
-coverage_only_matches=[m for m in fixtures if tournament_priority(str(m.league or "")) < 4
+coverage_only_matches=[m for m in fixtures if tournament_priority(str(m.league or "")) < 10
                        and str(m.provider_match_id) not in selected_ids]
 print("TOURNAMENT_COVERAGE_EXTRA",len(coverage_only_matches),flush=True)
 print("PREMATCH_SHORTLIST",shortlist_stats,flush=True)

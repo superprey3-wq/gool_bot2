@@ -202,14 +202,14 @@ def test_active_v6_exposes_all_qualified_tournament_alternatives():
     assert all(p.selection != "under 2.5" for p in all_markets)
 
 
-def test_quoted_v6_leg_not_discarded_by_fixed_66pct_probability(tmp_path, monkeypatch):
+def test_quoted_v6_conservative_leg_remains_available(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
     now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()
     fixtures = [event("a", "Team A"), event("b", "Team B")]
-    # 62% at 1.80 is +11.6% quoted-odds EV, above its 55.6% break-even.
+    # A full tournament coupon favours moderately-priced, high-probability legs.
     v6_qualified = [
         PrematchPick(k, name, name + " away", "btts", "yes",
-                     1.80, .62, .56, .88, "UEFA Champions League")
+                     1.80, .72, .56, .88, "UEFA Champions League")
         for k, name in (("a", "Team A"), ("b", "Team B"))
     ]
     catalog, tickets = build_catalog(
@@ -302,7 +302,7 @@ def test_nine_game_full_coupon_with_positive_quoted_value_no_missing_legs(tmp_pa
             "home": team, "away": f"Away {i}", "kickoff_ts": (today + timedelta(hours=4)).timestamp(),
         })
         picks.append(PrematchPick(eid, team, f"Away {i}", "match_total",
-                                 "over 1.5", 1.75, .63, .58, .86, league))
+                                 "over 1.5", 1.75, .71, .58, .86, league))
     catalog, tickets = build_catalog(
         fixtures, picks, now_ts=today.timestamp(), report_date="2026-10-14",
         already_shrunk=True,
@@ -322,11 +322,11 @@ def test_promoted_v6_near_miss_survives_final_catalog_filter(tmp_path, monkeypat
         "candidates": [{
             "state": "WAIT", "reason": "not_enough_value_after_conservative_shrinkage",
             "market": "match_total", "selection": "under 2.5",
-            "odd": 1.80, "bookmaker_fair_probability": .56,
-            "v5_probability_uncalibrated": .60,
-            "independent_probability_uncalibrated": .615,
-            "model_disagreement_pp": 1.5,
-            "market_shrunk_probability_heuristic": .58,
+            "odd": 1.55, "bookmaker_fair_probability": .63,
+            "v5_probability_uncalibrated": .74,
+            "independent_probability_uncalibrated": .75,
+            "model_disagreement_pp": 1.0,
+            "market_shrunk_probability_heuristic": .67,
         }],
     }
     now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()

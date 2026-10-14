@@ -17,6 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .v4_prematch_engine import PrematchPick, blend_with_market
+from .elite_tournament_policy import elite_tournament_tier, is_elite_tournament
 
 
 def _f(name: str, default: float) -> float:
@@ -44,17 +45,8 @@ def league_key(league: str) -> str:
 
 
 def _priority(league: str) -> int:
-    n = league.casefold()
-    if any(q in n for q in ("champions league", "лига чемпионов")):
-        return 0
-    if any(q in n for q in ("europa league", "лига европы")):
-        return 1
-    if any(q in n for q in ("conference league", "лига конференций")):
-        return 2
-    if any(q in n for q in ("world cup", "чемпионат мира", "euro ", "евро ")):
-        return 3
-    return 10
-
+    tier = elite_tournament_tier(league)
+    return 10 if tier is None else tier
 
 def _match_item(match: Any) -> dict[str, Any] | None:
     if isinstance(match, dict):
@@ -83,8 +75,12 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False, coverage: bool = F
         )
         price = float(raw.odds)
         probability = float(raw.model_probability)
-        # User-selected 1.30 floor for express legs; unlike >=1.70 singles.
+        # Conservative full-coverage parlays deliberately avoid long-price
+        # outcomes, even when the model flags value. A bookmaker quoted 1.30+
+        # leg is necessary, but NOT sufficient for a safer ticket.
         min_odd = 1.30
+        safe_max_odd = _f("GOOL_TOURNAMENT_SAFE_MAX_ODD", 1.85)
+        safe_min_probability = _f("GOOL_TOURNAMENT_SAFE_MIN_PROBABILITY", .66)
         # Full-fixture express legs must not inherit an arbitrary fixed 66% p
         # or 2.50 maximum odd from the standalone product. Profitability is
         # tested by the real, quoted price: p*odd >= 1 + required_roi.
@@ -99,7 +95,10 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False, coverage: bool = F
         # Verified bookmaker-only coverage does not have an independently
         # scored model-quality/long-price gate. Its risk is labelled, not
         # silently hidden by a server-wide model-only quality override.
-        if not (price >= min_odd and (coverage or (price <= max_odd and raw.data_quality >= min_quality))):
+        if not (min_odd <= price <= safe_max_odd
+                and 0 < probability < 1
+                and probability >= safe_min_probability
+                and (coverage or (price <= max_odd and raw.data_quality >= min_quality))):
             return None
         if not coverage and not (
             probability >= min_probability
@@ -139,13 +138,15 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
     old = read_catalog()
     if old.get("date") == report_date:
         for group in old.get("tournaments") or []:
+            if not is_elite_tournament(str(group.get("league") or "")):
+                continue
             for item in group.get("matches") or []:
                 normalized = _match_item(item)
                 if normalized:
                     universe[normalized["event_id"]] = normalized
     for fixture in fixtures:
         normalized = _match_item(fixture)
-        if not normalized:
+        if not normalized or not is_elite_tournament(normalized["league"]):
             continue
         if datetime.fromtimestamp(normalized["kickoff_ts"], _tz()).date().isoformat() != report_date:
             continue
@@ -170,18 +171,27 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
     result = []
     tickets = []
     for league, matches in grouped.items():
-        if len(matches) < 2:
+        if len(matches) < 2 or not is_elite_tournament(league):
             continue
         chosen = []
         matches_out = []
         for match in sorted(matches, key=lambda m: (m["kickoff_ts"], m["event_id"])):
             alternatives = by_event.get(match["event_id"]) or []
-            # Prefer high-quality, likely selections; do not chase long prices.
-            selected = max(alternatives, key=lambda a: (a["model_probability"] * a["quality"], a["expected_roi"]), default=None)
-            if selected is None:
-                # Coverage-first option: bookmaker-quoted, WITHOUT model value.
-                reserves = by_event_coverage.get(match["event_id"]) or []
-                selected = max(reserves, key=lambda a: (a["model_probability"], -a["odd"]), default=None)
+            reserves = by_event_coverage.get(match["event_id"]) or []
+            # For a FULL tournament coupon prefer a conservative probable leg,
+            # not the largest model-EV / longest bookmaker odds. An otherwise
+            # valid model signal @2.33 must not trump a safer @1.35 reserve.
+            # Small value bonus breaks near-ties without dominating safety.
+            all_safe = [*alternatives, *reserves]
+            selected = max(
+                all_safe,
+                key=lambda a: (
+                    a["model_probability"] + (.025 if a["qualification"] != "COVERAGE_ONLY" else 0),
+                    -a["odd"],
+                    a["quality"],
+                ),
+                default=None,
+            )
             phase = "STARTED" if float(match["kickoff_ts"]) <= now_ts + 180 else ("READY" if selected else "NO_VERIFIED_MARKET")
             note = dict(fixture_diagnostics.get(match["event_id"]) or {})
             if phase == "NO_VERIFIED_MARKET" and note:
@@ -210,7 +220,10 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                         + (f": {explanation}" if explanation else "")
                     )
                 else:
-                    note["display_reason"] = f"дополнительный фильтр экспресса отверг {active_count} вариантов V6"
+                    note["display_reason"] = (
+                        f"не найдено осторожного плеча от 1.30: исключены рискованные линии "
+                        f"из {active_count} вариантов V6"
+                    )
             if selected and selected.get("qualification") != "COVERAGE_ONLY":
                 promoted = set(note.get("tournament_value_promotions") or [])
                 selected["qualification"] = (
@@ -228,6 +241,7 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             "fixture_count": len(matches_out), "qualified_count": len(chosen),
             "complete": complete, "matches": matches_out,
             "coverage_only_count": unverified, "verified_value_count": len(chosen) - unverified,
+            "safe_price_max": _f("GOOL_TOURNAMENT_SAFE_MAX_ODD", 1.85),
             "status": "READY_ALL_MATCHES" if complete else "INCOMPLETE",
         }
         if chosen:
@@ -293,7 +307,10 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
     if not state:
         return ("🏆 <b>Экспрессы по турнирам · сегодня</b>\n"
                 "⏳ Нет свежего PREMATCH-сканирования. Проверь /prematchstatus."), None
-    tournaments = state.get("tournaments") or []
+    # Old pre-upgrade JSON catalog can still list every Flashscore league.
+    # Hide legacy nonelite tournaments immediately, even before the next scan.
+    tournaments = [t for t in state.get("tournaments") or []
+                   if is_elite_tournament(str(t.get("league") or ""))]
     status = str(state.get("scan_status") or "complete").lower()
     if status == "discovering":
         scan_line = "⏳ Расписание загружено. Идёт анализ матчей и проверка рынков."
@@ -306,7 +323,8 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
              scan_line,
              f"Найдено матчей: {state.get('fixture_count', 0)} · турниров: {len(tournaments)}",
              "Каждый полный экспресс включает все матчи турнира за сегодня.",
-             "Резервное плечо по реальной линии допускается от 1.30, но не подтверждает +EV.",
+             "Только ЛЧ и топ-5 лиг. Плечи: от 1.30, приоритет осторожным рынкам.",
+             "Резервное плечо по реальной линии не подтверждает +EV.",
              "Если нет действующей котировки, полный купон невозможен."]
     buttons = []
     for t in tournaments[:24]:
@@ -322,7 +340,8 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
 
 def tournament_details(key: str) -> str:
     state = _today_state()
-    group = next((t for t in state.get("tournaments") or [] if t.get("key") == key), None)
+    group = next((t for t in state.get("tournaments") or []
+                  if t.get("key") == key and is_elite_tournament(str(t.get("league") or ""))), None)
     if group is None:
         return "⏳ Турнир не найден в сегодняшнем сканировании. Открой «🏆 Турнирные экспрессы»."
     lines = [
@@ -333,7 +352,7 @@ def tournament_details(key: str) -> str:
         coverage = int(group.get("coverage_only_count") or 0)
         if coverage:
             lines.append(f"⚠️ ПОЛНЫЙ ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · резервных плечей {coverage}/{group['fixture_count']}")
-            lines.append("Расчёт по букмекерской линии, не модельная гарантия. Положительный EV резервных плечей не подтверждён.")
+            lines.append("Для резерва используется вероятность из букмекерской линии, не модельная гарантия. Положительный EV не подтверждён.")
         else:
             lines.append(f"✅ ПОЛНЫЙ VALUE-ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · оценочная P {group['combined_probability']*100:.2f}%")
     elif state.get("scan_status") in {"discovering", "pricing"}:

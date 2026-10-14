@@ -141,7 +141,7 @@ def test_preshunk_v6_consensus_is_not_shrunk_twice(tmp_path, monkeypatch):
     fixture_list = [event("a", "Team A"), event("b", "Team B")]
     quoted_v6 = [
         PrematchPick(k, name, name + " away", "match_total", "over 1.5",
-                     1.50, .70, .66, .90, "UEFA Champions League")
+                     1.50, .69, .65, .90, "UEFA Champions League")
         for k, name in (("a", "Team A"), ("b", "Team B"))
     ]
     wrong, wrong_tickets = build_catalog(fixture_list, quoted_v6, now_ts=now,
@@ -170,7 +170,7 @@ def test_each_fixture_records_actual_rejection_cause(tmp_path, monkeypatch):
     reasons = [m["diagnostics"]["display_reason"] for m in catalog["tournaments"][0]["matches"]]
     assert "начальный анализ" in reasons[0]
     assert "истории" in reasons[1]
-    assert "7 проверено" in reasons[2]
+    assert "7 рынков" in reasons[2]
     assert "3 вариантов V6" in reasons[3]
     assert tickets == []
 

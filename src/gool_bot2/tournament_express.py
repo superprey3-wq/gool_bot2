@@ -307,7 +307,10 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
     if not state:
         return ("🏆 <b>Экспрессы по турнирам · сегодня</b>\n"
                 "⏳ Нет свежего PREMATCH-сканирования. Проверь /prematchstatus."), None
-    tournaments = state.get("tournaments") or []
+    # Old pre-upgrade JSON catalog can still list every Flashscore league.
+    # Hide legacy nonelite tournaments immediately, even before the next scan.
+    tournaments = [t for t in state.get("tournaments") or []
+                   if is_elite_tournament(str(t.get("league") or ""))]
     status = str(state.get("scan_status") or "complete").lower()
     if status == "discovering":
         scan_line = "⏳ Расписание загружено. Идёт анализ матчей и проверка рынков."
@@ -337,7 +340,8 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
 
 def tournament_details(key: str) -> str:
     state = _today_state()
-    group = next((t for t in state.get("tournaments") or [] if t.get("key") == key), None)
+    group = next((t for t in state.get("tournaments") or []
+                  if t.get("key") == key and is_elite_tournament(str(t.get("league") or ""))), None)
     if group is None:
         return "⏳ Турнир не найден в сегодняшнем сканировании. Открой «🏆 Турнирные экспрессы»."
     lines = [

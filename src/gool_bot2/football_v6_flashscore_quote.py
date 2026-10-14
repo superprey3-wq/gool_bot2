@@ -20,16 +20,16 @@ def _valid_odd(value: Any) -> float | None:
     return x if math.isfinite(x) and x > 1.0 else None
 
 
-def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | None:
+def flashscore_fulltime_quotes(data: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(data, dict) or not data.get("odds"):
-        return None
+        return []
     rows = [row for row in data["odds"] if isinstance(row, dict)]
     home_id, away_id = _find_participant_ids(rows)
     # Without a verified home/away participant mapping, team-specific totals
     # can be silently misclassified as match totals by the shared decoder.
     # Fail closed rather than advertise those quotes as an honest market.
     if not home_id or not away_id or home_id == away_id:
-        return None
+        return []
     observations = _selection_observations(data, home_id, away_id)
 
     # Each bookmaker gets only its own offerings; pairs are taken from the
@@ -122,9 +122,13 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
         len(q["match_totals"]),
         q["bookmaker"],
     ), reverse=True)
-    if not offers:
-        return None
-    best = offers[0]
-    available = (len(best["match_totals"]) + len(best["home_totals"]) +
-                 len(best["away_totals"]) + int(bool(best["match_1x2"])) + int(bool(best["double_chance"])) + int(bool(best["btts"])))
-    return best if available else None
+    return [offer for offer in offers if (
+        offer["match_totals"] or offer["home_totals"] or offer["away_totals"]
+        or offer["match_1x2"] or offer["double_chance"] or offer["btts"]
+    )]
+
+
+def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The canonical single same-bookmaker quote for V6 remains unchanged."""
+    quotes = flashscore_fulltime_quotes(data)
+    return quotes[0] if quotes else None

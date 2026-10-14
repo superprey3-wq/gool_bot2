@@ -39,7 +39,7 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
         scope, typ, side, line = key
         if str(scope).upper() != "FULL_TIME":
             continue
-        if typ not in {"OVER_UNDER", "HOME_DRAW_AWAY", "BOTH_TEAMS_TO_SCORE"}:
+        if typ not in {"OVER_UNDER", "HOME_DRAW_AWAY", "BOTH_TEAMS_TO_SCORE", "DOUBLE_CHANCE"}:
             continue
         if typ == "OVER_UNDER":
             try:
@@ -62,6 +62,11 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
             if selection not in {"HOME", "DRAW", "AWAY"}:
                 continue
             group = ("match_1x2", "full", None)
+        elif typ == "DOUBLE_CHANCE":
+            selection = str(side).upper()
+            if selection not in {"HOME_OR_DRAW", "DRAW_OR_AWAY", "HOME_OR_AWAY"}:
+                continue
+            group = ("double_chance", "full", None)
         else:
             selection = str(side).upper()
             if selection not in {"YES", "NO"}:
@@ -87,6 +92,7 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
             "home_totals": [],
             "away_totals": [],
             "match_1x2": {},
+            "double_chance": {},
             "btts": {},
         }
         for (family, _kind, line), sides in markets.items():
@@ -100,6 +106,9 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
                 })
             elif family == "match_1x2" and {"HOME", "DRAW", "AWAY"} <= sides.keys():
                 output["match_1x2"] = {s.lower(): sides[s] for s in ("HOME", "DRAW", "AWAY")}
+            elif family == "double_chance":
+                output["double_chance"] = {label.lower(): sides[label]
+                    for label in ("HOME_OR_DRAW", "DRAW_OR_AWAY", "HOME_OR_AWAY") if label in sides}
             elif family == "btts" and {"YES", "NO"} <= sides.keys():
                 output["btts"] = {s.lower(): sides[s] for s in ("YES", "NO")}
         for family in ("match_totals", "home_totals", "away_totals"):
@@ -109,7 +118,7 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
     offers = [build(book, raw) for book, raw in books.items()]
     offers.sort(key=lambda q: (
         len(q["match_totals"]) + len(q["home_totals"]) + len(q["away_totals"])
-        + int(bool(q["match_1x2"])) + int(bool(q["btts"])),
+        + int(bool(q["match_1x2"])) + int(bool(q["double_chance"])) + int(bool(q["btts"])),
         len(q["match_totals"]),
         q["bookmaker"],
     ), reverse=True)
@@ -117,5 +126,5 @@ def flashscore_fulltime_quote(data: dict[str, Any] | None) -> dict[str, Any] | N
         return None
     best = offers[0]
     available = (len(best["match_totals"]) + len(best["home_totals"]) +
-                 len(best["away_totals"]) + int(bool(best["match_1x2"])) + int(bool(best["btts"])))
+                 len(best["away_totals"]) + int(bool(best["match_1x2"])) + int(bool(best["double_chance"])) + int(bool(best["btts"])))
     return best if available else None

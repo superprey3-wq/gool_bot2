@@ -312,3 +312,38 @@ def test_nine_game_full_coupon_with_positive_quoted_value_no_missing_legs(tmp_pa
     assert catalog["tournaments"][0]["qualified_count"] == 9
     assert catalog["tournaments"][0]["complete"]
     assert {p.event_id for p in tickets[0]["legs"]} == {f"fixture{i}" for i in range(9)}
+
+
+def test_promoted_v6_near_miss_survives_final_catalog_filter(tmp_path, monkeypatch):
+    from gool_bot2.active_challenger_decisions import football_v6_tournament_picks
+    monkeypatch.setenv("GOOL_TOURNAMENT_EXPRESS_STATE", str(tmp_path / "state.json"))
+    shadow = {
+        "status": "WAIT", "quote_source": "1xbet", "data_quality": .85,
+        "candidates": [{
+            "state": "WAIT", "reason": "not_enough_value_after_conservative_shrinkage",
+            "market": "match_total", "selection": "under 2.5",
+            "odd": 1.80, "bookmaker_fair_probability": .56,
+            "v5_probability_uncalibrated": .60,
+            "independent_probability_uncalibrated": .615,
+            "model_disagreement_pp": 1.5,
+            "market_shrunk_probability_heuristic": .58,
+        }],
+    }
+    now = datetime(2026, 10, 13, 12, tzinfo=ZoneInfo("Europe/Moscow")).timestamp()
+    bets = []
+    diag = {}
+    for eid, name in (("a", "Team A"), ("b", "Team B")):
+        picks, metadata = football_v6_tournament_picks(
+            shadow, event_id=eid, home=name, away=name+" away",
+            league="UEFA Champions League", kickoff_ts=now+3600*8,
+        )
+        assert len(picks) == 1
+        bets.extend(picks)
+        diag[eid] = {"tournament_value_promotions": metadata["tournament_value_promotions"]}
+    fixtures = [event("a", "Team A"), event("b", "Team B")]
+    result, tickets = build_catalog(fixtures, bets, now_ts=now, report_date="2026-10-13",
+                                    already_shrunk=True, fixture_diagnostics=diag)
+    assert len(tickets) == 1
+    assert result["tournaments"][0]["qualified_count"] == 2
+    assert all(m["selection"]["qualification"] == "TOURNAMENT_VALUE"
+               for m in result["tournaments"][0]["matches"])

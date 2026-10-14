@@ -120,6 +120,28 @@ def bookmaker_coverage_picks(
             for sel, odd, fair in zip(("home", "draw", "away"), odds, fairs):
                 append("match_1x2", sel, odd, fair)
 
+    # DC outcomes overlap and are NOT a three-way 100%-sum market.
+    # Use the SAME bookmaker's complete 1X2 quote to estimate each DC
+    # probability. Actual DC prices must be quoted; never synthesize odds.
+    chance = quote.get("double_chance") or {}
+    if isinstance(chance, dict) and isinstance(three, dict):
+        three_odds = [_odd(three.get(key)) for key in ("home", "draw", "away")]
+        if all(x is not None and x > 1 for x in three_odds) and credible_margin(three_odds):
+            home_p, draw_p, away_p = devig_three_way(*three_odds)
+            for source_key, label, fair in (
+                ("home_or_draw", "home or draw", home_p + draw_p),
+                ("draw_or_away", "draw or away", draw_p + away_p),
+                ("home_or_away", "home or away", home_p + away_p),
+            ):
+                price = _odd(chance.get(source_key))
+                if price is not None:
+                    # Rejected if the probability/price combination implies
+                    # implausibly large positive EV from merely re-labeling
+                    # three outcomes (typically a mapping error).
+                    if fair * price > 1.20:
+                        continue
+                    append("double_chance", label, price, fair)
+
     btts = quote.get("btts") or {}
     if isinstance(btts, dict):
         yes, no = _odd(btts.get("yes")), _odd(btts.get("no"))
@@ -132,3 +154,43 @@ def bookmaker_coverage_picks(
     # success, NOT the largest accumulator headline price.
     out.sort(key=lambda p: (-p.model_probability, p.odds, p.market, p.selection))
     return out
+
+
+def choose_quote_coverage(
+    quotes: list[tuple[dict[str, Any] | None, str]],
+    *, event_id: str, home: str, away: str, league: str,
+    kickoff_ts: float, safe_min_odd: float = 1.30,
+    safe_max_odd: float = 1.85, safe_min_probability: float = .66,
+) -> tuple[list[PrematchPick], str, str, dict[str, int]]:
+    """Find the best *actual bookmaker's* safe offer; never mix paired sides.
+
+    If an 1xBet market exists but lacks any safer 1.30-1.85 leg, continue
+    checking every Flashscore bookmaker rather than freezing that event.
+    Choose whole-book offers, preserving the source for the final journal.
+    """
+    selected: list[PrematchPick] = []
+    source = ""
+    bookmaker = ""
+    best_key: tuple[float, int, int] = (0.0, 0, 0)
+    counted = {"books_checked": 0, "all_candidates": 0, "safe_candidates": 0}
+    for offer, origin in quotes:
+        if not isinstance(offer, dict):
+            continue
+        counted["books_checked"] += 1
+        picks = bookmaker_coverage_picks(
+            offer, quote_source=origin, event_id=event_id,
+            home=home, away=away, league=league, kickoff_ts=kickoff_ts,
+        )
+        counted["all_candidates"] += len(picks)
+        viable = [p for p in picks if safe_min_odd <= p.odds <= safe_max_odd
+                  and p.model_probability >= safe_min_probability]
+        counted["safe_candidates"] += len(viable)
+        if not viable:
+            continue
+        key = (max(p.model_probability for p in viable), len(viable), int(origin == "1xbet"))
+        if key > best_key:
+            best_key = key
+            selected = viable
+            source = origin
+            bookmaker = str(offer.get("bookmaker") or ("1xBet" if origin == "1xbet" else "Flashscore odds"))
+    return selected, source, bookmaker, counted

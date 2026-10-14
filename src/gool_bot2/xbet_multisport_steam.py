@@ -4660,6 +4660,7 @@ class MultiSportSteamWorker:
         decoded = failed = detected = delivered = policy_blocked = 0
         model_rejected = 0
         evaluated_lanes_total = 0
+        basketball_v5_rejections: dict[str, int] = {}
         latest: list[dict[str, Any]] = []
         recent_families = [
             str(item.get("market_family") or "")
@@ -4744,16 +4745,21 @@ class MultiSportSteamWorker:
                                 dict(row.get("basketball_historical_profile") or {}),
                                 lane_row, phase="PREMATCH",
                             )
+                            audit_v5: dict[str, Any] = {}
                             signal = (
                                 basketball_v5_prematch_signal(
                                     historical_signal, lane_row,
                                     dict(row.get("sport_context") or {}),
                                     str(row.get("league") or ""),
                                     dict(row.get("segment_memory") or {}),
+                                    audit=audit_v5,
                                 )
                                 if _truthy("GOOL_BASKETBALL_V5_ACTIVE", True)
                                 else historical_signal
                             )
+                            if audit_v5:
+                                reason = str(audit_v5.get("reason") or "unknown")
+                                basketball_v5_rejections[reason] = basketball_v5_rejections.get(reason, 0) + 1
                         elif v3_only:
                             # Legacy handicaps/moneylines are not V3; retain their
                             # prices for audit, but do not publish V2 by accident.
@@ -5032,6 +5038,7 @@ class MultiSportSteamWorker:
             "prematch_delivered": delivered,
             "prematch_policy_blocked": policy_blocked,
             "prematch_model_rejected": model_rejected,
+            "prematch_basketball_v5_reasons": dict(basketball_v5_rejections),
             "prematch_evaluated_lanes": evaluated_lanes_total,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
             "matches": visible,
@@ -5845,6 +5852,7 @@ class MultiSportSteamWorker:
             "prematch_delivered": int(prematch.get("prematch_delivered") or 0),
             "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),
             "prematch_model_rejected": int(prematch.get("prematch_model_rejected") or 0),
+            "prematch_basketball_v5_reasons": dict(prematch.get("prematch_basketball_v5_reasons") or {}),
             "prematch_evaluated_lanes": int(prematch.get("prematch_evaluated_lanes") or 0),
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,

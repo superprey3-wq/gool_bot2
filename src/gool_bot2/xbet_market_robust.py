@@ -70,6 +70,8 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
         self._last_index_at: float = 0.0
         self._index_cache_used: bool = False
         self._index_cache_age_seconds: float | None = None
+        self._index_source: str = "unavailable"
+        self._index_v3_attempts: list[dict[str, Any]] = []
 
     @staticmethod
     def _index_rows(root: str, query: str) -> tuple[str, list[dict[str, Any]]]:
@@ -124,10 +126,60 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
             self._last_index_at = now
             self._index_cache_used = False
             self._index_cache_age_seconds = 0.0
+            self._index_source = "legacy_livefeed"
+            self._index_v3_attempts = []
             best_root = max(roots, key=lambda root: self._index_root_counts.get(root, 0))
             if self._index_root_counts.get(best_root, 0) > 0:
                 self.active_root = best_root
             return self.active_root, rows
+
+        # The legacy Get1x2_VZip index may be empty while the current 1xBet
+        # frontend still serves real matches via main-live-feed/v3. Reuse the
+        # tested multisport request profile, but fetch actual prices afresh;
+        # identities alone NEVER authorize a betting signal.
+        self._index_v3_attempts = []
+        if os.getenv("XBET_FOOTBALL_V3_INDEX_FALLBACK", "1").strip().lower() not in {"0", "no", "false", "off"}:
+            try:
+                from .xbet_multisport_steam import _sport_v3_json, _v3_hosts_from_roots
+                hosts = _v3_hosts_from_roots(roots)
+                for host in hosts:
+                    for gr in (1557, 412):
+                        query = [
+                            ("cfView", "3"), ("count", "1000"),
+                            ("fcountry", os.getenv("XBET_FOOTBALL_V3_FCOUNTRY", "66")),
+                            ("gr", str(gr)), ("grMode", "4"),
+                            ("lng", "en"), ("ref", "1"),
+                        ]
+                        payload = _sport_v3_json(host, "/service-api/main-live-feed/v3/games1x2", query, timeout=8.0)
+                        games = payload if isinstance(payload, list) else []
+                        found = []
+                        for game in games:
+                            if not isinstance(game, dict):
+                                continue
+                            sport = game.get("sport") or {}
+                            try:
+                                sport_id = int(sport.get("id") or 0)
+                            except (TypeError, ValueError, AttributeError):
+                                continue
+                            if sport_id != 1:
+                                continue
+                            event_id = str(game.get("id") or "").strip()
+                            home = str((game.get("opponent1") or {}).get("fullName") or "").strip()
+                            away = str((game.get("opponent2") or {}).get("fullName") or "").strip()
+                            if event_id and home and away:
+                                found.append({"event_id": event_id, "home": home, "away": away, "root": host + "/LiveFeed"})
+                        self._index_v3_attempts.append({"host": host, "group": gr, "raw": len(games), "football": len(found)})
+                        if found:
+                            self._event_roots = {row["event_id"]: [row["root"]] for row in found}
+                            self._last_event_roots = {k: list(v) for k, v in self._event_roots.items()}
+                            self._last_index_rows = [dict(row) for row in found]
+                            self._last_index_at = now
+                            self._index_cache_used = False
+                            self._index_cache_age_seconds = 0.0
+                            self._index_source = "frontend_v3"
+                            return host + "/LiveFeed", found
+            except Exception as exc:
+                self._index_v3_attempts.append({"error": type(exc).__name__})
 
         max_cache_age = max(0.0, float(os.getenv("XBET_INDEX_CACHE_SECONDS", "300")))
         age = now - self._last_index_at if self._last_index_at > 0 else 999999.0
@@ -135,12 +187,18 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
             self._event_roots = {key: list(value) for key, value in self._last_event_roots.items()}
             self._index_cache_used = True
             self._index_cache_age_seconds = round(age, 1)
+            self._index_source = "cached_identity"
             return self.active_root, [dict(row) for row in self._last_index_rows]
 
         self._event_roots = {}
         self._index_cache_used = False
         self._index_cache_age_seconds = None
+        self._index_source = "unavailable"
         return None, []
+
+    @staticmethod
+    def _usable_market_game(value: Any) -> bool:
+        return isinstance(value, dict) and any(value.get(key) for key in ("GE", "AE", "E", "SG"))
 
     def _game(self, event_id: str) -> dict[str, Any] | None:
         params = {
@@ -162,9 +220,39 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
         for root in roots:
             payload = market._http_json(f"{root}/GetGameZip?{urllib.parse.urlencode(params)}", timeout=7.0)
             value = payload.get("Value") if isinstance(payload, dict) else None
-            if isinstance(value, dict):
+            if self._usable_market_game(value):
                 self.active_root = root
                 return value
+        # If old LiveFeed gives an empty index or shell without market groups,
+        # request a fresh v3 game tree, not an old saved bookmaker price.
+        if os.getenv("XBET_FOOTBALL_V3_GAME_FALLBACK", "1").strip().lower() not in {"0", "no", "false", "off"}:
+            try:
+                from .xbet_multisport_steam import (
+                    _sport_v3_json, _v3_hosts_from_roots, _v3_to_legacy_market_game,
+                )
+                for host in _v3_hosts_from_roots(roots):
+                    for gr in (1557, 412):
+                        query = [
+                            ("cfView", "3"), ("countEvents", "250"),
+                            ("fcountry", os.getenv("XBET_FOOTBALL_V3_FCOUNTRY", "66")),
+                            ("gameId", str(event_id)), ("gr", str(gr)),
+                            ("grMode", "4"), ("lng", "en"),
+                            ("marketType", "1"), ("ref", "1"),
+                        ]
+                        payload = _sport_v3_json(host, "/service-api/main-live-feed/v3/gameEvents", query, timeout=8.0)
+                        if not isinstance(payload, dict):
+                            continue
+                        converted = _v3_to_legacy_market_game(payload, str(event_id))
+                        # In a v3 converted market the group identifier sits
+                        # on the parent. Legacy _nodes expects G on each price.
+                        for group in converted.get("GE") or []:
+                            for node in group.get("ME") or []:
+                                if isinstance(node, dict):
+                                    node.setdefault("G", group.get("G"))
+                        if self._usable_market_game(converted):
+                            return converted
+            except Exception:
+                pass
         return None
 
     def _markets_for_event(self, event_id: str, minute: int, current_total: int) -> dict[str, Any] | None:
@@ -214,10 +302,13 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
         root, candidates = self._fetch_index()
         output: dict[str, Any] = {}
         jobs = []
+        mapped_count = 0
+        unavailable_market_count = 0
         with ThreadPoolExecutor(max_workers=max(2, int(os.getenv("XBET_GAME_WORKERS", "8")))) as pool:
             for fs in matches:
                 event_id = self._map(fs, candidates)
                 if event_id:
+                    mapped_count += 1
                     minute = int(fs.minute or 0)
                     current_total = int(fs.home_score or 0) + int(fs.away_score or 0)
                     jobs.append((fs, event_id, pool.submit(self._markets_for_event, event_id, minute, current_total)))
@@ -227,6 +318,7 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                 except Exception:
                     markets = None
                 if not markets:
+                    unavailable_market_count += 1
                     continue
                 now = time.time()
                 score = (int(fs.home_score or 0), int(fs.away_score or 0))
@@ -261,6 +353,15 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "root": root,
             "latency_ms": int((time.time() - started) * 1000),
+            "index_events": len(candidates),
+            "index_source": self._index_source,
+            "index_root_counts": dict(self._index_root_counts),
+            "index_cache_used": self._index_cache_used,
+            "index_v3_attempts": self._index_v3_attempts[-4:],
+            "flashscore_live": len(matches),
+            "mapped_events": mapped_count,
+            "game_market_unavailable": unavailable_market_count,
+            "fetched_live_markets": len(output),
             "matches": output,
         }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

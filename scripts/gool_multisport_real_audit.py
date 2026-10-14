@@ -25,8 +25,10 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", "3.0")
     os.environ.setdefault("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT", "2.5")
     os.environ.setdefault("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", "1")
-    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "0")
-    os.environ.setdefault("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK", "0")
+    # Mirror production: otherwise this audit silently disables the very
+    # frontend endpoint used after legacy 1xBet becomes unavailable.
+    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "1")
+    os.environ.setdefault("GOOL_MULTISPORT_CURRENT_LINEFEED_FALLBACK", "1")
     os.environ["XBET_MULTISPORT_TELEGRAM_ENABLED"] = "0"
     os.environ["GOOL_MULTISPORT_PREMATCH_ENABLED"] = "1"
     os.environ.setdefault("GOOL_MULTISPORT_PREMATCH_HORIZON_SECONDS", str(30 * 3600))
@@ -61,9 +63,17 @@ def main() -> None:
                 f"LIVE fs={_n(row.get('flashscore_live'))} brain={_n(row.get('live_brain_candidates'))} xb={_n(row.get('xbet_live'))} "
                 f"mapped={_n(row.get('mapped'))} decoded={_n(row.get('decoded'))} "
                 f"signals={would_live} mismatch={_n(row.get('score_mismatch'))} "
-                f"decode_fail={_n(row.get('market_decode_failed'))} policy_skip={_n(row.get('policy_blocked'))}"
+                f"decode_fail={_n(row.get('market_decode_failed'))} policy_skip={_n(row.get('policy_blocked'))} "
+                f"sync_wait={_n(row.get('provider_sync_blocked'))} price_rejected={_n(row.get('pricing_rejected'))} "
+                f"prematch_price_rejected={_n(row.get('prematch_model_rejected'))} "
+                f"prematch_quote_fails={_n(row.get('prematch_market_decode_failed'))}"
             )
             print(f"WOULD_SEND_NOW sport={sport} phase=LIVE bets={would_live}")
+            print("INDEX_DIAG " + json.dumps({
+                "sport": sport, "live": row.get("xbet_diag") or {},
+                "prematch": (row.get("prematch") or {}).get("xbet_prematch_diag") or {},
+                "live_decode_errors": row.get("diagnostics") or [],
+            }, ensure_ascii=False, separators=(",", ":")))
             if would_live:
                 for match in row.get("matches") or []:
                     for sig in match.get("signals") or []:
@@ -130,6 +140,8 @@ def main() -> None:
             f"- Policy-skipped lanes: **{_n(row.get('prematch_policy_blocked'))}**",
             f"- Signals this snapshot: **{_n(row.get('prematch_detected'))}**",
             f"- Market decode failures: **{_n(row.get('prematch_market_decode_failed'))}**",
+            f"- Model/price rejected lanes: **{_n(row.get('prematch_model_rejected'))}**",
+            f"- PREMATCH index diagnostics: `{str((row.get('prematch') or {}).get('xbet_prematch_diag') or {})[:900]}`",
             "",
             "#### PREMATCH scope coverage",
         ]
@@ -151,6 +163,9 @@ def main() -> None:
             f"- **WOULD SEND NOW (LIVE): {_n(row.get('detected'))} bets**",
             f"- Score mismatches: **{_n(row.get('score_mismatch'))}**",
             f"- Market decode failures: **{_n(row.get('market_decode_failed'))}**",
+            f"- Provider sync blocked: **{_n(row.get('provider_sync_blocked'))}**",
+            f"- Model/pricing rejections: **{_n(row.get('pricing_rejected'))}**",
+            f"- LIVE index diagnostics: `{str(row.get('xbet_diag') or {})[:900]}`",
             f"- Policy-skipped LIVE lanes: **{_n(row.get('policy_blocked'))}**",
             "",
             "#### LIVE scope coverage",

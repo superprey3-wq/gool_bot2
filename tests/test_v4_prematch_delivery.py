@@ -299,3 +299,98 @@ def test_stale_nonelite_tournament_delivery_is_blocked_before_telegram(tmp_path,
     result = delivery.emit_delivery_selection(delivery_payload, {}, tmp_path/"journal.json")
     assert result["parlays"] == 0
     assert cards == []
+
+
+
+def test_safe_release_resends_one_revised_tournament_and_keeps_old_wager(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.journal import load_signal_journal, save_signal_journal
+    from gool_bot2.tournament_express import league_key
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    journal = tmp_path / "journal.json"
+    league = "EUROPE: Champions League - League phase"
+    old_id = f"parlay:tournament:2026-10-14:{league_key(league)}"
+    old_legs = [
+        delivery.prematch_row_from_pick(PrematchPick(
+            str(i), f"Home {i}", f"Away {i}", "match_total", "under 1.5",
+            2.33, .7, .4, .85, league, 1800000000.0
+        ))
+        for i in range(2)
+    ]
+    save_signal_journal(journal, [{
+        "entry_id": old_id, "origin": "prematch_parlay",
+        "kind": "TOURNAMENT", "result": "pending", "telegram_sent": True,
+        "legs": old_legs, "odd": 5.43,
+    }])
+    new_picks = [
+        PrematchPick(str(i), f"Home {i}", f"Away {i}", "match_total",
+                     "over 1.5", 1.35, .76, .72, .85, league, 1800000000.0)
+        for i in range(2)
+    ]
+    ticket = {
+        "mode": "NO_BET", "singles": [], "doubles": [],
+        "tournaments": [{
+            "tournament": league, "day": "2026-10-14", "legs": new_picks,
+            "coverage_only_count": 2,
+            "coverage_only_legs": [(p.event_id, p.market, p.selection) for p in new_picks],
+            "verified_value_count": 0,
+            "combined_odds": 1.8225, "combined_probability": .5,
+        }],
+    }
+    messages = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *_a, **_kw: b"png")
+    monkeypatch.setattr(delivery.telegram, "broadcast_photo",
+                        lambda _png, caption="", **_kw: messages.append(caption) or 1)
+
+    first = delivery.emit_delivery_selection(ticket, {}, journal)
+    second = delivery.emit_delivery_selection(ticket, {}, journal)
+    assert first["parlays"] == 1
+    assert second["parlays"] == 0
+    assert len(messages) == 1
+    assert "ОБНОВЛЁННЫЙ" in messages[0]
+    assert "уже сделанные ставки не отменяются" in messages[0]
+    rows = load_signal_journal(journal)
+    assert len(rows) == 2
+    old = next(row for row in rows if row["entry_id"] == old_id)
+    new = next(row for row in rows if row["entry_id"] != old_id)
+    assert new["telegram_sent"] is True
+    assert new["replaces_entry_id"] == old_id
+    assert old["suggestion_status"] == "previous_version"
+    assert old["superseded_by"] == new["entry_id"]
+    assert old["odd"] == 5.43 and old["result"] == "pending"
+    assert [x["selection"] for x in old["legs"]] == ["under 1.5", "under 1.5"]
+    assert [x["selection"] for x in new["legs"]] == ["over 1.5", "over 1.5"]
+
+
+def test_safe_release_does_not_resend_identical_existing_tournament(tmp_path, monkeypatch):
+    from gool_bot2 import v4_prematch_delivery as delivery
+    from gool_bot2.journal import load_signal_journal, save_signal_journal
+    from gool_bot2.tournament_express import league_key
+    from gool_bot2.v4_prematch_engine import PrematchPick
+
+    path = tmp_path / "journal.json"
+    league = "ENGLAND: Premier League"
+    old_id = f"parlay:tournament:2026-10-14:{league_key(league)}"
+    picks = [
+        PrematchPick(str(i), f"H{i}", f"A{i}", "match_total", "over 1.5",
+                     1.40, .75, .68, .85, league, 1800000000.0)
+        for i in range(2)
+    ]
+    save_signal_journal(path, [{
+        "entry_id": old_id, "origin": "prematch_parlay",
+        "kind": "TOURNAMENT", "result": "pending", "telegram_sent": True,
+        "legs": [delivery.prematch_row_from_pick(p) for p in picks], "odd": 1.96,
+    }])
+    calls = []
+    monkeypatch.setattr(delivery, "render_v4_parlay_card", lambda *_a, **_kw: b"png")
+    monkeypatch.setattr(delivery.telegram, "broadcast_photo",
+                        lambda *args, **kw: calls.append(args) or 1)
+    input_ = {"tournaments": [{
+        "tournament": league, "day": "2026-10-14", "legs": picks,
+        "combined_odds": 1.96, "combined_probability": .5,
+    }]}
+    result = delivery.emit_delivery_selection(input_, {}, path)
+    assert result["parlays"] == 0
+    assert calls == []
+    assert len(load_signal_journal(path)) == 1

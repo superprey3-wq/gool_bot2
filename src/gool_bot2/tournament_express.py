@@ -73,17 +73,18 @@ def _match_item(match: Any) -> dict[str, Any] | None:
     return {"event_id": event_id, "league": league, "home": home, "away": away, "kickoff_ts": ts}
 
 
-def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] | None:
+def _leg(pick: PrematchPick, *, already_shrunk: bool = False, coverage: bool = False) -> dict[str, Any] | None:
     try:
         # V6 already shrinks its probability toward bookmaker fair pricing.
         # Applying blend_with_market again would double-shrink the edge and
         # silently veto genuine V6-qualified parlay alternatives.
-        raw = pick if already_shrunk else blend_with_market(
+        raw = pick if already_shrunk or coverage else blend_with_market(
             pick, model_weight=_f("GOOL_TOURNAMENT_MODEL_WEIGHT", .55)
         )
         price = float(raw.odds)
         probability = float(raw.model_probability)
-        min_odd = _f("GOOL_TOURNAMENT_LEG_MIN_ODD", 1.35)
+        # User-selected 1.30 floor for express legs; unlike >=1.70 singles.
+        min_odd = 1.30
         # Full-fixture express legs must not inherit an arbitrary fixed 66% p
         # or 2.50 maximum odd from the standalone product. Profitability is
         # tested by the real, quoted price: p*odd >= 1 + required_roi.
@@ -95,11 +96,16 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] 
         roi = probability * price - 1.0
         if not all(math.isfinite(x) for x in (price, probability, edge, roi, raw.data_quality)):
             return None
-        if not (min_odd <= price <= max_odd
-                and raw.data_quality >= min_quality
-                and probability >= min_probability
-                and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .010)
-                and roi >= _f("GOOL_TOURNAMENT_MIN_EXPECTED_ROI", .02)):
+        # Verified bookmaker-only coverage does not have an independently
+        # scored model-quality/long-price gate. Its risk is labelled, not
+        # silently hidden by a server-wide model-only quality override.
+        if not (price >= min_odd and (coverage or (price <= max_odd and raw.data_quality >= min_quality))):
+            return None
+        if not coverage and not (
+            probability >= min_probability
+            and edge >= _f("GOOL_TOURNAMENT_MIN_EDGE", .010)
+            and roi >= _f("GOOL_TOURNAMENT_MIN_EXPECTED_ROI", .02)
+        ):
             return None
         return {
             "event_id": str(raw.event_id), "home": raw.home, "away": raw.away,
@@ -108,6 +114,8 @@ def _leg(pick: PrematchPick, *, already_shrunk: bool = False) -> dict[str, Any] 
             "break_even_probability": round(1.0 / price, 6),
             "expected_roi": round(roi, 6), "quality": round(raw.data_quality, 4),
             "edge": round(edge, 6),
+            "qualification": "COVERAGE_ONLY" if coverage else "VALUE",
+            "probability_source": "bookmaker_de_vig" if coverage else "model_heuristic",
         }
     except (TypeError, ValueError, AttributeError, ZeroDivisionError):
         return None
@@ -118,7 +126,8 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                   scan_status: str = "complete", processed_count: int = 0,
                   price_targets: int = 0,
                   already_shrunk: bool = False,
-                  fixture_diagnostics: dict[str, dict[str, Any]] | None = None
+                  fixture_diagnostics: dict[str, dict[str, Any]] | None = None,
+                  coverage_picks: list[PrematchPick] | None = None
                   ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (menu snapshot, complete publishable tournament parlays).
 
@@ -143,7 +152,13 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
         universe[normalized["event_id"]] = normalized
 
     by_event: dict[str, list[dict[str, Any]]] = {}
+    by_event_coverage: dict[str, list[dict[str, Any]]] = {}
     fixture_diagnostics = fixture_diagnostics or {}
+    coverage_picks = coverage_picks or []
+    for pick in coverage_picks:
+        leg = _leg(pick, coverage=True)
+        if leg is not None:
+            by_event_coverage.setdefault(leg["event_id"], []).append(leg)
     for pick in picks:
         leg = _leg(pick, already_shrunk=already_shrunk)
         if leg is not None:
@@ -163,6 +178,10 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             alternatives = by_event.get(match["event_id"]) or []
             # Prefer high-quality, likely selections; do not chase long prices.
             selected = max(alternatives, key=lambda a: (a["model_probability"] * a["quality"], a["expected_roi"]), default=None)
+            if selected is None:
+                # Coverage-first option: bookmaker-quoted, WITHOUT model value.
+                reserves = by_event_coverage.get(match["event_id"]) or []
+                selected = max(reserves, key=lambda a: (a["model_probability"], -a["odd"]), default=None)
             phase = "STARTED" if float(match["kickoff_ts"]) <= now_ts + 180 else ("READY" if selected else "NO_VERIFIED_MARKET")
             note = dict(fixture_diagnostics.get(match["event_id"]) or {})
             if phase == "NO_VERIFIED_MARKET" and note:
@@ -192,7 +211,7 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                     )
                 else:
                     note["display_reason"] = f"дополнительный фильтр экспресса отверг {active_count} вариантов V6"
-            if selected:
+            if selected and selected.get("qualification") != "COVERAGE_ONLY":
                 promoted = set(note.get("tournament_value_promotions") or [])
                 selected["qualification"] = (
                     "TOURNAMENT_VALUE" if f"{selected['market']}|{selected['selection']}" in promoted
@@ -203,10 +222,12 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
             if phase == "READY":
                 chosen.append(selected)
         complete = len(chosen) == len(matches_out)
+        unverified = sum(s["qualification"] == "COVERAGE_ONLY" for s in chosen)
         group = {
             "key": league_key(league), "league": league,
             "fixture_count": len(matches_out), "qualified_count": len(chosen),
             "complete": complete, "matches": matches_out,
+            "coverage_only_count": unverified, "verified_value_count": len(chosen) - unverified,
             "status": "READY_ALL_MATCHES" if complete else "INCOMPLETE",
         }
         if chosen:
@@ -215,7 +236,8 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
         if complete:
             # Only one actual event per leg; never substitute a selection for
             # a different game and never price an event that already started.
-            pick_map = {(str(p.event_id), str(p.market), str(p.selection)): p for p in picks}
+            pick_map = {(str(p.event_id), str(p.market), str(p.selection)): p for p in coverage_picks}
+            pick_map.update({(str(p.event_id), str(p.market), str(p.selection)): p for p in picks})
             original_legs = []
             for leg in chosen:
                 original = pick_map.get((leg["event_id"], leg["market"], leg["selection"]))
@@ -227,6 +249,12 @@ def build_catalog(fixtures: list[Any], picks: list[PrematchPick], *,
                     "kind": "TOURNAMENT", "tournament": league, "day": report_date,
                     "legs": original_legs, "combined_odds": group["combined_odd"],
                     "combined_probability": group["combined_probability"],
+                    "coverage_only_count": unverified,
+                    "verified_value_count": len(chosen) - unverified,
+                    "coverage_only_legs": [
+                        (x["event_id"], x["market"], x["selection"])
+                        for x in chosen if x["qualification"] == "COVERAGE_ONLY"
+                    ],
                 })
         result.append(group)
     result.sort(key=lambda g: (_priority(g["league"]), -g["fixture_count"], g["league"].casefold()))
@@ -278,7 +306,8 @@ def tournament_menu() -> tuple[str, dict[str, Any] | None]:
              scan_line,
              f"Найдено матчей: {state.get('fixture_count', 0)} · турниров: {len(tournaments)}",
              "Каждый полный экспресс включает все матчи турнира за сегодня.",
-             "Недостаточно данных хотя бы по одной игре → купон не публикуем."]
+             "Резервное плечо по реальной линии допускается от 1.30, но не подтверждает +EV.",
+             "Если нет действующей котировки, полный купон невозможен."]
     buttons = []
     for t in tournaments[:24]:
         covered, count = int(t["qualified_count"]), int(t["fixture_count"])
@@ -301,7 +330,12 @@ def tournament_details(key: str) -> str:
         f"Охват: {group['qualified_count']}/{group['fixture_count']} матчей",
     ]
     if group["complete"]:
-        lines.append(f"✅ ПОЛНЫЙ ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · модельная P {group['combined_probability']*100:.2f}%")
+        coverage = int(group.get("coverage_only_count") or 0)
+        if coverage:
+            lines.append(f"⚠️ ПОЛНЫЙ ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · резервных плечей {coverage}/{group['fixture_count']}")
+            lines.append("Расчёт по букмекерской линии, не модельная гарантия. Положительный EV резервных плечей не подтверждён.")
+        else:
+            lines.append(f"✅ ПОЛНЫЙ VALUE-ЭКСПРЕСС · кэф {group['combined_odd']:.2f} · оценочная P {group['combined_probability']*100:.2f}%")
     elif state.get("scan_status") in {"discovering", "pricing"}:
         lines.append("⏳ Проверка продолжается. Отсутствие линии пока не означает отказ.")
     else:
@@ -310,8 +344,11 @@ def tournament_details(key: str) -> str:
         leg = match.get("selection") or {}
         title = f"{i}. {html.escape(match['home'])} — {html.escape(match['away'])}"
         if match["status"] == "READY" and leg:
-            tier = "· V6" if leg.get("qualification") == "V6_ACTIVE" else "· турнирный value" if leg.get("qualification") == "TOURNAMENT_VALUE" else ""
-            lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · P {leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}% {tier}")
+            tier = ("· резерв по линии (без +EV)" if leg.get("qualification") == "COVERAGE_ONLY"
+                    else "· V6" if leg.get("qualification") == "V6_ACTIVE"
+                    else "· турнирный value")
+            prob_name = "Рынок≈" if leg.get("qualification") == "COVERAGE_ONLY" else "P≈"
+            lines.append(f"{title}\n   {html.escape(str(leg['selection']))} @ {leg['odd']:.2f} · {prob_name}{leg['model_probability']*100:.1f}% / безуб. {leg['break_even_probability']*100:.1f}% {tier}")
         else:
             reason = (
                 "матч уже начался / близок к началу" if (

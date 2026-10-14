@@ -25,6 +25,7 @@ from gool_bot2.prematch_quality import prematch_evidence_quality
 from gool_bot2.prematch_team_regime import apply_team_regime
 from gool_bot2.prematch_value_hunter import analysis_value_rows,select_best_value_pick,diagnose_value_rows,select_value_scan_rows
 from gool_bot2.tournament_express import build_catalog, write_catalog, _priority as tournament_priority
+from gool_bot2.tournament_coverage import bookmaker_coverage_picks
 from gool_bot2.v4_value_hunter_delivery import emit_value_hunter
 from pathlib import Path
 import os
@@ -286,6 +287,13 @@ if V5_ACTIVE or V6_ACTIVE:
  },flush=True)
 else:
  rows,shortlist_stats=select_confident_prematch_rows(rows)
+# Reserve coupon analysis is independent of whether football history has
+# enough observations for V6. Every tournament fixture must have its genuine
+# bookmaker-quote families checked, even if stage1/cap excluded the event.
+selected_ids={str(r["match"].provider_match_id) for r in rows}
+coverage_only_matches=[m for m in fixtures if tournament_priority(str(m.league or "")) < 4
+                       and str(m.provider_match_id) not in selected_ids]
+print("TOURNAMENT_COVERAGE_EXTRA",len(coverage_only_matches),flush=True)
 print("PREMATCH_SHORTLIST",shortlist_stats,flush=True)
 print("VALUE_HUNTER_POOL",{"selected":len(value_scan_rows),"normal_shortlist":len(rows)},flush=True)
 update_prematch_status(
@@ -309,7 +317,7 @@ update_prematch_status(
 runtime=Path(os.getenv("RUNTIME_DATA_DIR","data"))
 xbet_state=Path(os.getenv("XBET_PREMATCH_STATE",str(runtime/"live"/"xbet_prematch_market.json")))
 try:
- xbet_result=XBetPrematchCollector(xbet_state).collect_once(targets=[r["match"] for r in rows])
+ xbet_result=XBetPrematchCollector(xbet_state).collect_once(targets=[r["match"] for r in rows]+coverage_only_matches)
  update_prematch_status(stage="pricing", xbet_matches=len((xbet_result or {}).get("matches") or {}), xbet_refreshed=int((xbet_result or {}).get("refreshed") or 0))
 except Exception as exc:
  update_prematch_status(stage="pricing", xbet_error=f"{type(exc).__name__}:{exc}")
@@ -340,6 +348,22 @@ def one(r):
   if V6_ACTIVE or str(os.getenv("GOOL_FOOTBALL_V6_SHADOW_ENABLED","1")).casefold() in {"1","true","yes","on"}:
    try:
     v6_quote=market or flashscore_fulltime_quote(odds_payload)
+    quote_source="1xbet" if market else "flashscore" if v6_quote else "none"
+    coverage=bookmaker_coverage_picks(
+     v6_quote,quote_source=quote_source,
+     event_id=str(m.provider_match_id),home=m.home,away=m.away,
+     league=m.league or "",kickoff_ts=kick,
+    )
+    if not coverage and market:
+     flashscore_quote=flashscore_fulltime_quote(odds_payload)
+     coverage=bookmaker_coverage_picks(
+      flashscore_quote,quote_source="flashscore",
+      event_id=str(m.provider_match_id),home=m.home,away=m.away,
+      league=m.league or "",kickoff_ts=kick,
+     )
+     if coverage:quote_source="flashscore"
+    r["tournament_coverage_candidates"]=coverage
+    r["tournament_coverage_quote_source"]=quote_source
     v6_shadow=evaluate_football_v6_prematch(
      forecast,r.get("profile") or {},v6_quote,
      event_id=str(m.provider_match_id),active_picks=picks,
@@ -555,6 +579,7 @@ def value_only(r):
 
 priced=[]; meta={}; value_candidates=[]
 tournament_priced=[]
+tournament_coverage_priced=[]
 # Fixtures failing the early history/profile gate must remain visible in
 # the tournament report; otherwise 0/7 gives no actionable explanation.
 tournament_diagnostics={str(m.provider_match_id):{"reason":"not_priced"} for m in fixtures}
@@ -563,6 +588,7 @@ value_diag_total={"scanned_matches":0,"modeled_markets":0,"high_odds_markets":0,
 def _publish_tournament_progress():
  partial,_=build_catalog(
   all_daily_fixtures,(tournament_priced if V6_ACTIVE else priced),
+  coverage_picks=tournament_coverage_priced,
   now_ts=time.time(),report_date=day.isoformat(),
   scan_status="pricing",processed_count=value_diag_total["scanned_matches"],
   price_targets=len(rows),already_shrunk=V6_ACTIVE,
@@ -585,6 +611,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   value_diag_total["rejects"].update(value_diag.get("rejects") or {})
   m=r["match"]; fs_meta=dict(m.meta or {})
   tournament_priced.extend(r.get("tournament_candidates") or [])
+  tournament_coverage_priced.extend(r.get("tournament_coverage_candidates") or [])
   if V6_ACTIVE:
    tournament_diagnostics[str(m.provider_match_id)]=dict(r.get("tournament_diagnostic") or {"reason":"no_v6_diagnostic"})
   v6_shadow=r.get("football_v6_shadow")
@@ -608,6 +635,12 @@ with ThreadPoolExecutor(max_workers=20) as pool:
     "bookmaker":"1xBet" if quote_source=="1xbet" else "Flashscore odds" if quote_source=="flashscore" else "",
     "flashscore_meta":fs_meta,
    }
+  if r.get("tournament_coverage_candidates") and not r.get("tournament_candidates"):
+   quote_source=str(r.get("tournament_coverage_quote_source") or "")
+   meta[str(m.provider_match_id)]={
+    "bookmaker":"1xBet" if quote_source=="1xbet" else "Flashscore odds" if quote_source=="flashscore" else "",
+    "flashscore_meta":fs_meta,
+   }
   if value_pick:
    vp,vm=value_pick
    value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))
@@ -622,6 +655,51 @@ with ThreadPoolExecutor(max_workers=20) as pool:
    append_price_snapshot(**kw); append_sqlite_snapshot(**kw,data_quality=p.data_quality)
   if value_diag_total["scanned_matches"]%12==0:
    _publish_tournament_progress()
+# Dedicated real-quote scan for the remainder of today's tournament slate.
+# These matches were dropped by the independent-model shortage or shortlist,
+# not by the bookmaker's ability to quote the game.
+if coverage_only_matches:
+ def collect_reserve(m):
+  kick=float((m.meta or {}).get("scheduled_start_ts") or 0)
+  market=find_prematch_market(m.home,m.away,path=xbet_state,kickoff_ts=kick)
+  out=bookmaker_coverage_picks(
+   market,quote_source="1xbet" if market else "none",
+   event_id=str(m.provider_match_id),home=m.home,away=m.away,
+   league=m.league or "",kickoff_ts=kick,
+  )
+  source="1xbet" if out else ""
+  if not out:
+   try:
+    odds=fetch_event_odds(m.provider_match_id)
+    full_quote=flashscore_fulltime_quote(odds)
+    out=bookmaker_coverage_picks(
+     full_quote,quote_source="flashscore",event_id=str(m.provider_match_id),
+     home=m.home,away=m.away,league=m.league or "",kickoff_ts=kick,
+    )
+    if out:source="flashscore"
+   except Exception as exc:
+    print("TOURNAMENT_COVERAGE_ODDS_MISSING",m.home,m.away,type(exc).__name__,flush=True)
+  return m,out,source
+ with ThreadPoolExecutor(max_workers=min(8,len(coverage_only_matches))) as coverage_pool:
+  for fut in as_completed([coverage_pool.submit(collect_reserve,m) for m in coverage_only_matches]):
+   m,candidates,source=fut.result()
+   tournament_coverage_priced.extend(candidates)
+   event_id=str(m.provider_match_id)
+   tournament_diagnostics[event_id]={
+    "reason":"coverage_only_no_v6_profile",
+    "quoted_markets_checked":len(candidates),
+    "qualified_active":0,
+    "coverage_candidates":len(candidates),
+   }
+   fs_meta=dict(m.meta or {})
+   home_logo=fs.team_logo_url(str(fs_meta.get("home_team_slug") or ""),str(fs_meta.get("home_team_id") or ""))
+   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
+   if home_logo:fs_meta["home_logo_url"]=home_logo
+   if away_logo:fs_meta["away_logo_url"]=away_logo
+   if candidates:
+    meta[event_id]={"bookmaker":"1xBet" if source=="1xbet" else "Flashscore odds",
+                    "flashscore_meta":fs_meta}
+   print("TOURNAMENT_COVERAGE_RESERVE",m.home,m.away,"real_quotes",len(candidates),flush=True)
 # Save the last candidates even if the total was not a multiple of 12.
 _publish_tournament_progress()
 
@@ -700,13 +778,14 @@ d=choose_delivery(
 # not merely from singles or the strongest two matches in the league.
 catalog,tournament_tickets=build_catalog(
  all_daily_fixtures,(tournament_priced if V6_ACTIVE else priced),
+ coverage_picks=tournament_coverage_priced,
  now_ts=time.time(),report_date=day.isoformat(),
  scan_status="complete",processed_count=len(rows),price_targets=len(rows),
  already_shrunk=V6_ACTIVE,fixture_diagnostics=tournament_diagnostics,
 )
 write_catalog(catalog)
 d["tournaments"]=tournament_tickets
-print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets),"v6_independent_candidates":len(tournament_priced)},flush=True)
+print("TOURNAMENT_EXPRESS",{"fixtures":catalog["fixture_count"],"leagues":len(catalog["tournaments"]),"complete_tickets":len(tournament_tickets),"v6_independent_candidates":len(tournament_priced),"bookmaker_reserves":len(tournament_coverage_priced)},flush=True)
 journal=Path(os.getenv("GOOL_MULTI_JOURNAL_PATH") or (Path(os.getenv("RUNTIME_DATA_DIR","data"))/"live"/"gool_multi_journal.json"))
 value_delivered=emit_value_hunter(value_candidates,journal)
 print("VALUE_HUNTER_DELIVERY",value_delivered,"candidates",len(value_candidates),flush=True)

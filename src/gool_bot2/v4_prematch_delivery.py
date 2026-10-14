@@ -409,9 +409,17 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
     rows = load_signal_journal(journal_path)
     for idx, (kind, acc) in enumerate(groups, 1):
         legs = []
+        reserve_keys = {tuple(x) for x in acc.get("coverage_only_legs") or []}
         for p in acc.get("legs") or []:
             info = _delivery_meta_for_pick(meta, p)
-            legs.append(prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {})))
+            leg = prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {}))
+            if kind == "TOURNAMENT" and (str(p.event_id), str(p.market), str(p.selection)) in reserve_keys:
+                leg["leg_qualification"] = "COVERAGE_ONLY"
+                leg["probability_source"] = "bookmaker_de_vig"
+                leg["expected_value_verified"] = False
+            else:
+                leg["leg_qualification"] = "MODEL_VALUE"
+            legs.append(leg)
         if not legs:
             continue
         # A parlay is an independent betting product. Its legs may also have been
@@ -473,6 +481,9 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
                 "kind": kind, "tournament": str(acc.get("tournament") or ""), "tournament_day": str(acc.get("day") or ""),
+                "coverage_only_count": int(acc.get("coverage_only_count") or 0),
+                "verified_value_count": int(acc.get("verified_value_count") or 0),
+                "probability_source": "mixed_bookmaker_proxy" if int(acc.get("coverage_only_count") or 0) else "model_heuristic",
                 "result": "pending", "lifecycle": "scheduled",
                 "legs": legs, "odd": float(acc.get("combined_odds") or 0.0),
                 "effective_odd": float(acc.get("combined_odds") or 0.0),
@@ -497,7 +508,12 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         # Telegram photo caption limit is 1024 chars. For a many-match
         # tournament show all legs in the card/menu, without failed delivery.
         if kind == "TOURNAMENT":
-            caption_lines = caption_lines[:3] + [f"Матчей в купоне: {len(legs)}. Полный список — 🏆 Турнирные экспрессы."]
+            reserve_count = int(parent.get("coverage_only_count") or 0)
+            caption_lines = caption_lines[:3] + [
+                f"Матчей в купоне: {len(legs)}. Резервных плечей без подтверждённого преимущества: {reserve_count}.",
+                "⚠️ Резервные плечи — оценка по букмекерской линии, не подтверждённый моделью value.",
+                "Полный список — 🏆 Турнирные экспрессы.",
+            ]
         delivered = telegram.broadcast_photo(png, caption="\n".join(caption_lines).strip())
         if delivered:
             parent["telegram_sent"] = True

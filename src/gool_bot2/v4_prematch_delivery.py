@@ -416,7 +416,10 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         reserve_keys = {tuple(x) for x in acc.get("coverage_only_legs") or []}
         for p in acc.get("legs") or []:
             info = _delivery_meta_for_pick(meta, p)
-            leg = prematch_row_from_pick(p, tier="STRONG", bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {}))
+            bookmaker = str(info.get("bookmaker") or "")
+            if kind == "TOURNAMENT" and (str(p.event_id), str(p.market), str(p.selection)) in reserve_keys:
+                bookmaker = str((acc.get("leg_bookmakers") or {}).get(str(p.event_id)) or bookmaker)
+            leg = prematch_row_from_pick(p, tier="STRONG", bookmaker=bookmaker, flashscore_meta=dict(info.get("flashscore_meta") or {}))
             if kind == "TOURNAMENT" and (str(p.event_id), str(p.market), str(p.selection)) in reserve_keys:
                 leg["leg_qualification"] = "COVERAGE_ONLY"
                 leg["probability_source"] = "bookmaker_de_vig"

@@ -437,7 +437,12 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             from .tournament_express import league_key
             day = str(acc.get("day") or "")
             tournament_name = str(acc.get("tournament") or "")
-            pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
+            # Deliberate one-off new public coupon for the reviewed elite/safe
+            # policy. The previous unversioned daily id was already sent and
+            # must NOT suppress the corrected one. A stable version suffix
+            # still prevents a duplicate on every PREMATCH rerun.
+            old_pid = f"parlay:tournament:{day}:{league_key(tournament_name)}"
+            pid = f"{old_pid}:elite_safe_v1"
         else:
             pid = f"parlay:{kind.lower()}:{digest}"
 
@@ -482,8 +487,14 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
                     )
                 continue
         else:
+            # Preserve the originally published ticket as its own historical
+            # record (the user may have used it). The corrected card is a new
+            # ticket, not a rewrite of the old wager or settled result.
+            prior_parent = next((x for x in rows if str(x.get("entry_id") or "") == old_pid), None) if kind == "TOURNAMENT" else None
             parent = {
                 "entry_id": pid, "origin": "prematch_parlay", "card_family": "prematch_parlay", "head": "prematch",
+                "replaces_entry_id": str(prior_parent.get("entry_id") or "") if prior_parent is not None else "",
+                "ticket_revision": "elite_safe_v1" if kind == "TOURNAMENT" else "",
                 "kind": kind, "tournament": str(acc.get("tournament") or ""), "tournament_day": str(acc.get("day") or ""),
                 "coverage_only_count": int(acc.get("coverage_only_count") or 0),
                 "verified_value_count": int(acc.get("verified_value_count") or 0),
@@ -514,6 +525,7 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
         if kind == "TOURNAMENT":
             reserve_count = int(parent.get("coverage_only_count") or 0)
             caption_lines = caption_lines[:3] + [
+                *([f"🔄 ОБНОВЛЁННЫЙ КУПОН: заменяет предыдущую рекомендацию по турниру."] if parent.get("replaces_entry_id") else []),
                 f"Матчей в купоне: {len(legs)}. Резервных плечей без подтверждённого преимущества: {reserve_count}.",
                 "⚠️ Резервные плечи — оценка по букмекерской линии, не подтверждённый моделью value.",
                 "Полный список — 🏆 Турнирные экспрессы.",

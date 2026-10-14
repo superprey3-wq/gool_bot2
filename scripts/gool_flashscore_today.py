@@ -637,7 +637,7 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   if r.get("tournament_coverage_candidates") and not r.get("tournament_candidates"):
    quote_source=str(r.get("tournament_coverage_quote_source") or "")
    meta[str(m.provider_match_id)]={
-    "bookmaker":str(r.get("tournament_coverage_bookmaker") or "") or "1xBet" if quote_source=="1xbet" else "Flashscore odds",
+    "bookmaker":str(r.get("tournament_coverage_bookmaker") or ("1xBet" if quote_source=="1xbet" else "Flashscore odds")),
     "flashscore_meta":fs_meta,
    }
   if value_pick:

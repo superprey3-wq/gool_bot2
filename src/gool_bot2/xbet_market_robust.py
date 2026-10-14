@@ -317,7 +317,14 @@ class RobustXBetMarketCollector(market.XBetMarketCollector):
                     markets = future.result(timeout=18)
                 except Exception:
                     markets = None
-                if not markets:
+                # A bookmaker response can contain score-only placeholders;
+                # they are not live betting lines and must never count as a
+                # successfully refreshed signal price.
+                if not markets or not (
+                    any(markets.get(key) for key in ("match_total", "home_total", "away_total", "first_half_total"))
+                    or any((markets.get("match_1x2") or {}).get(k) for k in ("home", "draw", "away"))
+                    or any((markets.get("btts") or {}).get(k) for k in ("yes", "no"))
+                ):
                     unavailable_market_count += 1
                     continue
                 now = time.time()

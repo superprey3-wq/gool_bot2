@@ -16,7 +16,7 @@ from gool_bot2.prematch_goal_profile import build_prematch_goal_profile
 from gool_bot2.football_v5_shadow import append_first_snapshots, forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
 from gool_bot2.football_v6_consensus_shadow import evaluate_football_v6_prematch
-from gool_bot2.active_challenger_decisions import football_v6_active_picks
+from gool_bot2.active_challenger_decisions import football_v6_tournament_picks, football_v6_active_picks
 from gool_bot2.football_v6_flashscore_quote import flashscore_fulltime_quote
 from gool_bot2.xbet_prematch_market import XBetPrematchCollector,find_prematch_market
 from gool_bot2.prematch_status import update_prematch_status
@@ -366,16 +366,19 @@ def one(r):
     event_id=str(m.provider_match_id),home=m.home,away=m.away,
     league=m.league or "",kickoff_ts=kick,
    )
-   tournament_alternatives,_=football_v6_active_picks(
+   tournament_alternatives,tournament_meta=football_v6_tournament_picks(
     r.get("football_v6_shadow") or {},
     event_id=str(m.provider_match_id),home=m.home,away=m.away,
-    league=m.league or "",kickoff_ts=kick,return_all=True,
+    league=m.league or "",kickoff_ts=kick,
    )
    r["tournament_candidates"]=tournament_alternatives
    r["tournament_diagnostic"]={
     "reason":str((info or {}).get("reject") or (r.get("football_v6_shadow") or {}).get("reason") or ""),
     "quoted_markets_checked":int((r.get("football_v6_shadow") or {}).get("quoted_markets_checked") or 0),
     "qualified_active":len(tournament_alternatives),
+    "qualified_strict":len([p for p in tournament_alternatives if f"{p.market}|{p.selection}" not in set(tournament_meta.get("tournament_value_promotions") or [])]),
+    "tournament_value_promotions":list(tournament_meta.get("tournament_value_promotions") or []),
+    "rejection_reasons":dict((r.get("football_v6_shadow") or {}).get("rejection_reasons") or {}),
     "quote_source":str((r.get("football_v6_shadow") or {}).get("quote_source") or ""),
    }
    print("FOOTBALL_V6_TOURNAMENT",m.home,"-",m.away,
@@ -596,6 +599,15 @@ with ThreadPoolExecutor(max_workers=20) as pool:
   away_logo=fs.team_logo_url(str(fs_meta.get("away_team_slug") or ""),str(fs_meta.get("away_team_id") or ""))
   if home_logo: fs_meta["home_logo_url"]=home_logo
   if away_logo: fs_meta["away_logo_url"]=away_logo
+  if V6_ACTIVE and r.get("tournament_candidates"):
+   # Independent tournament legs can exist even when the ordinary standalone
+   # candidate is absent. Preserve the verified bookmaker and crests so the
+   # complete coupon doesn't show a blank source or pretend to be priced by GOOL.
+   quote_source=str((r.get("football_v6_shadow") or {}).get("quote_source") or "")
+   meta[str(m.provider_match_id)]={
+    "bookmaker":"1xBet" if quote_source=="1xbet" else "Flashscore odds" if quote_source=="flashscore" else "",
+    "flashscore_meta":fs_meta,
+   }
   if value_pick:
    vp,vm=value_pick
    value_candidates.append((vp,{**vm,"flashscore_meta":fs_meta}))

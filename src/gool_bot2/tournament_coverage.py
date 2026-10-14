@@ -73,7 +73,9 @@ def bookmaker_coverage_picks(
 
     for market, family in (("match_total", "match_totals"),
                            ("home_total", "home_totals"),
-                           ("away_total", "away_totals")):
+                           ("away_total", "away_totals"),
+                           ("1H_OVER_UNDER", "first_half_totals"),
+                           ("2H_OVER_UNDER", "second_half_totals")):
         family_rows = [row for row in quote.get(family) or [] if isinstance(row, dict)]
         # For a single bookmaker full-time quote, more goals must never make
         # OVER cheaper or UNDER dearer. If its totals ladder is incoherent,
@@ -119,6 +121,37 @@ def bookmaker_coverage_picks(
             fairs = devig_three_way(*odds)
             for sel, odd, fair in zip(("home", "draw", "away"), odds, fairs):
                 append("match_1x2", sel, odd, fair)
+
+    # Draw-no-bet has a genuine draw/push path. Its de-vig estimate describes
+    # the conditional chance on non-push outcomes; it is NOT guaranteed EV.
+    dnb = quote.get("draw_no_bet") or {}
+    if isinstance(dnb, dict):
+        home_o, away_o = _odd(dnb.get("home")), _odd(dnb.get("away"))
+        if home_o is not None and away_o is not None and credible_margin([home_o, away_o]):
+            home_f, away_f = devig_two_way(home_o, away_o)
+            append("draw_no_bet", "home", home_o, home_f)
+            append("draw_no_bet", "away", away_o, away_f)
+
+    # Settler supports only full-win / full-loss / push. Half-goal Asian lines
+    # avoid pushes and quarter handicap half-wins that the journal cannot book.
+    for handicap in quote.get("asian_handicaps") or []:
+        if not isinstance(handicap, dict):
+            continue
+        try:
+            home_line = float(handicap["home_line"])
+            away_line = float(handicap["away_line"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if (not math.isfinite(home_line) or not math.isfinite(away_line)
+            or abs(home_line + away_line) > 1e-8
+            or abs(home_line % 1.0 - .5) > 1e-8):
+            continue
+        h, a = _odd(handicap.get("home")), _odd(handicap.get("away"))
+        if h is None or a is None or not credible_margin([h, a]):
+            continue
+        fh, fa = devig_two_way(h, a)
+        append("asian_handicap", f"home {home_line:+g}", h, fh)
+        append("asian_handicap", f"away {away_line:+g}", a, fa)
 
     # DC outcomes overlap and are NOT a three-way 100%-sum market.
     # Use the SAME bookmaker's complete 1X2 quote to estimate each DC

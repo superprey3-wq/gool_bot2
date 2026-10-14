@@ -46,6 +46,13 @@ def bookmaker_coverage_picks(
     except (TypeError, ValueError):
         return []
 
+    def credible_margin(odds: list[float]) -> bool:
+        # Real bookmaker alternatives should belong to one coherent two-
+        # or three-sided market. Arbitrage-like (<100%) or extreme (>125%)
+        # paired overround often means stale or mismapped selections.
+        vig = sum(1.0 / value for value in odds)
+        return 0.995 <= vig <= 1.25
+
     out: list[PrematchPick] = []
     seen: set[tuple[str, str]] = set()
 
@@ -67,7 +74,26 @@ def bookmaker_coverage_picks(
     for market, family in (("match_total", "match_totals"),
                            ("home_total", "home_totals"),
                            ("away_total", "away_totals")):
-        for row in quote.get(family) or []:
+        family_rows = [row for row in quote.get(family) or [] if isinstance(row, dict)]
+        # For a single bookmaker full-time quote, more goals must never make
+        # OVER cheaper or UNDER dearer. If its totals ladder is incoherent,
+        # exclude the entire family rather than publishing a swapped line.
+        ladder = []
+        for item in family_rows:
+            try:
+                line = float(item["line"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            o, u = _odd(item.get("over")), _odd(item.get("under"))
+            if o is not None and u is not None and o > 1 and u > 1:
+                ladder.append((line, o, u))
+        ladder.sort()
+        if any(
+            high[1] + .01 < low[1] or high[2] > low[2] + .01
+            for low, high in zip(ladder, ladder[1:]) if high[0] > low[0]
+        ):
+            continue
+        for row in family_rows:
             if not isinstance(row, dict):
                 continue
             try:
@@ -80,6 +106,8 @@ def bookmaker_coverage_picks(
             over, under = _odd(row.get("over")), _odd(row.get("under"))
             if over is None or under is None or min(over, under) <= 1:
                 continue
+            if not credible_margin([over, under]):
+                continue
             fo, fu = devig_two_way(over, under)
             append(market, f"over {line:g}", over, fo)
             append(market, f"under {line:g}", under, fu)
@@ -87,7 +115,7 @@ def bookmaker_coverage_picks(
     three = quote.get("match_1x2") or {}
     if isinstance(three, dict):
         odds = [_odd(three.get(k)) for k in ("home", "draw", "away")]
-        if all(x is not None and x > 1 for x in odds):
+        if all(x is not None and x > 1 for x in odds) and credible_margin(odds):
             fairs = devig_three_way(*odds)
             for sel, odd, fair in zip(("home", "draw", "away"), odds, fairs):
                 append("match_1x2", sel, odd, fair)
@@ -95,7 +123,7 @@ def bookmaker_coverage_picks(
     btts = quote.get("btts") or {}
     if isinstance(btts, dict):
         yes, no = _odd(btts.get("yes")), _odd(btts.get("no"))
-        if yes is not None and no is not None and min(yes, no) > 1:
+        if yes is not None and no is not None and min(yes, no) > 1 and credible_margin([yes, no]):
             fy, fn = devig_two_way(yes, no)
             append("btts", "yes", yes, fy)
             append("btts", "no", no, fn)

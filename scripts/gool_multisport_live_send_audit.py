@@ -25,7 +25,7 @@ def main() -> None:
     os.environ.setdefault("GOOL_MULTISPORT_EXACT_GAME_TIMEOUT", "3.0")
     os.environ.setdefault("GOOL_MULTISPORT_GAME_HTTP_TIMEOUT", "2.5")
     os.environ.setdefault("GOOL_MULTISPORT_GAME_ROOT_ATTEMPTS", "1")
-    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "0")
+    os.environ.setdefault("GOOL_MULTISPORT_V3_GAME_FALLBACK", "1")
     os.environ["XBET_MULTISPORT_TELEGRAM_ENABLED"] = "0"
     os.environ["GOOL_MULTISPORT_PREMATCH_ENABLED"] = "0"
     os.environ.setdefault("XBET_MULTISPORT_MAX_MAPPED_PER_SPORT", "6")
@@ -66,10 +66,15 @@ def main() -> None:
                 f"WOULD_SEND_NOW sport={sport} bets={would_send} "
                 f"fs={_n(row.get('flashscore_live'))} brain={_n(row.get('live_brain_candidates'))} "
                 f"xb={_n(row.get('xbet_live'))} mapped={_n(row.get('mapped'))} "
-                f"decoded={_n(row.get('decoded'))} policy_skip={_n(row.get('policy_blocked'))} "
+                f"decoded={_n(row.get('decoded'))} mismatch={_n(row.get('score_mismatch'))} "
+                f"sync_block={_n(row.get('provider_sync_blocked'))} policy_skip={_n(row.get('policy_blocked'))} "
                 f"price_rej={_n(row.get('pricing_rejected'))} steam_block={_n(row.get('steam_blocked'))} "
                 f"matchbook_block={_n(row.get('matchbook_blocked'))} dup={_n(row.get('duplicate_filtered'))}"
             )
+            print("INDEX_LIVE_DIAG " + json.dumps({
+                "sport": sport, "live_index": row.get("xbet_diag") or {},
+                "decode_errors": row.get("diagnostics") or [],
+            }, ensure_ascii=False, separators=(",", ":")))
             print(
                 "WOULD_SEND_BRAIN "
                 + json.dumps(
@@ -153,7 +158,9 @@ def main() -> None:
             f"- {sport}: would_send={_n(row.get('detected'))} "
             f"FS={_n(row.get('flashscore_live'))} Brain={_n(row.get('live_brain_candidates'))} "
             f"1xBet={_n(row.get('xbet_live'))} mapped={_n(row.get('mapped'))} "
-            f"decoded={_n(row.get('decoded'))} price_rej={_n(row.get('pricing_rejected'))} "
+            f"decoded={_n(row.get('decoded'))} score_mismatch={_n(row.get('score_mismatch'))} "
+            f"sync_block={_n(row.get('provider_sync_blocked'))} "
+            f"price_rej={_n(row.get('pricing_rejected'))} "
             f"policy_skip={_n(row.get('policy_blocked'))} brain_states={states_count} "
             f"directions={direction_totals[sport]}"
         )

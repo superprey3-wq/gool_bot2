@@ -4658,6 +4658,8 @@ class MultiSportSteamWorker:
         mapped_all = map_xbet_to_flashscore(xbet_prematch, price_targets)
         mapped, mapped_total = self._prematch_batch(cfg, mapped_all)
         decoded = failed = detected = delivered = policy_blocked = 0
+        model_rejected = 0
+        evaluated_lanes_total = 0
         latest: list[dict[str, Any]] = []
         recent_families = [
             str(item.get("market_family") or "")
@@ -4680,11 +4682,13 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                eligible_lanes = 0
                 for lane in row.get("market_lanes") or []:
                     allowed, policy_reason = lane_phase_policy(cfg.key, "PREMATCH", lane, row.get("period"))
                     if not allowed:
                         policy_blocked += 1
                         continue
+                    eligible_lanes += 1
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
                     if cfg.key == "hockey":
@@ -4830,6 +4834,8 @@ class MultiSportSteamWorker:
                     }
                     candidates.append((lane_row, signal))
 
+                evaluated_lanes_total += eligible_lanes
+                model_rejected += max(0, eligible_lanes - len(candidates))
                 # Build a separate safer pool for parlays. Unlike the published
                 # single, this pool can inspect alternate total/IT lines from the
                 # same event. It never records a second single.
@@ -5025,6 +5031,8 @@ class MultiSportSteamWorker:
             "prematch_detected": detected,
             "prematch_delivered": delivered,
             "prematch_policy_blocked": policy_blocked,
+            "prematch_model_rejected": model_rejected,
+            "prematch_evaluated_lanes": evaluated_lanes_total,
             "xbet_prematch_diag": self._prematch_index_diag.get(cfg.key) or {},
             "matches": visible,
             "all_day_parlay_candidates": all_day_parlay,
@@ -5836,6 +5844,8 @@ class MultiSportSteamWorker:
             "prematch_detected": int(prematch.get("prematch_detected") or 0),
             "prematch_delivered": int(prematch.get("prematch_delivered") or 0),
             "prematch_policy_blocked": int(prematch.get("prematch_policy_blocked") or 0),
+            "prematch_model_rejected": int(prematch.get("prematch_model_rejected") or 0),
+            "prematch_evaluated_lanes": int(prematch.get("prematch_evaluated_lanes") or 0),
             "prematch_matches": list(prematch.get("matches") or []),
             "prematch_parlays": prematch_parlays,
             "prematch_parlay_delivered": parlay_delivered,

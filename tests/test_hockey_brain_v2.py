@@ -448,3 +448,20 @@ def test_hockey_live_no_full_match_or_team_total_signal():
         lane = _live_lane(scope="FULL_MATCH", line=4.5)
         lane["market_family"] = family
         assert live_signal(brain, lane) is None
+
+
+def test_hockey_scoreboard_only_candidate_needs_verified_recent_goal_and_fresh_history():
+    base = {
+        "live_game_stats": {"current_segment_available": False, "segment_stats": {}},
+        "history_points": 3,
+        "recent_window_seconds": 80.0,
+        "recent_score_rate": .75,
+        "segment_score_verified": True,
+    }
+    fresh = live_candidate_gate(base)
+    assert fresh["state"] in {"PASS", "BORDERLINE"}
+    assert fresh["scoreboard_only"] is True
+    assert fresh["reason"] == "verified_recent_goal_no_segment_stats"
+    assert live_candidate_gate({**base, "segment_score_verified": False})["state"] == "WAIT"
+    assert live_candidate_gate({**base, "recent_score_rate": 0.0})["state"] == "WAIT"
+    assert live_candidate_gate({**base, "history_points": 1})["state"] == "WAIT"

@@ -117,3 +117,34 @@ def test_signed_1xbet_handicaps_do_not_overwrite_one_another():
     lanes = prematch_market_lanes({"FULL_MATCH": {"handicap": decoded}}, "hockey")
     assert any(row.get("market_family") == "handicap" and row.get("selection_side") == "home" and row.get("line") == -5 for row in lanes)
     assert any(row.get("market_family") == "handicap" and row.get("selection_side") == "away" and row.get("line") == -5 for row in lanes)
+
+
+def test_basketball_v5_blocks_preseason_by_default_but_allows_explicit_shadow_override(monkeypatch):
+    import gool_bot2.basketball_v5_consensus as v5
+    lane = {"line": 40.5, "over": 1.70, "under": 2.05, "scope": "QUARTER_1", "market_family": "match_total"}
+    monkeypatch.setattr(v5, "dynamic_prematch_signal", lambda *args, **kwargs: {
+        "direction": "over", "odd": 1.70, "model_probability": .86,
+        "market_probability": .55, "data_quality": .92,
+    })
+    assert basketball_v5_prematch_signal(_historical(), lane, {}, "USA: NBA - Pre-season") is None
+    monkeypatch.setenv("GOOL_BASKETBALL_V5_ALLOW_PRESEASON", "1")
+    assert basketball_v5_prematch_signal(_historical(), lane, {}, "USA: NBA - Pre-season") is not None
+
+
+def test_basketball_v5_does_not_promote_extreme_uncalibrated_half_totals(monkeypatch):
+    import gool_bot2.basketball_v5_consensus as v5
+    lane = {
+        "line": 119.5, "over": 1.95, "under": 1.80,
+        "scope": "FIRST_HALF", "market_family": "match_total",
+    }
+    hist = {
+        **_historical(), "direction": "under", "odd": 1.80,
+        "line": 119.5, "projected_total": 103.67,
+    }
+    monkeypatch.setattr(v5, "dynamic_prematch_signal", lambda *args, **kwargs: {
+        "direction": "under", "odd": 1.80, "model_probability": .90,
+        "market_probability": .50, "data_quality": .92,
+    })
+    assert basketball_v5_prematch_signal(hist, lane, {}, "NBA") is None
+    monkeypatch.setenv("GOOL_BASKETBALL_V5_MAX_UNVERIFIED_GAP_POINTS", "20")
+    assert basketball_v5_prematch_signal(hist, lane, {}, "NBA") is not None

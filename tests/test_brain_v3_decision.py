@@ -206,3 +206,13 @@ def test_v3_can_still_take_exceptional_late_draw_before_cutoff() -> None:
     assert out["late_draw_exceptional"] is True
     assert out["status"] == BET
     assert out["probability"] >= out["bet_min"]
+
+
+def test_first_half_uncalibrated_probability_is_capped_without_changing_second_half():
+    first = evaluate_brain_v3(_record(28), data_quality=0.82)
+    second = evaluate_brain_v3(_record(65), data_quality=0.82)
+    assert first["strategy"] == "goal_before_ht"
+    assert first["confidence_cap"] <= .79
+    assert first["bet_min"] >= .78
+    assert second["strategy"] == "another_goal"
+    assert second["confidence_cap"] > .79

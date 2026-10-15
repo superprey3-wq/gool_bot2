@@ -2365,7 +2365,11 @@ class MultiSportSteamWorker:
                 "history_points": len(recent),
                 "recent_window_seconds": age,
                 "recent_shot_rate": recent_shot_rate,
+                "recent_score_rate": recent_score_rate,
+                "segment_score_verified": bool(segment_score_verified),
             })
+            if gate.get("scoreboard_only"):
+                reason = "Flashscore: подтверждён свежий гол периода; статистика бросков недоступна, проверяем линию только для ТБ"
             rating = float(gate.get("score") or 0.0)
             state = str(gate.get("state") or "WAIT")
         elif cfg.key == "basketball" and _truthy("GOOL_BASKETBALL_BRAIN_V2_ENABLED", True):
@@ -4183,7 +4187,14 @@ class MultiSportSteamWorker:
                 "profit_units": round(profit, 4),
                 "settled_at": now,
                 "settled_score": [int(score[0]), int(score[1])],
-                "settled_match_score": [int(full_score[0]), int(full_score[1])],
+                # Half/quarter settlement often precedes full time: do NOT
+                # mislabel the in-progress cumulative score as FINAL score.
+                "settled_match_score": (
+                    [int(full_score[0]), int(full_score[1])]
+                    if str(state.get("coarse_status") or "") == "3"
+                    else None
+                ),
+                "settled_match_complete": str(state.get("coarse_status") or "") == "3",
             })
             if (
                 _mode() == "active"

@@ -264,6 +264,11 @@ def evaluate_brain_v3(
         confidence_cap = 0.76
     elif cumulative_source != "provider_xg" and xg5_source != "provider_xg":
         confidence_cap = 0.84
+    if period == "1H":
+        # Risk cap for uncalibrated first-half probabilities (not calibration).
+        confidence_cap = min(confidence_cap, max(0.70, min(0.85, _f(
+            "GOOL_BRAIN_V3_1H_UNCALIBRATED_CAP", 0.79
+        ))))
     if adjusted_probability is not None:
         adjusted_probability = min(adjusted_probability, confidence_cap)
 
@@ -328,6 +333,10 @@ def evaluate_brain_v3(
     )
 
     bet_min = _f("GOOL_BRAIN_V3_BET_MIN", 0.70)
+    if period == "1H":
+        bet_min = max(bet_min, _f("GOOL_BRAIN_V3_1H_BET_MIN", 0.76))
+        if minute >= 25:
+            bet_min = max(bet_min, _f("GOOL_BRAIN_V3_1H_FROM_25_BET_MIN", 0.78))
     if minute >= 70:
         bet_min = max(bet_min, _f("GOOL_BRAIN_V3_LATE_BET_MIN", 0.72))
     if late_draw:

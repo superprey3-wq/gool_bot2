@@ -170,3 +170,14 @@ def test_not_claiming_v3_without_signal_type():
     report=basketball_detail_html([no_version])
     assert "не записан" in report
     assert "не приписывать эту ставку V3" in report
+
+
+def test_unfinished_half_result_does_not_claim_a_final_match_score():
+    from gool_bot2.full_report_export import _score_text
+    row = {
+        "scope": "FIRST_HALF", "settled_score": [69, 66],
+        "settled_match_score": None, "settled_match_complete": False,
+    }
+    assert _score_text(row) == "69:66"
+    report = basketball_detail_html([{**_quarter_handicap(), **row}])
+    assert "счёт всего матча:</b> не записан" in report

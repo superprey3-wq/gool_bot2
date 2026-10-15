@@ -408,8 +408,17 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
     min_points = max(2, int(_env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SNAPSHOTS", 3.0)))
     min_window = max(30.0, _env_float("GOOL_HOCKEY_LIVE_MIN_ANALYSIS_SECONDS", 60.0))
 
+    # Never call a missing SOG feed a quiet period. A verified recent
+    # current-period scoring change can nevertheless trigger a BOOKMAKER lookup.
+    score_only = bool(
+        not available
+        and brain.get("segment_score_verified")
+        and (_num(brain.get("recent_score_rate"), 0.0) or 0.0) >= 0.30
+        and points >= min_points
+        and window >= min_window
+    )
     score = 38.0
-    if available:
+    if available or score_only:
         score += 12.0
     if points >= min_points:
         score += 14.0
@@ -420,10 +429,13 @@ def live_candidate_gate(brain: dict[str, Any]) -> dict[str, Any]:
 
     score = _clamp(score, 0.0, 78.0)
     state = "PASS" if score >= 68.0 else ("BORDERLINE" if score >= 60.0 else "WAIT")
-    if not available or points < min_points or window < min_window:
+    if not (available or score_only) or points < min_points or window < min_window:
         state = "WAIT"
     return {
         "state": state,
+        "scoreboard_only": score_only,
+        "reason": ("verified_recent_goal_no_segment_stats" if score_only else
+                   "no_current_period_stats" if not available else "stats_available"),
         "score": round(score, 1),
         "required_snapshots": min_points,
         "required_window_seconds": round(min_window, 1),
@@ -628,6 +640,15 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
         min_stat_edge = _env_float("GOOL_HOCKEY_LIVE_SEGMENT_MIN_STAT_EDGE", 0.35)
         if stat_edge < min_stat_edge:
             return None
+
+    # Without a SOG feed, only a fresh verified score-based OVER may proceed
+    # after pricing; the model must never interpret missing SOG as slow pace.
+    if not shot_rate_available and (
+        direction != "over"
+        or score_source != "flashscore_verified"
+        or (_num(brain.get("recent_score_rate"), 0.0) or 0.0) < 0.30
+    ):
+        return None
 
     # UNDER without real current-period SOG is too easy to manufacture from a
     # stale/missing stats feed plus historical priors. Missing shots must mean

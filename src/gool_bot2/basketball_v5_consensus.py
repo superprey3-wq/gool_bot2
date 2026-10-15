@@ -32,7 +32,13 @@ def basketball_v5_prematch_signal(
     odds_range: tuple[float, float] | None = None,
 ) -> dict[str, Any] | None:
     """Produce no public pick if history, matchup, market quote disagree."""
-    # Pre-season rotations are not exchangeable with historical regular-season\n    # samples. Permit an explicit experiment override, never a silent default.\n    if ("pre-season" in str(league).casefold() or "preseason" in str(league).casefold()) and _threshold(\n        "GOOL_BASKETBALL_V5_ALLOW_PRESEASON", 0.0\n    ) < 0.5:\n        return None\n    if not historical or historical.get("historical_tier") != "PASS_8":
+    # Pre-season rotations are not exchangeable with historical regular-season
+    # samples. Permit an explicit experiment override, never a silent default.
+    if ("pre-season" in str(league).casefold() or "preseason" in str(league).casefold()) and _threshold(
+        "GOOL_BASKETBALL_V5_ALLOW_PRESEASON", 0.0
+    ) < 0.5:
+        return None
+    if not historical or historical.get("historical_tier") != "PASS_8":
         return None
     if historical.get("direction") not in {"over", "under"}:
         return None
@@ -63,7 +69,27 @@ def basketball_v5_prematch_signal(
     if not (0 < book_fair < 1 and 0 < dynamic_p < 1 and 0 < historical_p < 1):
         return None
 
-    # Extreme line/model gaps on a quarter or half are commonly a market-scope\n    # mismatch, an unstable small sample, or a genuine edge: without a calibrated\n    # error distribution we cannot distinguish them. Quarantine, do not promote.\n    hist_projection = historical.get("projected_total")\n    if hist_projection is not None:\n        try:\n            projection = float(hist_projection)\n        except (TypeError, ValueError):\n            return None\n        if not math.isfinite(projection):\n            return None\n        scope = str(lane.get("scope") or "")\n        family = str(lane.get("market_family") or "")\n        max_gap = 8.0 if scope.startswith("QUARTER_") else 13.0 if scope.endswith("_HALF") else 22.0\n        if family in {"home_total", "away_total"}:\n            max_gap *= 0.70\n        max_gap = _threshold("GOOL_BASKETBALL_V5_MAX_UNVERIFIED_GAP_POINTS", max_gap)\n        if abs(projection - line) > max_gap:\n            return None\n\n    # No probability may be presented as trained/calibrated: conservative
+    # Extreme line/model gaps on a quarter or half are commonly a market-scope
+    # mismatch, an unstable small sample, or a genuine edge: without a calibrated
+    # error distribution we cannot distinguish them. Quarantine, do not promote.
+    hist_projection = historical.get("projected_total")
+    if hist_projection is not None:
+        try:
+            projection = float(hist_projection)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(projection):
+            return None
+        scope = str(lane.get("scope") or "")
+        family = str(lane.get("market_family") or "")
+        max_gap = 8.0 if scope.startswith("QUARTER_") else 13.0 if scope.endswith("_HALF") else 22.0
+        if family in {"home_total", "away_total"}:
+            max_gap *= 0.70
+        max_gap = _threshold("GOOL_BASKETBALL_V5_MAX_UNVERIFIED_GAP_POINTS", max_gap)
+        if abs(projection - line) > max_gap:
+            return None
+
+    # No probability may be presented as trained/calibrated: conservative
     # lower-of-two agreement estimate shrunk toward the bookmaker's fair price.
     lower = min(dynamic_p, historical_p)
     blended = book_fair + 0.55 * max(0.0, lower - book_fair)
@@ -83,7 +109,8 @@ def basketball_v5_prematch_signal(
         "data_quality": round(quality, 3),
         "basketball_v5_dynamic_probability": round(dynamic_p, 6),
         "basketball_v5_historical_proxy": round(historical_p, 6),
-        "basketball_v5_historical_agrees": True,\n        "basketball_v5_consensus_shrinkage": 0.55,
+        "basketball_v5_historical_agrees": True,
+        "basketball_v5_consensus_shrinkage": 0.55,
         "basketball_v5_market_quote_verified": True,
         "historical_probability_uncalibrated": True,
         "probabilities_calibrated": False,

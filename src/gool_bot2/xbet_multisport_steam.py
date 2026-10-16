@@ -55,6 +55,7 @@ from .segment_memory import build_segment_memory, segment_prior
 from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
 from .basketball_v5_consensus import basketball_v5_prematch_signal
+from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
 from .hockey_prematch_ev_shadow import evaluate_hockey_prematch_ev_shadow
 from .active_challenger_decisions import hockey_ev_active_signal, basketball_v4_active_signal
@@ -4632,6 +4633,7 @@ class MultiSportSteamWorker:
             "prematch_scenario_stress": signal.get("prematch_scenario_stress") if phase == "PREMATCH" else None,
             "historical_scoring_dispersion": signal.get("historical_scoring_dispersion") if phase == "PREMATCH" else None,
             "prematch_market_comparison": signal.get("prematch_market_comparison") if phase == "PREMATCH" else None,
+            "prematch_scenarios": signal.get("prematch_scenarios") if phase == "PREMATCH" else None,
             "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
             "hockey_prematch_ev_shadow": signal.get("hockey_prematch_ev_shadow"),
             "historical_tier": signal.get("historical_tier"),
@@ -4957,6 +4959,29 @@ class MultiSportSteamWorker:
                     }
                     candidates.append((lane_row, signal))
 
+                # Independent PREMATCH scenario registry: hypotheses only.
+                # Every decoded fixture is evaluated, including WAIT/no-pick
+                # matches. It must never change candidates, prices or delivery.
+                try:
+                    row["prematch_scenarios"] = evaluate_prematch_scenarios(
+                        cfg.key,
+                        features=dict(row.get("sport_context") or {}),
+                        league=str(row.get("league") or ""),
+                        segment_memory=dict(row.get("segment_memory") or {}),
+                        historical_profile=dict(row.get("basketball_historical_profile") or {}),
+                        market_lanes=eligible_market_lanes,
+                        qualified_picks=candidates,
+                    )
+                except Exception as exc:
+                    row["prematch_scenarios"] = {
+                        "version": "prematch_scenarios_v1", "status": "ERROR",
+                        "reason": type(exc).__name__, "publication_enabled": False,
+                    }
+                    print(
+                        f"GOOL_PREMATCH_SCENARIOS_ERROR sport={cfg.key} "
+                        f"match={row.get('event_id')} type={type(exc).__name__}",
+                        flush=True,
+                    )
                 evaluated_lanes_total += eligible_lanes
                 model_rejected += max(0, eligible_lanes - len(candidates))
                 # Build a separate safer pool for parlays. Unlike the published
@@ -5111,6 +5136,7 @@ class MultiSportSteamWorker:
                         "prematch_market_comparison": prematch_market_comparison(
                             eligible_market_lanes, candidates, sport=cfg.key,
                         ),
+                        "prematch_scenarios": row.get("prematch_scenarios"),
                     }
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     detected += int(recorded)

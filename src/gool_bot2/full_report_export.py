@@ -217,6 +217,18 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
         bits.append(f"Brain={brain_mode}")
     elif _sport(row) == "basketball":
         bits.append("Brain=не записан")
+    prematch_scenarios = row.get("prematch_scenarios")
+    if isinstance(prematch_scenarios, dict) and prematch_scenarios.get("status") == "SHADOW_ONLY":
+        scenarios = list(prematch_scenarios.get("scenarios") or [])
+        matches = [x for x in scenarios if isinstance(x, dict) and x.get("status") == "MATCH"]
+        if matches:
+            summaries = []
+            for item in matches[:5]:
+                verified = int(item.get("brain_qualified_market_sides") or 0)
+                summaries.append(f"{item.get('id')}: {item.get('name')} (Brain={verified})")
+            bits.append("PREMATCH-сценарии SHADOW, НЕ СТАВКИ: " + "; ".join(summaries))
+        else:
+            bits.append("PREMATCH-сценарии SHADOW: подтверждённых гипотез нет")
     market_comp = row.get("prematch_market_comparison")
     if isinstance(market_comp, dict) and market_comp:
         offered = dict(market_comp.get("offered") or {})

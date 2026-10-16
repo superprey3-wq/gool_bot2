@@ -432,6 +432,30 @@ def one(r):
    if isinstance(r.get("football_v6_shadow"),dict):
     r["football_v6_shadow"]["prematch_scenarios"]=strategy_scenarios
    info={**dict(info or {}),"prematch_scenarios":strategy_scenarios}
+   if not picks:
+    from gool_bot2.prematch_scenario_active import (
+     recover_football_v6_prematch,recover_football_first_half_goal,
+    )
+    restored,restored_meta=([],{})
+    if V6_ACTIVE:
+     restored,restored_meta=recover_football_v6_prematch(
+      strategy_scenarios,tournament_candidates=r.get("tournament_candidates") or [],
+      shadow=dict(r.get("football_v6_shadow") or {}),
+     )
+    if not restored:
+     restored,restored_meta=recover_football_first_half_goal(
+      strategy_scenarios,pregame_profile=dict(r.get("profile") or {}),
+      quote=market,football_quality=float(forecast.get("quality") or 0.0),
+      event_id=str(m.provider_match_id),home=m.home,away=m.away,
+      league=m.league or "",kickoff_ts=kick,
+     )
+    if restored:
+     picks=restored
+     info={**info,**restored_meta}
+     r["prematch_scenario_active"]=dict(restored_meta)
+     print("GOOL_FOOTBALL_PREMATCH_SCENARIO_ACTIVE",m.home,"-",m.away,
+      "scenarios",restored_meta.get("scenario_ids",[]),
+      "selection",picks[0].selection,"odd",picks[0].odds,flush=True)
    print("GOOL_FOOTBALL_PREMATCH_SCENARIOS",m.home,"-",m.away,
     "matched",strategy_scenarios.get("matched_count",0),
     "qualified",strategy_scenarios.get("qualified_pattern_count",0),flush=True)

@@ -222,6 +222,64 @@ def prematch_candidate(features: dict[str, Any], league: str) -> dict[str, Any]:
     }
 
 
+
+def prematch_scenario_stress(
+    *,
+    lam_home: float,
+    lam_away: float,
+    family: str,
+    direction: str,
+    line: float,
+    odd: float,
+    scenario_shift: float = 0.20,
+) -> dict[str, Any]:
+    """Scenario sensitivity only; NOT a calibrated probability or active bet gate.
+
+    Five deterministic scoring scenarios vary the home/away rates together
+    or oppositely. The 20% shift is a diagnostic what-if, not a league variance
+    estimate. Include actual push mass in expected-unit proxy.
+    """
+    shift = _clamp(scenario_shift, 0.0, 0.40)
+    cases = {
+        "baseline": (1.0, 1.0),
+        "both_low": (1.0 - shift, 1.0 - shift),
+        "both_high": (1.0 + shift, 1.0 + shift),
+        "home_stronger": (1.0 + shift, 1.0 - shift),
+        "away_stronger": (1.0 - shift, 1.0 + shift),
+    }
+    results: dict[str, dict[str, float]] = {}
+    for name, (home_shift, away_shift) in cases.items():
+        home = lam_home * home_shift
+        away = lam_away * away_shift
+        if family in {"match_total", "home_total", "away_total"}:
+            lam = home + away if family == "match_total" else home if family == "home_total" else away
+            win, push, loss = _side_probabilities(lam, line, direction)
+        elif family == "handicap" and direction in {"home", "away"}:
+            win, push, loss = _handicap_probabilities(home, away, direction, line)
+        elif family == "moneyline" and direction in {"home", "away"}:
+            win = _two_way_win_probability(home, away, direction)
+            push, loss = 0.0, 1.0 - win
+        else:
+            return {"available": False, "reason": "unsupported_market"}
+        results[name] = {
+            "win": round(win, 5),
+            "push": round(push, 5),
+            "loss": round(loss, 5),
+            "ev_units_uncalibrated": round(win * (odd - 1.0) - loss, 5),
+        }
+    evs = [value["ev_units_uncalibrated"] for value in results.values()]
+    return {
+        "available": True,
+        "scenario_shift": round(shift, 3),
+        "probabilities_calibrated": False,
+        "scenarios": results,
+        "baseline_ev_units_uncalibrated": results["baseline"]["ev_units_uncalibrated"],
+        "worst_ev_units_uncalibrated": round(min(evs), 5),
+        "best_ev_units_uncalibrated": round(max(evs), 5),
+        "scenario_negative_ev_count": sum(value < 0 for value in evs),
+    }
+
+
 def prematch_signal(
     lane: dict[str, Any],
     features: dict[str, Any],
@@ -365,9 +423,26 @@ def prematch_signal(
         0.0,
         87.0,
     )
+    scenario_stress = prematch_scenario_stress(
+        lam_home=lam_home, lam_away=lam_away,
+        family=family, direction=direction, line=line, odd=odd,
+    )
+
+    def dispersion(mean_key: str, variance_key: str) -> float | None:
+        avg, var = _num(features.get(mean_key)), _num(features.get(variance_key))
+        return round(var / max(0.1, avg), 3) if avg is not None and var is not None else None
+
+    scoring_dispersion = {
+        "home_for": dispersion("home_gf_avg", "home_gf_variance"),
+        "away_for": dispersion("away_gf_avg", "away_gf_variance"),
+        "recent_total_variance": _num(features.get("recent_total_variance")),
+        "recent_total_n": features.get("recent_total_sample_n"),
+    }
     return {
         "phase": "PREMATCH",
         "brain_mode": "hockey_prematch_v2",
+        "prematch_scenario_stress": scenario_stress,
+        "historical_scoring_dispersion": scoring_dispersion,
         "direction": direction,
         "selection_side": selection_side,
         "selection": str(lane.get("selection") or ""),

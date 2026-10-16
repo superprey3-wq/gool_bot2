@@ -1519,6 +1519,98 @@ def select_prematch_primary(
     return max(candidates, key=lambda item: _signal_confidence_key(item[1]))
 
 
+
+def _prematch_market_family_bucket(row: dict[str, Any]) -> str:
+    """Stable comparison groups; never silently merge F+ with F-."""
+    family = str(row.get("market_family") or "")
+    scope = str(row.get("scope") or "FULL_MATCH")
+    if family == "handicap":
+        try:
+            return "handicap_plus" if float(row.get("line") or 0.0) > 0 else "handicap_minus"
+        except (TypeError, ValueError):
+            return "handicap_unknown"
+    if family == "moneyline":
+        return "moneyline"
+    if family in {"home_total", "away_total"}:
+        return "team_total" if scope == "FULL_MATCH" else "segment_team_total"
+    if family == "match_total":
+        return "match_total" if scope == "FULL_MATCH" else "segment_match_total"
+    return family or "unknown"
+
+
+def prematch_market_comparison(
+    eligible_lanes: list[dict[str, Any]],
+    qualified: list[tuple[dict[str, Any], dict[str, Any]]],
+    *,
+    sport: str,
+    max_choices: int = 6,
+) -> dict[str, Any]:
+    """Document WHY one public PREMATCH market won over alternatives.
+
+    Keep offer/qualified/public-price buckets distinct. The published model
+    probabilities and EV proxies are uncalibrated and MUST NOT be presented as
+    proven expected returns. This function is audit-only: it never changes
+    which bet is selected.
+    """
+    from .single_price_policy import minimum_single_odd, public_single_allowed
+
+    offered: dict[str, int] = {}
+    accepted: dict[str, int] = {}
+    public: dict[str, int] = {}
+
+    def count(bucket: dict[str, int], row: dict[str, Any]) -> None:
+        group = _prematch_market_family_bucket(row)
+        bucket[group] = bucket.get(group, 0) + 1
+
+    for lane in eligible_lanes:
+        count(offered, lane)
+    possible: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for row, signal in qualified:
+        count(accepted, row)
+        if public_single_allowed(signal.get("odd"), phase="PREMATCH", sport=sport):
+            count(public, row)
+            possible.append((row, signal))
+
+    choices: list[dict[str, Any]] = []
+    remaining = list(possible)
+    limit = max(1, min(10, int(max_choices)))
+    for _ in range(min(limit, len(remaining))):
+        winner = select_prematch_primary(remaining, sport=sport)
+        if winner is None:
+            break
+        row, signal = winner
+        def as_float(value: Any) -> float | None:
+            try:
+                n = float(value)
+                return round(n, 5) if math.isfinite(n) else None
+            except (TypeError, ValueError):
+                return None
+
+        choices.append({
+            "market": _prematch_market_family_bucket(row),
+            "scope": str(row.get("scope") or "FULL_MATCH"),
+            "selection": str(signal.get("selection") or row.get("selection") or "?"),
+            "odd": as_float(signal.get("odd")),
+            "model_probability_uncalibrated": as_float(signal.get("model_probability")),
+            "market_probability": as_float(signal.get("market_probability")),
+            "edge_uncalibrated": as_float(signal.get("edge")),
+            "ev_proxy_uncalibrated": as_float(signal.get("value_after_vig_proxy")),
+            "chosen": len(choices) == 0,
+        })
+        remaining.remove(winner)
+    return {
+        "method": "existing_public_singles_rank_unmodified",
+        "probabilities_calibrated": False,
+        "public_min_odd": minimum_single_odd(phase="PREMATCH", sport=sport),
+        "offered": offered,
+        "brain_qualified": accepted,
+        "public_price_qualified": public,
+        "other_public_choices": max(0, len(possible) - 1),
+        "ranked_choices": choices,
+        "basketball_handicaps_active": sport != "basketball",
+    }
+
+
 def detect_prematch_choice(
     rows: list[dict[str, Any]],
     cfg: SportConfig,
@@ -2787,6 +2879,14 @@ class MultiSportSteamWorker:
         def win_pct(values: list[int]) -> float | None:
             return None if not values else sum(values) / len(values)
 
+        def sample_variance(values: list[float]) -> float | None:
+            # Ten games are still too few to calibrate tail probabilities.
+            # Preserve sample-size and variance for an audit, not a bet gate.
+            if len(values) < 5:
+                return None
+            mean = sum(values) / len(values)
+            return round(sum((v - mean) ** 2 for v in values) / (len(values) - 1), 4)
+
         h2h_totals: list[float] = []
         for row in h2h:
             try:
@@ -2835,6 +2935,13 @@ class MultiSportSteamWorker:
             "recent_total_avg": recent_total,
             "venue_total_avg": venue_total,
             "h2h_total_avg": h2h_total,
+            "home_gf_variance": sample_variance(hgf),
+            "away_gf_variance": sample_variance(agf),
+            "home_ga_variance": sample_variance(hga),
+            "away_ga_variance": sample_variance(aga),
+            "recent_total_variance": sample_variance(recent_total_values[-20:]),
+            "recent_total_sample_n": len(recent_total_values[-20:]),
+            "h2h_total_variance": sample_variance(h2h_totals[-10:]),
             "home_rest_days": None if home_rest_days is None else round(home_rest_days, 2),
             "away_rest_days": None if away_rest_days is None else round(away_rest_days, 2),
             "home_back_to_back": bool(home_rest_days is not None and home_rest_days < 1.5),
@@ -4522,6 +4629,9 @@ class MultiSportSteamWorker:
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
+            "prematch_scenario_stress": signal.get("prematch_scenario_stress") if phase == "PREMATCH" else None,
+            "historical_scoring_dispersion": signal.get("historical_scoring_dispersion") if phase == "PREMATCH" else None,
+            "prematch_market_comparison": signal.get("prematch_market_comparison") if phase == "PREMATCH" else None,
             "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
             "hockey_prematch_ev_shadow": signal.get("hockey_prematch_ev_shadow"),
             "historical_tier": signal.get("historical_tier"),
@@ -4693,6 +4803,7 @@ class MultiSportSteamWorker:
                     continue
                 decoded += 1
                 candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                eligible_market_lanes: list[dict[str, Any]] = []
                 eligible_lanes = 0
                 for lane in row.get("market_lanes") or []:
                     allowed, policy_reason = lane_phase_policy(cfg.key, "PREMATCH", lane, row.get("period"))
@@ -4700,6 +4811,7 @@ class MultiSportSteamWorker:
                         policy_blocked += 1
                         continue
                     eligible_lanes += 1
+                    eligible_market_lanes.append(lane)
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
                     history = self._append_prematch_history(lane_row, cfg)
                     if cfg.key == "hockey":
@@ -4994,6 +5106,12 @@ class MultiSportSteamWorker:
                 primary = select_prematch_primary(candidates, recent_families, cfg.key)
                 if primary is not None:
                     best_row, best_signal = primary
+                    best_signal = {
+                        **best_signal,
+                        "prematch_market_comparison": prematch_market_comparison(
+                            eligible_market_lanes, candidates, sport=cfg.key,
+                        ),
+                    }
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     detected += int(recorded)
                     delivered += int(bool(sent))

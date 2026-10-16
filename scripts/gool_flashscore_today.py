@@ -415,8 +415,16 @@ def one(r):
   # research archive, including WAIT/no-standalone-pick fixtures.
   try:
    from gool_bot2.prematch_strategy_scenarios import evaluate_prematch_scenarios
+   # Unlike FT goals, a pre-kickoff first-half lambda must come from
+   # the FIRST_HALF historical segment, not an arbitrary 45% of FT.
+   research_forecast=dict(forecast)
+   historical_first_half=dict(((r.get("profile") or {}).get("first_half") or {}))
+   research_forecast["first_half"]={
+    "home_lambda":historical_first_half.get("home_expected_goals"),
+    "away_lambda":historical_first_half.get("away_expected_goals"),
+   }
    strategy_scenarios=evaluate_prematch_scenarios(
-    "football", football_forecast=forecast,
+    "football", football_forecast=research_forecast,
     football_quote=market or flashscore_fulltime_quote(odds_payload),
     qualified_picks=picks,
    )

@@ -76,6 +76,8 @@ def test_hockey_extreme_plus_nine_is_blocked_if_model_expects_close_game():
 
 def test_hockey_negative_five_remains_eligible_when_goals_support_it(monkeypatch):
     import gool_bot2.hockey_brain_v2 as hockey
+    # Explicit research-only override: public V2 handicaps are quarantined.
+    monkeypatch.setenv("GOOL_HOCKEY_PREMATCH_ENABLE_HANDICAPS", "1")
     monkeypatch.setattr(hockey, "prematch_lambdas", lambda *args, **kwargs: (9.0, 1.0, 5.6))
     lane = {
         "market_family": "handicap", "selection_side": "home",

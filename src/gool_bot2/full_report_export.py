@@ -217,6 +217,13 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
         bits.append(f"Brain={brain_mode}")
     elif _sport(row) == "basketball":
         bits.append("Brain=не записан")
+    activation = row.get("scenario_activation")
+    if isinstance(activation, dict) and activation.get("scenario_ids"):
+        bits.append(
+            "АКТИВНЫЙ PREMATCH СЦЕНАРИЙ: "
+            + ", ".join(str(code) for code in activation.get("scenario_ids") or [])
+            + " · запас по модели эвристический (не калиброван)"
+        )
     prematch_scenarios = row.get("prematch_scenarios")
     if isinstance(prematch_scenarios, dict) and prematch_scenarios.get("status") == "SHADOW_ONLY":
         scenarios = list(prematch_scenarios.get("scenarios") or [])

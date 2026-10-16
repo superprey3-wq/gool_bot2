@@ -208,10 +208,22 @@ def production_v5_picks(
     if full_analysis:
         candidates.extend(price_flashscore_full_market(forecast,full_analysis,event_id=event_id,home=home,away=away,league=league,kickoff_ts=kickoff_ts))
     candidates = _unique_sorted(candidates)
+    # Hypothesis-only diagnostics; quote, data and selected markets always
+    # originate from the same pre-kickoff V5 scan. Never emit a scenario bet.
+    from .prematch_strategy_scenarios import evaluate_prematch_scenarios
+    scenarios = evaluate_prematch_scenarios(
+        "football", football_forecast=forecast, football_quote=xbet,
+        qualified_picks=candidates,
+    )
     if not candidates:
-        return [], {"model":"football_v5","reject":"NO_POSITIVE_VALUE_AT_REAL_ODDS"}
+        return [], {
+            "model":"football_v5",
+            "reject":"NO_POSITIVE_VALUE_AT_REAL_ODDS",
+            "prematch_scenarios": scenarios,
+        }
     return candidates, {
         "model": "football_v5",
+        "prematch_scenarios": scenarios,
         "brain_version": "V5",
         "v5_home_lambda": forecast["home_lambda"],
         "v5_away_lambda": forecast["away_lambda"],

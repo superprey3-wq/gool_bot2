@@ -120,7 +120,8 @@ def test_basketball_high_totals_and_segment_memory_respect_10_games():
     )
     assert by_id(outcome, "B01")["status"] == "MATCH"
     assert by_id(outcome, "B05")["status"] == "MATCH"
-    assert by_id(outcome, "B05")["quoted_market_sides"] == 2
+    # The scenario names one directional quarter side, never contradictory OVER+UNDER.
+    assert by_id(outcome, "B05")["quoted_market_sides"] == 1
     assert by_id(outcome, "B03")["status"] in {"MATCH", "WATCH"}
     assert by_id(outcome, "B06")["status"] == "NO_DATA"
     assert outcome["publication_enabled"] is False

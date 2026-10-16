@@ -82,7 +82,10 @@ def basketball_v5_prematch_signal(
             return None
         scope = str(lane.get("scope") or "")
         family = str(lane.get("market_family") or "")
-        max_gap = 8.0 if scope.startswith("QUARTER_") else 13.0 if scope.endswith("_HALF") else 22.0
+        # Small historical samples with an unusually large projection/price
+        # gap generated false confidence in Q2 and H1 on 2026-10-16. Use
+        # conservative quarantine bounds pending chronological calibration.
+        max_gap = 5.0 if scope.startswith("QUARTER_") else 9.0 if scope.endswith("_HALF") else 18.0
         if family in {"home_total", "away_total"}:
             max_gap *= 0.70
         max_gap = _threshold("GOOL_BASKETBALL_V5_MAX_UNVERIFIED_GAP_POINTS", max_gap)

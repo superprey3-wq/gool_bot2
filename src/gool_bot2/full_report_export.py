@@ -515,7 +515,11 @@ def _runtime_live_audit_html(
         # does NOT gate 1xBet. The actual live_brain_candidates runtime counter
         # is authoritative, not the legacy per-match brain_state.
         if fs_ids and not cand_ids and peak("live_brain_candidates") == 0:
-            alert = "<p><b>⚠️ Все увиденные LIVE-матчи были отсечены до запроса 1xBet.</b> Для Basketball V3 проверьте наличие и корректность сегмента.</p>"
+            alert = (
+                "<p><b>⚠️ В сохранённых runtime-снимках нет LIVE-кандидатов до 1xBet.</b> "
+                "Это не означает, что за весь день не было сигналов: снимки "
+                "могут быть неполными. Проверьте частоту сохранения и данные сегмента.</p>"
+            )
         elif cand_ids and peak("xbet_live") == 0:
             alert = "<p><b>⚠️ Brain дал кандидатов, но 1xBet LIVE вернул 0 матчей.</b></p>"
         elif peak("mapped") == 0 and peak("xbet_live") > 0 and cand_ids:
@@ -523,7 +527,7 @@ def _runtime_live_audit_html(
 
         cards.append(
             f'<div class="audit"><h3>{icons[sport]} {sport.upper()} LIVE funnel</h3>'
-            f"<div>Runtime-снимков: <b>{len(sport_states)}</b> · FS уник.: <b>{len(fs_ids)}</b> "
+            f"<div>Сохранено runtime-снимков (не полная дневная воронка): <b>{len(sport_states)}</b> · FS уник.: <b>{len(fs_ids)}</b> (в снимках) "
             f"· Brain кандидаты уник.: <b>{len(cand_ids)}</b></div>"
             f"<div>Пик за цикл: FS <b>{peak('flashscore_live')}</b> → Brain <b>{peak('live_brain_candidates')}</b> "
             f"→ 1xBet <b>{peak('xbet_live')}</b> → mapped <b>{peak('mapped')}</b> "

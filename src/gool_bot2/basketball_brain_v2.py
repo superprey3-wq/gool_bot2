@@ -927,6 +927,22 @@ def live_signal(brain: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any] |
             possession_source = "flashscore_recent_delta"
             data_quality = 0.65
 
+    # A delayed provider update can report a huge minute-by-minute scoring
+    # spike even when the actual quarter score is normal. The October 16
+    # Toros/Paisas entry had 11 points in 177 seconds, but its delta claimed
+    # 13.46 points/minute. Do not convert that burst into an OVER signal.
+    # This gate applies only when there is no direct current-quarter boxscore.
+    if possession_source == "flashscore_recent_delta":
+        recent_rate = max(0.0, _num(brain.get("recent_score_rate"), 0.0) or 0.0)
+        quarter_rate = current / max(0.5, elapsed / 60.0)
+        prior_rate = prior_total / max(1.0, duration / 60.0)
+        max_delta_rate = max(
+            8.0,
+            prior_rate * _env_float("GOOL_BASKETBALL_LIVE_MAX_DELTA_PRIOR_MULTIPLIER", 2.2),
+        )
+        if recent_rate > max_delta_rate and quarter_rate < recent_rate * 0.65:
+            return None
+
     if poss_per_min is None:
         observed_rate = current / max(0.5, elapsed / 60.0)
         raw_pace_total = current * duration / max(1.0, elapsed)

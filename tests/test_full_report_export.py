@@ -313,7 +313,7 @@ def test_daily_report_includes_multisport_live_funnel_and_wait_reasons(tmp_path:
     assert "FS уник.: <b>1</b>" in text
     assert "Brain кандидаты уник.: <b>0</b>" in text
     assert "нет статистики текущего сегмента: <b>1</b>" in text
-    assert "Все увиденные LIVE-матчи были отсечены до запроса 1xBet" in text
+    assert "В сохранённых runtime-снимках нет LIVE-кандидатов до 1xBet" in text
     assert "Отправленные LIVE-направления: ТБ <b>0</b> · ТМ <b>1</b>" in text
     assert "HOCKEY LIVE funnel" in text
     assert "Brain кандидаты уник.: <b>1</b>" in text

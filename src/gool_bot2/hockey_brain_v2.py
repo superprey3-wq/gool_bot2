@@ -231,6 +231,11 @@ def prematch_signal(
     odds_range: tuple[float, float] | None = None,
 ) -> dict[str, Any] | None:
     family = str(lane.get("market_family") or "")
+    # Handicap probabilities come from a narrow, uncalibrated Poisson goal
+    # difference model. Quarantine public handicaps until an out-of-time
+    # handicap calibration exists; allow explicit opt-in for controlled trials.
+    if family == "handicap" and _env_float("GOOL_HOCKEY_PREMATCH_ENABLE_HANDICAPS", 0.0) < 0.5:
+        return None
     full_lam_home, full_lam_away, baseline = prematch_lambdas(features, league)
     scope = str(lane.get("scope") or "FULL_MATCH")
     scope_share = _scope_goal_share(scope)
@@ -264,6 +269,14 @@ def prematch_signal(
     try:
         line = float(lane.get("line") or 0.0)
     except (TypeError, ValueError):
+        return None
+
+    # Per-team full-game lambdas are capped at 5 goals in prematch_lambdas.
+    # Extrapolating that capped Poisson tail to lines like ITM 9 creates
+    # spuriously near-certain UNDERS in extreme mismatch leagues.
+    # Until those tail distributions are backtested, quarantine these prices.
+    if (scope == "FULL_MATCH" and family in {"home_total", "away_total"}
+            and line >= _env_float("GOOL_HOCKEY_PREMATCH_MAX_TEAM_TOTAL_LINE", 7.5)):
         return None
 
     direction = ""

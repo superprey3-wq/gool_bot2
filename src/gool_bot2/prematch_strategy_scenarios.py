@@ -77,7 +77,7 @@ def _quoted_options(sport: str, lanes: list[dict[str, Any]] | None, football_quo
                 for d in ("over", "under"):
                     odd = _num(row.get(d))
                     if odd is not None and odd > 1.001:
-                        offered.append({"family": family, "direction": d, "scope": "FIRST_HALF" if family == "first_half_total" else "FULL_MATCH", "odd": round(odd, 4)})
+                        offered.append({"family": family, "direction": d, "scope": "FIRST_HALF" if family == "first_half_total" else "FULL_MATCH", "odd": round(odd, 4), "line": _num(row.get("line"))})
         for family, key, directions in (
             ("match_1x2", "match_1x2", ("home", "draw", "away")),
             ("btts", "btts", ("yes", "no")),
@@ -99,7 +99,7 @@ def _quoted_options(sport: str, lanes: list[dict[str, Any]] | None, football_quo
             for d in ("over", "under"):
                 odd = _num(lane.get(d))
                 if odd is not None and odd > 1.001:
-                    offered.append({"family": family, "direction": d, "scope": scope, "odd": round(odd, 4)})
+                    offered.append({"family": family, "direction": d, "scope": scope, "odd": round(odd, 4), "line": _num(lane.get("line"))})
         elif family in {"moneyline", "handicap"}:
             side = str(lane.get("selection_side") or "")
             odd = _num(lane.get("odd"))
@@ -124,6 +124,7 @@ def _qualified_options(qualified: list[Any] | None, *, sport: str) -> list[dict[
             )
             odd = _num(getattr(entry, "odds", None))
             scope = "FIRST_HALF" if family == "first_half_total" else "FULL_MATCH"
+            line = None
         else:
             if not isinstance(entry, (tuple, list)) or len(entry) < 2:
                 continue
@@ -135,10 +136,11 @@ def _qualified_options(qualified: list[Any] | None, *, sport: str) -> list[dict[
             label = str(signal.get("selection") or lane.get("selection") or "")
             odd = _num(signal.get("odd"))
             scope = str(lane.get("scope") or "FULL_MATCH")
+            line = _num(signal.get("line") if signal.get("line") is not None else lane.get("line"))
         if odd is not None and odd > 1.001:
             options.append({
                 "family": family, "direction": direction,
-                "scope": scope, "odd": round(odd, 4),
+                "scope": scope, "odd": round(odd, 4), "line": line,
                 "selection": label,
             })
     return options

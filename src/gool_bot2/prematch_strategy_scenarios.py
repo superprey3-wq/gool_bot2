@@ -181,7 +181,7 @@ def _football(forecast: dict[str, Any]) -> list[dict[str, Any]]:
                markets=[_target("match_1x2", "home" if gap is None or gap > 0 else "away"),
                         _target("home_total" if gap is None or gap > 0 else "away_total", "over")],
                evidence={"expected_goal_difference": gap}),
-        _scene("F05", "Равный матч — проверка Ф+", None if gap is None else abs(gap) <= 0.35,
+        _scene("F05", "Равный матч — проверка ничьей", None if gap is None else abs(gap) <= 0.35,
                reason="football_v5_forecast_unavailable",
                markets=[_target("match_1x2", "draw")],
                evidence={"expected_goal_difference": gap, "handicap_quote_not_in_current_v5_decoder": True}),
@@ -205,7 +205,14 @@ def _hockey(features: dict[str, Any], league: str, memory: dict[str, Any]) -> li
     imbalance = None if hdiff is None else abs(hdiff) >= .80
     goalie_a = _num(features.get("away_goalie_gsax_per60"))
     goalie_h = _num(features.get("home_goalie_gsax_per60"))
-    goalie_bad = bool(goalie_a is not None and goalie_a < -.45 or goalie_h is not None and goalie_h < -.45) if valid and (goalie_a is not None or goalie_h is not None) else None
+    home_starter = features.get("home_goalie_starter_verified") is True
+    away_starter = features.get("away_goalie_starter_verified") is True
+    goalie_bad = (
+        bool((away_starter and goalie_a is not None and goalie_a < -.45)
+             or (home_starter and goalie_h is not None and goalie_h < -.45))
+        if valid and ((away_starter and goalie_a is not None)
+                      or (home_starter and goalie_h is not None)) else None
+    )
     rest = _num(features.get("rest_advantage_days"))
     fatigue = None if not valid or rest is None else abs(rest) >= 1.25 and (
         bool(features.get("home_back_to_back")) or bool(features.get("away_back_to_back"))
@@ -229,6 +236,11 @@ def _hockey(features: dict[str, Any], league: str, memory: dict[str, Any]) -> li
             if gap >= 0.35 and (best_period is None or gap > best_period[1]):
                 best_period = part, gap
 
+    period_direction = (
+        "over" if best_period is not None and period_obs[best_period[0]] > baseline / 3.0
+        else "under"
+    )
+
     return [
         _scene("H01", "Повышенная результативность", high, reason="recent_scoring_or_form_unavailable",
                markets=[_target("match_total", "over"), _target("home_total", "over"),
@@ -243,8 +255,9 @@ def _hockey(features: dict[str, Any], league: str, memory: dict[str, Any]) -> li
                evidence={"lambda_goal_gap_signed": hdiff, "handicap_publication_quarantined": True}),
         _scene("H04", "Подтверждённый слабый вратарь", goalie_bad,
                reason="verified_starting_goalie_performance_unavailable",
-               markets=[_target("home_total" if goalie_a is not None and goalie_a < -.45 else "away_total", "over")],
-               evidence={"home_goalie_gsax_per60": goalie_h, "away_goalie_gsax_per60": goalie_a, "starter_not_verified": True}),
+               markets=[_target("home_total" if away_starter and goalie_a is not None and goalie_a < -.45 else "away_total", "over")],
+               evidence={"home_goalie_gsax_per60": goalie_h, "away_goalie_gsax_per60": goalie_a,
+                         "home_starter_verified": home_starter, "away_starter_verified": away_starter}),
         _scene("H05", "Неравный отдых", fatigue, reason="rest_or_form_unavailable",
                markets=[_target("moneyline", "home" if rest is None or rest > 0 else "away")],
                evidence={"rest_advantage_days": rest}),
@@ -254,8 +267,8 @@ def _hockey(features: dict[str, Any], league: str, memory: dict[str, Any]) -> li
                evidence={"special_teams_metrics_available": all(v is not None for v in (*power, *penalty))}),
         _scene("H07", "Сильный период", None if memory_quality is None or memory_quality < .55 or not valid or not period_obs else best_period is not None,
                reason="period_segment_prior_or_quality_missing",
-               markets=[_target("match_total", "over", best_period[0] if best_period else "ANY_SEGMENT"),
-                        _target("match_total", "under", best_period[0] if best_period else "ANY_SEGMENT")],
+               markets=[_target("match_total", period_direction,
+                                best_period[0] if best_period else "ANY_SEGMENT")],
                evidence={"period_expected": period_obs, "segment_memory_quality": memory_quality}),
     ]
 
@@ -313,6 +326,11 @@ def _basketball(features: dict[str, Any], league: str, memory: dict[str, Any], h
         bool(features.get("home_back_to_back")) or bool(features.get("away_back_to_back"))
     )
 
+    quarter_direction = (
+        "over" if best_quarter is not None and quarter_observations[best_quarter[0]] > profile["quarter_total"]
+        else "under"
+    )
+
     return [
         _scene("B01", "Темповый матч — предварительный фильтр", high,
                reason="historical_scoring_unavailable", markets=[_target("match_total", "over")],
@@ -332,8 +350,8 @@ def _basketball(features: dict[str, Any], league: str, memory: dict[str, Any], h
         _scene("B05", "Аномалия одной четверти",
                None if memory_quality is None or memory_quality < .55 or not valid or not quarter_observations else best_quarter is not None,
                reason="qualified_period_history_unavailable",
-               markets=[_target("match_total", "over", best_quarter[0] if best_quarter else "ANY_SEGMENT"),
-                        _target("match_total", "under", best_quarter[0] if best_quarter else "ANY_SEGMENT")],
+               markets=[_target("match_total", quarter_direction,
+                                best_quarter[0] if best_quarter else "ANY_SEGMENT")],
                evidence={"period_expected": quarter_observations, "segment_memory_quality": memory_quality}),
         _scene("B06", "Различие результативности половин",
                None if not halves else abs(halves["FIRST_HALF"] - halves["SECOND_HALF"]) >= 8.0,

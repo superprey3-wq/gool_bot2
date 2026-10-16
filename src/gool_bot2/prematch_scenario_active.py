@@ -283,3 +283,74 @@ def recover_football_v6_prematch(
         "recovery_from": "v6_wait",
         "source": "v6_tournament_consensus_real_odds",
     }
+
+
+
+def recover_football_first_half_goal(
+    scenarios: dict[str, Any],
+    *,
+    pregame_profile: dict[str, Any],
+    quote: dict[str, Any] | None,
+    football_quality: float,
+    event_id: str,
+    home: str,
+    away: str,
+    league: str,
+    kickoff_ts: float,
+) -> tuple[list[Any], dict[str, Any]]:
+    """Enable F01 only with actual verified first-half history and 1xBet line.
+
+    Explicit 1H_OVER 0.5 settlement already exists in V4 prematch settlement.
+    Do NOT infer the first-half hazard as a fraction of FT xG. Fail closed
+    when the bookmaker has not quoted both sides or history is sparse.
+    """
+    from .v4_prematch_engine import PrematchPick, devig_two_way
+
+    if not active_enabled() or football_quality < .75 or not quote or kickoff_ts <= 0:
+        return [], {}
+    if not matching_scenario_ids(
+        scenarios, sport="football", family="first_half_total",
+        direction="over", scope="FIRST_HALF",
+    ):
+        return [], {}
+    first = dict(pregame_profile.get("first_half") or {})
+    if (_n(first.get("pair_sample")) or 0) < 8:
+        return [], {}
+    hl, al = _n(first.get("home_expected_goals")), _n(first.get("away_expected_goals"))
+    if hl is None or al is None or min(hl, al) < 0 or hl + al < 1.20:
+        return [], {}
+    true_model_p = 1.0 - math.exp(-(hl + al))
+    if true_model_p < .73:
+        return [], {}
+
+    for row in quote.get("first_half_totals") or []:
+        if not isinstance(row, dict) or _n(row.get("line")) != .5:
+            continue
+        over, under = _n(row.get("over")), _n(row.get("under"))
+        if None in (over, under) or min(over, under) <= 1.001 or over > 3.0:
+            continue
+        if not public_single_allowed(over, phase="PREMATCH", sport="football"):
+            continue
+        fair, _ = devig_two_way(over, under)
+        if fair >= true_model_p:
+            continue
+        # Only a third of an uncalibrated single-half model can shift odds.
+        model_p = fair + .35 * (true_model_p - fair)
+        expected_value = model_p * over - 1.0
+        if model_p < .60 or expected_value < .060 or model_p - fair < .055:
+            continue
+        return [PrematchPick(
+            str(event_id), str(home), str(away),
+            "first_half_total", "over 0.5", float(over),
+            round(model_p, 6), round(fair, 6),
+            float(football_quality), str(league), float(kickoff_ts),
+        )], {
+            "model": "football_prematch_f01_first_half_scenario_active",
+            "scenario_ids": ["F01"],
+            "bookmaker": "1xBet",
+            "recovery_from": "v6_wait",
+            "historical_first_half_samples": int(first["pair_sample"]),
+            "probabilities_calibrated": False,
+            "market_shrinkage": .35,
+        }
+    return [], {}

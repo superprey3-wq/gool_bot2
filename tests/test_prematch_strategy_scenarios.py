@@ -27,7 +27,7 @@ def basketball_features():
         "home_gf_avg": 120, "home_ga_avg": 120,
         "away_gf_avg": 118, "away_ga_avg": 115,
         "home_venue_gf_avg": 130, "away_venue_gf_avg": 125,
-        "recent_total_avg": 247, "venue_total_avg": 244,
+        "recent_total_avg": 275, "venue_total_avg": 265,
     }
 
 

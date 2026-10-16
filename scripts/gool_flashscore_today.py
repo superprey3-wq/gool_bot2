@@ -410,6 +410,25 @@ def one(r):
     "status","BET" if picks else "WAIT",
     "reject",(info or {}).get("reject",""),
     "odds",f"{picks[0].odds:.2f}" if picks else "-",flush=True)
+  # V6 ACTIVE overwrites V5 shortlist. Evaluate the scenario hypotheses
+  # against the ACTUAL final V6 picks and persist in V6 first-snapshot
+  # research archive, including WAIT/no-standalone-pick fixtures.
+  try:
+   from gool_bot2.prematch_strategy_scenarios import evaluate_prematch_scenarios
+   strategy_scenarios=evaluate_prematch_scenarios(
+    "football", football_forecast=forecast,
+    football_quote=market or flashscore_fulltime_quote(odds_payload),
+    qualified_picks=picks,
+   )
+   r["prematch_scenarios"]=strategy_scenarios
+   if isinstance(r.get("football_v6_shadow"),dict):
+    r["football_v6_shadow"]["prematch_scenarios"]=strategy_scenarios
+   info={**dict(info or {}),"prematch_scenarios":strategy_scenarios}
+   print("GOOL_FOOTBALL_PREMATCH_SCENARIOS",m.home,"-",m.away,
+    "matched",strategy_scenarios.get("matched_count",0),
+    "qualified",strategy_scenarios.get("qualified_pattern_count",0),flush=True)
+  except Exception as exc:
+   print("GOOL_FOOTBALL_PREMATCH_SCENARIOS_ERROR",m.home,"-",m.away,type(exc).__name__,flush=True)
   if picks:
    print("FOOTBALL_V6_PREMATCH" if V6_ACTIVE else "FOOTBALL_V5_PREMATCH",m.home,"-",m.away,
     "candidates",len(picks),"best",picks[0].market,picks[0].selection,

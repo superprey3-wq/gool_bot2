@@ -250,6 +250,23 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
             )
         if _sport(row) == "basketball" and market_comp.get("basketball_handicaps_active") is False:
             bits.append("Ф±: вне действующей модели V5")
+    stress = row.get("prematch_scenario_stress")
+    if isinstance(stress, dict) and stress.get("available"):
+        minimum = _number(stress.get("worst_ev_units_uncalibrated"))
+        baseline = _number(stress.get("baseline_ev_units_uncalibrated"))
+        failed = int(stress.get("scenario_negative_ev_count") or 0)
+        if minimum is not None and baseline is not None:
+            bits.append(
+                f"Хоккей: стресс ±20% ожидаемых шайб · "
+                f"EV-модель {baseline:+.3f}→{minimum:+.3f}u · "
+                f"отрицательных сценариев {failed}/5 (НЕ КАЛИБРОВАНО)"
+            )
+    variance = row.get("historical_scoring_dispersion")
+    if isinstance(variance, dict):
+        for label, key in (("хозяева", "home_for"), ("гости", "away_for")):
+            ratio = _number(variance.get(key))
+            if ratio is not None:
+                bits.append(f"разброс шайб {label}: дисперсия/среднее {ratio:.2f}")
     if _sport(row) == "basketball":
         tier = str(row.get("historical_tier") or "").strip()
         h, a = row.get("historical_home_hits"), row.get("historical_away_hits")

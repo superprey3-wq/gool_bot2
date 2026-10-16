@@ -217,6 +217,39 @@ def _diagnostic_text(row: dict[str, Any]) -> str:
         bits.append(f"Brain={brain_mode}")
     elif _sport(row) == "basketball":
         bits.append("Brain=не записан")
+    market_comp = row.get("prematch_market_comparison")
+    if isinstance(market_comp, dict) and market_comp:
+        offered = dict(market_comp.get("offered") or {})
+        qualified = dict(market_comp.get("public_price_qualified") or {})
+        names = {
+            "handicap_plus": "Ф+", "handicap_minus": "Ф−",
+            "match_total": "тотал матча",
+            "segment_match_total": "тотал периода",
+            "team_total": "ИТ матча",
+            "segment_team_total": "ИТ периода",
+            "moneyline": "исход",
+        }
+        groups = sorted(set(offered) | set(qualified))
+        if groups:
+            bits.append(
+                "Рынки предложены→прошли фильтры: "
+                + ", ".join(
+                    f"{names.get(g, g)} {offered.get(g, 0)}→{qualified.get(g, 0)}"
+                    for g in groups
+                )
+            )
+        choices = list(market_comp.get("ranked_choices") or [])
+        if len(choices) > 1 and isinstance(choices[1], dict):
+            alternative = choices[1]
+            bits.append(
+                "Следующий вариант: "
+                + str(alternative.get("selection") or "?")
+                + " @"
+                + str(alternative.get("odd") or "?")
+                + " (не калиброван)"
+            )
+        if _sport(row) == "basketball" and market_comp.get("basketball_handicaps_active") is False:
+            bits.append("Ф±: вне действующей модели V5")
     if _sport(row) == "basketball":
         tier = str(row.get("historical_tier") or "").strip()
         h, a = row.get("historical_home_hits"), row.get("historical_away_hits")

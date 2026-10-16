@@ -2879,6 +2879,14 @@ class MultiSportSteamWorker:
         def win_pct(values: list[int]) -> float | None:
             return None if not values else sum(values) / len(values)
 
+        def sample_variance(values: list[float]) -> float | None:
+            # Ten games are still too few to calibrate tail probabilities.
+            # Preserve sample-size and variance for an audit, not a bet gate.
+            if len(values) < 5:
+                return None
+            mean = sum(values) / len(values)
+            return round(sum((v - mean) ** 2 for v in values) / (len(values) - 1), 4)
+
         h2h_totals: list[float] = []
         for row in h2h:
             try:
@@ -2927,6 +2935,13 @@ class MultiSportSteamWorker:
             "recent_total_avg": recent_total,
             "venue_total_avg": venue_total,
             "h2h_total_avg": h2h_total,
+            "home_gf_variance": sample_variance(hgf),
+            "away_gf_variance": sample_variance(agf),
+            "home_ga_variance": sample_variance(hga),
+            "away_ga_variance": sample_variance(aga),
+            "recent_total_variance": sample_variance(recent_total_values[-20:]),
+            "recent_total_sample_n": len(recent_total_values[-20:]),
+            "h2h_total_variance": sample_variance(h2h_totals[-10:]),
             "home_rest_days": None if home_rest_days is None else round(home_rest_days, 2),
             "away_rest_days": None if away_rest_days is None else round(away_rest_days, 2),
             "home_back_to_back": bool(home_rest_days is not None and home_rest_days < 1.5),
@@ -4614,6 +4629,8 @@ class MultiSportSteamWorker:
             "fair_probability": float(signal.get("fair_probability") or 0.0),
             "model_probability": signal.get("model_probability"),
             "market_probability": signal.get("market_probability"),
+            "prematch_scenario_stress": signal.get("prematch_scenario_stress") if phase == "PREMATCH" else None,
+            "historical_scoring_dispersion": signal.get("historical_scoring_dispersion") if phase == "PREMATCH" else None,
             "prematch_market_comparison": signal.get("prematch_market_comparison") if phase == "PREMATCH" else None,
             "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
             "hockey_prematch_ev_shadow": signal.get("hockey_prematch_ev_shadow"),

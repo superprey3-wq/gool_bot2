@@ -527,7 +527,7 @@ def _runtime_live_audit_html(
 
         cards.append(
             f'<div class="audit"><h3>{icons[sport]} {sport.upper()} LIVE funnel</h3>'
-            f"<div>Сохранено runtime-снимков (не полная дневная воронка): <b>{len(sport_states)}</b> · FS уник. в снимках: <b>{len(fs_ids)}</b> "
+            f"<div>Сохранено runtime-снимков (не полная дневная воронка): <b>{len(sport_states)}</b> · FS уник.: <b>{len(fs_ids)}</b> (в снимках) "
             f"· Brain кандидаты уник.: <b>{len(cand_ids)}</b></div>"
             f"<div>Пик за цикл: FS <b>{peak('flashscore_live')}</b> → Brain <b>{peak('live_brain_candidates')}</b> "
             f"→ 1xBet <b>{peak('xbet_live')}</b> → mapped <b>{peak('mapped')}</b> "

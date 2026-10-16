@@ -56,6 +56,7 @@ from .basketball_historical_v3 import HistoricalProfileCache, best_market
 from .basketball_v4_shadow import assess_basketball_v4_live
 from .basketball_v5_consensus import basketball_v5_prematch_signal
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
+from .prematch_scenario_active import active_enabled, recover_multisport_prematch
 from .market_integrity import basketball_points_market_anomaly, bookmaker_kickoff_compatible
 from .hockey_prematch_ev_shadow import evaluate_hockey_prematch_ev_shadow
 from .active_challenger_decisions import hockey_ev_active_signal, basketball_v4_active_signal
@@ -4577,7 +4578,9 @@ class MultiSportSteamWorker:
             "phase": phase,
             "origin": str(row.get("origin") or ("multisport_prematch" if phase == "PREMATCH" else "multisport_live")),
             "signal_type": (
-                "hockey_prematch_ev_active" if str(signal.get("brain_mode") or "") == "hockey_prematch_ev_active"
+                "hockey_prematch_scenario_active" if str(signal.get("brain_mode") or "") == "hockey_prematch_scenario_active"
+                else "basketball_prematch_scenario_active" if str(signal.get("brain_mode") or "") == "basketball_prematch_scenario_active"
+                else "hockey_prematch_ev_active" if str(signal.get("brain_mode") or "") == "hockey_prematch_ev_active"
                 else "basketball_live_v4_active" if str(signal.get("brain_mode") or "") == "basketball_live_v4_active"
                 else "hockey_live_v2" if str(signal.get("brain_mode") or "") == "hockey_live_v2"
                 else "hockey_prematch_v2" if str(signal.get("brain_mode") or "") == "hockey_prematch_v2"
@@ -4634,6 +4637,7 @@ class MultiSportSteamWorker:
             "historical_scoring_dispersion": signal.get("historical_scoring_dispersion") if phase == "PREMATCH" else None,
             "prematch_market_comparison": signal.get("prematch_market_comparison") if phase == "PREMATCH" else None,
             "prematch_scenarios": signal.get("prematch_scenarios") if phase == "PREMATCH" else None,
+            "scenario_activation": signal.get("scenario_activation") if phase == "PREMATCH" else None,
             "basketball_v4_shadow": signal.get("basketball_v4_shadow"),
             "hockey_prematch_ev_shadow": signal.get("hockey_prematch_ev_shadow"),
             "historical_tier": signal.get("historical_tier"),
@@ -4806,6 +4810,7 @@ class MultiSportSteamWorker:
                 decoded += 1
                 candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
                 eligible_market_lanes: list[dict[str, Any]] = []
+                priced_lane_rows: list[dict[str, Any]] = []
                 eligible_lanes = 0
                 for lane in row.get("market_lanes") or []:
                     allowed, policy_reason = lane_phase_policy(cfg.key, "PREMATCH", lane, row.get("period"))
@@ -4815,6 +4820,7 @@ class MultiSportSteamWorker:
                     eligible_lanes += 1
                     eligible_market_lanes.append(lane)
                     lane_row = self._lane_row(row, {**lane, "phase_policy": policy_reason})
+                    priced_lane_rows.append(lane_row)
                     history = self._append_prematch_history(lane_row, cfg)
                     if cfg.key == "hockey":
                         sport_features = dict(row.get("sport_context") or {})
@@ -5129,6 +5135,38 @@ class MultiSportSteamWorker:
 
                 signals: list[dict[str, Any]] = []
                 primary = select_prematch_primary(candidates, recent_families, cfg.key)
+                # ACTIVE scenario fallback is permitted only when existing
+                # V2/V5 has no publicly eligible singles. It cannot override
+                # a stronger production choice, nor the global 1.70 price gate.
+                if primary is None and cfg.key in {"hockey", "basketball"} and active_enabled():
+                    try:
+                        recovered, scenario_diag = recover_multisport_prematch(
+                            sport=cfg.key,
+                            scenario_snapshot=dict(row.get("prematch_scenarios") or {}),
+                            lanes=priced_lane_rows,
+                            features=dict(row.get("sport_context") or {}),
+                            league=str(row.get("league") or ""),
+                            segment_memory=dict(row.get("segment_memory") or {}),
+                        )
+                        row["prematch_scenario_active_diagnostics"] = scenario_diag
+                        if recovered:
+                            candidates.extend(recovered)
+                            primary = select_prematch_primary(candidates, recent_families, cfg.key)
+                            row["prematch_scenario_active_candidate"] = True
+                            print(
+                                f"GOOL_{cfg.key.upper()}_SCENARIO_ACTIVE "
+                                f"match={row.get('event_id')} "
+                                f"scenario_ids={recovered[0][1].get('scenario_activation', {}).get('scenario_ids')} "
+                                f"market={recovered[0][0].get('market_family')} "
+                                f"odd={recovered[0][1].get('odd')}",
+                                flush=True,
+                            )
+                    except Exception as exc:
+                        print(
+                            f"GOOL_{cfg.key.upper()}_SCENARIO_ACTIVE_ERROR "
+                            f"match={row.get('event_id')} error={type(exc).__name__}:{exc}",
+                            flush=True,
+                        )
                 if primary is not None:
                     best_row, best_signal = primary
                     best_signal = {
@@ -5137,6 +5175,7 @@ class MultiSportSteamWorker:
                             eligible_market_lanes, candidates, sport=cfg.key,
                         ),
                         "prematch_scenarios": row.get("prematch_scenarios"),
+                        "scenario_activation": best_signal.get("scenario_activation"),
                     }
                     recorded, sent = self._record_signal(best_row, best_signal, cfg)
                     detected += int(recorded)

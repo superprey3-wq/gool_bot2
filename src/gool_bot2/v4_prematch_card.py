@@ -88,6 +88,9 @@ def render_v4_prematch_card(
     is_value = product == "value_hunter" or tier == "VALUE"
     accent = GOLD if tier == "STRONG" or is_value else ACCENT
     odd = float(row.get("odd") or 0.0)
+    brain = str(row.get("brain_version") or "V4").upper()
+    if brain not in {"V4", "V5", "V6"}:
+        brain = "V4"
     market = football_selection_ru(row.get("market"), row.get("selection") or row.get("market"))
     probability = float(row.get("probability") or row.get("model_probability") or 0.0)
     edge = float(row.get("edge") or row.get("value_edge") or 0.0)
@@ -99,7 +102,7 @@ def render_v4_prematch_card(
     draw.rounded_rectangle((18,18,1062,1102),30,outline=accent,width=5)
     draw.rounded_rectangle((24,20,1056,112),24,fill=PANEL,outline=accent,width=2)
     draw.rectangle((24,20,40,112),fill=accent)
-    draw.text((58,36),"GOOL V4",font=sc._font(36,True),fill=accent)
+    draw.text((58,36),f"GOOL {brain}",font=sc._font(36,True),fill=accent)
     draw.text((58,78),"VALUE HUNTER • HIGH ODDS" if is_value else "PREMATCH • MODEL RADAR",font=sc._font(15,True),fill=TEXT)
     draw.rounded_rectangle((825,38,1028,93),16,fill=accent)
     _center_in_box(draw,"В ИГРЕ" if live else ("VALUE" if is_value else "PREMATCH"),(825,38,1028,93),sc._font(18,True),BG)
@@ -138,7 +141,7 @@ def render_v4_prematch_card(
     footer_text = "GOOL НАШЁЛ ЗАВЫШЕННУЮ ЦЕНУ БУКМЕКЕРА" if is_value else "GOOL ВЫБРАЛ ЛУЧШИЙ ДОСТУПНЫЙ РЫНОК ДЛЯ ЭТОГО МАТЧА"
     _center(draw,footer_text,932,_fit(draw,footer_text,900,16,True),TEXT)
     _center(draw,"PREMATCH  •  В ИГРЕ  •  РЕЗУЛЬТАТ",1030,sc._font(15,True),MUTED)
-    _center(draw,"GOOL V4 • MODEL SIGNAL",1068,sc._font(12,True),accent)
+    _center(draw,f"GOOL {brain} • MODEL SIGNAL",1068,sc._font(12,True),accent)
     return sc._save(img)
 
 def _center_in_box(draw, text: str, box, font, fill):
@@ -171,7 +174,10 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     draw.rounded_rectangle((18, 18, 1062, 882), 30, outline=accent, width=5)
     draw.rounded_rectangle((28, 22, 1052, 94), 22, fill=PANEL, outline=accent, width=2)
     draw.text((54, 40), "GOOL", font=sc._font(29, True), fill=TEXT)
-    draw.text((154, 40), "V4 · PREMATCH RESULT", font=sc._font(25, True), fill=accent)
+    brain = str(row.get("brain_version") or "V4").upper()
+    if brain not in {"V4", "V5", "V6"}:
+        brain = "V4"
+    draw.text((154, 40), f"{brain} · PREMATCH RESULT", font=sc._font(25, True), fill=accent)
     draw.rounded_rectangle((790, 36, 1020, 80), 14, fill=(9, 19, 31), outline=accent, width=2)
     _center_in_box(draw, result_label, (790, 36, 1020, 80), sc._font(15, True), accent)
 
@@ -205,7 +211,7 @@ def render_v4_prematch_result_card(row: dict[str, Any], record: dict[str, Any] |
     draw.text((95, 802), f"МОДЕЛЬ {probability*100:.1f}%", font=sc._font(14, True), fill=TEXT)
     draw.text((780, 802), f"ПЕРЕВЕС {edge*100:+.1f} п.п.", font=sc._font(14, True), fill=accent)
     _center(draw, "PREMATCH · РЕЗУЛЬТАТ ПОДТВЕРЖДЁН", 840, sc._font(13, True), MUTED)
-    _center(draw, "GOOL V4", 865, sc._font(10, True), accent)
+    _center(draw, f"GOOL {brain}", 865, sc._font(10, True), accent)
     return sc._save(img)
 
 def _mini_team_badge(img: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int, meta: dict[str, Any], side: str, name: str, accent) -> None:

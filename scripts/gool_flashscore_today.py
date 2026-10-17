@@ -821,6 +821,7 @@ d=choose_delivery(
  max_singles=None if max_singles<=0 else max_singles,
  max_doubles=None if max_doubles<=0 else max_doubles,
  include_super=not global_super_on,
+ v6_active=V6_ACTIVE,
 )
 # Build full-tournament coupons from the ENTIRE today's fixture universe,
 # not merely from singles or the strongest two matches in the league.

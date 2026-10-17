@@ -94,8 +94,11 @@ def football_v6_active_picks(
         ev = _number(candidate.get("heuristic_ev_units"))
         disagreement = _number(candidate.get("model_disagreement_pp"))
         if (
-            odd is None or not public_single_allowed(odd, phase="PREMATCH", sport="football")
-            or odd > _threshold("GOOL_FOOTBALL_V6_SINGLE_MAX_ODD", 3.25)
+            odd is None or odd < 1.40
+            # Tournament legs (return_all=True) have their own odds/value
+            # qualifications. Singles alone use the public-price limits.
+            or (not return_all and not public_single_allowed(odd, phase="PREMATCH", sport="football"))
+            or (not return_all and odd > _threshold("GOOL_FOOTBALL_V6_SINGLE_MAX_ODD", 3.25))
             or p is None or not (0.0 < p < 1.0) or
             fair is None or not (0.0 < fair < 1.0) or
             ev is None or ev < _threshold("GOOL_FOOTBALL_V6_ACTIVE_MIN_EV", .07) or

@@ -209,12 +209,77 @@ def build_super_accumulator(
     }
 
 
+
+def rank_v6_prematch_for_delivery(
+    picks: Iterable[PrematchPick],
+    *,
+    limit: int = 8,
+    max_per_event: int = 1,
+) -> list[tuple[PrematchPick, str]]:
+    """Publish only V6-verified, already market-shrunk singles.
+
+    The active V6 models arrive here AFTER market shrinkage and the V6
+    price/quality/independent-model/EV gate. Applying the legacy shrinkage a
+    second time and a fixed 60% win-probability floor killed every priced
+    public candidate (real-data audit 2026-10-17: 14 -> NO_BET).
+
+    A quoted ~2.5 side with p=.43 can have better unit EV than the break-even
+    1/2.5=.40 even though its chance of winning is below 60%. Check the
+    actual price-relative margin instead. A cautious 3.25 singles odds cap
+    prevents the uncalibrated V6's huge longshots from dominating publication.
+    """
+    import math
+    from .single_price_policy import minimum_single_odd
+
+    floor = minimum_single_odd(phase="PREMATCH", sport="football")
+    accepted: list[tuple[PrematchPick, str]] = []
+    for pick in picks:
+        values = (pick.odds, pick.model_probability, pick.market_probability, pick.data_quality)
+        if not all(math.isfinite(float(v)) for v in values):
+            continue
+        if (
+            pick.odds < floor or pick.odds > 3.25
+            or pick.data_quality < 0.65
+            or not (0 < pick.model_probability < 1 and 0 < pick.market_probability < 1)
+            or pick.edge < 0.025
+            or pick.expected_value < 0.07
+        ):
+            continue
+        strong = (
+            pick.data_quality >= 0.75 and pick.edge >= 0.045
+            and pick.expected_value >= 0.12
+        )
+        accepted.append((pick, "STRONG" if strong else "NORMAL"))
+    accepted.sort(
+        key=lambda item: (
+            item[1] == "STRONG",
+            item[0].expected_value,
+            item[0].edge,
+            item[0].model_probability,
+        ),
+        reverse=True,
+    )
+    out: list[tuple[PrematchPick, str]] = []
+    used: dict[str, int] = {}
+    for pick, tier in accepted:
+        if used.get(pick.event_id, 0) >= max(1, int(max_per_event)):
+            continue
+        used[pick.event_id] = used.get(pick.event_id, 0) + 1
+        out.append((pick, tier))
+        if len(out) >= max(1, int(limit)):
+            break
+    return out
+
+
+
+
 def choose_delivery(
     picks: Iterable[PrematchPick],
     *,
     max_singles: int | None = None,
     max_doubles: int | None = None,
     include_super: bool = True,
+    v6_active: bool = False,
 ) -> dict:
     """Build singles and parlays as independent products.
 
@@ -224,7 +289,10 @@ def choose_delivery(
     """
     rows = list(picks)
     single_limit = len(rows) if max_singles is None else max(0, int(max_singles))
-    singles = rank_prematch_for_delivery(rows, limit=single_limit)
+    singles = (
+        rank_v6_prematch_for_delivery(rows, limit=single_limit)
+        if v6_active else rank_prematch_for_delivery(rows, limit=single_limit)
+    )
 
     # Parlays have their own confidence/value selection. Do not starve them just
     # because the same high-quality fixtures were already selected as singles.

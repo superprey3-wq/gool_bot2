@@ -264,6 +264,11 @@ def recover_football_v6_prematch(
             continue
         if p < .60 or p - fair < .023 or pick.expected_value < .045:
             continue
+        # A tournament-priced near-miss must not bypass V6's quarantine
+        # on 1X2 predictions without corroborated opponent-strength history.
+        coverage = _n(shadow.get("opponent_strength_coverage"))
+        if pick.market == "match_1x2" and (coverage is None or coverage < .30):
+            continue
         direction = pick.selection.partition(" ")[0] if pick.market in {"match_total", "home_total", "away_total"} else pick.selection
         ids = matching_scenario_ids(
             scenarios, sport="football", family=pick.market, direction=direction,

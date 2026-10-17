@@ -298,7 +298,7 @@ def _prematch_market_key(market: str, selection: str) -> str:
     return f"{family}:{normalized or str(market or '').strip().casefold()}"
 
 
-def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "", flashscore_meta: dict[str, Any] | None = None) -> dict[str, Any]:
+def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = "", flashscore_meta: dict[str, Any] | None = None, brain_version: str = "V4") -> dict[str, Any]:
     """Convert a calibrated PrematchPick into the shared production journal/card schema."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -317,6 +317,7 @@ def prematch_row_from_pick(pick: Any, *, tier: str = "NORMAL", bookmaker: str = 
         "scheduled_start": scheduled,
         "kickoff_ts": kickoff_ts,
         "market": str(pick.market),
+        "brain_version": str(brain_version or "V4"),
         "market_family": _prematch_market_family(str(pick.market)),
         "market_key": _prematch_market_key(str(pick.market), str(pick.selection)),
         "selection": str(pick.selection),
@@ -388,7 +389,11 @@ def _emit_delivery_selection(delivery: dict[str, Any], meta: dict[str, Any], jou
             continue
         seen.add(key)
         info = _delivery_meta_for_pick(meta, pick)
-        row = prematch_row_from_pick(pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""), flashscore_meta=dict(info.get("flashscore_meta") or {}))
+        row = prematch_row_from_pick(
+            pick, tier=str(tier), bookmaker=str(info.get("bookmaker") or ""),
+            flashscore_meta=dict(info.get("flashscore_meta") or {}),
+            brain_version=str(info.get("brain_version") or "V4"),
+        )
         before = len(load_signal_journal(journal_path))
         delivered = _emit_prematch_signal(row, journal_path)
         after = len(load_signal_journal(journal_path))

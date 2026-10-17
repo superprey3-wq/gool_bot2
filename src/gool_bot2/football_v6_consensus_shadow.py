@@ -186,6 +186,15 @@ def evaluate_football_v6_prematch(
 
     candidates.sort(key=lambda item: (item["state"] == "PASS_SHADOW", item["heuristic_ev_units"]), reverse=True)
     qualified = sum(r["state"] == "PASS_SHADOW" for r in candidates)
+    # Report the FULL quoted-market funnel instead of hiding supported
+    # totals/BTTS behind high-priced 1x2 outcomes in the top-12 preview.
+    quoted_by_market: dict[str, int] = {}
+    passed_by_market: dict[str, int] = {}
+    for row in candidates:
+        fam = str(row.get("market") or "unknown")
+        quoted_by_market[fam] = quoted_by_market.get(fam, 0) + 1
+        if row["state"] == "PASS_SHADOW":
+            passed_by_market[fam] = passed_by_market.get(fam, 0) + 1
     # Preserve the complete rejection histogram, not just top-12 examples.
     reason_counts: dict[str, int] = {}
     for candidate in candidates:
@@ -197,11 +206,17 @@ def evaluate_football_v6_prematch(
         "status": "PASS_SHADOW" if qualified else "WAIT",
         "reason": "consensus_unvalidated" if qualified else "no_qualified_consensus_at_real_odds",
         "data_quality": round(quality, 4),
+        "opponent_strength_coverage": _finite(forecast_v5.get("opponent_strength_coverage")),
+        "opponent_strength_confirmed": bool(forecast_v5.get("opponent_strength_confirmed")),
+        "quoted_by_market": quoted_by_market,
+        "passed_by_market": passed_by_market,
         "v5_lambdas": [round(hl, 4), round(al, 4)],
         "independent_lambdas": [round(independent.home_lambda, 4), round(independent.away_lambda, 4)],
         "dixon_coles_used_only_for_sensitivity": dixon is not None,
         "quoted_markets_checked": len(candidates),
         "qualified_shadow_markets": qualified,
         "rejection_reasons": reason_counts,
-        "candidates": candidates[:12],
+        # Bounded but large enough to retain EVERY typical 1x2, BTTS,
+        # full-time and team-total price candidate for active risk ranking.
+        "candidates": candidates[:48],
     }

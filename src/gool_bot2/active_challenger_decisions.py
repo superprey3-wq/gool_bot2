@@ -58,12 +58,26 @@ def football_v6_active_picks(
         return [], {**base, "reject": "quality"}
     if _number(kickoff_ts) is None or kickoff_ts <= 0:
         return [], {**base, "reject": "kickoff"}
+    from .single_price_policy import public_single_allowed
+    # Both history-derived models can agree on a 1X2 side without
+    # independent opponent-strength samples. Do not publish such winners.
+    opponent_coverage = _number(shadow.get("opponent_strength_coverage"))
+    verified_winner = (
+        opponent_coverage is not None
+        and opponent_coverage >= _threshold("GOOL_FOOTBALL_V6_1X2_MIN_OPPONENT_COVERAGE", .30)
+    )
     eligible = []
+    rejection_counts: dict[str, int] = {}
     for candidate in shadow.get("candidates") or []:
         if candidate.get("state") != "PASS_SHADOW":
             continue
         market, selection = str(candidate.get("market") or ""), str(candidate.get("selection") or "")
         if market not in {"match_total", "home_total", "away_total", "match_1x2", "btts"}:
+            continue
+        if market == "match_1x2" and not verified_winner:
+            rejection_counts["1x2_opponent_strength_unverified"] = (
+                rejection_counts.get("1x2_opponent_strength_unverified", 0) + 1
+            )
             continue
         if market in {"match_total", "home_total", "away_total"}:
             direction, _, line_text = selection.partition(" ")
@@ -80,8 +94,12 @@ def football_v6_active_picks(
         ev = _number(candidate.get("heuristic_ev_units"))
         disagreement = _number(candidate.get("model_disagreement_pp"))
         if (
-            odd is None or odd < 1.4 or
-            p is None or not (0.0 < p < 1.0) or
+            odd is None or odd < 1.40
+            # Tournament legs (return_all=True) have their own odds/value
+            # qualifications. Singles alone use the public-price limits.
+            or (not return_all and not public_single_allowed(odd, phase="PREMATCH", sport="football"))
+            or (not return_all and odd > _threshold("GOOL_FOOTBALL_V6_SINGLE_MAX_ODD", 3.25))
+            or p is None or not (0.0 < p < 1.0) or
             fair is None or not (0.0 < fair < 1.0) or
             ev is None or ev < _threshold("GOOL_FOOTBALL_V6_ACTIVE_MIN_EV", .07) or
             disagreement is None or disagreement > _threshold("GOOL_FOOTBALL_V6_ACTIVE_MAX_DISAGREEMENT_PP", 10.0) or
@@ -92,18 +110,30 @@ def football_v6_active_picks(
             str(event_id), str(home), str(away), market, selection,
             odd, p, fair, quality, str(league), float(kickoff_ts),
         )
-        eligible.append((ev, -disagreement, pick))
+        # Quoted nominal EV overweights unlikely big-odds winners.
+        # Prefer value per unit of risk while retaining all valid families.
+        risk_score = ev / max(.01, odd - 1.0) - .25 * disagreement / 100.0
+        eligible.append((risk_score, ev, -disagreement, pick))
     if not eligible:
-        return [], {**base, "reject": "no_live_qualified_candidate"}
-    eligible.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    best = eligible[0][2]
-    return ([x[2] for x in eligible] if return_all else [best]), {
+        return [], {**base, "reject": "no_live_qualified_candidate",
+                    "winner_opponent_coverage": opponent_coverage,
+                    "v6_market_rejections": rejection_counts}
+    eligible.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    best = eligible[0][3]
+    return ([x[3] for x in eligible] if return_all else [best]), {
         **base,
         "bookmaker": (
             "1xBet" if shadow.get("quote_source") == "1xbet"
             else str(shadow.get("bookmaker") or "Flashscore odds")
         ),
         "v6_unvalidated_consensus": True,
+        "winner_opponent_coverage": opponent_coverage,
+        "v6_market_rejections": rejection_counts,
+        "v6_rank": "risk_adjusted_ev_no_market_quota",
+        "v6_eligible_markets": {
+            family: sum(item[3].market == family for item in eligible)
+            for family in sorted({item[3].market for item in eligible})
+        },
         "v6_gate": "real_odds_quality_agreement_value",
         "v6_consensus_prob_heuristic": best.model_probability,
     }
@@ -143,6 +173,7 @@ def football_v6_tournament_picks(
     ):
         return strict, {**meta, "tournament_value_promotions": promotions}
     existing = {(p.market, p.selection) for p in strict}
+    winner_coverage = _number(shadow.get("opponent_strength_coverage"))
     for candidate in shadow.get("candidates") or []:
         if not isinstance(candidate, dict):
             continue
@@ -150,6 +181,8 @@ def football_v6_tournament_picks(
             continue
         market, selection = str(candidate.get("market") or ""), str(candidate.get("selection") or "")
         if market not in {"match_total", "home_total", "away_total", "match_1x2", "btts"}:
+            continue
+        if market == "match_1x2" and (winner_coverage is None or winner_coverage < .30):
             continue
         if market in {"match_total", "home_total", "away_total"}:
             direction, _, line_txt = selection.partition(" ")

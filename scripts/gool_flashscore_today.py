@@ -400,6 +400,8 @@ def one(r):
     "tournament_value_promotions":list(tournament_meta.get("tournament_value_promotions") or []),
     "rejection_reasons":dict((r.get("football_v6_shadow") or {}).get("rejection_reasons") or {}),
     "quote_source":str((r.get("football_v6_shadow") or {}).get("quote_source") or ""),
+    "quoted_by_market":dict((r.get("football_v6_shadow") or {}).get("quoted_by_market") or {}),
+    "passed_by_market":dict((r.get("football_v6_shadow") or {}).get("passed_by_market") or {}),
     "coverage_source":str(r.get("tournament_coverage_quote_source") or ""),
     "coverage_bookmaker":str(r.get("tournament_coverage_bookmaker") or ""),
     "coverage_diagnostic":dict(r.get("tournament_coverage_diagnostic") or {}),
@@ -409,6 +411,10 @@ def one(r):
    print("FOOTBALL_V6_ACTIVE",m.home,"-",m.away,
     "status","BET" if picks else "WAIT",
     "reject",(info or {}).get("reject",""),
+    "market",picks[0].market if picks else "-",
+    "winner_cov",(r.get("football_v6_shadow") or {}).get("opponent_strength_coverage"),
+    "quoted",(r.get("football_v6_shadow") or {}).get("quoted_by_market"),
+    "passed",(r.get("football_v6_shadow") or {}).get("passed_by_market"),
     "odds",f"{picks[0].odds:.2f}" if picks else "-",flush=True)
   # V6 ACTIVE overwrites V5 shortlist. Evaluate the scenario hypotheses
   # against the ACTUAL final V6 picks and persist in V6 first-snapshot
@@ -451,7 +457,7 @@ def one(r):
      )
     if restored:
      picks=restored
-     info={**info,**restored_meta}
+     info={**info,**restored_meta, "brain_version":"V6" if V6_ACTIVE else "V5"}
      r["prematch_scenario_active"]=dict(restored_meta)
      print("GOOL_FOOTBALL_PREMATCH_SCENARIO_ACTIVE",m.home,"-",m.away,
       "scenarios",restored_meta.get("scenario_ids",[]),

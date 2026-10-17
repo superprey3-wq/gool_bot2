@@ -245,9 +245,12 @@ def rank_v6_prematch_for_delivery(
             or pick.expected_value < 0.07
         ):
             continue
+        # STRONG is a confidence label, not just a high-price EV label.
+        # An underdog at 38% win chance must never look like a high-
+        # probability selection merely because its quoted odd is 3.19.
         strong = (
-            pick.data_quality >= 0.75 and pick.edge >= 0.045
-            and pick.expected_value >= 0.12
+            pick.data_quality >= 0.75 and pick.model_probability >= 0.57
+            and pick.edge >= 0.045 and pick.expected_value >= 0.12
         )
         accepted.append((pick, "STRONG" if strong else "NORMAL"))
     accepted.sort(

@@ -168,6 +168,7 @@ class FootballHost:
         self._next_poll = 0.0
         self._next_live_odds = 0.0
         self._next_settle = 0.0
+        self._next_notice = 0.0
 
     def _save_journal(self):
         # Bound storage by age and number; never discard pending bets.
@@ -247,6 +248,7 @@ class FootballHost:
         now = time.time() if now is None else now
         rows = [r for r in self.journal if r.get("result") == "pending"]
         if not rows or now < self._next_settle:
+            self._announce_results(now=now)
             return 0
         self._next_settle = now + 300
         try:
@@ -268,7 +270,32 @@ class FootballHost:
         if changed:
             self._save_journal()
             print(f"GOOL_LITE_SETTLED count={changed}", flush=True)
+        self._announce_results(now=now)
         return changed
+
+    def _announce_results(self, *, now: float) -> None:
+        """Notify each settled wager once; do not turn shadow analysis into messages."""
+        if not is_active() or now < self._next_notice:
+            return
+        self._next_notice = now + 60
+        changed = False
+        for row in self.journal:
+            if (row.get("result") not in ("won", "lost")
+                    or row.get("result_notified")
+                    or not row.get("sent")):
+                continue
+            label = "✅ ЗАШЛО" if row["result"] == "won" else "❌ НЕ ЗАШЛО"
+            message = (
+                f"{label} · ФУТБОЛ\\n"
+                f"{html.escape(str(row.get('home')))} — {html.escape(str(row.get('away')))}\\n"
+                f"{html.escape(str(row.get('selection')))} @{row.get('odd')}\\n"
+                f"{html.escape(str(row.get('phase')))}"
+            )
+            if telegram.broadcast(message) > 0:
+                row["result_notified"] = True
+                changed = True
+        if changed:
+            self._save_journal()
 
     def _settle_one(self, r: dict[str, Any], state: dict[str, Any],
                     timelines: dict[str, list[dict[str, Any]]]) -> str | None:

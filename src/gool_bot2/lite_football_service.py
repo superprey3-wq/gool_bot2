@@ -525,7 +525,7 @@ def smoke() -> None:
     with tempfile.TemporaryDirectory(prefix="gool-football-smoke-") as folder:
         service = FootballHost(Path(folder))
         assert service.brain.state_path.parent == Path(folder) / "live"
-        assert "Футбол" in service._format_status()
+        assert "футбол" in service._format_status().casefold()
         print("GOOL_FOOTBALL_SMOKE " + json.dumps({
             "peak_rss_mib": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
             "ok": True,

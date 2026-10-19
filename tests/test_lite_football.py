@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from gool_bot2.lite_football import LiteFootballWorker, _over
+from gool_bot2.lite_football import LiteFootballWorker, _over, _paired_trend_price
 
 
 def _game(kickoff: float, *, live: bool = False):
@@ -99,3 +99,29 @@ def test_live_analysis_cannot_send_without_verified_price(tmp_path, monkeypatch)
 
 def test_poisson_probability_is_monotone():
     assert 0 < _over(1.5, 3) < _over(3.5, 3) < 1
+
+
+def test_odds_cannot_mix_sides_across_bookmakers():
+    market = {
+        "settings": {"bookmakers": [
+            {"bookmaker": {"id": 1, "name": "Book A"}},
+            {"bookmaker": {"id": 2, "name": "Book B"}},
+        ]},
+        "odds": [
+            {"bookmakerId": 1, "bettingScope": "FULL_TIME",
+             "bettingType": "OVER_UNDER", "odds": [
+                 {"selection": "OVER", "value": 1.9, "handicap": {"value": 2.5}}
+             ]},
+            {"bookmakerId": 2, "bettingScope": "FULL_TIME",
+             "bettingType": "OVER_UNDER", "odds": [
+                 {"selection": "UNDER", "value": 1.9, "handicap": {"value": 2.5}}
+             ]},
+        ],
+    }
+    assert _paired_trend_price(market, "FT_OVER_2.5") is None
+    market["odds"][0]["odds"].append(
+        {"selection": "UNDER", "value": 2.0, "handicap": {"value": 2.5}}
+    )
+    priced = _paired_trend_price(market, "FT_OVER_2.5")
+    assert priced["bookmaker"] == "Book A"
+    assert priced["best_odds"] == 1.9

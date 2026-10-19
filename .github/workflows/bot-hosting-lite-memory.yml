@@ -1,0 +1,36 @@
+name: Bot-Hosting Lite memory feasibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bot-hosting-lite
+    paths:
+      - "scripts/bot_hosting_memory_probe.py"
+      - ".github/workflows/bot-hosting-lite-memory.yml"
+      - "src/gool_bot2/**"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  measure-imports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install declared GOOL runtime dependencies
+        run: python -m pip install -e .
+      - name: Measure actual interpreter and module import memory
+        run: python scripts/bot_hosting_memory_probe.py
+      - name: Save memory report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gool-bot-hosting-import-memory
+          path: reports/bot_hosting_lite/import_memory.json
+          retention-days: 14

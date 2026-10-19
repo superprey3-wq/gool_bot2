@@ -7,6 +7,7 @@ on:
       - bot-hosting-lite
     paths:
       - "scripts/bot_hosting_memory_probe.py"
+      - "bot_hosting_lite.py"
       - ".github/workflows/bot-hosting-lite-memory.yml"
       - "src/gool_bot2/**"
       - "pyproject.toml"
@@ -38,6 +39,11 @@ jobs:
             tests/test_prematch_scenario_active.py \
             tests/test_hockey_brain_v2.py \
             tests/test_basketball_brain_v2.py
+      - name: Start GOOL Lite without secrets or network calls
+        env:
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+        run: |
+          python bot_hosting_lite.py --smoke
       - name: Save memory report
         uses: actions/upload-artifact@v4
         with:

@@ -3,24 +3,32 @@
 import os
 from typing import Any
 
-from . import goal_state_policy as _goal_state_policy
-from .architecture_isolation import install_architecture_isolation
-from .brain_v3_activation import install_brain_v3_activation
-from .brain_v3_candidate_stability import install_brain_v3_candidate_stability
-from .brain_v3_field_scan_runtime import install_brain_v3_field_scan_runtime
-from .brain_v3_learning_runtime import install_brain_v3_learning_runtime
-from .brain_v3_memory import install_brain_v3_memory
-from .brain_v3_selection_hardening import install_brain_v3_selection_hardening
-from .browser_context_runtime import install_browser_context_runtime
-from .live_goal_hazard import install_live_goal_hazard
-from .production_calibration import install_production_calibration
-from .runtime_fastlane import install_runtime_fastlane
-from .steam_quality_hardening import install_steam_quality_hardening
-from .steam_red_card_guard import install_steam_red_card_guard
-from .xbet_trajectory_hardening import install_xbet_trajectory_hardening
+def _football_autoinstall_enabled() -> bool:
+    raw = os.getenv("GOOL_FOOTBALL_AUTOINSTALL", "1")
+    return str(raw).strip().casefold() not in {"0", "false", "no", "off"}
+
+# Non-football processes must not import dozens of football patch modules on startup.
+# Normal football runtime keeps exactly its prior import order and installed hooks.
+if _football_autoinstall_enabled():
+    from . import goal_state_policy as _goal_state_policy
+    from .architecture_isolation import install_architecture_isolation
+    from .brain_v3_activation import install_brain_v3_activation
+    from .brain_v3_candidate_stability import install_brain_v3_candidate_stability
+    from .brain_v3_field_scan_runtime import install_brain_v3_field_scan_runtime
+    from .brain_v3_learning_runtime import install_brain_v3_learning_runtime
+    from .brain_v3_memory import install_brain_v3_memory
+    from .brain_v3_selection_hardening import install_brain_v3_selection_hardening
+    from .browser_context_runtime import install_browser_context_runtime
+    from .live_goal_hazard import install_live_goal_hazard
+    from .production_calibration import install_production_calibration
+    from .runtime_fastlane import install_runtime_fastlane
+    from .steam_quality_hardening import install_steam_quality_hardening
+    from .steam_red_card_guard import install_steam_red_card_guard
+    from .xbet_trajectory_hardening import install_xbet_trajectory_hardening
 
 
-_ORIGINAL_GOAL_STATE_POLICY = _goal_state_policy.enforce_goal_state_policy
+    _ORIGINAL_GOAL_STATE_POLICY = _goal_state_policy.enforce_goal_state_policy
+
 
 
 def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
@@ -68,10 +76,6 @@ def _final_live_brain_policy(decision: Any, experts: dict[str, Any]) -> Any:
             row.reason_tags.append("1xbet_odds_only")
     return _ORIGINAL_GOAL_STATE_POLICY(decision, experts)
 
-
-def _football_autoinstall_enabled() -> bool:
-    raw = os.getenv("GOOL_FOOTBALL_AUTOINSTALL", "1")
-    return str(raw).strip().casefold() not in {"0", "false", "no", "off"}
 
 
 if _football_autoinstall_enabled():

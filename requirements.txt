@@ -1,1 +1,3 @@
-# Dependencies are installed by monkey_start.py using /home/container/.pip-tmp
+# GOOL Lite stage 1: bot-hosting.net automatically installs this file.
+# Keep heavy ML libraries out of the small 256 MB / 512 MB deployment.
+Pillow>=10,<13

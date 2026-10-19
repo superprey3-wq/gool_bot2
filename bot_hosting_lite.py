@@ -180,13 +180,12 @@ def _telegram_loop(state: Path, interval: int = 15):
                                      multisport_menu.sport_parlay_text("basketball"))
                 elif cmd in ("/dayreport", "/fullreport"):
                     from gool_bot2.full_report_export import build_daily_report
-                    filename, data, mime = build_daily_report(
+                    filename, data, caption = build_daily_report(
                         football_path=state / "gool_lite_football_journal.json"
                     )
                     # Do not send the same document as HTML text below.
                     ok = telegram.send_document(chat_id, filename, data,
-                                                caption="📊 GOOL Lite · отчёт за день",
-                                                content_type=mime)
+                                                caption=caption, content_type="text/html")
                     if not ok:
                         telegram.send_message(chat_id, "⚠️ Не удалось отправить отчёт; проверь логи.")
                     continue

@@ -112,7 +112,7 @@ class LivePriceAdapter:
         if market == "GOAL_BEFORE_HT":
             if not (10 <= minute <= 45):
                 return None
-            lines = c._markets_for_event(book_id, minute, sum(scoreboard)).get("first_half_total") or []
+            lines = (c._markets_for_event(book_id, minute, sum(scoreboard)) or {}).get("first_half_total") or []
             family = "first_half_total"
         elif market == "ANOTHER_GOAL":
             if not (46 <= minute <= 85):

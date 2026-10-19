@@ -260,6 +260,9 @@ class LiteFootballWorker:
                 for decision in evaluate_live_goals(record):
                     decisions.append({
                         "event_id": mid, "match": f"{m.home} — {m.away}",
+                        "home": m.home, "away": m.away, "league": m.league or "",
+                        "score": [m.home_score, m.away_score],
+                        "observed_at": now,
                         "minute": m.minute, "market": decision.market,
                         "decision": decision.decision, "confidence": decision.confidence,
                         "probability": decision.probability,

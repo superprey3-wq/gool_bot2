@@ -254,8 +254,11 @@ class LiteFootballWorker:
             if float(item.get("start_ts") or 0) > now + 120
             and float(item.get("start_ts") or 0) <= now + 12 * 3600
         }
-        from .global_super10 import publish_candidates
-        publish_candidates("football", self._recent_candidates.values())
+        # Football-only host does not need the cross-sport SUPER 10 pool.
+        # Avoid importing its heavy cards and writing extra disk state.
+        if os.getenv("GOOL_LITE_PUBLISH_SUPER10", "0") == "1":
+            from .global_super10 import publish_candidates
+            publish_candidates("football", self._recent_candidates.values())
         result = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "upcoming": len(upcoming), "analysed": analysed,

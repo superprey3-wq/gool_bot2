@@ -30,10 +30,10 @@ class FakeProvider:
         assert event_id == "ABCDEFGH"
         assert limit == 10
         # Both teams average 2.0 goals for and 2.0 against: total lambda 4.0.
-        a = [{"event_id": str(i), "timestamp": 1700000000 + i,
+        a = [{"event_id": str(i), "timestamp": 1700000000 + i * 86400,
               "home": "Alpha FC", "away": "Other FC", "home_score": 2,
               "away_score": 2} for i in range(10)]
-        b = [{"event_id": str(i+20), "timestamp": 1700000000 + i,
+        b = [{"event_id": str(i+20), "timestamp": 1700000000 + i * 86400,
               "home": "Other FC", "away": "Beta FC", "home_score": 2,
               "away_score": 2} for i in range(10)]
         return {"home_recent": a, "away_recent": b, "h2h": []}

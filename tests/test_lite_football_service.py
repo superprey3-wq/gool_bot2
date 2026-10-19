@@ -161,3 +161,23 @@ def test_dayreport_and_commands_only_football(tmp_path, monkeypatch):
 def test_score_parser_requires_verified_team_scores():
     assert _game_score({"SC": {"FS": {"S1": 0, "S2": 2}}}) == (0, 2)
     assert _game_score({"SC": {}}) is None
+
+
+def test_result_notification_is_sent_once_and_persisted(tmp_path, monkeypatch):
+    from gool_bot2 import telegram
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "active")
+    h = make_host(tmp_path)
+    h.journal = [{
+        "event_id": "ABCDEFGH", "home": "Alpha FC", "away": "Beta FC",
+        "phase": "PREMATCH", "market": "FT_OVER_2.5",
+        "selection": "ТБ 2.5", "odd": 1.8, "result": "won",
+        "created_ts": time.time(), "sent": True,
+    }]
+    h._save_journal()
+    notices = []
+    monkeypatch.setattr(telegram, "broadcast", lambda text: notices.append(text) or 1)
+    h._announce_results(now=time.time())
+    h._announce_results(now=time.time() + 61)
+    assert len(notices) == 1
+    assert "ЗАШЛО" in notices[0]
+    assert make_host(tmp_path).journal[0]["result_notified"] is True

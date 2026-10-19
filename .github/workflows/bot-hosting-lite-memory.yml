@@ -8,6 +8,7 @@ on:
     paths:
       - "scripts/bot_hosting_memory_probe.py"
       - "bot_hosting_lite.py"
+      - "requirements-lite.txt"
       - ".github/workflows/bot-hosting-lite-memory.yml"
       - "src/gool_bot2/**"
       - "pyproject.toml"
@@ -50,3 +51,18 @@ jobs:
           name: gool-bot-hosting-import-memory
           path: reports/bot_hosting_lite/import_memory.json
           retention-days: 14
+
+  lite-minimal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only lightweight runtime dependencies
+        run: python -m pip install -r requirements-lite.txt
+      - name: Boot Lite worker from minimal installation
+        env:
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+        run: python bot_hosting_lite.py --smoke

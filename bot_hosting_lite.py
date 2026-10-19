@@ -1,6 +1,6 @@
 """GOOL Lite staging launcher for a single small bot-hosting container.
 
-Stage 1: hockey + basketball PREMATCH/LIVE, lightweight Telegram menu.
+Stage 2: three-sport analysis in one process, lightweight Telegram menus.
 No training, browsers, exchange workers, or football trained ensemble.
 The default is SHADOW: real feed processing, no unsolicited bet messages.
 """
@@ -31,8 +31,11 @@ DEFAULTS = {
     "GOOL_MULTISPORT_PREMATCH_ENABLED": "1",
     "GOOL_DAILY_ALL_MARKETS_ENABLED": "0",
     "GOOL_DAILY_MARKET_EMBEDDED_ENABLED": "0",
-    "GOOL_GLOBAL_SUPER10_ENABLED": "0",  # stage 1 has no football
+    "GOOL_GLOBAL_SUPER10_ENABLED": "1",  # dry-run SUPER 10 in shadow mode
     "GOOL_MULTISPORT_INTERVAL_SECONDS": "90",
+    "GOOL_LITE_FOOTBALL_ENABLED": "1",
+    "GOOL_LITE_FOOTBALL_PREMATCH_MAX": "3",
+    "GOOL_LITE_FOOTBALL_LIVE_MAX": "3",
     "GOOL_MULTISPORT_PREMATCH_FS_BRAIN_SCAN_MAX": "30",
     "GOOL_MULTISPORT_PREMATCH_PRICE_MAX_PER_SPORT": "12",
     "GOOL_MULTISPORT_PREMATCH_MAX_MAPPED_PER_SPORT": "24",
@@ -69,6 +72,7 @@ def _telegram_loop(state: Path, interval: int = 15):
     """Poll only Lite-supported commands. No legacy football model imported."""
     from gool_bot2 import telegram
     from gool_bot2 import multisport_menu
+    from gool_bot2 import global_super10
 
     offset_path = state / "telegram_offset.txt"
     try:
@@ -107,9 +111,10 @@ def _telegram_loop(state: Path, interval: int = 15):
                     telegram.subscribe(chat_id)
                     response_text = (
                         "🟢 GOOL Lite — тестовый запуск\\n"
+                        "⚽ Футбол: PREMATCH и LIVE-анализ\\n"
                         "🏒 Хоккей и 🏀 баскетбол: PREMATCH + LIVE\\n"
                         "Режим: " + os.getenv("GOOL_MULTISPORT_MODE", "shadow").upper() +
-                        "\\nКоманды: /status /hockeyjournal /basketjournal /hockeyprematch /basketprematch /stop"
+                        "\\nКоманды: /status /football /super10 /dayreport /parlays /hockeyjournal /basketjournal /stop"
                     )
                 elif cmd == "/stop":
                     telegram.unsubscribe(chat_id)
@@ -121,10 +126,17 @@ def _telegram_loop(state: Path, interval: int = 15):
                     except (FileNotFoundError, ValueError):
                         pass
                     sports = s.get("sports") or {}
+                    f = {}
+                    try:
+                        f = json.loads((state / "gool_lite_football_state.json").read_text("utf-8"))
+                    except (OSError, ValueError):
+                        pass
                     response_text = (
                         "🏟 GOOL Lite\\n"
                         f"Режим: {os.getenv('GOOL_MULTISPORT_MODE', 'shadow').upper()}\\n"
                         f"Последний анализ: {s.get('captured_at') or 'ещё не выполнялся'}\\n"
+                        f"Футбол: {'анализ есть' if f.get('captured_at') else 'ожидает'} "
+                        f"(отправка ставок пока отключена)\\n"
                         f"Хоккей: {'OK' if sports.get('hockey') else 'ожидает'}\\n"
                         f"Баскетбол: {'OK' if sports.get('basketball') else 'ожидает'}"
                     )
@@ -136,8 +148,50 @@ def _telegram_loop(state: Path, interval: int = 15):
                     sport = "hockey" if cmd == "/hockeyprematch" else "basketball"
                     sections = multisport_menu.sport_prematch_picks_sections(sport)
                     response_text = "\\n\\n".join(sections[:1]) if sections else "Ставок пока нет"
+                elif cmd in ("/football", "/footballprematch", "/footballlive"):
+                    f = {}
+                    try:
+                        f = json.loads((state / "gool_lite_football_state.json").read_text("utf-8"))
+                    except (OSError, ValueError):
+                        pass
+                    pre = f.get("prematch") or {}
+                    live = f.get("live") or {}
+                    response_text = (
+                        "⚽ GOOL Lite · футбол\\n"
+                        f"PREMATCH: проверено {pre.get('analysed', 0)}, сценариев {pre.get('scenario_matches', 0)}, "
+                        f"с реальными ценами {pre.get('priced', 0)}\\n"
+                        f"LIVE: матчей {live.get('live_total', 0)}, проверено {live.get('analysed', 0)}\\n"
+                        "⚠️ Автоотправка футбольных ставок ещё не проверена и отключена."
+                    )
+                    if cmd == "/footballprematch":
+                        for r in (f.get("prematch_candidates") or [])[:3]:
+                            response_text += (f"\\n{r.get('home')} — {r.get('away')}: "
+                                              f"{r.get('selection')} @{r.get('odd')} "
+                                              f"[{r.get('bookmaker')}]")
+                    elif cmd == "/footballlive":
+                        for r in (live.get("decisions") or [])[:5]:
+                            response_text += (f"\\n{r.get('match')} {r.get('minute')}′ "
+                                              f"{r.get('market')} {r.get('decision')} "
+                                              "(без котировки)")
+                elif cmd in ("/super10", "/super"):
+                    response_text = multisport_menu.super10_text()
+                elif cmd in ("/parlays", "/express"):
+                    response_text = (multisport_menu.sport_parlay_text("hockey") + "\\n" +
+                                     multisport_menu.sport_parlay_text("basketball"))
+                elif cmd in ("/dayreport", "/fullreport"):
+                    from gool_bot2.full_report_export import build_daily_report
+                    filename, data, mime = build_daily_report(
+                        football_path=state / "gool_lite_football_journal.json"
+                    )
+                    # Do not send the same document as HTML text below.
+                    ok = telegram.send_document(chat_id, filename, data,
+                                                caption="📊 GOOL Lite · отчёт за день",
+                                                content_type=mime)
+                    if not ok:
+                        telegram.send_message(chat_id, "⚠️ Не удалось отправить отчёт; проверь логи.")
+                    continue
                 else:
-                    response_text = "Команды GOOL Lite: /start /status /hockeyjournal /basketjournal /hockeyprematch /basketprematch /stop"
+                    response_text = "Команды GOOL Lite: /start /status /football /footballlive /footballprematch /super10 /dayreport /parlays /hockeyjournal /basketjournal /stop"
                 telegram.send_message(chat_id, str(response_text)[:3800])
             except Exception as exc:
                 print(f"GOOL_LITE_TELEGRAM_ERROR command={cmd} error={type(exc).__name__}:{exc}", flush=True)
@@ -152,7 +206,10 @@ def _smoke() -> int:
     with tempfile.TemporaryDirectory(prefix="gool-lite-smoke-") as temp:
         os.environ["RUNTIME_DATA_DIR"] = temp
         from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker
+        from gool_bot2.lite_football import LiteFootballWorker
         worker = MultiSportSteamWorker(Path(temp))
+        football = LiteFootballWorker(Path(temp))
+        assert football.state_path.parent == Path(temp) / "live"
         assert worker.state_path.parent == Path(temp) / "live"
         poll = _telegram_loop(Path(temp) / "live")
         poll()  # token deliberately absent; no API request
@@ -182,8 +239,10 @@ def main() -> int:
         if not os.getenv("TELEGRAM_CHAT_ID"):
             raise RuntimeError("Active GOOL Lite needs TELEGRAM_CHAT_ID")
     from gool_bot2.xbet_multisport_steam import MultiSportSteamWorker
+    from gool_bot2.lite_football import LiteFootballWorker
 
     worker = MultiSportSteamWorker(Path(os.environ["RUNTIME_DATA_DIR"]))
+    football = LiteFootballWorker(Path(os.environ["RUNTIME_DATA_DIR"])) if os.getenv("GOOL_LITE_FOOTBALL_ENABLED", "1") == "1" else None
     poll = _telegram_loop(state)
     stop = False
 
@@ -196,7 +255,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop_handler)
     print("GOOL_LITE_STAGE1_STARTED " + json.dumps({
         "mode": os.getenv("GOOL_MULTISPORT_MODE", "shadow"),
-        "sports": ["hockey", "basketball"],
+        "sports": ["football", "hockey", "basketball"],
         "interval": args.interval,
         "data_dir": str(state.parent),
         **_usage(),
@@ -208,6 +267,11 @@ def main() -> int:
             worker.collect_once()
         except Exception as exc:
             print(f"GOOL_LITE_COLLECT_ERROR {type(exc).__name__}:{exc}", flush=True)
+        try:
+            if football is not None:
+                football.collect_once()
+        except Exception as exc:
+            print(f"GOOL_LITE_FOOTBALL_ERROR {type(exc).__name__}:{exc}", flush=True)
         try:
             poll()
         except Exception as exc:

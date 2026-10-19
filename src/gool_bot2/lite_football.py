@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .flashscore_odds import exact_trend_price, fetch_event_odds
+from .flashscore_odds import TREND_MARKET, fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
 from .prematch_goal_profile import build_prematch_goal_profile
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
@@ -46,6 +46,59 @@ MARKETS = {
     # F04/F05 still evaluated and displayed as scenarios, but are not sent:
     # this cheap source has no verified paired 1X2 quote implementation.
 }
+
+
+def _paired_trend_price(data: dict[str, Any], target: str) -> dict[str, Any] | None:
+    """Require both sides from the SAME bookmaker and the SAME handicap."""
+    choice = TREND_MARKET.get(target)
+    if not choice:
+        return None
+    scope, kind, line, side = choice
+    bookmakers = {
+        str((x.get("bookmaker") or {}).get("id")): str((x.get("bookmaker") or {}).get("name") or "")
+        for x in ((data.get("settings") or {}).get("bookmakers") or [])
+        if isinstance(x, dict)
+    }
+    offers: list[dict[str, Any]] = []
+    for market in data.get("odds") or []:
+        if (not isinstance(market, dict) or market.get("bettingScope") != scope
+                or market.get("bettingType") != kind):
+            continue
+        odds: dict[str, float] = {}
+        for item in market.get("odds") or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                odd = float(item.get("value"))
+            except (TypeError, ValueError):
+                continue
+            if not (1.01 < odd < 500):
+                continue
+            if kind == "OVER_UNDER":
+                try:
+                    if abs(float((item.get("handicap") or {}).get("value")) - float(line)) > .0001:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+                direction = str(item.get("selection") or "").upper()
+            else:
+                yesno = item.get("bothTeamsToScore")
+                direction = ("YES" if yesno is True else "NO" if yesno is False
+                             else str(yesno).upper())
+            if direction in ("OVER", "UNDER", "YES", "NO"):
+                odds[direction] = odd
+        opposite = "UNDER" if side == "OVER" else "OVER" if side == "UNDER" else "NO" if side == "YES" else "YES"
+        a, b = odds.get(side), odds.get(opposite)
+        if not a or not b:
+            continue
+        fair = (1 / a) / ((1 / a) + (1 / b))
+        offers.append({
+            "best_odds": a,
+            "opposite_odds": b,
+            "market_probability": fair,
+            "bookmaker": bookmakers.get(str(market.get("bookmakerId"))) or str(market.get("bookmakerId") or ""),
+        })
+    return max(offers, key=lambda x: x["best_odds"]) if offers else None
 
 
 def _load(path: Path, default: Any) -> Any:
@@ -122,7 +175,7 @@ class LiteFootballWorker:
             for target, label, probability in MARKETS.get(scenario, []):
                 if target == "1H_OVER_0.5" and fh is None:
                     continue
-                price = exact_trend_price(odds, target)
+                price = _paired_trend_price(odds, target)
                 if not price:
                     continue
                 odd = float(price.get("best_odds") or 0)

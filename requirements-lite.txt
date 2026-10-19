@@ -1,0 +1,3 @@
+# GOOL Lite Stage 1 only: hockey/basketball + Telegram cards.
+# Intentionally no pandas, numpy, scikit-learn, playwright, or trained models.
+Pillow>=10,<13

@@ -1,60 +1,79 @@
-# GOOL Lite Stage 1 — Bot-Hosting.net Free
+# GOOL Lite — free Bot-Hosting.net
 
-This is an experimental, **not production-equivalent**, one-process runtime for the
-`bot-hosting-lite` Git branch. `main` is not changed.
+**Experimental 3-sport, one-process, SHADOW-by-default build.** On Bot-Hosting.net
+(256 MB RAM / 25% CPU / 512 MB disk) it is a staged replacement, NOT yet
+production-equivalent to the full GOOL MULTI.
 
-## Capabilities
+## Features
 
-- Real hockey and basketball Flashscore/1xBet scans, PREMATCH and LIVE.
-- Original multi-sport formulas and scenario engines; SHADOW signals by default.
-- Telegram /start /stop /status /hockeyjournal /basketjournal
-  /hockeyprematch /basketprematch (requires TELEGRAM_BOT_TOKEN).
-- Small SQLite state and bounded multisport history (approximately 1 MiB).
-- No football production process, no pretrained football models, no Chromium,
-  no full bookmaker archive, no full /dayreport or cross-sport SUPER 10.
-- Single Python process. No live production worker on GitHub Actions.
+- 🏒 Hockey PREMATCH + LIVE: existing scenarios, real Flashscore/1xBet markets.
+- 🏀 Basketball PREMATCH + LIVE: existing formulas, team history and market lines.
+- ⚽ Football PREMATCH: Flashscore history + F01–F05; only a subset (F01–F03)
+  can produce a **diagnostic** priced candidate from real two-sided odds.
+  Only 3 upcoming games per 30min by default, to keep CPU within free quota.
+- ⚽ Football LIVE: Flashscore minute, score and attack stats, momentum, V4
+  decision diagnostics. **No football LIVE wager is delivered**, because this
+  Lite path has not yet verified live 1xBet quote and score synchronization.
+- Telegram: /start, /stop, /status, /football, /footballprematch, /footballlive,
+  /hockeyjournal, /basketjournal, /hockeyprematch, /basketprematch,
+  /parlays, /super10, /dayreport. Football commands show diagnostic candidates.
+- SUPER 10 pool/eligibility from all 3 sports, but **no automatic message in
+  shadow mode**. Football candidates are uncalibrated and must be validated.
+- /dayreport exports full HTML document using current journal data, which may
+  be empty or incomplete in the staging period (football auto-delivery is disabled).
+- Only Pillow dependency; no pandas, numpy, sklearn, Chromium, trained models.
+- No ongoing production processing on GitHub Actions: CI runs offline tests only.
 
-## Deploy using the hosting panel
+## Deploy
 
-1. Create a free **Python** Application on https://bot-hosting.net/ .
-2. Select **GitHub repository** as the source:
-   `superprey3-wq/gool_bot2`, branch **bot-hosting-lite**.
-3. Python version **3.11+**.
-4. Entry File / STARTUP_FILE: **bot_hosting_lite.py**.
-5. Leave the Python runtime's default start command, which installs root
-   `requirements.txt` (Lite branch installs **Pillow only**).
-   If custom command is required:
-   `python -m pip install --no-cache-dir -r requirements.txt && exec python bot_hosting_lite.py`
-6. Under Environment (never commit secrets): `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
-7. Leave `GOOL_MULTISPORT_MODE=shadow` until at least a few real feed cycles
-   have correct matches, periods, prices and journal results.
-8. Start. Console should show `GOOL_LITE_STAGE1_STARTED` and later
-   `GOOL_MULTISPORT_FS_BRAIN` and `GOOL_LITE_HEALTH`.
-9. In Telegram use `/start` then `/status`.
-10. To explicitly enable sending signals after validation, set
-    `GOOL_MULTISPORT_MODE=active` and restart.
+1. Create **Python** service on https://bot-hosting.net.
+2. GitHub repo: `superprey3-wq/gool_bot2`.
+3. Branch: **bot-hosting-lite** (NOT main).
+4. Python 3.11.
+5. Startup File: **bot_hosting_lite.py**.
+6. The branch's root `requirements.txt` installs **Pillow only**.
+7. Configure secrets on the **host**, never GitHub:
+   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+8. Keep `GOOL_MULTISPORT_MODE=shadow` to prevent automatic bet cards
+   during testing. Leave `GOOL_FOOTBALL_AUTOINSTALL=0`.
+9. Restart once the exact target commit is known. If 'pull on restart' is enabled,
+   it may download recent code; check Actions before restarting.
+10. Console: `GOOL_LITE_STAGE1_STARTED` (legacy startup event name),
+   `GOOL_LITE_FOOTBALL_PRE`, `GOOL_LITE_FOOTBALL_LIVE`,
+   `GOOL_MULTISPORT_FS_BRAIN`, `GOOL_LITE_HEALTH`.
+11. Telegram: /start, /status, /football, /super10, /dayreport.
 
-**Free quota**: 256 MB RAM / 25% vCPU / 512 MB disk, manual renewal every 4 days.
-These are very tight constraints. Imports and no-network constructor were tested
-in CI at ~45 MiB RSS; a full feed cycle with hundreds of fixtures has NOT yet
-been tested against the free quota. Active delivery is not approved by CI alone.
+**CAUTION:** Switching to `active` enables LIVE/PREMATCH delivery of hockey
+and basketball and may also send SUPER 10 if all delivery conditions pass.
+The Lite football analyzer still does *not* automatically send football bets.
+Do not switch to active without checking real price mapping and safeguards.
 
-## Troubleshooting
+Default settings can be overridden with:
+- `GOOL_LITE_FOOTBALL_ENABLED=0`: temporarily disable football scanner.
+- `GOOL_LITE_FOOTBALL_PREMATCH_MAX=3`: number of PREMATCH fixtures per cycle
+  (every 30min; max=8).
+- `GOOL_LITE_FOOTBALL_LIVE_MAX=3`: live fixtures for statistics
+  (every 150sec; max=8).
+- `GOOL_MULTISPORT_INTERVAL_SECONDS=90`: multi-sport full scan period.
+- `GOOL_GLOBAL_SUPER10_ENABLED=1`: monitor global readiness in shadow mode.
 
-- `ModuleNotFoundError: PIL`: ensure `requirements.txt` from
-  **bot-hosting-lite**, not `main`, and dependency installation is configured.
-- `ModuleNotFoundError: gool_bot2`: confirm the entire repo was cloned,
-  not only `bot_hosting_lite.py`; the launcher adds `src` to Python path.
-- `GOOL_LITE_COLLECT_ERROR`: check the printed exception and upstream
-  Flashscore/1xBet reachability; the worker will retry.
-- Frequent RAM/CPU kills: increase GOOL_MULTISPORT_INTERVAL_SECONDS or set
-  GOOL_HOCKEY_ENABLED=0 temporarily to isolate memory/CPU load. This limits
-  sports coverage, so it is diagnostic only, not a final GOOL configuration.
-- Empty status after startup: the first scan may take time or fail if providers
-  block traffic. Check logs rather than treating zero cards as an engine pass.
-- If `/status` gets no reply, check Telegram token and whether another GOOL
-  deployment is polling the **same bot token**.
-- Never expose Telegram tokens in screenshots, logs or public repositories.
+**Important measurements**: 33–45 MiB startup RSS on GitHub CI, ~94 MB when
+hockey started processing in one observed real bot-hosting.net session.
+This is NOT the steady-state peak with all three sports. The free plan's
+25% CPU quota is likely a tighter constraint than RAM.
 
-GitHub Actions tests build and validate the program; they do not act as
-a permanent host and do not store runtime Telegram journals.
+Stop the service or set `GOOL_LITE_FOOTBALL_ENABLED=0` if health checks show
+the provider calls are repeatedly timing out or the process is killed.
+
+## Not yet verified
+
+1. 24-hour host endurance under actual football+hockey+basketball load.
+2. Correct real-data pairing of football prematch odds; LIVE bookmaker quotes
+   and live football automated signal delivery.
+3. All journals, SUPER 10 and /dayreport populated with settled entries.
+4. No CPU throttling during weekend match surges.
+
+## Security
+
+Never send bot token in chat or screenshots. Do not run the full GOOL bot on
+another host with the same token simultaneously (Telegram getUpdates conflict).

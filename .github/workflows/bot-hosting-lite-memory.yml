@@ -9,6 +9,7 @@ on:
       - "scripts/bot_hosting_memory_probe.py"
       - "bot_hosting_lite.py"
       - "tests/test_lite_football.py"
+      - "tests/test_lite_telegram_commands.py"
       - "requirements-lite.txt"
       - ".github/workflows/bot-hosting-lite-memory.yml"
       - "src/gool_bot2/**"
@@ -41,7 +42,8 @@ jobs:
             tests/test_prematch_scenario_active.py \
             tests/test_hockey_brain_v2.py \
             tests/test_basketball_brain_v2.py \
-            tests/test_lite_football.py
+            tests/test_lite_football.py \
+            tests/test_lite_telegram_commands.py
       - name: Start GOOL Lite without secrets or network calls
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"
@@ -69,7 +71,7 @@ jobs:
       - name: Test football Lite with minimal dependencies
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"
-        run: python -m pytest -q tests/test_lite_football.py
+        run: python -m pytest -q tests/test_lite_football.py tests/test_lite_telegram_commands.py
       - name: Boot Lite worker from minimal installation
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"

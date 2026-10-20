@@ -125,3 +125,55 @@ def test_odds_cannot_mix_sides_across_bookmakers():
     priced = _paired_trend_price(market, "FT_OVER_2.5")
     assert priced["bookmaker"] == "Book A"
     assert priced["best_odds"] == 1.9
+
+
+def test_prematch_rotates_through_matches_instead_of_first_five(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv("GOOL_LITE_FOOTBALL_PREMATCH_MAX", "5")
+    now = time.time()
+    games = [
+        SimpleNamespace(provider_match_id=f"A{i:07d}", home=f"Home{i}", away=f"Away{i}",
+                        league="Test", meta={"scheduled_start_ts": now + 3200})
+        for i in range(16)
+    ]
+    class Provider:
+        def scheduled_matches_for_day(self, day):
+            return games
+    worker = LiteFootballWorker(tmp_path, provider=Provider())
+    seen = []
+    def no_history(game):
+        seen.append(game.provider_match_id)
+        return {"status":"WAIT_HISTORY", "quality":0}, {}
+    monkeypatch.setattr(worker, "_forecast", no_history)
+    for i in range(4):
+        result = worker.scan_prematch(now=now + 601 * i)
+        assert result["selected"] <= 5
+    assert len(set(seen)) == 16
+    assert result["filters"]["no_history"] >= 1
+
+
+def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path):
+    from types import SimpleNamespace
+    now = time.time()
+    fixtures = [
+        SimpleNamespace(provider_match_id=f"L{i:07d}", home=f"H{i}", away=f"A{i}",
+                        league="Test", meta={}, minute=25, is_halftime=False,
+                        home_score=0, away_score=0)
+        for i in range(12)
+    ]
+    seen = []
+    class Provider:
+        def live_matches(self):
+            return fixtures
+        def fetch_stats(self, event_id):
+            seen.append(event_id)
+            return {"shots": (4, 3), "shots_on_target": (1, 2), "corners": (2, 1)}
+    worker = LiteFootballWorker(tmp_path, provider=Provider())
+    for i in range(9):
+        result = worker.scan_live(now=now + i * 151)
+        assert result["errors"] == 0
+        assert result["analysed"] <= 4
+        assert result["filters"]["brain_bet"] == 0
+    assert len(set(seen)) == 12
+    assert seen[:4] == seen[4:8] == seen[8:12]
+    assert set(seen[:4]).isdisjoint(set(seen[12:16]))

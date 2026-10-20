@@ -371,6 +371,7 @@ class LiteFootballWorker:
             "low_confidence": 0, "low_probability": 0, "brain_bet": 0,
             "no_xg": 0, "no_decision": 0,
             "fotmob_checked": 0, "fotmob_confirmed": 0,
+            "fotmob_unmapped": 0, "fotmob_no_shotmap": 0, "fotmob_error": 0,
         }
         failures = 0
         seen = set()
@@ -399,7 +400,24 @@ class LiteFootballWorker:
                                 0.0, sum(float(x) for x in new) - sum(float(x) for x in old)
                             )
                 providers = {"flashscore": {"stats": stats, "meta": {}}}
-                if (secondary_budget and past is not None
+                record = {
+                    "match": {"minute": m.minute, "home_score": m.home_score,
+                              "away_score": m.away_score, "is_halftime": m.is_halftime,
+                              "home": m.home, "away": m.away},
+                    "providers": providers,
+                    "live_momentum": momentum,
+                }
+                # Only spend the expensive secondary request on a game that
+                # already has enough fresh pressure to warrant confirmation.
+                preliminary = evaluate_live_goals(record)
+                pressure_candidate = any(
+                    d.probability >= .55 and
+                    any(reason == "momentum_ready=1" for reason in d.reasons) and
+                    any(reason.startswith("recent_signals=") and
+                        int(reason.split("=", 1)[1]) >= 2 for reason in d.reasons)
+                    for d in preliminary
+                )
+                if (secondary_budget and pressure_candidate
                         and os.getenv("GOOL_LITE_FOTMOB_VERIFY", "1") == "1"
                         and now - self._fotmob_last_checked.get(mid, 0) >= 600
                         and ("xg" not in stats or len(stats) < 4)):
@@ -411,21 +429,22 @@ class LiteFootballWorker:
                             from .providers.fotmob import FotMobProvider
                             self._fotmob_provider = FotMobProvider()
                         extra = self._fotmob_provider.enrich(m.home, m.away)
-                        if (extra is not None
-                                and pair_score(m.home, m.away, extra.home, extra.away) >= .88
+                        # FotMob.enrich echoes requested home/away strings, so
+                        # compare its actual mapping match_score, not echoed names!
+                        mapped_score = float((extra.meta or {}).get("match_score") or 0) if extra else 0.
+                        if (extra is not None and mapped_score >= .88
                                 and (extra.meta or {}).get("has_shotmap")
-                                and (extra.stats or {}).get("shots") != (0, 0)):
+                                and sum(extra.stats.get("shots") or (0, 0)) > 0):
                             providers["fotmob"] = {"stats": extra.stats, "meta": extra.meta}
                             filters["fotmob_confirmed"] += 1
+                        elif not extra or mapped_score < .88:
+                            filters["fotmob_unmapped"] += 1
+                        else:
+                            filters["fotmob_no_shotmap"] += 1
                     except Exception as exc:
+                        filters["fotmob_error"] += 1
                         print(f"GOOL_LITE_SECONDARY_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
-                record = {
-                    "match": {"minute": m.minute, "home_score": m.home_score,
-                              "away_score": m.away_score, "is_halftime": m.is_halftime,
-                              "home": m.home, "away": m.away},
-                    "providers": providers,
-                    "live_momentum": momentum,
-                }
+                # Re-evaluate with the independent source, if actually matched.
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
                     filters["no_decision"] += 1

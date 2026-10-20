@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds
 from gool_bot2.football_v5_shadow import forecast_from_history, _observations, _name, _team_view
-from gool_bot2.lite_football_v5_adapter import normalized_full_market
+from gool_bot2.lite_football_v5_adapter import normalized_full_market, history_identity_name
 
 
 def main() -> None:
@@ -48,7 +48,8 @@ def main() -> None:
                 for key in ("home_recent","away_recent","h2h")
             }
             forecast = forecast_from_history(
-                home=m.home, away=m.away,
+                home=history_identity_name(m.home, history),
+                away=history_identity_name(m.away, history),
                 kickoff=float((m.meta or {}).get("scheduled_start_ts") or 0),
                 context=history,
             )
@@ -58,9 +59,10 @@ def main() -> None:
             kickoff = float((m.meta or {}).get("scheduled_start_ts") or 0)
             observations = _observations(history, kickoff)
             result["valid_dated_rows"] = len(observations)
-            result["valid_home_id_matches"] = sum(1 for row in observations if _team_view(row, _name(m.home)))
-            result["valid_away_id_matches"] = sum(1 for row in observations if _team_view(row, _name(m.away)))
+            result["valid_home_id_matches"] = sum(1 for row in observations if _team_view(row, _name(history_identity_name(m.home, history))))
+            result["valid_away_id_matches"] = sum(1 for row in observations if _team_view(row, _name(history_identity_name(m.away, history))))
             result["fixture_names"] = [m.home, m.away]
+            result["v5_history_identities"] = [history_identity_name(m.home, history), history_identity_name(m.away, history)]
             result["history_home_names_sample"] = [[v.get("home"),v.get("away"),v.get("timestamp")] for v in (history.get("home_recent") or [])[:2]]
             result["history_away_names_sample"] = [[v.get("home"),v.get("away"),v.get("timestamp")] for v in (history.get("away_recent") or [])[:2]]
             result["kickoff_ts"] = kickoff

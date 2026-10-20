@@ -259,3 +259,20 @@ def test_oddscheck_reports_index_without_claiming_live_odds(tmp_path, monkeypatc
     assert len(notices) == 1
     assert "Найдено событий футбола: 1" in notices[0]
     assert "не проверка доступности LIVE-котировок" in notices[0]
+
+
+def test_audit_separates_daily_counters_from_new_process_session(tmp_path):
+    h = make_host(tmp_path)
+    snapshot = {
+        "prematch": {"captured_at": "2026-10-20T13:00:01Z", "analysed": 5,
+                     "filters":{"priced": 1}},
+        "live": {"captured_at": "2026-10-20T13:00:01Z", "analysed": 4,
+                 "filters":{"scores365_checked":1, "secondary_diagnostic":1}},
+    }
+    h._track_scans(snapshot)
+    assert h.session_audit["live"]["scores365_checked"] == 1
+    assert h.session_audit["prematch"]["analysed"] == 5
+    newer = make_host(tmp_path)
+    assert newer.audit["live"]["scores365_checked"] == 1
+    assert newer.session_audit["live"] == {}
+    assert "После перезапуска" in newer._format_audit()

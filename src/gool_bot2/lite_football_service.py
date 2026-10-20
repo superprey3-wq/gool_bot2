@@ -134,7 +134,8 @@ class LivePriceAdapter:
         fair = (1 / over) / ((1 / over) + (1 / under))
         p = _numeric(decision.get("probability"))
         confidence = _numeric(decision.get("confidence"))
-        if p < 0.70 or confidence < 0.78 or p - fair < 0.06 or p * over - 1 < 0.05:
+        required_confidence = max(0.62, float(decision.get("confidence_required") or 0.78))
+        if p < 0.70 or confidence < required_confidence or p - fair < 0.06 or p * over - 1 < 0.05:
             return None
         return {
             "event_id": fixture.provider_match_id,

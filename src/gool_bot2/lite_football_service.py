@@ -390,6 +390,10 @@ class FootballHost:
             )
             and not any(r.get("event_id") == d.get("event_id") and r.get("phase") == "LIVE"
                         for r in self.journal)
+            and (is_active() or not any(
+                r.get("event_id") == d.get("event_id") and r.get("phase") == "LIVE"
+                for r in self.shadow_journal
+            ))
         ]
         # Original V3 has its own LIVE scenarios and may independently approve
         # the same fixture as V4. Price at most one decision per match, prioritizing

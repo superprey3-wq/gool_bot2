@@ -16,7 +16,7 @@ from typing import Any, Callable
 from .flashscore_odds import fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
 from .football_v5_shadow import forecast_from_history
-from .lite_football_v5_adapter import original_v5_picks
+from .lite_football_v5_adapter import original_v5_picks, history_identity_name
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .providers.flashscore import FlashscoreProvider
 from .providers.common import pair_score
@@ -73,7 +73,9 @@ class LiteFootballWorker:
             str(fixture.provider_match_id), fixture.home, fixture.away, limit=10,
         ) or {}
         forecast = forecast_from_history(
-            home=fixture.home, away=fixture.away, kickoff=kickoff, context=history,
+            home=history_identity_name(fixture.home, history),
+            away=history_identity_name(fixture.away, history),
+            kickoff=kickoff, context=history,
         )
         return forecast, history
 

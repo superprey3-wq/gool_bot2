@@ -18,7 +18,6 @@ from .live_goal_brain_v4 import evaluate_live_goals
 from .live_momentum import LiveMomentumTracker
 from .football_v5_shadow import forecast_from_history
 from .lite_football_v5_adapter import original_v5_picks, history_identity_name
-from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .providers.flashscore import FlashscoreProvider
 from .providers.common import pair_score
 
@@ -87,7 +86,7 @@ class LiteFootballWorker:
         return forecast, history
 
     def _picks(self, fixture: Any, forecast: dict[str, Any],
-               scenarios: dict[str, Any], odds: dict[str, Any],
+               odds: dict[str, Any],
                history: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """The unchanged GOOL V5 production price gate owns PREMATCH decisions."""
         if forecast.get("status") != "READY" or not odds:
@@ -114,10 +113,9 @@ class LiteFootballWorker:
         ]
         upcoming.sort(key=lambda m: float((m.meta or {}).get("scheduled_start_ts") or 0))
         max_scan = max(1, min(8, int(os.getenv("GOOL_LITE_FOOTBALL_PREMATCH_MAX", "5"))))
-        analysed, patterns, priced, failures = 0, 0, 0, 0
+        analysed, priced, failures = 0, 0, 0
         counters = {
-            "no_history": 0, "no_scenario": 0, "not_priceable_scenario": 0,
-            "quote_empty": 0, "no_value": 0, "priced": 0,
+            "no_history": 0, "quote_empty": 0, "no_value": 0, "priced": 0,
         }
         observations: list[dict[str, Any]] = []
         seen_now = set()
@@ -134,20 +132,15 @@ class LiteFootballWorker:
             seen_now.add(event_id)
             try:
                 forecast, profile = self._forecast(fixture)
-                scenarios = evaluate_prematch_scenarios("football", football_forecast=forecast)
-                matched_here = int(scenarios.get("matched_count") or 0)
-                patterns += matched_here
-                # Original V5 prices 1X2, BTTS and FT totals irrespective of
-                # F01-F05 hypotheses. Never gate the quote behind a scenario.
+                # V5 PREMATCH decisions depend on historic form/opponent-adjusted
+                # forecast and actual available bookmaker odds, not LIVE scenarios.
                 priceable = forecast.get("status") == "READY"
                 if not priceable:
                     counters["no_history"] += 1
-                elif not matched_here:
-                    counters["no_scenario"] += 1
                 odds = self.odds_fetch(event_id, timeout=6) or {} if priceable else {}
                 if priceable and not odds:
                     counters["quote_empty"] += 1
-                picks = self._picks(fixture, forecast, scenarios, odds, history=profile)
+                picks = self._picks(fixture, forecast, odds, history=profile)
                 if priceable and odds and not picks:
                     counters["no_value"] += 1
                 analysed += 1
@@ -159,9 +152,7 @@ class LiteFootballWorker:
                     "event_id": event_id, "match": f"{fixture.home} — {fixture.away}",
                     "kickoff": (fixture.meta or {}).get("scheduled_start_ts"),
                     "status": forecast.get("status"), "sample": forecast.get("sample", 0),
-                    "scenario_matches": [s["id"] for s in scenarios.get("scenarios", [])
-                                         if s.get("status") == "MATCH"],
-                    "priced": bool(picks),
+                     "priced": bool(picks),
                     "quote_available": bool(odds),
                     "priceable_scenario": priceable,
                     "brain": "FOOTBALL_V5",
@@ -182,7 +173,7 @@ class LiteFootballWorker:
         result = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "upcoming": len(upcoming), "analysed": analysed,
-            "scenario_matches": patterns, "priced": priced, "brain": "FOOTBALL_V5",
+            "priced": priced, "brain": "FOOTBALL_V5",
             "errors": failures, "filters": counters,
             "selected": len(selection), "prematch_cursor": self._prematch_cursor,
             "observations": observations[:10],

@@ -300,3 +300,23 @@ def test_audit_separates_daily_counters_from_new_process_session(tmp_path):
     assert newer.audit["live"]["scores365_checked"] == 1
     assert newer.session_audit["live"] == {}
     assert "После перезапуска" in newer._format_audit()
+
+
+def test_rejected_live_odds_remember_safe_reason_without_raw_book_payload(tmp_path):
+    index = [{"event_id": "123", "home": "Alpha FC", "away": "Beta FC"}]
+    mismatch = LivePriceAdapter(tmp_path, FakeCollector(score=(2, 1)))
+    assert mismatch.price(_decision(), index, now=time.time()) is None
+    assert mismatch.last_reject_reason == "GAME_SCORE_MISMATCH"
+    absent = LivePriceAdapter(tmp_path, FakeCollector(quote=False))
+    assert absent.price(_decision(), index, now=time.time()) is None
+    assert absent.last_reject_reason == "TARGET_LINE_MISSING"
+    valid = LivePriceAdapter(tmp_path, FakeCollector())
+    assert valid.price(_decision(), index, now=time.time()) is not None
+    assert valid.last_reject_reason is None
+
+
+def test_audit_reports_live_rejection_reason(tmp_path):
+    h = make_host(tmp_path)
+    h.audit["odds"] = {"index_checks": 1, "rejected": 1,
+                       "reject_GAME_SCORE_MISMATCH": 1}
+    assert "GAME_SCORE_MISMATCH=1" in h._format_audit()

@@ -577,7 +577,9 @@ class FootballHost:
             f"За день PREMATCH: {int((self.audit.get('prematch') or {}).get('priced') or 0)} положительных сканов; "
             f"F01–F05 совпадений {(self.audit.get('prematch') or {}).get('scenario_matches',0)}\n"
             f"За день LIVE: V3 BET {(self.audit.get('live') or {}).get('v3_bet',0)} · "
-            f"V4 BET {(self.audit.get('live') or {}).get('brain_bet',0)}\n"
+            f"V4 BET {(self.audit.get('live') or {}).get('brain_bet',0)} · "
+            f"V4 Policy STRONG {(self.audit.get('live') or {}).get('v4_policy_strong',0)}\n"
+            f"SHADOW-журнал: {len(self.shadow_journal)} проверенных кандидатов · /shadowjournal\n"
             "Причины отсутствия сигналов: /audit. LIVE требует актуальных котировок 1xBet."
         )
 

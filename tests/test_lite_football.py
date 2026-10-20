@@ -124,7 +124,7 @@ def test_prematch_rotates_through_matches_instead_of_first_five(tmp_path, monkey
     assert result["filters"]["no_history"] >= 1
 
 
-def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path, monkeypatch):
+def test_live_tracks_cohort_for_five_scans_before_rotation(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
     monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
     from types import SimpleNamespace
@@ -143,14 +143,15 @@ def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path, mon
             seen.append(event_id)
             return {"shots": (4, 3), "shots_on_target": (1, 2), "corners": (2, 1)}
     worker = LiteFootballWorker(tmp_path, provider=Provider())
-    for i in range(9):
+    for i in range(10):
         result = worker.scan_live(now=now + i * 151)
         assert result["errors"] == 0
         assert result["analysed"] <= 4
         assert result["filters"]["brain_bet"] == 0
     assert len(set(seen)) == 12
-    assert seen[:4] == seen[4:8] == seen[8:12]
-    assert set(seen[:4]).isdisjoint(set(seen[12:16]))
+    assert all(seen[4*i:4*i+4] == seen[:4] for i in range(5))
+    assert all(seen[4*i:4*i+4] == seen[20:24] for i in range(5,10))
+    assert set(seen[:4]).isdisjoint(set(seen[20:24]))
 
 
 def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp_path, monkeypatch):
@@ -273,3 +274,59 @@ def test_original_secondary_collector_runs_without_preliminary_bet_and_caches(tm
     assert second["filters"]["no_xg"] == 0
     assert secondary.calls == 1
     assert first["filters"]["brain_bet"] == 0  # no fake betting signals
+
+
+def test_365scores_confirmation_without_xg_not_reported_as_xg(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "1")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    now = time.time()
+    class FS:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id="ABCDEFGH", home="Alpha FC",
+                                    away="Beta FC", league="Test", minute=22,
+                                    is_halftime=False, home_score=0, away_score=0)]
+        def fetch_stats(self, eid):
+            return {"shots": (5,3), "shots_on_target": (1,1), "corners": (2,2)}
+    class Scores:
+        def enrich(self, home, away):
+            return SimpleNamespace(
+                stats={"shots":(5,3), "shots_on_target":(1,1)},
+                meta={"match_score": .96})
+    worker = LiteFootballWorker(tmp_path, provider=FS())
+    worker._scores365_provider = Scores()
+    result = worker.scan_live(now=now)
+    assert result["filters"]["scores365_confirmed"] == 1
+    assert result["filters"]["scores365_without_xg"] == 1
+    assert result["filters"]["scores365_with_xg"] == 0
+    assert result["filters"]["no_xg"] == 1
+    assert result["filters"]["brain_bet"] == 0
+
+
+def test_stale_long_live_gap_resets_original_momentum(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from collections import deque
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    now = time.time()
+    match = SimpleNamespace(provider_match_id="ABCDEFGH", home="Alpha FC",
+                            away="Beta FC", league="Test", minute=48,
+                            is_halftime=False, home_score=0, away_score=0)
+    class FS:
+        def live_matches(self):
+            return [match]
+        def fetch_stats(self, eid):
+            return {"shots": (14,9), "shots_on_target": (5,3)}
+    worker = LiteFootballWorker(tmp_path, provider=FS())
+    worker._live["ABCDEFGH"] = deque([
+        {"ts": now-1000, "minute": 25, "score": [0,0],
+         "stats": {"shots": (2,2), "shots_on_target": (1,0)}},
+    ], maxlen=12)
+    worker._momentum_tracker._history["ABCDEFGH"].append({
+        "minute":25,"score":(0,0),"shots":(2.,2.),
+        "sot":(1.,0.),"xg":None,"big":None,"danger":None})
+    result = worker.scan_live(now=now)
+    assert result["errors"] == 0
+    assert result["filters"]["momentum_reset"] == 1
+    assert result["filters"]["no_momentum"] >= 1
+    assert len(worker._momentum_tracker._history["ABCDEFGH"]) == 1

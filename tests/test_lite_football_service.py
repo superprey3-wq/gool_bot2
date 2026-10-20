@@ -181,3 +181,26 @@ def test_result_notification_is_sent_once_and_persisted(tmp_path, monkeypatch):
     assert len(notices) == 1
     assert "ЗАШЛО" in notices[0]
     assert make_host(tmp_path).journal[0]["result_notified"] is True
+
+
+def test_daily_audit_shows_rejections_and_does_not_double_count_cached_scan(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "shadow")
+    h = make_host(tmp_path)
+    payload = {
+        "prematch": {"captured_at": "2026-10-20T06:00:00Z",
+                     "analysed": 5, "upcoming": 25, "priced": 0,
+                     "filters": {"no_history": 3, "no_scenario": 2, "quote_empty": 0}},
+        "live": {"captured_at": "2026-10-20T06:00:00Z",
+                 "analysed": 4, "live_total": 18,
+                 "filters": {"no_momentum": 2, "low_confidence": 2, "brain_bet": 0}},
+    }
+    h._track_scans(payload)
+    h._track_scans(payload)
+    text = h._format_audit()
+    assert "нет сценария" in text.lower()
+    assert "История недоступна: 3" in text
+    assert "проверено: 5" in text
+    assert "мозг BET: 0" in text
+    h2 = make_host(tmp_path)
+    assert h2.audit["prematch"]["analysed"] == 5
+    assert h2.audit["live"]["analysed"] == 4

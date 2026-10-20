@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from gool_bot2.football_v5_shadow import forecast_from_history
 from gool_bot2.football_v5_production import production_v5_picks
-from gool_bot2.lite_football_v5_adapter import normalized_full_market, original_v5_picks
+from gool_bot2.lite_football_v5_adapter import normalized_full_market, original_v5_picks, history_identity_name
 from gool_bot2.lite_football import LiteFootballWorker
 from gool_bot2.lite_football_service import FootballHost
 
@@ -119,3 +119,22 @@ def test_original_live_v4_no_bet_is_not_promoted_by_lite(monkeypatch,tmp_path):
     assert row["brain"] == "ORIGINAL_LIVE_V4"
     assert row["decisions"][0]["decision"] == "NO_BET"
     assert row["filters"]["brain_bet"] == 0
+
+
+def test_original_v5_accepts_only_history_confirmed_country_suffix_identity(tmp_path):
+    ctx = history()
+    assert history_identity_name("Alpha FC (Bhu)", ctx) == "Alpha FC"
+    assert history_identity_name("Beta FC (Leb)", ctx) == "Beta FC"
+    assert history_identity_name("Other (Bhu)", ctx) == "Other (Bhu)"
+    assert history_identity_name("Alpha FC (U21)", ctx) == "Alpha FC (U21)"
+    class FakeProvider:
+        def fetch_match_history(self, event_id, home, away, limit):
+            assert home == "Alpha FC (Bhu)" and away == "Beta FC (Leb)"
+            return ctx
+    work = LiteFootballWorker(tmp_path, provider=FakeProvider())
+    fixture = SimpleNamespace(provider_match_id="ABCDEFGH", home="Alpha FC (Bhu)",
+                              away="Beta FC (Leb)", league="test",
+                              meta={"scheduled_start_ts":time.time()+3600})
+    forecast, _ = work._forecast(fixture)
+    assert forecast["status"] == "READY"
+    assert forecast["home_games"] >= 6 and forecast["away_games"] >= 6

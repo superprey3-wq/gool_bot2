@@ -158,9 +158,33 @@ def test_dayreport_and_commands_only_football(tmp_path, monkeypatch):
     assert "Баскетбол" not in sent[0]
 
 
-def test_score_parser_requires_verified_team_scores():
-    assert _game_score({"SC": {"FS": {"S1": 0, "S2": 2}}}) == (0, 2)
-    assert _game_score({"SC": {}}) is None
+def test_score_parser_matches_original_1xbet_score_epoch_semantics():
+    # GetGameZip routinely omits zero-valued sides. The original GOOL
+    # guards accept SC.FS={} as 0:0 and SC.FS={S1:3} as 3:0.
+    from gool_bot2.xbet_score_epoch_guard import extract_xbet_score
+    cases = [
+        ({"SC": {"FS": {"S1": 0, "S2": 2}}}, (0, 2)),
+        ({"SC": {"FS": {}}}, (0, 0)),
+        ({"SC": {"FS": {"S1": 3}}}, (3, 0)),
+        ({"SC": {"FS": {"S2": 1}}}, (0, 1)),
+        ({"SC": {}}, None),
+        ({"SC": {"FS": None}}, None),
+    ]
+    for game, expected in cases:
+        assert _game_score(game) == expected
+        assert extract_xbet_score(game) == expected
+
+
+def test_live_real_1xbet_omitted_zero_score_gets_priced(tmp_path):
+    class OriginalZeroSideCollector(FakeCollector):
+        def _game(self, event_id):
+            self.called.append(("game", event_id))
+            return {"SC": {"FS": {}}}
+    gateway = LivePriceAdapter(tmp_path, collector=OriginalZeroSideCollector())
+    index = [{"event_id": "123", "home": "Alpha FC", "away": "Beta FC"}]
+    row = gateway.price(_decision(), index, now=time.time())
+    assert row is not None
+    assert row["odd"] == 1.65
 
 
 def test_result_notification_is_sent_once_and_persisted(tmp_path, monkeypatch):

@@ -170,6 +170,7 @@ class FootballHost:
         self.live.mkdir(parents=True, exist_ok=True)
         self.brain = brain if brain is not None else LiteFootballWorker(self.root)
         self.journal_path = self.live / "gool_lite_football_journal.json"
+        self.shadow_journal_path = self.live / "gool_lite_football_shadow_journal.json"
         self.audit_path = self.live / "gool_lite_football_audit.json"
         self.audit = _load(self.audit_path, {})
         if self.audit.get("date") != datetime.now(TZ).strftime("%Y-%m-%d"):
@@ -177,6 +178,9 @@ class FootballHost:
                           "last_prematch_scan": "", "last_live_scan": "", "prematch_candidates": []}
         self.offset_path = self.live / "football_telegram_offset.txt"
         self.journal = _load(self.journal_path, [])
+        self.shadow_journal = _load(self.shadow_journal_path, [])
+        if not isinstance(self.shadow_journal, list):
+            self.shadow_journal = []
         if not isinstance(self.journal, list):
             self.journal = []
         self.price_adapter = price_adapter if price_adapter is not None else LivePriceAdapter(self.root)
@@ -202,6 +206,23 @@ class FootballHost:
         self.journal = (finished[-550:] + pending[-250:])
         _save(self.journal_path, self.journal)
 
+    def _record_shadow(self, item: dict[str, Any], *, now: float) -> None:
+        # Never present a SHADOW observation as a placed or sent bet.
+        event_id = str(item.get("event_id") or "")
+        phase = str(item.get("phase") or "")
+        if any(str(r.get("event_id")) == event_id and r.get("phase") == phase
+               for r in self.shadow_journal):
+            return
+        row = {
+            **item, "created_ts": now,
+            "created_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+            "result": "pending", "sent": False, "origin": "shadow_verified",
+        }
+        self.shadow_journal.append(row)
+        self.shadow_journal = self.shadow_journal[-250:]
+        _save(self.shadow_journal_path, self.shadow_journal)
+        print(f"GOOL_SHADOW_VERIFIED phase={phase} event={event_id}", flush=True)
+
     def _deliver(self, item: dict[str, Any], *, now: float) -> bool:
         event_id = str(item.get("event_id") or "")
         phase = str(item.get("phase") or "")
@@ -214,6 +235,7 @@ class FootballHost:
         if phase == "PREMATCH" and _numeric(item.get("start_ts")) <= now + 60:
             return False
         if not is_active():
+            self._record_shadow(item, now=now)
             return False
         bet = {**item, "created_ts": now, "result": "pending",
                "created_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
@@ -338,7 +360,8 @@ class FootballHost:
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"
             f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"
-            f"Отправлено сигналов: {len(self.journal)}\n"
+            f"Отправлено сигналов: {len(self.journal)} · "
+            f"SHADOW (не отправлялись): {len(self.shadow_journal)}\n"
             "В SHADOW рассылка отключена. Причины отсева показаны выше."
             + "".join(
                 f"\nНайден: {html.escape(str(r.get('home')))} — "
@@ -415,7 +438,8 @@ class FootballHost:
 
     def reconcile(self, *, now: float | None = None) -> int:
         now = time.time() if now is None else now
-        rows = [r for r in self.journal if r.get("result") == "pending"]
+        rows = [r for r in [*self.journal, *self.shadow_journal]
+                if r.get("result") == "pending"]
         if not rows or now < self._next_settle:
             self._announce_results(now=now)
             return 0
@@ -438,6 +462,7 @@ class FootballHost:
                 changed += 1
         if changed:
             self._save_journal()
+            _save(self.shadow_journal_path, self.shadow_journal[-250:])
             print(f"GOOL_LITE_SETTLED count={changed}", flush=True)
         self._announce_results(now=now)
         return changed
@@ -578,6 +603,19 @@ class FootballHost:
             )
         return msg[:3900]
 
+    def _format_shadow_journal(self) -> str:
+        rows = self.shadow_journal
+        result = f"🔎 <b>GOOL · проверенные SHADOW-кандидаты: {len(rows)}</b>\n"
+        result += "Это наблюдения с реальными котировками, а не отправленные ставки.\n"
+        result += self._summary(rows)
+        for row in rows[-12:]:
+            marker = {"won": "✅", "lost": "❌", "push": "↩️"}.get(row.get("result"), "⏳")
+            result += (f"\n{marker} {html.escape(str(row.get('home')))} — "
+                       f"{html.escape(str(row.get('away')))} · "
+                       f"{html.escape(str(row.get('selection')))} @{row.get('odd')} "
+                       f"({html.escape(str(row.get('phase')))})")
+        return result[:3900]
+
     def _format_prematch(self) -> str:
         rows = self.last_state.get("prematch_candidates") or []
         msg = "🟡 <b>Футбол PREMATCH · кандидаты (не гарантированные ставки)</b>"
@@ -646,7 +684,7 @@ class FootballHost:
         cmd = command.split(maxsplit=1)[0].split("@", 1)[0].lower() if command else ""
         if cmd == "/start":
             telegram.subscribe(chat_id)
-            response = "⚽ GOOL Lite · Футбол. Команды: /status /audit /oddscheck /prematch /live /journal /express /dayreport /stop"
+            response = "⚽ GOOL Lite · Футбол. Команды: /status /audit /shadowjournal /oddscheck /prematch /live /journal /express /dayreport /stop"
         elif cmd == "/stop":
             telegram.unsubscribe(chat_id)
             response = "🔕 Уведомления отключены."
@@ -679,6 +717,8 @@ class FootballHost:
             response = self._format_live()
         elif cmd in ("/journal", "/footballjournal"):
             response = self._format_journal()
+        elif cmd in ("/shadowjournal", "/shadow", "/testjournal"):
+            response = self._format_shadow_journal()
         elif cmd in ("/prematchjournal", "/livejournal"):
             response = self._format_journal("PREMATCH" if cmd == "/prematchjournal" else "LIVE")
         elif cmd in ("/express", "/parlays"):

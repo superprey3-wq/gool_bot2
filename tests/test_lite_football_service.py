@@ -221,7 +221,7 @@ def test_daily_audit_shows_rejections_and_does_not_double_count_cached_scan(tmp_
     h._track_scans(payload)
     h._track_scans(payload)
     text = h._format_audit()
-    assert "нет сценария" in text.lower()
+    assert "нет котировок" in text.lower()
     assert "История недоступна: 3" in text
     assert "проверено: 5" in text
     assert "мозг BET: 0" in text

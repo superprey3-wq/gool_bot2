@@ -10,6 +10,7 @@ on:
       - "tests/test_lite_football.py"
       - "tests/test_lite_football_service.py"
       - "tests/test_lite_original_football.py"
+      - "scripts/football_only_probe.py"
       - ".github/workflows/bot-hosting-lite-memory.yml"
       - "requirements*.txt"
 
@@ -33,6 +34,13 @@ jobs:
           PYTHONPATH: "src"
         run: |
           python -m pytest -q tests/test_lite_football.py tests/test_lite_football_service.py tests/test_lite_original_football.py tests/test_prematch_strategy_scenarios.py tests/test_live_goal_brain_v4.py
+      - name: One-shot Flashscore + original Football V5 real-data source diagnostic
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+          PYTHONPATH: "src"
+        run: python scripts/football_only_probe.py
       - name: One-process no-network memory smoke
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"

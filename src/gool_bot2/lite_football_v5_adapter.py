@@ -17,7 +17,7 @@ def history_identity_name(team: str, context: dict[str, Any]) -> str:
     Flashscore fixture might say 'Paro (Bhu)' while H2H calls it 'Paro'.
     Do not invent unknown aliases or change the underlying V5 forecast.
     """
-    match = re.fullmatch(r"(.+?)\\s*\\(([A-Za-z]{3})\\)", str(team or "").strip())
+    match = re.fullmatch(r"(.+?)\s*\(([A-Za-z]{3})\)", str(team or "").strip())
     if not match:
         return team
     shortened = match.group(1).strip()

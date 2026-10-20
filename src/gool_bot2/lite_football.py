@@ -16,6 +16,7 @@ from typing import Any, Callable
 from .flashscore_odds import fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
 from .live_momentum import LiveMomentumTracker
+from .lite_football_scenarios import prematch_scenarios, evaluate_live_scenarios, forget_live_history
 from .football_v5_shadow import forecast_from_history
 from .lite_football_v5_adapter import original_v5_picks, history_identity_name
 from .providers.flashscore import FlashscoreProvider
@@ -113,9 +114,11 @@ class LiteFootballWorker:
         ]
         upcoming.sort(key=lambda m: float((m.meta or {}).get("scheduled_start_ts") or 0))
         max_scan = max(1, min(8, int(os.getenv("GOOL_LITE_FOOTBALL_PREMATCH_MAX", "5"))))
-        analysed, priced, failures = 0, 0, 0
+        analysed, priced, failures, scene_matches = 0, 0, 0, 0
         counters = {
             "no_history": 0, "quote_empty": 0, "no_value": 0, "priced": 0,
+            "prematch_scene_match": 0, "prematch_scene_approved": 0,
+            "prematch_scene_no_data": 0,
         }
         observations: list[dict[str, Any]] = []
         seen_now = set()
@@ -141,6 +144,16 @@ class LiteFootballWorker:
                 if priceable and not odds:
                     counters["quote_empty"] += 1
                 picks = self._picks(fixture, forecast, odds, history=profile)
+                scenes = prematch_scenarios(
+                    forecast, football_quote=odds, qualified_picks=picks,
+                )
+                matched = int(scenes.get("matched_count") or 0)
+                scene_matches += matched
+                counters["prematch_scene_match"] += matched
+                counters["prematch_scene_approved"] += int(scenes.get("qualified_pattern_count") or 0)
+                counters["prematch_scene_no_data"] += sum(
+                    row.get("status") == "NO_DATA" for row in scenes.get("scenarios") or []
+                )
                 if priceable and odds and not picks:
                     counters["no_value"] += 1
                 analysed += 1
@@ -156,6 +169,11 @@ class LiteFootballWorker:
                     "quote_available": bool(odds),
                     "priceable_scenario": priceable,
                     "brain": "FOOTBALL_V5",
+                    "prematch_scenarios": [
+                        {"id": row.get("id"), "name": row.get("name"),
+                         "status": row.get("status")}
+                        for row in scenes.get("scenarios") or []
+                    ],
                 })
             except Exception as exc:
                 failures += 1
@@ -174,6 +192,7 @@ class LiteFootballWorker:
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "upcoming": len(upcoming), "analysed": analysed,
             "priced": priced, "brain": "FOOTBALL_V5",
+            "scenario_matches": scene_matches,
             "errors": failures, "filters": counters,
             "selected": len(selection), "prematch_cursor": self._prematch_cursor,
             "observations": observations[:10],
@@ -237,6 +256,9 @@ class LiteFootballWorker:
             "secondary_cache_used": 0, "secondary_due": 0,
             "momentum_old_collector": 0, "momentum_gap": 0,
             "momentum_reset": 0, "sources_with_xg": 0,
+            "v3_evaluated": 0, "v3_ready": 0, "v3_bet": 0,
+            "v3_no_5m": 0, "v3_low_quality": 0, "v3_memory_insufficient": 0,
+            "live_scenario_match": 0,
             "scores365_with_xg": 0, "scores365_without_xg": 0,
         }
         failures = 0
@@ -261,6 +283,7 @@ class LiteFootballWorker:
                     # pressure cannot become a fictional fresh 5-minute trend.
                     history.clear()
                     self._momentum_tracker._history.pop(mid, None)
+                    forget_live_history(mid)
                     self._secondary_cache.pop(mid, None)
                     filters["momentum_reset"] += 1
                 past = next((x for x in reversed(history) if now - x["ts"] >= 300
@@ -388,6 +411,42 @@ class LiteFootballWorker:
                     filters["momentum_old_collector"] += 1
                 elif fallback_momentum.get("minutes_in_epoch", 0) >= 5:
                     record["live_momentum"] = fallback_momentum
+                # PREMATCH scenarios F01-F05 cannot veto or invent LIVE bets.
+                # LIVE has its own original Brain V3 memory and scenario states.
+                live_v3 = evaluate_live_scenarios(record, mid, observed_at=now)
+                filters["v3_evaluated"] += 1
+                if live_v3.get("status") == "READY":
+                    filters["v3_ready"] += 1
+                for block in live_v3.get("blocks") or []:
+                    if block == "brain_v3_wait_5m_history":
+                        filters["v3_no_5m"] += 1
+                    elif block == "brain_v3_data_quality_low":
+                        filters["v3_low_quality"] += 1
+                    elif block == "brain_v3_not_enough_epoch_snapshots":
+                        filters["v3_memory_insufficient"] += 1
+                filters["live_scenario_match"] += sum(
+                    row.get("status") in {"MATCH", "BET"}
+                    for row in live_v3.get("scenarios") or []
+                )
+                if live_v3.get("decision") == "BET" and live_v3.get("market"):
+                    filters["v3_bet"] += 1
+                    prob = float(live_v3.get("probability") or 0)
+                    decisions.append({
+                        "event_id": mid, "match": f"{m.home} — {m.away}",
+                        "home": m.home, "away": m.away, "league": m.league or "",
+                        "score": [m.home_score, m.away_score], "minute": m.minute,
+                        "observed_at": now, "market": live_v3["market"],
+                        "decision": "BET", "base_decision": "BET",
+                        "brain": "ORIGINAL_BRAIN_V3",
+                        "scenario": live_v3["strategy"],
+                        # Original V3 confidence_score = probability * 100.
+                        "confidence": prob,
+                        "confidence_required": float(live_v3.get("bet_min") or .70),
+                        "probability": prob,
+                        "data_quality": live_v3.get("data_quality"),
+                        "pressure_state": live_v3.get("pressure_state"),
+                        "priced": False, "publishable": False,
+                    })
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
                     filters["no_decision"] += 1
@@ -449,7 +508,8 @@ class LiteFootballWorker:
             "analysed": len(seen), "errors": failures, "selected": len(selected),
             "batch": batch + 1, "batch_count": batches,
             "cohort_scan": self._live_window_scans, "filters": filters,
-            "brain": "ORIGINAL_LIVE_V4",
+            "brain": "ORIGINAL_LIVE_V4+ORIGINAL_BRAIN_V3",
+            "scenarios": {"prematch": "F01-F05", "live": "L01-L05"},
             "decisions": decisions[:20],
         }
         print("GOOL_LITE_FOOTBALL_LIVE " + json.dumps({

@@ -159,6 +159,11 @@ class FootballHost:
         self.live.mkdir(parents=True, exist_ok=True)
         self.brain = brain if brain is not None else LiteFootballWorker(self.root)
         self.journal_path = self.live / "gool_lite_football_journal.json"
+        self.audit_path = self.live / "gool_lite_football_audit.json"
+        self.audit = _load(self.audit_path, {})
+        if self.audit.get("date") != datetime.now(TZ).strftime("%Y-%m-%d"):
+            self.audit = {"date": datetime.now(TZ).strftime("%Y-%m-%d"), "prematch": {}, "live": {}, "odds": {},
+                          "last_prematch_scan": "", "last_live_scan": ""}
         self.offset_path = self.live / "football_telegram_offset.txt"
         self.journal = _load(self.journal_path, [])
         if not isinstance(self.journal, list):
@@ -214,10 +219,64 @@ class FootballHost:
         print(f"GOOL_FOOTBALL_LITE_SENT phase={phase} event={event_id}", flush=True)
         return True
 
+    def _track_scans(self, result: dict[str, Any]) -> None:
+        """Persist bounded daily audit without storing raw bookmaker feeds."""
+        date_now = datetime.now(TZ).strftime("%Y-%m-%d")
+        if self.audit.get("date") != date_now:
+            self.audit = {"date": date_now, "prematch": {}, "live": {}, "odds": {},
+                          "last_prematch_scan": "", "last_live_scan": ""}
+        for part in ("prematch", "live"):
+            detail = result.get(part) or {}
+            when = detail.get("captured_at")
+            marker = "last_" + part + "_scan"
+            if not when or when == self.audit.get(marker):
+                continue
+            self.audit[marker] = when
+            bucket = self.audit.setdefault(part, {})
+            bucket["scans"] = int(bucket.get("scans") or 0) + 1
+            for key in ("upcoming", "selected", "analysed", "priced",
+                        "scenario_matches", "errors", "live_total", "eligible"):
+                if key in detail:
+                    bucket[key] = int(bucket.get(key) or 0) + int(detail.get(key) or 0)
+            for key, value in (detail.get("filters") or {}).items():
+                bucket[key] = int(bucket.get(key) or 0) + int(value or 0)
+        _save(self.audit_path, self.audit)
+
+    def _count_odds(self, key: str) -> None:
+        bucket = self.audit.setdefault("odds", {})
+        bucket[key] = int(bucket.get(key) or 0) + 1
+        _save(self.audit_path, self.audit)
+
+    def _format_audit(self) -> str:
+        pre = self.audit.get("prematch") or {}
+        live = self.audit.get("live") or {}
+        odds = self.audit.get("odds") or {}
+        return (
+            f"🩺 <b>GOOL · {self.audit.get('date', '?')} · Футбол</b>\\n"
+            f"Режим: {html.escape(os.getenv(KEY, 'shadow').upper())}\\n"
+            "PREMATCH\\n"
+            f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\\n"
+            f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\\n"
+            f"Рынок не поддержан: {pre.get('not_priceable_scenario',0)} · нет линии: {pre.get('quote_empty',0)}\\n"
+            f"Не прошли фильтры: {pre.get('no_value',0)} · кандидаты: {pre.get('priced',0)}\\n"
+            "LIVE\\n"
+            f"Сканов: {live.get('scans',0)} · матчей в ленте: {live.get('live_total',0)} · проверено: {live.get('analysed',0)}\\n"
+            f"Нет статистики: {live.get('no_stats',0)} · нет динамики: {live.get('no_momentum',0)}\\n"
+            f"Слабая активность: {live.get('insufficient_activity',0)} · уверенность ниже порога: {live.get('low_confidence',0)}\\n"
+            f"Вероятность ниже порога: {live.get('low_probability',0)} · мозг BET: {live.get('brain_bet',0)}\\n"
+            f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\\n"
+            "КОЭФФИЦИЕНТЫ LIVE\\n"
+            f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\\n"
+            f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\\n"
+            f"Отправлено сигналов: {len(self.journal)}\\n"
+            "В SHADOW рассылка отключена. Причины отсева показаны выше."
+        )
+
     def collect(self, *, now: float | None = None) -> dict[str, Any]:
         now = time.time() if now is None else now
         result = self.brain.collect_once()
         self.last_state = dict(result)
+        self._track_scans(result)
         pre = result.get("prematch") or {}
         if not pre.get("cached"):
             for candidate in result.get("prematch_candidates") or []:
@@ -236,10 +295,16 @@ class FootballHost:
             try:
                 collector = self.price_adapter._get_collector()
                 _, index = collector._fetch_index()
+                self._count_odds("index_checks")
+                if not index:
+                    self._count_odds("index_empty")
                 for decision in candidates[:2]:
                     priced = self.price_adapter.price(decision, index, now=now)
                     if priced:
+                        self._count_odds("priced")
                         self._deliver(priced, now=now)
+                    else:
+                        self._count_odds("rejected")
             except Exception as exc:
                 print(f"GOOL_LITE_LIVE_ODDS_ERROR {type(exc).__name__}:{exc}", flush=True)
         return result
@@ -352,7 +417,7 @@ class FootballHost:
             f"LIVE · матчей {live.get('live_total', 0)} · "
             f"разобрано {live.get('analysed', 0)}\n"
             f"Журнал · {len(self.journal)} сигналов\n"
-            "Гол/моменты LIVE требуют подтверждения котировок 1xBet."
+            "Причины отсутствия сигналов: /audit. LIVE требует актуальных котировок 1xBet."
         )
 
     def _journal_rows(self, *, phase: str | None = None) -> list[dict[str, Any]]:
@@ -445,12 +510,14 @@ class FootballHost:
         cmd = command.split(maxsplit=1)[0].split("@", 1)[0].lower() if command else ""
         if cmd == "/start":
             telegram.subscribe(chat_id)
-            response = "⚽ GOOL Lite · Футбол. Команды: /status /prematch /live /journal /express /dayreport /stop"
+            response = "⚽ GOOL Lite · Футбол. Команды: /status /audit /prematch /live /journal /express /dayreport /stop"
         elif cmd == "/stop":
             telegram.unsubscribe(chat_id)
             response = "🔕 Уведомления отключены."
         elif cmd in ("/status", "/football"):
             response = self._format_status()
+        elif cmd in ("/audit", "/debug", "/diagnostics"):
+            response = self._format_audit()
         elif cmd in ("/prematch", "/footballprematch"):
             response = self._format_prematch()
         elif cmd in ("/live", "/footballlive"):
@@ -469,7 +536,7 @@ class FootballHost:
         elif cmd in ("/super10", "/super"):
             response = "SUPER 10 временно недоступен: запущен только футбол. Нужны 10 разных проверенных матчей."
         else:
-            response = "⚽ Команды: /status /prematch /live /journal /express /dayreport /stop"
+            response = "⚽ Команды: /status /audit /prematch /live /journal /express /dayreport /stop"
         telegram.send_message(chat_id, response[:3900])
 
     def poll(self, *, now: float | None = None) -> int:

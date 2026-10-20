@@ -274,3 +274,31 @@ def test_original_v4_strong_policy_can_price_only_with_quality_and_true_momentum
     assert result["filters"]["v4_policy_strong"] == 0
     assert not [d for d in result["decisions"]
                 if d["brain"] == "ORIGINAL_V4_POLICY_STRONG"]
+
+
+def test_v4_policy_never_promotes_red_card_live_scenario(monkeypatch,tmp_path):
+    from gool_bot2 import lite_football
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    class Provider:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id="ABCDEFGH",home="Alpha",
+                                    away="Beta",league="Test",minute=25,
+                                    home_score=0,away_score=0,is_halftime=False)]
+        def fetch_stats(self,mid):
+            return {"shots":(10,8),"shots_on_target":(4,3),"big_chances":(1,1)}
+    monkeypatch.setattr(lite_football,"evaluate_live_scenarios",
+        lambda record,mid,*,observed_at:{
+            "decision":"NO_BET","status":"WATCH","strategy":"goal_before_ht",
+            "probability":.6,"data_quality":.90,"blocks":[],"scenarios":[]})
+    monkeypatch.setattr(lite_football,"evaluate_live_goals",
+        lambda record:[SimpleNamespace(
+            market="GOAL_BEFORE_HT",decision="NO_BET",confidence=.73,
+            probability=.95, data_source="attack_proxy",
+            reasons=("momentum_ready=1","recent_signals=3",
+                     "red_cards=1","threshold=.62"))])
+    row=LiteFootballWorker(tmp_path,provider=Provider()).scan_live(now=time.time())
+    assert row["errors"] == 0
+    assert row["filters"]["v4_policy_strong"] == 0
+    assert not any(d.get("brain")=="ORIGINAL_V4_POLICY_STRONG"
+                   for d in row["decisions"])

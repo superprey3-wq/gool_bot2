@@ -1,15 +1,11 @@
-"""Memory-bounded, model-free football discovery for GOOL Lite.
+"""GOOL original Football V5 PREMATCH and LIVE Brain V4 single-process adapter.
 
-Uses the existing Flashscore provider, historical goal profile and F01-F05
-scenario hypotheses. A matched hypothesis is *not* an automatically valid bet:
-only real paired quotes, independently estimated probabilities and conservative
-gates can create a priced PREMATCH candidate. LIVE is diagnostic-only until
-a verifiably LIVE 1xBet quote adapter has been tested on this hosting tier.
+Pricing and decisions are performed by unchanged original GOOL modules.
+This file only handles the free host's bounded data collection and audit.
 """
 from __future__ import annotations
 
 import json
-import math
 import os
 import time
 from collections import deque
@@ -17,125 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .flashscore_odds import TREND_MARKET, fetch_event_odds
+from .flashscore_odds import fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
 from .football_v5_shadow import forecast_from_history
 from .lite_football_v5_adapter import original_v5_picks
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .providers.flashscore import FlashscoreProvider
 from .providers.common import pair_score
-
-
-def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, x))
-
-
-def _over(lam: float, threshold: int) -> float:
-    # P(Poisson(lam) >= threshold), model estimate, NOT calibrated probability.
-    return 1 - sum(math.exp(-lam) * lam**k / math.factorial(k) for k in range(threshold))
-
-
-MARKETS = {
-    "F01": [("1H_OVER_0.5", "Гол в первом тайме", lambda h, a, fh: _over(fh, 1))],
-    "F02": [
-        ("FT_OVER_2.5", "ТБ 2.5", lambda h, a, fh: _over(h + a, 3)),
-        ("BTTS_YES", "Обе забьют — да", lambda h, a, fh: (1 - math.exp(-h)) * (1 - math.exp(-a))),
-    ],
-    "F03": [
-        ("FT_UNDER_2.5", "ТМ 2.5", lambda h, a, fh: 1 - _over(h + a, 3)),
-        ("BTTS_NO", "Обе забьют — нет", lambda h, a, fh: 1 - (1 - math.exp(-h)) * (1 - math.exp(-a))),
-    ],
-    # F04/F05 still evaluated and displayed as scenarios, but are not sent:
-    # this cheap source has no verified paired 1X2 quote implementation.
-}
-
-
-def _paired_trend_price(data: dict[str, Any], target: str) -> dict[str, Any] | None:
-    """Require both sides from the SAME bookmaker and the SAME handicap."""
-    choice = TREND_MARKET.get(target)
-    if not choice:
-        return None
-    scope, kind, line, side = choice
-    bookmakers = {
-        str((x.get("bookmaker") or {}).get("id")): str((x.get("bookmaker") or {}).get("name") or "")
-        for x in ((data.get("settings") or {}).get("bookmakers") or [])
-        if isinstance(x, dict)
-    }
-    offers: list[dict[str, Any]] = []
-    for market in data.get("odds") or []:
-        if (not isinstance(market, dict) or market.get("bettingScope") != scope
-                or market.get("bettingType") != kind):
-            continue
-        odds: dict[str, float] = {}
-        for item in market.get("odds") or []:
-            if not isinstance(item, dict):
-                continue
-            try:
-                odd = float(item.get("value"))
-            except (TypeError, ValueError):
-                continue
-            if not (1.01 < odd < 500):
-                continue
-            if kind == "OVER_UNDER":
-                try:
-                    if abs(float((item.get("handicap") or {}).get("value")) - float(line)) > .0001:
-                        continue
-                except (TypeError, ValueError):
-                    continue
-                direction = str(item.get("selection") or "").upper()
-            else:
-                yesno = item.get("bothTeamsToScore")
-                direction = ("YES" if yesno is True else "NO" if yesno is False
-                             else str(yesno).upper())
-            if direction in ("OVER", "UNDER", "YES", "NO"):
-                odds[direction] = odd
-        opposite = "UNDER" if side == "OVER" else "OVER" if side == "UNDER" else "NO" if side == "YES" else "YES"
-        a, b = odds.get(side), odds.get(opposite)
-        if not a or not b:
-            continue
-        fair = (1 / a) / ((1 / a) + (1 / b))
-        offers.append({
-            "best_odds": a,
-            "opposite_odds": b,
-            "market_probability": fair,
-            "bookmaker": bookmakers.get(str(market.get("bookmakerId"))) or str(market.get("bookmakerId") or ""),
-        })
-    return max(offers, key=lambda x: x["best_odds"]) if offers else None
-
-
-
-def _lite_live_decision(decision: Any, reasons: dict[str, str]) -> tuple[bool, float, str]:
-    """Separate small-host evidence policy: V4's >=.78 needs 2+ providers.
-
-    A one-provider proxy cannot become an automatic bet. One-provider real xG
-    needs three separate recent pressure measures and an extra probability
-    margin. Two-provider cases also require independent recent momentum.
-    """
-    if reasons.get("momentum_ready") != "1":
-        return False, 0.78, "NO_5M_MOMENTUM"
-    recent = int(reasons.get("recent_signals") or 0)
-    sources = int(reasons.get("sources") or 0)
-    if int(reasons.get("red_cards") or 0) > 0:
-        return False, 0.78, "RED_CARD_UNCALIBRATED"
-    conf = float(decision.confidence)
-    prob = float(decision.probability)
-    threshold = float(reasons.get("threshold") or 1.0)
-    source = str(decision.data_source or "")
-    if sources <= 1:
-        if source != "provider_xg" or recent < 3:
-            return False, 0.78, "SINGLE_SOURCE_INSUFFICIENT"
-        required = 0.62
-        min_probability = max(0.74, threshold + 0.07)
-    else:
-        if recent < (2 if source == "provider_xg" else 3):
-            return False, 0.78, "INSUFFICIENT_ACTIVITY"
-        required = 0.70
-        min_probability = max(0.70, threshold + 0.04)
-    if conf < required:
-        return False, required, "LOW_CONFIDENCE"
-    if prob < min_probability:
-        return False, required, "LOW_PROBABILITY"
-    return True, required, "VERIFIED_MOMENTUM"
 
 
 def _load(path: Path, default: Any) -> Any:

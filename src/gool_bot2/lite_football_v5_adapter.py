@@ -7,7 +7,30 @@ verified book prices. No guessed bookmaker or fabricated market prices.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
+
+
+def history_identity_name(team: str, context: dict[str, Any]) -> str:
+    """Strip a 3-letter country suffix ONLY if historical data confirms it.
+
+    Flashscore fixture might say 'Paro (Bhu)' while H2H calls it 'Paro'.
+    Do not invent unknown aliases or change the underlying V5 forecast.
+    """
+    match = re.fullmatch(r"(.+?)\\s*\\(([A-Za-z]{3})\\)", str(team or "").strip())
+    if not match:
+        return team
+    shortened = match.group(1).strip()
+    for bucket in ("home_recent", "away_recent", "h2h"):
+        for row in context.get(bucket) or []:
+            if not isinstance(row, dict):
+                continue
+            if shortened.casefold() in {
+                str(row.get("home") or "").strip().casefold(),
+                str(row.get("away") or "").strip().casefold(),
+            }:
+                return shortened
+    return team
 
 
 def _decimal(value: Any) -> float | None:
@@ -125,7 +148,9 @@ def original_v5_picks(
 
     if forecast is None:
         forecast = forecast_from_history(
-            home=home, away=away, kickoff=kickoff, context=history,
+            home=history_identity_name(home, history),
+            away=history_identity_name(away, history),
+            kickoff=kickoff, context=history,
         )
     if forecast.get("status") != "READY":
         return [], {"status": forecast.get("status"), "forecast": forecast, "model": "FOOTBALL_V5"}

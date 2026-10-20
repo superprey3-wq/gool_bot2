@@ -22,6 +22,7 @@ from .live_goal_brain_v4 import evaluate_live_goals
 from .prematch_goal_profile import build_prematch_goal_profile
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .providers.flashscore import FlashscoreProvider
+from .providers.common import pair_score
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -101,6 +102,41 @@ def _paired_trend_price(data: dict[str, Any], target: str) -> dict[str, Any] | N
     return max(offers, key=lambda x: x["best_odds"]) if offers else None
 
 
+
+def _lite_live_decision(decision: Any, reasons: dict[str, str]) -> tuple[bool, float, str]:
+    """Separate small-host evidence policy: V4's >=.78 needs 2+ providers.
+
+    A one-provider proxy cannot become an automatic bet. One-provider real xG
+    needs three separate recent pressure measures and an extra probability
+    margin. Two-provider cases also require independent recent momentum.
+    """
+    if reasons.get("momentum_ready") != "1":
+        return False, 0.78, "NO_5M_MOMENTUM"
+    recent = int(reasons.get("recent_signals") or 0)
+    sources = int(reasons.get("sources") or 0)
+    if int(reasons.get("red_cards") or 0) > 0:
+        return False, 0.78, "RED_CARD_UNCALIBRATED"
+    conf = float(decision.confidence)
+    prob = float(decision.probability)
+    threshold = float(reasons.get("threshold") or 1.0)
+    source = str(decision.data_source or "")
+    if sources <= 1:
+        if source != "provider_xg" or recent < 3:
+            return False, 0.78, "SINGLE_SOURCE_INSUFFICIENT"
+        required = 0.62
+        min_probability = max(0.74, threshold + 0.07)
+    else:
+        if recent < (2 if source == "provider_xg" else 3):
+            return False, 0.78, "INSUFFICIENT_ACTIVITY"
+        required = 0.70
+        min_probability = max(0.70, threshold + 0.04)
+    if conf < required:
+        return False, required, "LOW_CONFIDENCE"
+    if prob < min_probability:
+        return False, required, "LOW_PROBABILITY"
+    return True, required, "VERIFIED_MOMENTUM"
+
+
 def _load(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text("utf-8"))
@@ -133,6 +169,8 @@ class LiteFootballWorker:
         self._prematch_cursor = 0
         self._live_window = 0
         self._live_window_scans = 0
+        self._fotmob_provider = None
+        self._fotmob_last_checked: dict[str, float] = {}
         self._last_result = _load(self.state_path, {})
         self._prematch_cursor = int(self._last_result.get("prematch_cursor") or 0)
         self._live_window = int(self._last_result.get("live_window") or 0)
@@ -327,10 +365,12 @@ class LiteFootballWorker:
             self._live_window_scans = 0
             self._live_window = (batch + 1) % batches
         decisions: list[dict[str, Any]] = []
+        secondary_budget = 1
         filters = {
             "no_stats": 0, "no_momentum": 0, "insufficient_activity": 0,
             "low_confidence": 0, "low_probability": 0, "brain_bet": 0,
             "no_xg": 0, "no_decision": 0,
+            "fotmob_checked": 0, "fotmob_confirmed": 0,
         }
         failures = 0
         seen = set()
@@ -358,31 +398,53 @@ class LiteFootballWorker:
                             momentum[f"{alias}_total_last_5m"] = max(
                                 0.0, sum(float(x) for x in new) - sum(float(x) for x in old)
                             )
+                providers = {"flashscore": {"stats": stats, "meta": {}}}
+                if (secondary_budget and past is not None
+                        and os.getenv("GOOL_LITE_FOTMOB_VERIFY", "1") == "1"
+                        and now - self._fotmob_last_checked.get(mid, 0) >= 600
+                        and ("xg" not in stats or len(stats) < 4)):
+                    secondary_budget -= 1
+                    self._fotmob_last_checked[mid] = now
+                    filters["fotmob_checked"] += 1
+                    try:
+                        if self._fotmob_provider is None:
+                            from .providers.fotmob import FotMobProvider
+                            self._fotmob_provider = FotMobProvider()
+                        extra = self._fotmob_provider.enrich(m.home, m.away)
+                        if (extra is not None
+                                and pair_score(m.home, m.away, extra.home, extra.away) >= .88
+                                and (extra.meta or {}).get("has_shotmap")
+                                and (extra.stats or {}).get("shots") != (0, 0)):
+                            providers["fotmob"] = {"stats": extra.stats, "meta": extra.meta}
+                            filters["fotmob_confirmed"] += 1
+                    except Exception as exc:
+                        print(f"GOOL_LITE_SECONDARY_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
                 record = {
                     "match": {"minute": m.minute, "home_score": m.home_score,
                               "away_score": m.away_score, "is_halftime": m.is_halftime,
                               "home": m.home, "away": m.away},
-                    "providers": {"flashscore": {"stats": stats, "meta": {}}},
+                    "providers": providers,
                     "live_momentum": momentum,
                 }
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
                     filters["no_decision"] += 1
-                if "xg" not in stats:
+                if not any("xg" in source["stats"] for source in providers.values()):
                     filters["no_xg"] += 1
                 for decision in evaluated:
                     reasons = {part.split("=", 1)[0]: part.split("=", 1)[1]
                                for part in decision.reasons if "=" in part}
-                    if decision.decision == "BET":
+                    lite_bet, required_confidence, policy = _lite_live_decision(decision, reasons)
+                    if lite_bet:
                         filters["brain_bet"] += 1
                     else:
                         if reasons.get("momentum_ready") == "0":
                             filters["no_momentum"] += 1
                         elif int(reasons.get("recent_signals", "0")) < 2:
                             filters["insufficient_activity"] += 1
-                        elif decision.confidence < .78:
+                        elif policy in ("LOW_CONFIDENCE", "SINGLE_SOURCE_INSUFFICIENT"):
                             filters["low_confidence"] += 1
-                        elif decision.probability < float(reasons.get("threshold", "0")):
+                        elif policy == "LOW_PROBABILITY":
                             filters["low_probability"] += 1
                     decisions.append({
                         "event_id": mid, "match": f"{m.home} — {m.away}",
@@ -390,8 +452,12 @@ class LiteFootballWorker:
                         "score": [m.home_score, m.away_score],
                         "observed_at": now,
                         "minute": m.minute, "market": decision.market,
-                        "decision": decision.decision, "confidence": decision.confidence,
+                        "decision": "BET" if lite_bet else "NO_BET",
+                        "base_decision": decision.decision,
+                        "policy": policy, "confidence_required": required_confidence,
+                        "confidence": decision.confidence,
                         "probability": decision.probability, "reasons": reasons,
+                        "provider_count": len(providers),
                         "priced": False,  # LIVE odds not guaranteed by Flashscore quote API
                         "publishable": False,
                     })

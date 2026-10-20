@@ -254,13 +254,20 @@ class FootballHost:
         if (result.get("prematch") or {}).get("captured_at"):
             rows = self.audit.setdefault("prematch_candidates", [])
             seen = {str(row.get("event_id") or "") for row in rows}
+            # Audit only counts new event IDs; the same candidate can recur
+            # across PREMATCH scans and daily 'priced' is not distinct bets.
+            seen_all = {str(e) for e in self.audit.get("prematch_unique_ids") or []}
             for row in result.get("prematch_candidates") or []:
                 match_id = str(row.get("event_id") or "")
+                if match_id:
+                    seen_all.add(match_id)
                 if match_id and match_id not in seen:
                     rows.append({key: row.get(key) for key in (
                         "event_id", "home", "away", "selection", "odd", "start_ts")})
                     seen.add(match_id)
             self.audit["prematch_candidates"] = rows[-10:]
+            self.audit["prematch_unique_ids"] = sorted(seen_all)[-1000:]
+            self.audit["prematch_unique"] = len(self.audit["prematch_unique_ids"])
         _save(self.audit_path, self.audit)
 
     def _count_odds(self, key: str) -> None:
@@ -282,12 +289,17 @@ class FootballHost:
             f"365Scores {self.session_audit['live'].get('scores365_checked',0)} "
             f"(подтв. {self.session_audit['live'].get('scores365_confirmed',0)}), "
             f"FotMob {self.session_audit['live'].get('fotmob_checked',0)}, "
-            f"BET {self.session_audit['live'].get('brain_bet',0)}\n"
+            f"BET {self.session_audit['live'].get('brain_bet',0)}\n"            f"После перезапуска · LIVE без xG: {self.session_audit['live'].get('no_xg',0)}, "
+            f"нет динамики: {self.session_audit['live'].get('no_momentum',0)}, "
+            f"низкая уверенность: {self.session_audit['live'].get('low_confidence',0)}; "
+            f"1xBet проверок: {self.session_audit['odds'].get('index_checks',0)}, "
+            f"отказов: {self.session_audit['odds'].get('rejected',0)}\n"
             "PREMATCH\n"
             f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\n"
             f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\n"
             f"Рынок не поддержан: {pre.get('not_priceable_scenario',0)} · нет линии: {pre.get('quote_empty',0)}\n"
-            f"Не прошли фильтры: {pre.get('no_value',0)} · кандидаты: {pre.get('priced',0)}\n"
+            f"Не прошли фильтры: {pre.get('no_value',0)} · положительных сканов: {pre.get('priced',0)} · "
+            f"уникальных матчей (с начала новой проверки): {self.audit.get('prematch_unique',0)}\n"
             "LIVE\n"
             f"Сканов: {live.get('scans',0)} · матчей в ленте: {live.get('live_total',0)} · проверено: {live.get('analysed',0)}\n"
             f"Нет статистики: {live.get('no_stats',0)} · нет динамики: {live.get('no_momentum',0)}\n"

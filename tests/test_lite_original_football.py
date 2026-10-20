@@ -116,7 +116,8 @@ def test_original_live_v4_no_bet_is_not_promoted_by_lite(monkeypatch,tmp_path):
     ])
     worker=LiteFootballWorker(tmp_path,provider=FakeProvider())
     row=worker.scan_live(now=time.time())
-    assert row["brain"] == "ORIGINAL_LIVE_V4"
+    assert "ORIGINAL_LIVE_V4" in row["brain"]
+    assert "ORIGINAL_BRAIN_V3" in row["brain"]
     assert row["decisions"][0]["decision"] == "NO_BET"
     assert row["filters"]["brain_bet"] == 0
 

@@ -497,6 +497,7 @@ class LiteFootballWorker:
                         if (rank.allowed and rank.tier == "STRONG"
                                 and ready and recent_n >= 2
                                 and quality >= .50 and p >= .70
+                                and int(reasons.get("red_cards") or 0) == 0
                                 and decision.confidence >= .62):
                             filters["v4_policy_strong"] += 1
                             decisions.append({

@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from gool_bot2.lite_football import LiteFootballWorker, _over, _paired_trend_price
+from gool_bot2.lite_football import LiteFootballWorker, _over, _paired_trend_price, _lite_live_decision
 
 
 def _game(kickoff: float, *, live: bool = False):
@@ -177,3 +177,30 @@ def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path):
     assert len(set(seen)) == 12
     assert seen[:4] == seen[4:8] == seen[8:12]
     assert set(seen[:4]).isdisjoint(set(seen[12:16]))
+
+
+def test_single_source_live_can_pass_only_with_real_xg_and_strong_fresh_momentum():
+    from types import SimpleNamespace
+    decision = SimpleNamespace(data_source="provider_xg", probability=.82, confidence=.68)
+    reasons = {"momentum_ready": "1", "sources": "1", "recent_signals": "3",
+               "red_cards": "0", "threshold": ".65"}
+    ok, required, reason = _lite_live_decision(decision, reasons)
+    assert ok and required == .62 and reason == "VERIFIED_MOMENTUM"
+    proxy = SimpleNamespace(data_source="attack_proxy", probability=.89, confidence=.73)
+    ok, _, reason = _lite_live_decision(proxy, reasons)
+    assert not ok and reason == "SINGLE_SOURCE_INSUFFICIENT"
+    reasons["momentum_ready"] = "0"
+    assert not _lite_live_decision(decision, reasons)[0]
+
+
+def test_multisource_live_checks_activity_confidence_and_probability():
+    from types import SimpleNamespace
+    decision = SimpleNamespace(data_source="attack_proxy", probability=.78, confidence=.73)
+    reasons = {"momentum_ready": "1", "sources": "2", "recent_signals": "3",
+               "red_cards": "0", "threshold": ".65"}
+    assert _lite_live_decision(decision, reasons)[0]
+    reasons["recent_signals"] = "2"
+    assert not _lite_live_decision(decision, reasons)[0]
+    reasons["recent_signals"] = "3"
+    reasons["red_cards"] = "1"
+    assert not _lite_live_decision(decision, reasons)[0]

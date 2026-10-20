@@ -128,7 +128,14 @@ class LiteFootballWorker:
         self._last_live = 0.0
         self._seen_pre: dict[str, float] = {}
         self._live: dict[str, deque[dict[str, Any]]] = {}
+        # Rotate football fixtures, rather than repeatedly sampling only the first
+        # 4 live / first 5 prematch matches on a crowded matchday.
+        self._prematch_cursor = 0
+        self._live_window = 0
+        self._live_window_scans = 0
         self._last_result = _load(self.state_path, {})
+        self._prematch_cursor = int(self._last_result.get("prematch_cursor") or 0)
+        self._live_window = int(self._last_result.get("live_window") or 0)
         self._recent_candidates: dict[str, dict[str, Any]] = {
             str(row["event_id"]): row
             for row in (self._last_result.get("prematch_candidates") or [])
@@ -209,7 +216,7 @@ class LiteFootballWorker:
 
     def scan_prematch(self, *, now: float | None = None) -> dict[str, Any]:
         now = time.time() if now is None else now
-        if now - self._last_pre < 1800:
+        if now - self._last_pre < max(300, int(os.getenv("GOOL_LITE_FOOTBALL_PREMATCH_INTERVAL", "600"))):
             return {"cached": True}
         self._last_pre = now
         matches = self.provider.scheduled_matches_for_day(0)
@@ -220,24 +227,49 @@ class LiteFootballWorker:
         upcoming.sort(key=lambda m: float((m.meta or {}).get("scheduled_start_ts") or 0))
         max_scan = max(1, min(8, int(os.getenv("GOOL_LITE_FOOTBALL_PREMATCH_MAX", "5"))))
         analysed, patterns, priced, failures = 0, 0, 0, 0
+        counters = {
+            "no_history": 0, "no_scenario": 0, "not_priceable_scenario": 0,
+            "quote_empty": 0, "no_value": 0, "priced": 0,
+        }
         observations: list[dict[str, Any]] = []
         seen_now = set()
-        for fixture in upcoming[:max_scan]:
+        # Stagger successive scans across the full 4-hour upcoming window.
+        selection = (
+            [upcoming[(self._prematch_cursor + i) % len(upcoming)]
+             for i in range(min(max_scan, len(upcoming)))]
+            if upcoming else []
+        )
+        if upcoming:
+            self._prematch_cursor = (self._prematch_cursor + len(selection)) % len(upcoming)
+        for fixture in selection:
             event_id = str(fixture.provider_match_id)
             seen_now.add(event_id)
             try:
                 forecast, profile = self._forecast(fixture)
                 scenarios = evaluate_prematch_scenarios("football", football_forecast=forecast)
-                patterns += int(scenarios.get("matched_count") or 0)
-                odds = {}
-                if patterns and any(s.get("status") == "MATCH" and s.get("id") in MARKETS
-                                    for s in scenarios.get("scenarios") or []):
-                    odds = self.odds_fetch(event_id, timeout=6) or {}
+                matched_here = int(scenarios.get("matched_count") or 0)
+                patterns += matched_here
+                priceable = any(
+                    s.get("status") == "MATCH" and s.get("id") in MARKETS
+                    for s in scenarios.get("scenarios") or []
+                )
+                if forecast.get("status") != "READY":
+                    counters["no_history"] += 1
+                elif not matched_here:
+                    counters["no_scenario"] += 1
+                elif not priceable:
+                    counters["not_priceable_scenario"] += 1
+                odds = self.odds_fetch(event_id, timeout=6) or {} if priceable else {}
+                if priceable and not odds:
+                    counters["quote_empty"] += 1
                 picks = self._picks(fixture, forecast, scenarios, odds)
+                if priceable and odds and not picks:
+                    counters["no_value"] += 1
                 analysed += 1
                 if picks:
                     self._recent_candidates[event_id] = picks[0]
                     priced += 1
+                    counters["priced"] += 1
                 observations.append({
                     "event_id": event_id, "match": f"{fixture.home} — {fixture.away}",
                     "kickoff": (fixture.meta or {}).get("scheduled_start_ts"),
@@ -245,6 +277,8 @@ class LiteFootballWorker:
                     "scenario_matches": [s["id"] for s in scenarios.get("scenarios", [])
                                          if s.get("status") == "MATCH"],
                     "priced": bool(picks),
+                    "quote_available": bool(odds),
+                    "priceable_scenario": priceable,
                 })
             except Exception as exc:
                 failures += 1
@@ -263,7 +297,9 @@ class LiteFootballWorker:
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "upcoming": len(upcoming), "analysed": analysed,
             "scenario_matches": patterns, "priced": priced,
-            "errors": failures, "observations": observations[:10],
+            "errors": failures, "filters": counters,
+            "selected": len(selection), "prematch_cursor": self._prematch_cursor,
+            "observations": observations[:10],
             "prematch_candidates": list(self._recent_candidates.values())[:20],
         }
         print("GOOL_LITE_FOOTBALL_PRE " + json.dumps({
@@ -279,16 +315,32 @@ class LiteFootballWorker:
         matches = self.provider.live_matches()
         relevant = [m for m in matches if m.minute and 10 <= m.minute <= 85 and not m.is_halftime]
         # Limit detailed per-match requests on the 25% CPU free tier.
-        relevant.sort(key=lambda m: (m.minute > 45, m.minute))
+        relevant.sort(key=lambda m: str(m.provider_match_id))
         max_live = max(1, min(8, int(os.getenv("GOOL_LITE_FOOTBALL_LIVE_MAX", "4"))))
+        batches = max(1, (len(relevant) + max_live - 1) // max_live)
+        batch = self._live_window % batches
+        selected = relevant[batch * max_live:(batch + 1) * max_live]
+        self._live_window_scans += 1
+        # Keep a small set of the same games for 3 cycles (5-minute momentum),
+        # then rotate. Avoid treating cumulative stats as 'recent' every cycle.
+        if self._live_window_scans >= 3:
+            self._live_window_scans = 0
+            self._live_window = (batch + 1) % batches
         decisions: list[dict[str, Any]] = []
+        filters = {
+            "no_stats": 0, "no_momentum": 0, "insufficient_activity": 0,
+            "low_confidence": 0, "low_probability": 0, "brain_bet": 0,
+            "no_xg": 0, "no_decision": 0,
+        }
         failures = 0
         seen = set()
-        for m in relevant[:max_live]:
+        for m in selected:
             mid = str(m.provider_match_id)
             seen.add(mid)
             try:
                 stats = self.provider.fetch_stats(mid)
+                if not stats:
+                    filters["no_stats"] += 1
                 history = self._live.setdefault(mid, deque(maxlen=12))
                 row = {"ts": now, "minute": m.minute,
                        "score": [m.home_score, m.away_score], "stats": stats}
@@ -313,7 +365,25 @@ class LiteFootballWorker:
                     "providers": {"flashscore": {"stats": stats, "meta": {}}},
                     "live_momentum": momentum,
                 }
-                for decision in evaluate_live_goals(record):
+                evaluated = evaluate_live_goals(record)
+                if not evaluated:
+                    filters["no_decision"] += 1
+                if "xg" not in stats:
+                    filters["no_xg"] += 1
+                for decision in evaluated:
+                    reasons = {part.split("=", 1)[0]: part.split("=", 1)[1]
+                               for part in decision.reasons if "=" in part}
+                    if decision.decision == "BET":
+                        filters["brain_bet"] += 1
+                    else:
+                        if reasons.get("momentum_ready") == "0":
+                            filters["no_momentum"] += 1
+                        elif int(reasons.get("recent_signals", "0")) < 2:
+                            filters["insufficient_activity"] += 1
+                        elif decision.confidence < .78:
+                            filters["low_confidence"] += 1
+                        elif decision.probability < float(reasons.get("threshold", "0")):
+                            filters["low_probability"] += 1
                     decisions.append({
                         "event_id": mid, "match": f"{m.home} — {m.away}",
                         "home": m.home, "away": m.away, "league": m.league or "",
@@ -321,7 +391,7 @@ class LiteFootballWorker:
                         "observed_at": now,
                         "minute": m.minute, "market": decision.market,
                         "decision": decision.decision, "confidence": decision.confidence,
-                        "probability": decision.probability,
+                        "probability": decision.probability, "reasons": reasons,
                         "priced": False,  # LIVE odds not guaranteed by Flashscore quote API
                         "publishable": False,
                     })
@@ -329,12 +399,18 @@ class LiteFootballWorker:
                 failures += 1
                 print(f"GOOL_LITE_FOOTBALL_LIVE_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
         for key in list(self._live):
-            if key not in seen:
+            rows = self._live[key]
+            if not rows or now - rows[-1]["ts"] > 2400:
+                del self._live[key]
+        # Guard memory when hundreds of fixtures are active.
+        if len(self._live) > 64:
+            for key, _ in sorted(self._live.items(), key=lambda item: item[1][-1]["ts"])[:len(self._live) - 64]:
                 del self._live[key]
         result = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "live_total": len(matches), "eligible": len(relevant),
-            "analysed": len(seen), "errors": failures,
+            "analysed": len(seen), "errors": failures, "selected": len(selected),
+            "batch": batch + 1, "batch_count": batches, "filters": filters,
             "decisions": decisions[:20],
         }
         print("GOOL_LITE_FOOTBALL_LIVE " + json.dumps({
@@ -351,6 +427,8 @@ class LiteFootballWorker:
             result["prematch_candidates"] = pre.get("prematch_candidates", [])
         if not live.get("cached"):
             result["live"] = live
+        result["prematch_cursor"] = self._prematch_cursor
+        result["live_window"] = self._live_window
         result["captured_at"] = datetime.now(timezone.utc).isoformat()
         result["mode"] = os.getenv("GOOL_MULTISPORT_MODE", "shadow")
         # This module is analysis-only pending a verified LIVE-priced decision

@@ -116,15 +116,17 @@ def normalized_full_market(raw: dict[str, Any]) -> dict[str, Any]:
 def original_v5_picks(
     *, history: dict[str, Any], raw_odds: dict[str, Any],
     event_id: str, home: str, away: str, league: str, kickoff: float,
+    forecast: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Execute the unchanged original Football V5 forecaster and production gates."""
     from .football_v5_shadow import forecast_from_history
     from .football_v5_production import production_v5_picks
     from .football_prematch_localization import football_selection_ru
 
-    forecast = forecast_from_history(
-        home=home, away=away, kickoff=kickoff, context=history,
-    )
+    if forecast is None:
+        forecast = forecast_from_history(
+            home=home, away=away, kickoff=kickoff, context=history,
+        )
     if forecast.get("status") != "READY":
         return [], {"status": forecast.get("status"), "forecast": forecast, "model": "FOOTBALL_V5"}
     analysis = normalized_full_market(raw_odds)
@@ -137,6 +139,7 @@ def original_v5_picks(
         bookmaker = next((
             str(row.get("bookmaker") or "") for row in analysis["candidates"]
             if abs(float(row["odds"]) - pick.odds) < 1e-7
+            and abs(float(row["market_probability"]) - pick.market_probability) < 1e-6
             and pick.market == {
                 "OVER_UNDER":"match_total", "BOTH_TEAMS_TO_SCORE":"btts",
                 "HOME_DRAW_AWAY":"match_1x2",

@@ -343,3 +343,33 @@ def test_audit_unique_candidates_not_repeated_positive_scans(tmp_path):
     restarted = make_host(tmp_path)
     assert restarted.audit["prematch_unique"] == 1
     assert "После перезапуска · LIVE без xG" in restarted._format_audit()
+
+
+def test_shadow_verified_real_quote_is_recorded_not_sent_and_settled(tmp_path, monkeypatch):
+    from gool_bot2 import telegram
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "shadow")
+    sent = []
+    monkeypatch.setattr(telegram, "broadcast", lambda msg: sent.append(msg) or 1)
+    host = make_host(tmp_path)
+    now = time.time()
+    prematch = {
+        "phase": "PREMATCH", "event_id": "ABCDEFGH",
+        "home": "Alpha FC", "away": "Beta FC",
+        "start_ts": now + 3600, "market": "match_total",
+        "original_selection": "over 2.5",
+        "selection": "ТБ 2.5", "odd": 1.85,
+        "bookmaker": "Real Paired Odds",
+        "model_probability": .75, "expected_value": .13,
+    }
+    assert host._deliver(prematch, now=now) is False
+    assert host._deliver(prematch, now=now) is False
+    assert sent == []
+    assert host.journal == []
+    assert len(host.shadow_journal) == 1
+    assert host.shadow_journal[0]["sent"] is False
+    assert "не отправленные ставки" in host._format_shadow_journal()
+    assert "SHADOW (не отправлялись): 1" in host._format_audit()
+    restarted = make_host(tmp_path)
+    assert len(restarted.shadow_journal) == 1
+    assert restarted._settle_one(restarted.shadow_journal[0],
+                               {"is_finished": True, "home_score": 2, "away_score": 1}, {}) == "won"

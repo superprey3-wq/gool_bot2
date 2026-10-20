@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 from .flashscore_odds import fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
+from .v4_live_policy import LiveV4Input, decide_live_v4
+import math
 from .live_momentum import LiveMomentumTracker
 from .lite_football_scenarios import prematch_scenarios, evaluate_live_scenarios, forget_live_history
 from .football_v5_shadow import forecast_from_history
@@ -258,6 +260,8 @@ class LiteFootballWorker:
             "momentum_reset": 0, "sources_with_xg": 0,
             "v3_evaluated": 0, "v3_ready": 0, "v3_bet": 0,
             "v3_no_5m": 0, "v3_low_quality": 0, "v3_memory_insufficient": 0,
+            "v4_policy_reviewed": 0, "v4_policy_strong": 0,
+            "v4_policy_poor_data": 0, "v4_policy_rank_low": 0,
             "live_scenario_match": 0,
             "scores365_with_xg": 0, "scores365_without_xg": 0,
         }
@@ -460,6 +464,55 @@ class LiteFootballWorker:
                     original_bet = decision.decision == "BET"
                     required_confidence = .78
                     policy = "ORIGINAL_LIVE_V4"
+                    # The production GOOL includes an independent LIVE V4
+                    # ranking policy. The old V4 Brain hard-conf .78 cannot
+                    # reach BET with one xG-less provider (max <= .73). Reuse
+                    # the ORIGINAL policy as a conservative STRONG-only backup:
+                    # real 5m pressure, >=2 recent signals, data_quality>=.50,
+                    # probability >=.70, and still require fresh 1xBet value.
+                    if (not original_bet
+                            and os.getenv("GOOL_LITE_ORIGINAL_V4_POLICY", "1") == "1"):
+                        filters["v4_policy_reviewed"] += 1
+                        last5 = record.get("live_momentum") or {}
+                        recent_n = int(reasons.get("recent_signals") or 0)
+                        ready = reasons.get("momentum_ready") == "1"
+                        shots5 = float(last5.get("shots_total_last_5m") or 0)
+                        sot5 = float(last5.get("sot_total_last_5m") or 0)
+                        quality = float(live_v3.get("data_quality") or 0.0)
+                        p = float(decision.probability)
+                        rank = decide_live_v4(LiveV4Input(
+                            market=("goal_before_ht" if decision.market == "GOAL_BEFORE_HT"
+                                    else "another_goal"),
+                            minute=m.minute, probability=p, data_quality=quality,
+                            pressure=min(1.0, recent_n / 3.0),
+                            trend=min(1.0, (sot5 * 0.4 + shots5 * 0.1)),
+                            expected_remaining=-math.log(max(0.001, 1.0 - min(p, .999))),
+                            score_synced=True,
+                            post_goal_guard=not ready,
+                        ))
+                        if rank.reason == "poor_data":
+                            filters["v4_policy_poor_data"] += 1
+                        elif not rank.allowed:
+                            filters["v4_policy_rank_low"] += 1
+                        if (rank.allowed and rank.tier == "STRONG"
+                                and ready and recent_n >= 2
+                                and quality >= .50 and p >= .70
+                                and decision.confidence >= .62):
+                            filters["v4_policy_strong"] += 1
+                            decisions.append({
+                                "event_id": mid, "match": f"{m.home} — {m.away}",
+                                "home": m.home, "away": m.away,
+                                "league": m.league or "", "score": [m.home_score, m.away_score],
+                                "minute": m.minute, "observed_at": now,
+                                "market": decision.market, "decision": "BET",
+                                "base_decision": decision.decision,
+                                "brain": "ORIGINAL_V4_POLICY_STRONG",
+                                "policy_rank": rank.score,
+                                "confidence": decision.confidence,
+                                "confidence_required": .62,
+                                "probability": p, "data_quality": quality,
+                                "priced": False, "publishable": False,
+                            })
                     if original_bet:
                         filters["brain_bet"] += 1
                     else:
@@ -508,7 +561,7 @@ class LiteFootballWorker:
             "analysed": len(seen), "errors": failures, "selected": len(selected),
             "batch": batch + 1, "batch_count": batches,
             "cohort_scan": self._live_window_scans, "filters": filters,
-            "brain": "ORIGINAL_LIVE_V4+ORIGINAL_BRAIN_V3",
+            "brain": "ORIGINAL_LIVE_V4+ORIGINAL_BRAIN_V3+ORIGINAL_V4_POLICY",
             "scenarios": {"prematch": "F01-F05", "live": "L01-L05"},
             "decisions": decisions[:20],
         }

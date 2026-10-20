@@ -39,18 +39,14 @@ def _numeric(value: Any, default: float = 0.0) -> float:
 
 
 def _game_score(game: dict[str, Any]) -> tuple[int, int] | None:
-    score = game.get("SC") or {}
-    children = (score.get("FS") or {}, score, game)
-    for block in children:
-        if not isinstance(block, dict):
-            continue
-        try:
-            if block.get("S1") is not None and block.get("S2") is not None:
-                return (int(float(block["S1"])), int(float(block["S2"])))
-        except (ValueError, TypeError):
-            continue
-    return None
+    """Same exact score parser as the original GOOL 1xBet epoch guard.
 
+    1xBet often omits zero-score sides: SC.FS={} really means 0:0.
+    Rejecting absent S1/S2 was a Lite-only regression that could suppress
+    live odds even though the original bookmaker pipeline accepted the game.
+    """
+    from .xbet_score_epoch_guard import extract_xbet_score
+    return extract_xbet_score(game)
 
 class LivePriceAdapter:
     """Look up only promising live matches; never price from a stale index alone."""

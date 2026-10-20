@@ -237,3 +237,39 @@ def test_diagnostic_second_source_probe_when_primary_lacks_xg(tmp_path, monkeypa
     # Preserve unchanged GOOL V4 decision, even if it says NO_BET.
     assert result["decisions"][0]["decision"] == result["decisions"][0]["base_decision"]
     assert result["decisions"][0]["brain"] == "ORIGINAL_LIVE_V4"
+
+
+def test_original_secondary_collector_runs_without_preliminary_bet_and_caches(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "1")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    mid = "ABCDEFGH"
+    now = time.time()
+    class FS:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id=mid, home="Alpha FC",
+                                    away="Beta FC", league="Test", minute=27,
+                                    is_halftime=False, home_score=0, away_score=0)]
+        def fetch_stats(self, event_id):
+            return {"shots": (1, 1), "shots_on_target": (0, 0)}
+    class Secondary:
+        def __init__(self):
+            self.calls = 0
+        def enrich(self, home, away):
+            self.calls += 1
+            return SimpleNamespace(
+                stats={"shots": (1, 1), "xg": (0.3, 0.22)},
+                meta={"match_score": 0.94})
+    secondary = Secondary()
+    worker = LiteFootballWorker(tmp_path, provider=FS())
+    worker._scores365_provider = secondary
+    first = worker.scan_live(now=now)
+    assert first["filters"]["scores365_checked"] == 1
+    assert first["filters"]["scores365_confirmed"] == 1
+    assert first["filters"]["no_xg"] == 0
+    second = worker.scan_live(now=now + 151)
+    assert second["filters"]["scores365_checked"] == 0
+    assert second["filters"]["secondary_cache_used"] == 1
+    assert second["filters"]["no_xg"] == 0
+    assert secondary.calls == 1
+    assert first["filters"]["brain_bet"] == 0  # no fake betting signals

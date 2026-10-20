@@ -164,7 +164,7 @@ class FootballHost:
         self.audit = _load(self.audit_path, {})
         if self.audit.get("date") != datetime.now(TZ).strftime("%Y-%m-%d"):
             self.audit = {"date": datetime.now(TZ).strftime("%Y-%m-%d"), "prematch": {}, "live": {}, "odds": {},
-                          "last_prematch_scan": "", "last_live_scan": ""}
+                          "last_prematch_scan": "", "last_live_scan": "", "prematch_candidates": []}
         self.offset_path = self.live / "football_telegram_offset.txt"
         self.journal = _load(self.journal_path, [])
         if not isinstance(self.journal, list):
@@ -225,7 +225,7 @@ class FootballHost:
         date_now = datetime.now(TZ).strftime("%Y-%m-%d")
         if self.audit.get("date") != date_now:
             self.audit = {"date": date_now, "prematch": {}, "live": {}, "odds": {},
-                          "last_prematch_scan": "", "last_live_scan": ""}
+                          "last_prematch_scan": "", "last_live_scan": "", "prematch_candidates": []}
         for part in ("prematch", "live"):
             detail = result.get(part) or {}
             when = detail.get("captured_at")
@@ -241,6 +241,16 @@ class FootballHost:
                     bucket[key] = int(bucket.get(key) or 0) + int(detail.get(key) or 0)
             for key, value in (detail.get("filters") or {}).items():
                 bucket[key] = int(bucket.get(key) or 0) + int(value or 0)
+        if (result.get("prematch") or {}).get("captured_at"):
+            rows = self.audit.setdefault("prematch_candidates", [])
+            seen = {str(row.get("event_id") or "") for row in rows}
+            for row in result.get("prematch_candidates") or []:
+                match_id = str(row.get("event_id") or "")
+                if match_id and match_id not in seen:
+                    rows.append({key: row.get(key) for key in (
+                        "event_id", "home", "away", "selection", "odd", "start_ts")})
+                    seen.add(match_id)
+            self.audit["prematch_candidates"] = rows[-10:]
         _save(self.audit_path, self.audit)
 
     def _count_odds(self, key: str) -> None:
@@ -253,24 +263,32 @@ class FootballHost:
         live = self.audit.get("live") or {}
         odds = self.audit.get("odds") or {}
         return (
-            f"🩺 <b>GOOL · {self.audit.get('date', '?')} · Футбол</b>\\n"
-            f"Режим: {html.escape(os.getenv(KEY, 'shadow').upper())}\\n"
-            "PREMATCH\\n"
-            f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\\n"
-            f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\\n"
-            f"Рынок не поддержан: {pre.get('not_priceable_scenario',0)} · нет линии: {pre.get('quote_empty',0)}\\n"
-            f"Не прошли фильтры: {pre.get('no_value',0)} · кандидаты: {pre.get('priced',0)}\\n"
-            "LIVE\\n"
-            f"Сканов: {live.get('scans',0)} · матчей в ленте: {live.get('live_total',0)} · проверено: {live.get('analysed',0)}\\n"
-            f"Нет статистики: {live.get('no_stats',0)} · нет динамики: {live.get('no_momentum',0)}\\n"
-            f"Слабая активность: {live.get('insufficient_activity',0)} · уверенность ниже порога: {live.get('low_confidence',0)}\\n"
-            f"Вероятность ниже порога: {live.get('low_probability',0)} · мозг BET: {live.get('brain_bet',0)}\\n"
-            f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\\n"
-            "КОЭФФИЦИЕНТЫ LIVE\\n"
-            f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\\n"
-            f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\\n"
-            f"Отправлено сигналов: {len(self.journal)}\\n"
+            f"🩺 <b>GOOL · {self.audit.get('date', '?')} · Футбол</b>\n"
+            f"Режим: {html.escape(os.getenv(KEY, 'shadow').upper())}\n"
+            "PREMATCH\n"
+            f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\n"
+            f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\n"
+            f"Рынок не поддержан: {pre.get('not_priceable_scenario',0)} · нет линии: {pre.get('quote_empty',0)}\n"
+            f"Не прошли фильтры: {pre.get('no_value',0)} · кандидаты: {pre.get('priced',0)}\n"
+            "LIVE\n"
+            f"Сканов: {live.get('scans',0)} · матчей в ленте: {live.get('live_total',0)} · проверено: {live.get('analysed',0)}\n"
+            f"Нет статистики: {live.get('no_stats',0)} · нет динамики: {live.get('no_momentum',0)}\n"
+            f"Слабая активность: {live.get('insufficient_activity',0)} · уверенность ниже порога: {live.get('low_confidence',0)}\n"
+            f"Вероятность ниже порога: {live.get('low_probability',0)} · мозг BET: {live.get('brain_bet',0)}\n"
+            f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\n"
+            f"FotMob: проверок {live.get('fotmob_checked',0)} · подтвердил данные {live.get('fotmob_confirmed',0)}\n"
+            "КОЭФФИЦИЕНТЫ LIVE\n"
+            f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
+            f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"
+            f"Отправлено сигналов: {len(self.journal)}\n"
             "В SHADOW рассылка отключена. Причины отсева показаны выше."
+            + "".join(
+                f"\nНайден: {html.escape(str(r.get('home')))} — "
+                f"{html.escape(str(r.get('away')))} · "
+                f"{html.escape(str(r.get('selection')))} @{r.get('odd')} "
+                "(исторический кандидат, не текущая ставка)"
+                for r in (self.audit.get("prematch_candidates") or [])[-3:]
+            )
         )
 
     def collect(self, *, now: float | None = None) -> dict[str, Any]:
@@ -419,7 +437,8 @@ class FootballHost:
             f"сценариев {pre.get('scenario_matches', 0)} · котировок {pre.get('priced', 0)}\n"
             f"LIVE · матчей {live.get('live_total', 0)} · "
             f"разобрано {live.get('analysed', 0)}\n"
-            f"Журнал · {len(self.journal)} сигналов\n"
+            f"Журнал · {len(self.journal)} отправленных сигналов\n"
+            f"За день PREMATCH: {int((self.audit.get('prematch') or {}).get('priced') or 0)} кандидата(ов)\n"
             "Причины отсутствия сигналов: /audit. LIVE требует актуальных котировок 1xBet."
         )
 

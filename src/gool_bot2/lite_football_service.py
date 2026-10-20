@@ -54,6 +54,7 @@ class LivePriceAdapter:
     def __init__(self, data_root: Path, collector: Any = None):
         self.collector = collector
         self.data_root = data_root
+        self.last_reject_reason: str | None = None
 
     def _get_collector(self):
         if self.collector is None:
@@ -65,19 +66,25 @@ class LivePriceAdapter:
             )
         return self.collector
 
+    def _reject(self, reason: str) -> None:
+        # Do not log potentially sensitive raw bookmaker payloads.
+        self.last_reject_reason = reason
+        return None
+
     def price(self, decision: dict[str, Any], index: list[dict[str, Any]], *, now: float) -> dict[str, Any] | None:
         """Fail closed unless bookmaker identity, score and both live prices agree."""
+        self.last_reject_reason = None
         if decision.get("decision") != "BET":
-            return None
+            return self._reject("NO_BRAIN_BET")
         if now - _numeric(decision.get("observed_at")) > 60:
-            return None
+            return self._reject("STALE_DECISION")
         scores = decision.get("score") or []
         if len(scores) != 2:
-            return None
+            return self._reject("SCORE_MISSING")
         try:
             scoreboard = (int(scores[0]), int(scores[1]))
         except (ValueError, TypeError):
-            return None
+            return self._reject("SCORE_INVALID")
         c = self._get_collector()
         fixture = SimpleNamespace(
             provider_match_id=str(decision.get("event_id") or ""),
@@ -92,47 +99,47 @@ class LivePriceAdapter:
             default=None,
         )
         if not best:
-            return None
+            return self._reject("MATCH_NOT_FOUND")
         sim = pair_score(fixture.home, fixture.away, str(best["home"]), str(best["away"]))
         if sim < 0.88:
-            return None
+            return self._reject("NAME_MISMATCH")
         book_id = str(best.get("event_id") or "")
         if not book_id:
-            return None
+            return self._reject("BOOK_ID_MISSING")
         # Every quote and score are fetched anew. Never trust historical index odds.
         game = c._game(book_id)
         if not isinstance(game, dict) or _game_score(game) != scoreboard:
-            return None
+            return self._reject("GAME_SCORE_MISMATCH")
         minute = int(decision.get("minute") or 0)
         market = str(decision.get("market") or "")
         if market == "GOAL_BEFORE_HT":
             if not (10 <= minute <= 45):
-                return None
+                return self._reject("WRONG_1H_MINUTE")
             lines = (c._markets_for_event(book_id, minute, sum(scoreboard)) or {}).get("first_half_total") or []
             family = "first_half_total"
         elif market == "ANOTHER_GOAL":
             if not (46 <= minute <= 85):
-                return None
+                return self._reject("WRONG_2H_MINUTE")
             from .xbet_market_robust import decode_standard_markets
             lines = decode_standard_markets(game).get("match_total") or []
             family = "match_total"
         else:
-            return None
+            return self._reject("UNSUPPORTED_MARKET")
         target = float(sum(scoreboard)) + 0.5
         matching = next((row for row in lines
                          if abs(_numeric(row.get("line"), -999.0) - target) < 0.001), None)
         if not matching:
-            return None
+            return self._reject("TARGET_LINE_MISSING")
         over = _numeric(matching.get("over"))
         under = _numeric(matching.get("under"))
         if not (1.40 <= over <= 3.25 and under > 1.01):
-            return None
+            return self._reject("ODDS_PAIR_INVALID")
         fair = (1 / over) / ((1 / over) + (1 / under))
         p = _numeric(decision.get("probability"))
         confidence = _numeric(decision.get("confidence"))
         required_confidence = max(0.62, float(decision.get("confidence_required") or 0.78))
         if p < 0.70 or confidence < required_confidence or p - fair < 0.06 or p * over - 1 < 0.05:
-            return None
+            return self._reject("MODEL_VALUE_GATE")
         return {
             "event_id": fixture.provider_match_id,
             "book_event_id": book_id,
@@ -339,6 +346,15 @@ class FootballHost:
                         self._deliver(priced, now=now)
                     else:
                         self._count_odds("rejected")
+                        why = str(getattr(self.price_adapter, "last_reject_reason", None) or "UNKNOWN")
+                        if why not in {"MODEL_VALUE_GATE", "ODDS_PAIR_INVALID", "TARGET_LINE_MISSING",
+                                       "GAME_SCORE_MISMATCH", "NAME_MISMATCH", "MATCH_NOT_FOUND",
+                                       "STALE_DECISION", "UNSUPPORTED_MARKET", "SCORE_MISSING",
+                                       "SCORE_INVALID", "BOOK_ID_MISSING", "GAME_UNAVAILABLE",
+                                       "WRONG_1H_MINUTE", "WRONG_2H_MINUTE", "NO_BRAIN_BET"}:
+                            why = "UNKNOWN"
+                        self._count_odds("reject_" + why)
+                        print(f"GOOL_LITE_LIVE_ODDS_REJECT reason={why}", flush=True)
             except Exception as exc:
                 print(f"GOOL_LITE_LIVE_ODDS_ERROR {type(exc).__name__}:{exc}", flush=True)
         return result

@@ -6,6 +6,7 @@ only; network availability in GitHub Actions does NOT guarantee host availabilit
 from __future__ import annotations
 
 import json
+import resource
 import sys
 import time
 from pathlib import Path
@@ -83,6 +84,11 @@ def main() -> None:
                 result["v5_real_priced_count"] = len(wagers)
         except Exception as e:
             result["odds_error"] = type(e).__name__
+    result["rss_peak_mib"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    result["cpu_seconds"] = round(
+        resource.getrusage(resource.RUSAGE_SELF).ru_utime +
+        resource.getrusage(resource.RUSAGE_SELF).ru_stime, 2,
+    )
     result["elapsed_sec"] = round(time.monotonic()-start,2)
     print("GOOL_ORIGINAL_REAL_SOURCE_PROBE "+json.dumps(result, ensure_ascii=False),flush=True)
 

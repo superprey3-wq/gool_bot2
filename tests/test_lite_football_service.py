@@ -235,3 +235,27 @@ def test_lite_live_candidate_with_valid_recalibrated_confidence_reaches_price_ch
     h.collect(now=now)
     assert h.audit["odds"]["priced"] == 1
     assert h.journal == []  # SHADOW must not create a sent signal
+
+
+def test_audit_has_real_newlines_and_fotmob_breakdown(tmp_path):
+    h = make_host(tmp_path)
+    h.audit["live"] = {
+        "scans": 6, "analysed": 27, "no_xg": 27,
+        "fotmob_checked": 3, "fotmob_confirmed": 1,
+    }
+    msg = h._format_audit()
+    assert "\\n" not in msg
+    assert "\nLIVE\n" in msg
+    assert "FotMob: проверок 3" in msg
+    assert "подтвердил данные 1" in msg
+
+
+def test_oddscheck_reports_index_without_claiming_live_odds(tmp_path, monkeypatch):
+    from gool_bot2 import telegram
+    h = make_host(tmp_path)
+    notices = []
+    monkeypatch.setattr(telegram, "send_message", lambda cid, msg: notices.append(msg) or True)
+    h.handle("/oddscheck", "12345")
+    assert len(notices) == 1
+    assert "Найдено событий футбола: 1" in notices[0]
+    assert "не проверка доступности LIVE-котировок" in notices[0]

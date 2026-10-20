@@ -57,14 +57,15 @@ def _quote(event_id: str, timeout: int):
             ]}
 
 
-def test_scenarios_without_quote_never_make_a_bet(tmp_path, monkeypatch):
+def test_prematch_forecast_without_quote_never_makes_a_bet(tmp_path, monkeypatch):
     monkeypatch.setenv("RUNTIME_DATA_DIR", str(tmp_path))
     now = time.time()
     worker = LiteFootballWorker(tmp_path, provider=FakeProvider(now + 3600),
                                 odds_fetch=lambda *_args, **_kwargs: {})
     result = worker.scan_prematch(now=now)
     assert result["analysed"] == 1
-    assert result["scenario_matches"] >= 1
+    assert "scenario_matches" not in result
+    assert "no_scenario" not in result["filters"]
     assert result["priced"] == 0
     assert result["prematch_candidates"] == []
 

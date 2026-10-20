@@ -89,6 +89,7 @@ class LiteFootballWorker:
             home=fixture.home, away=fixture.away,
             league=fixture.league or "FOOTBALL",
             kickoff=float((fixture.meta or {}).get("scheduled_start_ts") or 0),
+            forecast=forecast,
         )
         return sorted(rows, key=lambda r: (r["expected_value"], r["edge"]), reverse=True)[:1]
 

@@ -286,7 +286,9 @@ class FootballHost:
         candidates = [
             d for d in live.get("decisions") or []
             if d.get("decision") == "BET"
-            and _numeric(d.get("confidence")) >= 0.78
+            and _numeric(d.get("confidence")) >= max(
+                0.62, _numeric(d.get("confidence_required"), .78)
+            )
             and not any(r.get("event_id") == d.get("event_id") and r.get("phase") == "LIVE"
                         for r in self.journal)
         ]

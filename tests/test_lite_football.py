@@ -143,7 +143,7 @@ def test_live_tracks_cohort_for_five_scans_before_rotation(tmp_path, monkeypatch
             seen.append(event_id)
             return {"shots": (4, 3), "shots_on_target": (1, 2), "corners": (2, 1)}
     worker = LiteFootballWorker(tmp_path, provider=Provider())
-    for i in range(10):
+    for i in range(15):
         result = worker.scan_live(now=now + i * 151)
         assert result["errors"] == 0
         assert result["analysed"] <= 4
@@ -151,7 +151,9 @@ def test_live_tracks_cohort_for_five_scans_before_rotation(tmp_path, monkeypatch
     assert len(set(seen)) == 12
     assert all(seen[4*i:4*i+4] == seen[:4] for i in range(5))
     assert all(seen[4*i:4*i+4] == seen[20:24] for i in range(5,10))
+    assert all(seen[4*i:4*i+4] == seen[40:44] for i in range(10,15))
     assert set(seen[:4]).isdisjoint(set(seen[20:24]))
+    assert set(seen[20:24]).isdisjoint(set(seen[40:44]))
 
 
 def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp_path, monkeypatch):

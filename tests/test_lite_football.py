@@ -64,7 +64,8 @@ def test_prematch_forecast_without_quote_never_makes_a_bet(tmp_path, monkeypatch
                                 odds_fetch=lambda *_args, **_kwargs: {})
     result = worker.scan_prematch(now=now)
     assert result["analysed"] == 1
-    assert "scenario_matches" not in result
+    assert result["scenario_matches"] >= 0
+    assert result["filters"]["prematch_scene_match"] == result["scenario_matches"]
     assert "no_scenario" not in result["filters"]
     assert result["priced"] == 0
     assert result["prematch_candidates"] == []

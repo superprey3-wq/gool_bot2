@@ -175,6 +175,12 @@ class FootballHost:
         self._next_live_odds = 0.0
         self._next_settle = 0.0
         self._next_notice = 0.0
+        # Daily audit survives restarts. Separate in-memory counters make
+        # post-deploy checks unambiguous and never combine old and new code.
+        self.session_started_at = datetime.now(TZ).strftime("%H:%M МСК")
+        self.session_audit: dict[str, dict[str, int]] = {
+            "prematch": {}, "live": {}, "odds": {},
+        }
 
     def _save_journal(self):
         # Bound storage by age and number; never discard pending bets.
@@ -233,14 +239,15 @@ class FootballHost:
             if not when or when == self.audit.get(marker):
                 continue
             self.audit[marker] = when
-            bucket = self.audit.setdefault(part, {})
-            bucket["scans"] = int(bucket.get("scans") or 0) + 1
-            for key in ("upcoming", "selected", "analysed", "priced",
-                        "scenario_matches", "errors", "live_total", "eligible"):
-                if key in detail:
-                    bucket[key] = int(bucket.get(key) or 0) + int(detail.get(key) or 0)
-            for key, value in (detail.get("filters") or {}).items():
-                bucket[key] = int(bucket.get(key) or 0) + int(value or 0)
+            for bucket in (self.audit.setdefault(part, {}),
+                           self.session_audit.setdefault(part, {})):
+                bucket["scans"] = int(bucket.get("scans") or 0) + 1
+                for key in ("upcoming", "selected", "analysed", "priced",
+                            "scenario_matches", "errors", "live_total", "eligible"):
+                    if key in detail:
+                        bucket[key] = int(bucket.get(key) or 0) + int(detail.get(key) or 0)
+                for key, value in (detail.get("filters") or {}).items():
+                    bucket[key] = int(bucket.get(key) or 0) + int(value or 0)
         if (result.get("prematch") or {}).get("captured_at"):
             rows = self.audit.setdefault("prematch_candidates", [])
             seen = {str(row.get("event_id") or "") for row in rows}
@@ -254,8 +261,9 @@ class FootballHost:
         _save(self.audit_path, self.audit)
 
     def _count_odds(self, key: str) -> None:
-        bucket = self.audit.setdefault("odds", {})
-        bucket[key] = int(bucket.get(key) or 0) + 1
+        for bucket in (self.audit.setdefault("odds", {}),
+                       self.session_audit.setdefault("odds", {})):
+            bucket[key] = int(bucket.get(key) or 0) + 1
         _save(self.audit_path, self.audit)
 
     def _format_audit(self) -> str:
@@ -265,6 +273,13 @@ class FootballHost:
         return (
             f"🩺 <b>GOOL · {self.audit.get('date', '?')} · Футбол</b>\n"
             f"Режим: {html.escape(os.getenv(KEY, 'shadow').upper())}\n"
+            f"🆕 После перезапуска ({self.session_started_at}): "
+            f"PRE {self.session_audit['prematch'].get('analysed',0)}, "
+            f"LIVE {self.session_audit['live'].get('analysed',0)}; "
+            f"365Scores {self.session_audit['live'].get('scores365_checked',0)} "
+            f"(подтв. {self.session_audit['live'].get('scores365_confirmed',0)}), "
+            f"FotMob {self.session_audit['live'].get('fotmob_checked',0)}, "
+            f"BET {self.session_audit['live'].get('brain_bet',0)}\n"
             "PREMATCH\n"
             f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\n"
             f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\n"
@@ -278,6 +293,7 @@ class FootballHost:
             f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\n"
             f"FotMob: проверок {live.get('fotmob_checked',0)} · подтвердил данные {live.get('fotmob_confirmed',0)}\n"
             f"365Scores: проверок {live.get('scores365_checked',0)} · подтвердил {live.get('scores365_confirmed',0)} · ошибки {live.get('scores365_error',0)}\n"
+            f"Доп. проверка: из давления {live.get('secondary_pressure',0)} · диагностических {live.get('secondary_diagnostic',0)}\n"
             "КОЭФФИЦИЕНТЫ LIVE\n"
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"

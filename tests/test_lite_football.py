@@ -124,7 +124,9 @@ def test_prematch_rotates_through_matches_instead_of_first_five(tmp_path, monkey
     assert result["filters"]["no_history"] >= 1
 
 
-def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path):
+def test_live_rotates_in_three_scan_windows_and_preserves_momentum(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
     from types import SimpleNamespace
     now = time.time()
     fixtures = [
@@ -190,3 +192,48 @@ def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp
         assert result["filters"]["fotmob_confirmed"] == expected
         assert result["filters"]["fotmob_unmapped"] == 1-expected
         assert worker._fotmob_provider.called == 1
+
+
+def test_diagnostic_second_source_probe_when_primary_lacks_xg(tmp_path, monkeypatch):
+    """A strict preliminary V4 NO_BET must not disable all source verification."""
+    import time
+    from types import SimpleNamespace
+    from collections import deque
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "1")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    now = time.time()
+    mid = "ABCDEFGH"
+
+    class FS:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id=mid, home="Alpha FC",
+                                    away="Beta FC", league="Test", minute=27,
+                                    is_halftime=False, home_score=0, away_score=0)]
+        def fetch_stats(self, event_id):
+            return {"shots": (5, 4), "shots_on_target": (1, 1),
+                    "big_chances": (0, 0)}
+    class Independent:
+        def __init__(self):
+            self.calls = 0
+        def enrich(self, home, away):
+            self.calls += 1
+            return SimpleNamespace(stats={"shots": (5, 4), "xg": (.3, .25)},
+                                   meta={"match_score": .95})
+
+    worker = LiteFootballWorker(tmp_path, provider=FS())
+    worker._live[mid] = deque([
+        {"ts": now - 330, "minute": 21, "score": [0,0],
+         "stats": {"shots": (4,3), "shots_on_target": (1,0),
+                   "big_chances": (0,0)}}], maxlen=12)
+    independent = Independent()
+    worker._scores365_provider = independent
+    result = worker.scan_live(now=now)
+    assert result["errors"] == 0
+    assert result["filters"]["secondary_diagnostic"] == 1
+    assert result["filters"]["scores365_checked"] == 1
+    assert result["filters"]["scores365_confirmed"] == 1
+    assert independent.calls == 1
+    assert result["filters"]["no_xg"] == 0
+    # Preserve unchanged GOOL V4 decision, even if it says NO_BET.
+    assert result["decisions"][0]["decision"] == result["decisions"][0]["base_decision"]
+    assert result["decisions"][0]["brain"] == "ORIGINAL_LIVE_V4"

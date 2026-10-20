@@ -9,6 +9,7 @@ on:
       - "src/gool_bot2/**"
       - "tests/test_lite_football.py"
       - "tests/test_lite_football_service.py"
+      - "tests/test_lite_original_football.py"
       - ".github/workflows/bot-hosting-lite-memory.yml"
       - "requirements*.txt"
 
@@ -26,12 +27,12 @@ jobs:
           python-version: "3.11"
       - name: Install only Bot-Hosting Lite requirements and pytest
         run: python -m pip install --no-cache-dir -r requirements.txt pytest
-      - name: Check isolated model-free football engine and reports
+      - name: Check unchanged GOOL V5 and LIVE V4 engines, real price gates, settlement
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"
           PYTHONPATH: "src"
         run: |
-          python -m pytest -q             tests/test_lite_football.py             tests/test_lite_football_service.py             tests/test_prematch_strategy_scenarios.py             tests/test_live_goal_brain_v4.py
+          python -m pytest -q tests/test_lite_football.py tests/test_lite_football_service.py tests/test_lite_original_football.py tests/test_prematch_strategy_scenarios.py tests/test_live_goal_brain_v4.py
       - name: One-process no-network memory smoke
         env:
           GOOL_FOOTBALL_AUTOINSTALL: "0"

@@ -204,3 +204,34 @@ def test_daily_audit_shows_rejections_and_does_not_double_count_cached_scan(tmp_
     h2 = make_host(tmp_path)
     assert h2.audit["prematch"]["analysed"] == 5
     assert h2.audit["live"]["analysed"] == 4
+
+
+def test_lite_live_candidate_with_valid_recalibrated_confidence_reaches_price_check(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "shadow")
+    now = time.time()
+    class CandidateBrain(FakeBrain):
+        def collect_once(self):
+            return {
+                "captured_at": "2026-10-20T10:00:00Z",
+                "prematch": {"cached": True},
+                "prematch_candidates": [],
+                "live": {"captured_at":"2026-10-20T10:00:00Z",
+                         "decisions":[{"event_id":"ABCDEFGH", "decision":"BET",
+                                       "confidence":.68, "confidence_required":.62,
+                                       "observed_at":now}],
+                         "filters":{"brain_bet":1}, "analysed":1},
+            }
+    class Adapter:
+        def _get_collector(self):
+            class Collector:
+                def _fetch_index(self):
+                    return "fresh", [{"event_id":"123", "home":"Alpha", "away":"Beta"}]
+            return Collector()
+        def price(self, decision, index, now):
+            return {"event_id": "ABCDEFGH", "phase":"LIVE",
+                    "selection":"ТБ 0.5", "odd":1.7, "model_probability":.81,
+                    "bookmaker":"1xBet LIVE", "expected_value":.35}
+    h = FootballHost(tmp_path, brain=CandidateBrain(tmp_path), price_adapter=Adapter())
+    h.collect(now=now)
+    assert h.audit["odds"]["priced"] == 1
+    assert h.journal == []  # SHADOW must not create a sent signal

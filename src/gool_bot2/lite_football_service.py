@@ -300,6 +300,7 @@ class FootballHost:
             "КОЭФФИЦИЕНТЫ LIVE\n"
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"
+            f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"
             f"Отправлено сигналов: {len(self.journal)}\n"
             "В SHADOW рассылка отключена. Причины отсева показаны выше."
             + "".join(

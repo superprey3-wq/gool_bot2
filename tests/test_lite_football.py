@@ -204,3 +204,43 @@ def test_multisource_live_checks_activity_confidence_and_probability():
     reasons["recent_signals"] = "3"
     reasons["red_cards"] = "1"
     assert not _lite_live_decision(decision, reasons)[0]
+
+
+def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp_path):
+    """FotMob.enrich echoes requested names: old code accepted weak mappings."""
+    from collections import deque
+    from types import SimpleNamespace
+    now = time.time()
+    mid = "ABCDEFGH"
+    class Provider:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id=mid, home="Alpha FC",
+                                    away="Beta FC", league="Test", minute=25,
+                                    is_halftime=False, home_score=0, away_score=0)]
+        def fetch_stats(self, event_id):
+            return {"shots": (12, 11), "shots_on_target": (6, 5),
+                    "big_chances": (1, 1), "corners": (6, 6)}
+    class FotMob:
+        def __init__(self, match_score):
+            self.match_score = match_score
+            self.called = 0
+        def enrich(self, home, away):
+            self.called += 1
+            return SimpleNamespace(
+                home=home, away=away,
+                stats={"shots": (12, 11), "shots_on_target": (6, 5),
+                       "big_chances": (1, 1), "xg": (1.6, 1.4)},
+                meta={"match_score": self.match_score, "has_shotmap": True})
+    for mapped_score, expected in ((.75, 0), (.96, 1)):
+        worker = LiteFootballWorker(tmp_path / str(mapped_score), provider=Provider())
+        worker._live[mid] = deque([{"ts": now - 350, "minute": 18,
+                                    "score": [0,0],
+                                    "stats": {"shots": (5, 4), "shots_on_target": (2, 1),
+                                              "big_chances": (0, 0), "corners": (1, 1)}}], maxlen=12)
+        worker._fotmob_provider = FotMob(mapped_score)
+        result = worker.scan_live(now=now)
+        assert result["errors"] == 0
+        assert result["filters"]["fotmob_checked"] == 1
+        assert result["filters"]["fotmob_confirmed"] == expected
+        assert result["filters"]["fotmob_unmapped"] == 1-expected
+        assert worker._fotmob_provider.called == 1

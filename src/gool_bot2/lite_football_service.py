@@ -397,6 +397,34 @@ class FootballHost:
                 return "won"
             return "lost" if finished else None
         if phase == "PREMATCH" and finished:
+            # Preserve the unchanged original Football V5 market/selection IDs.
+            # Do not settle them through the old Lite FT_OVER_2.5 alias.
+            choice = str(r.get("original_selection") or "").casefold().strip()
+            if kind in {"match_total", "home_total", "away_total"}:
+                parts = choice.split()
+                if len(parts) != 2 or parts[0] not in {"over", "under"}:
+                    return None
+                try:
+                    line = float(parts[1])
+                except (TypeError, ValueError):
+                    return None
+                home_goals = int(state.get("home_score") or 0)
+                away_goals = int(state.get("away_score") or 0)
+                goals = total if kind == "match_total" else home_goals if kind == "home_total" else away_goals
+                if goals == line:
+                    return "push"
+                return "won" if (goals > line) == (parts[0] == "over") else "lost"
+            if kind == "btts":
+                if choice not in {"yes", "no"}:
+                    return None
+                happened = int(state.get("home_score") or 0) > 0 and int(state.get("away_score") or 0) > 0
+                return "won" if happened == (choice == "yes") else "lost"
+            if kind == "match_1x2":
+                if choice not in {"home", "draw", "away"}:
+                    return None
+                hg, ag = int(state.get("home_score") or 0), int(state.get("away_score") or 0)
+                result = "home" if hg > ag else "away" if hg < ag else "draw"
+                return "won" if choice == result else "lost"
             if kind == "FT_OVER_2.5":
                 return "won" if total >= 3 else "lost"
             if kind == "FT_UNDER_2.5":
@@ -431,7 +459,7 @@ class FootballHost:
         pre = self.last_state.get("prematch") or {}
         live = self.last_state.get("live") or {}
         return (
-            "⚽ <b>GOOL Lite · только футбол</b>\n"
+            "⚽ <b>GOOL · оригинальный футбол V5 / LIVE V4</b>\n"
             f"Режим: {os.getenv(KEY, 'shadow').upper()}\n"
             f"PREMATCH · просмотрено {pre.get('analysed', 0)} · "
             f"сценариев {pre.get('scenario_matches', 0)} · котировок {pre.get('priced', 0)}\n"

@@ -37,7 +37,10 @@ def main() -> None:
     except Exception as e:
         result["live_error"] = type(e).__name__
     if pre:
-        m = next((m for m in pre if (m.meta or {}).get("scheduled_start_ts")), pre[0])
+        future = [m for m in pre if float((m.meta or {}).get("scheduled_start_ts") or 0) > time.time()+300]
+        future.sort(key=lambda m: float((m.meta or {}).get("scheduled_start_ts") or 0))
+        result["upcoming_unstarted"] = len(future)
+        m = future[0] if future else pre[0]
         try:
             history = provider.fetch_match_history(m.provider_match_id, m.home, m.away, limit=10)
             result["history_rows"] = {

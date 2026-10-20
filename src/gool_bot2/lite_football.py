@@ -215,6 +215,7 @@ class LiteFootballWorker:
             "fotmob_unmapped": 0, "fotmob_no_shotmap": 0, "fotmob_error": 0,
             "scores365_checked": 0, "scores365_confirmed": 0,
             "scores365_unmapped": 0, "scores365_error": 0,
+            "secondary_pressure": 0, "secondary_diagnostic": 0,
         }
         failures = 0
         seen = set()
@@ -260,8 +261,22 @@ class LiteFootballWorker:
                         int(reason.split("=", 1)[1]) >= 2 for reason in d.reasons)
                     for d in preliminary
                 )
-                if (secondary_budget and pressure_candidate
+                # A second source MUST NOT depend exclusively on the first
+                # source's high-confidence pre-filter: absent xG could otherwise
+                # permanently prevent every 365Scores request. Allow one
+                # diagnostic secondary-source probe per scan on a genuinely
+                # active fixture with a fresh 5-minute comparison.
+                diagnostic_probe = bool(
+                    past is not None
+                    and momentum.get("minutes_in_epoch", 0) >= 5
+                    and any(
+                        key in stats and sum(stats[key]) > 0
+                        for key in ("shots", "shots_on_target", "big_chances")
+                    )
+                )
+                if (secondary_budget and (pressure_candidate or diagnostic_probe)
                         and now - self._fotmob_last_checked.get(mid, 0) >= 600):
+                    filters["secondary_pressure" if pressure_candidate else "secondary_diagnostic"] += 1
                     secondary_budget -= 1
                     self._fotmob_last_checked[mid] = now
                     # Original V4 is evaluated on independent real provider stats.
@@ -323,9 +338,9 @@ class LiteFootballWorker:
                             filters["no_momentum"] += 1
                         elif int(reasons.get("recent_signals", "0")) < 2:
                             filters["insufficient_activity"] += 1
-                        elif policy in ("LOW_CONFIDENCE", "SINGLE_SOURCE_INSUFFICIENT"):
+                        elif decision.confidence < .78:
                             filters["low_confidence"] += 1
-                        elif policy == "LOW_PROBABILITY":
+                        elif decision.probability < float(reasons.get("threshold") or 1.0):
                             filters["low_probability"] += 1
                     decisions.append({
                         "event_id": mid, "match": f"{m.home} — {m.away}",

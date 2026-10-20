@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gool_bot2.providers.flashscore import FlashscoreProvider
 from gool_bot2.flashscore_odds import fetch_event_odds
 from gool_bot2.football_v5_shadow import forecast_from_history, _observations, _name, _team_view
-from gool_bot2.lite_football_v5_adapter import normalized_full_market, history_identity_name
+from gool_bot2.lite_football_v5_adapter import normalized_full_market, history_identity_name, original_v5_picks
 
 
 def main() -> None:
@@ -41,6 +41,8 @@ def main() -> None:
         future.sort(key=lambda m: float((m.meta or {}).get("scheduled_start_ts") or 0))
         result["upcoming_unstarted"] = len(future)
         m = future[0] if future else pre[0]
+        history = {}
+        forecast = {}
         try:
             history = provider.fetch_match_history(m.provider_match_id, m.home, m.away, limit=10)
             result["history_rows"] = {
@@ -71,6 +73,14 @@ def main() -> None:
         try:
             quotes = fetch_event_odds(m.provider_match_id, timeout=8) or {}
             result["paired_full_market_rows"] = len(normalized_full_market(quotes)["candidates"])
+            if forecast.get("status") == "READY":
+                wagers, _ = original_v5_picks(
+                    history=history, raw_odds=quotes,
+                    event_id=m.provider_match_id, home=m.home, away=m.away,
+                    league=m.league or "", kickoff=float((m.meta or {}).get("scheduled_start_ts") or 0),
+                    forecast=forecast,
+                )
+                result["v5_real_priced_count"] = len(wagers)
         except Exception as e:
             result["odds_error"] = type(e).__name__
     result["elapsed_sec"] = round(time.monotonic()-start,2)

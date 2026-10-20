@@ -289,7 +289,8 @@ class FootballHost:
             f"365Scores {self.session_audit['live'].get('scores365_checked',0)} "
             f"(подтв. {self.session_audit['live'].get('scores365_confirmed',0)}), "
             f"FotMob {self.session_audit['live'].get('fotmob_checked',0)}, "
-            f"BET {self.session_audit['live'].get('brain_bet',0)}\n"            f"После перезапуска · LIVE без xG: {self.session_audit['live'].get('no_xg',0)}, "
+            f"V4 BET {self.session_audit['live'].get('brain_bet',0)}, "
+            f"V3 BET {self.session_audit['live'].get('v3_bet',0)}\n"            f"После перезапуска · LIVE без xG: {self.session_audit['live'].get('no_xg',0)}, "
             f"с реальным xG: {self.session_audit['live'].get('sources_with_xg',0)}, "
             f"нет динамики: {self.session_audit['live'].get('no_momentum',0)}, "
             f"низкая уверенность: {self.session_audit['live'].get('low_confidence',0)}; "
@@ -301,11 +302,19 @@ class FootballHost:
             f"нет котировок: {pre.get('quote_empty',0)}\n"
             f"Не прошли фильтры: {pre.get('no_value',0)} · положительных сканов: {pre.get('priced',0)} · "
             f"уникальных матчей (с начала новой проверки): {self.audit.get('prematch_unique',0)}\n"
+            f"PREMATCH F01–F05: совпадений {pre.get('scenario_matches',0)} · "
+            f"с одобрением V5 {pre.get('prematch_scene_approved',0)} · "
+            f"нет данных {pre.get('prematch_scene_no_data',0)}\n"
             "LIVE\n"
             f"Сканов: {live.get('scans',0)} · матчей в ленте: {live.get('live_total',0)} · проверено: {live.get('analysed',0)}\n"
             f"Нет статистики: {live.get('no_stats',0)} · нет динамики: {live.get('no_momentum',0)}\n"
             f"Слабая активность: {live.get('insufficient_activity',0)} · уверенность ниже порога: {live.get('low_confidence',0)}\n"
-            f"Вероятность ниже порога: {live.get('low_probability',0)} · мозг BET: {live.get('brain_bet',0)}\n"
+            f"Вероятность ниже порога: {live.get('low_probability',0)} · V4 BET: {live.get('brain_bet',0)}\n"
+            f"LIVE L01–L05 (Brain V3): проверено {live.get('v3_evaluated',0)} · READY {live.get('v3_ready',0)} · "
+            f"BET {live.get('v3_bet',0)} · сценариев MATCH {live.get('live_scenario_match',0)}\n"
+            f"V3: не хватает 5-минутной истории {live.get('v3_no_5m',0)} · "
+            f"мало снимков {live.get('v3_memory_insufficient',0)} · "
+            f"низкое качество данных {live.get('v3_low_quality',0)}\n"
             f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\n"
             f"FotMob: проверок {live.get('fotmob_checked',0)} · подтвердил данные {live.get('fotmob_confirmed',0)}\n"
             f"365Scores: проверок {live.get('scores365_checked',0)} · подтвердил матч {live.get('scores365_confirmed',0)} · "
@@ -349,6 +358,18 @@ class FootballHost:
             and not any(r.get("event_id") == d.get("event_id") and r.get("phase") == "LIVE"
                         for r in self.journal)
         ]
+        # Original V3 has its own LIVE scenarios and may independently approve
+        # the same fixture as V4. Price at most one decision per match, prioritizing
+        # the original authoritative V3 so no duplicate correlated calls/cards.
+        candidates.sort(key=lambda d: 0 if d.get("brain") == "ORIGINAL_BRAIN_V3" else 1)
+        deduped: list[dict[str, Any]] = []
+        seen_live: set[str] = set()
+        for decision in candidates:
+            key = str(decision.get("event_id") or "")
+            if key and key not in seen_live:
+                deduped.append(decision)
+                seen_live.add(key)
+        candidates = deduped
         # At most one bookmaker index per qualifying cycle, no constant scraping.
         if candidates and now >= self._next_live_odds:
             self._next_live_odds = now + 150
@@ -514,7 +535,10 @@ class FootballHost:
             f"LIVE · матчей {live.get('live_total', 0)} · "
             f"разобрано {live.get('analysed', 0)}\n"
             f"Журнал · {len(self.journal)} отправленных сигналов\n"
-            f"За день PREMATCH: {int((self.audit.get('prematch') or {}).get('priced') or 0)} кандидата(ов)\n"
+            f"За день PREMATCH: {int((self.audit.get('prematch') or {}).get('priced') or 0)} положительных сканов; "
+            f"F01–F05 совпадений {(self.audit.get('prematch') or {}).get('scenario_matches',0)}\n"
+            f"За день LIVE: V3 BET {(self.audit.get('live') or {}).get('v3_bet',0)} · "
+            f"V4 BET {(self.audit.get('live') or {}).get('brain_bet',0)}\n"
             "Причины отсутствия сигналов: /audit. LIVE требует актуальных котировок 1xBet."
         )
 

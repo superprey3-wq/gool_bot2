@@ -19,7 +19,8 @@ from typing import Any, Callable
 
 from .flashscore_odds import TREND_MARKET, fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
-from .prematch_goal_profile import build_prematch_goal_profile
+from .football_v5_shadow import forecast_from_history
+from .lite_football_v5_adapter import original_v5_picks
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
 from .providers.flashscore import FlashscoreProvider
 from .providers.common import pair_score
@@ -181,76 +182,30 @@ class LiteFootballWorker:
         }
 
     def _forecast(self, fixture: Any) -> tuple[dict[str, Any], dict[str, Any]]:
-        event_id = str(fixture.provider_match_id)
-        history = self.provider.fetch_match_history(event_id, fixture.home, fixture.away, limit=10)
-        record = {
-            "match": {"home": fixture.home, "away": fixture.away},
-            "prematch_context": history,
-        }
-        profile = build_prematch_goal_profile(record)
-        full = profile.get("full_match") or {}
-        first = profile.get("first_half") or {}
-        n = int(full.get("pair_sample") or 0)
-        home, away = full.get("home_expected_goals"), full.get("away_expected_goals")
-        forecast = {"status": "WAIT_HISTORY", "quality": 0.0}
-        if home is not None and away is not None and n >= 6:
-            forecast = {
-                "status": "READY",
-                "home_lambda": _clamp(float(home), .05, 4.5),
-                "away_lambda": _clamp(float(away), .05, 4.5),
-                "quality": round(.50 + .045 * min(n, 10), 3),
-                "first_half_lambda": first.get("expected_total"),
-                "sample": n,
-            }
-        return forecast, profile
+        """Real Football V5 opponent-adjusted forecast; no Lite formula."""
+        kickoff = float((fixture.meta or {}).get("scheduled_start_ts") or 0)
+        history = self.provider.fetch_match_history(
+            str(fixture.provider_match_id), fixture.home, fixture.away, limit=10,
+        ) or {}
+        forecast = forecast_from_history(
+            home=fixture.home, away=fixture.away, kickoff=kickoff, context=history,
+        )
+        return forecast, history
 
     def _picks(self, fixture: Any, forecast: dict[str, Any],
-               scenarios: dict[str, Any], odds: dict[str, Any]) -> list[dict[str, Any]]:
+               scenarios: dict[str, Any], odds: dict[str, Any],
+               history: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """The unchanged GOOL V5 production price gate owns PREMATCH decisions."""
         if forecast.get("status") != "READY" or not odds:
             return []
-        h, a = float(forecast["home_lambda"]), float(forecast["away_lambda"])
-        fh = forecast.get("first_half_lambda")
-        matched = {
-            str(item.get("id"))
-            for item in scenarios.get("scenarios") or []
-            if item.get("status") == "MATCH"
-        }
-        result: list[dict[str, Any]] = []
-        for scenario in matched:
-            for target, label, probability in MARKETS.get(scenario, []):
-                if target == "1H_OVER_0.5" and fh is None:
-                    continue
-                price = _paired_trend_price(odds, target)
-                if not price:
-                    continue
-                odd = float(price.get("best_odds") or 0)
-                fair = float(price.get("market_probability") or 0)
-                p = _clamp(float(probability(h, a, float(fh or 0))))
-                if not (1.4 <= odd <= 3.5 and 0 < fair < 1):
-                    continue
-                edge = p - fair
-                ev = p * odd - 1.0
-                if p < 0.70 or edge < 0.07 or ev < 0.06:
-                    continue
-                result.append({
-                    "sport": "football", "phase": "PREMATCH",
-                    "event_id": str(fixture.provider_match_id),
-                    "flashscore_event_id": str(fixture.provider_match_id),
-                    "home": fixture.home, "away": fixture.away,
-                    "league": fixture.league or "FOOTBALL",
-                    "start_ts": float((fixture.meta or {}).get("scheduled_start_ts") or 0),
-                    "selection": label, "market": target, "market_family": target,
-                    "odd": round(odd, 3), "bookmaker": str(price.get("bookmaker") or ""),
-                    "model_probability": round(p, 4), "market_probability": round(fair, 4),
-                    "edge": round(edge, 4), "expected_value": round(ev, 4),
-                    "data_quality": float(forecast["quality"]),
-                    "strength": round(p * 100, 2),
-                    "scenario": scenario,
-                    "parlay_safe": bool(p >= 0.74 and 1.3 <= odd <= 1.5),
-                    "flashscore_meta": dict(fixture.meta or {}),
-                })
-        result.sort(key=lambda x: (x["expected_value"], x["data_quality"]), reverse=True)
-        return result[:1]  # only one PREMATCH pick per fixture
+        rows, details = original_v5_picks(
+            history=history or {}, raw_odds=odds,
+            event_id=str(fixture.provider_match_id),
+            home=fixture.home, away=fixture.away,
+            league=fixture.league or "FOOTBALL",
+            kickoff=float((fixture.meta or {}).get("scheduled_start_ts") or 0),
+        )
+        return sorted(rows, key=lambda r: (r["expected_value"], r["edge"]), reverse=True)[:1]
 
     def scan_prematch(self, *, now: float | None = None) -> dict[str, Any]:
         now = time.time() if now is None else now
@@ -287,20 +242,17 @@ class LiteFootballWorker:
                 scenarios = evaluate_prematch_scenarios("football", football_forecast=forecast)
                 matched_here = int(scenarios.get("matched_count") or 0)
                 patterns += matched_here
-                priceable = any(
-                    s.get("status") == "MATCH" and s.get("id") in MARKETS
-                    for s in scenarios.get("scenarios") or []
-                )
-                if forecast.get("status") != "READY":
+                # Original V5 prices 1X2, BTTS and FT totals irrespective of
+                # F01-F05 hypotheses. Never gate the quote behind a scenario.
+                priceable = forecast.get("status") == "READY"
+                if not priceable:
                     counters["no_history"] += 1
                 elif not matched_here:
                     counters["no_scenario"] += 1
-                elif not priceable:
-                    counters["not_priceable_scenario"] += 1
                 odds = self.odds_fetch(event_id, timeout=6) or {} if priceable else {}
                 if priceable and not odds:
                     counters["quote_empty"] += 1
-                picks = self._picks(fixture, forecast, scenarios, odds)
+                picks = self._picks(fixture, forecast, scenarios, odds, history=profile)
                 if priceable and odds and not picks:
                     counters["no_value"] += 1
                 analysed += 1
@@ -317,6 +269,7 @@ class LiteFootballWorker:
                     "priced": bool(picks),
                     "quote_available": bool(odds),
                     "priceable_scenario": priceable,
+                    "brain": "FOOTBALL_V5",
                 })
             except Exception as exc:
                 failures += 1
@@ -334,7 +287,7 @@ class LiteFootballWorker:
         result = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "upcoming": len(upcoming), "analysed": analysed,
-            "scenario_matches": patterns, "priced": priced,
+            "scenario_matches": patterns, "priced": priced, "brain": "FOOTBALL_V5",
             "errors": failures, "filters": counters,
             "selected": len(selection), "prematch_cursor": self._prematch_cursor,
             "observations": observations[:10],

@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from .flashscore_odds import fetch_event_odds
 from .live_goal_brain_v4 import evaluate_live_goals
+from .live_momentum import LiveMomentumTracker
 from .football_v5_shadow import forecast_from_history
 from .lite_football_v5_adapter import original_v5_picks, history_identity_name
 from .prematch_strategy_scenarios import evaluate_prematch_scenarios
@@ -57,6 +58,11 @@ class LiteFootballWorker:
         self._fotmob_provider = None
         self._scores365_provider = None
         self._fotmob_last_checked: dict[str, float] = {}
+        # Reuse the ORIGINAL GOOL data collector's momentum builder.
+        self._momentum_tracker = LiveMomentumTracker(max_points=12)
+        # The original live collector retained secondary-source snapshots
+        # between observations; Lite previously discarded them each scan.
+        self._secondary_cache: dict[str, dict[str, Any]] = {}
         self._last_result = _load(self.state_path, {})
         self._prematch_cursor = int(self._last_result.get("prematch_cursor") or 0)
         self._live_window = int(self._last_result.get("live_window") or 0)
@@ -206,7 +212,9 @@ class LiteFootballWorker:
             self._live_window_scans = 0
             self._live_window = (batch + 1) % batches
         decisions: list[dict[str, Any]] = []
-        secondary_budget = 1
+        secondary_budget = max(1, min(3, int(
+            os.getenv("GOOL_LITE_FOOTBALL_SECONDARY_BUDGET", "2")
+        )))
         filters = {
             "no_stats": 0, "no_momentum": 0, "insufficient_activity": 0,
             "low_confidence": 0, "low_probability": 0, "brain_bet": 0,
@@ -216,6 +224,8 @@ class LiteFootballWorker:
             "scores365_checked": 0, "scores365_confirmed": 0,
             "scores365_unmapped": 0, "scores365_error": 0,
             "secondary_pressure": 0, "secondary_diagnostic": 0,
+            "secondary_cache_used": 0, "secondary_due": 0,
+            "momentum_old_collector": 0, "momentum_gap": 0,
         }
         failures = 0
         seen = set()
@@ -229,28 +239,55 @@ class LiteFootballWorker:
                 history = self._live.setdefault(mid, deque(maxlen=12))
                 row = {"ts": now, "minute": m.minute,
                        "score": [m.home_score, m.away_score], "stats": stats}
+                if history and tuple(history[-1].get("score") or ()) != tuple(row["score"]):
+                    # The old collector resets pressure after a goal.
+                    history.clear()
+                    self._secondary_cache.pop(mid, None)
                 past = next((x for x in reversed(history) if now - x["ts"] >= 300
-                             and x["minute"] <= m.minute), None)
+                             and x["minute"] <= m.minute
+                             and 3 <= m.minute - x["minute"] <= 8), None)
                 history.append(row)
-                momentum: dict[str, Any] = {}
+                fallback_momentum: dict[str, Any] = {}
                 if past is not None:
-                    momentum["minutes_in_epoch"] = max(0, m.minute - past["minute"])
+                    fallback_momentum["minutes_in_epoch"] = max(0, m.minute - past["minute"])
                     for key, alias in (("shots", "shots"), ("shots_on_target", "sot"),
                                        ("big_chances", "big"), ("xg", "xg")):
                         old = past["stats"].get(key)
                         new = stats.get(key)
                         if old is not None and new is not None:
-                            momentum[f"{alias}_total_last_5m"] = max(
+                            fallback_momentum[f"{alias}_total_last_5m"] = max(
                                 0.0, sum(float(x) for x in new) - sum(float(x) for x in old)
                             )
+                elif len(history) > 1 and m.minute - history[-2]["minute"] > 8:
+                    filters["momentum_gap"] += 1
+
                 providers = {"flashscore": {"stats": stats, "meta": {}}}
+                cached = self._secondary_cache.get(mid)
+                if cached and now - float(cached.get("ts") or 0) <= 180:
+                    providers[str(cached["name"])] = {
+                        "stats": dict(cached["stats"]), "meta": dict(cached.get("meta") or {})
+                    }
+                    filters["secondary_cache_used"] += 1
+                else:
+                    self._secondary_cache.pop(mid, None)
                 record = {
-                    "match": {"minute": m.minute, "home_score": m.home_score,
+                    "match": {"flashscore_event_id": mid,
+                              "minute": m.minute, "home_score": m.home_score,
                               "away_score": m.away_score, "is_halftime": m.is_halftime,
                               "home": m.home, "away": m.away},
                     "providers": providers,
-                    "live_momentum": momentum,
                 }
+                # This is the ORIGINAL GOOL LiveMomentumTracker, building
+                # consensus deltas from sequential Flashscore/secondary frames.
+                record = self._momentum_tracker.attach(record)
+                original_momentum = record.get("live_momentum") or {}
+                momentum = original_momentum
+                if (original_momentum.get("minutes_in_epoch", 0) < 5
+                        and fallback_momentum.get("minutes_in_epoch", 0) >= 5):
+                    momentum = fallback_momentum
+                else:
+                    filters["momentum_old_collector"] += 1
+                record["live_momentum"] = momentum
                 # Only spend the expensive secondary request on a game that
                 # already has enough fresh pressure to warrant confirmation.
                 preliminary = evaluate_live_goals(record)
@@ -261,21 +298,18 @@ class LiteFootballWorker:
                         int(reason.split("=", 1)[1]) >= 2 for reason in d.reasons)
                     for d in preliminary
                 )
-                # A second source MUST NOT depend exclusively on the first
-                # source's high-confidence pre-filter: absent xG could otherwise
-                # permanently prevent every 365Scores request. Allow one
-                # diagnostic secondary-source probe per scan on a genuinely
-                # active fixture with a fresh 5-minute comparison.
-                diagnostic_probe = bool(
-                    past is not None
-                    and momentum.get("minutes_in_epoch", 0) >= 5
-                    and any(
-                        key in stats and sum(stats[key]) > 0
-                        for key in ("shots", "shots_on_target", "big_chances")
-                    )
+                # The original collector refreshed 365Scores and FotMob by
+                # fixture cadence BEFORE any brain decision. Lite must not
+                # require a pre-existing BET or xG to obtain those statistics.
+                # Retain the free host's two/scan request budget.
+                secondary_due = (
+                    bool(stats)
+                    and now - self._fotmob_last_checked.get(mid, 0)
+                    >= max(120, int(os.getenv("GOOL_LITE_SECONDARY_INTERVAL", "180")))
                 )
-                if (secondary_budget and (pressure_candidate or diagnostic_probe)
-                        and now - self._fotmob_last_checked.get(mid, 0) >= 600):
+                if secondary_due:
+                    filters["secondary_due"] += 1
+                if secondary_budget and secondary_due:
                     filters["secondary_pressure" if pressure_candidate else "secondary_diagnostic"] += 1
                     secondary_budget -= 1
                     self._fotmob_last_checked[mid] = now
@@ -293,6 +327,10 @@ class LiteFootballWorker:
                                     any(sum(v) > 0 for v in (extra.stats or {}).values()
                                         if isinstance(v, (tuple, list)) and len(v) == 2)):
                                 providers["365scores"] = {"stats": extra.stats, "meta": extra.meta}
+                                self._secondary_cache[mid] = {
+                                    "ts": now, "name": "365scores",
+                                    "stats": dict(extra.stats), "meta": dict(extra.meta or {}),
+                                }
                                 filters["scores365_confirmed"] += 1
                             else:
                                 filters["scores365_unmapped"] += 1
@@ -311,6 +349,10 @@ class LiteFootballWorker:
                             if extra and score >= .88 and (extra.meta or {}).get("has_shotmap") and sum(
                                     (extra.stats or {}).get("shots") or (0, 0)) > 0:
                                 providers["fotmob"] = {"stats": extra.stats, "meta": extra.meta}
+                                self._secondary_cache[mid] = {
+                                    "ts": now, "name": "fotmob",
+                                    "stats": dict(extra.stats), "meta": dict(extra.meta or {}),
+                                }
                                 filters["fotmob_confirmed"] += 1
                             elif not extra or score < .88:
                                 filters["fotmob_unmapped"] += 1
@@ -319,7 +361,17 @@ class LiteFootballWorker:
                         except Exception as exc:
                             filters["fotmob_error"] += 1
                             print(f"GOOL_LITE_SECONDARY_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
-                # Re-evaluate with the independent source, if actually matched.
+                # Rebuild original consensus and momentum after fresh secondary
+                # provider data. The next scan reuses verified cache for up to
+                # three minutes rather than discarding it immediately.
+                record["providers"] = providers
+                if len(providers) > 1:
+                    original = self._momentum_tracker.attach(record)
+                    fresh_momentum = original.get("live_momentum") or {}
+                    # Old LiveMomentumTracker computes deltas against available
+                    # points in the score epoch, never fictitious xG.
+                    if fresh_momentum.get("minutes_in_epoch", 0) >= 5:
+                        record["live_momentum"] = fresh_momentum
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
                     filters["no_decision"] += 1
@@ -369,6 +421,10 @@ class LiteFootballWorker:
         if len(self._live) > 64:
             for key, _ in sorted(self._live.items(), key=lambda item: item[1][-1]["ts"])[:len(self._live) - 64]:
                 del self._live[key]
+        # Secondary caches must stay bounded on the 512MB disk / 256MB RAM host.
+        for key in list(self._secondary_cache):
+            if key not in self._live or now - float(self._secondary_cache[key].get("ts") or 0) > 180:
+                del self._secondary_cache[key]
         result = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "live_total": len(matches), "eligible": len(relevant),

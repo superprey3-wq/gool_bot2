@@ -7,6 +7,7 @@ brain_v3_memory + brain_v3_decision. No bookmaker input affects probability.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 from .match_context import provider_count, xg_or_proxy_pair
@@ -19,9 +20,18 @@ def prematch_scenarios(
     qualified_picks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     from .prematch_strategy_scenarios import evaluate_prematch_scenarios
+    # Original registry expects pick attributes (PrematchPick), not the
+    # Lite transport dictionaries. Preserve the true V5 selection and price.
+    verified = [
+        SimpleNamespace(
+            market=row.get("market"), selection=row.get("original_selection"),
+            odds=row.get("odd"),
+        ) for row in (qualified_picks or [])
+        if isinstance(row, dict)
+    ]
     return evaluate_prematch_scenarios(
         "football", football_forecast=forecast, football_quote=football_quote,
-        qualified_picks=qualified_picks,
+        qualified_picks=verified,
     )
 
 

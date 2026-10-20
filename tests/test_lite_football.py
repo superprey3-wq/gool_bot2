@@ -52,8 +52,8 @@ def _quote(event_id: str, timeout: int):
     return {"settings": {"bookmakers": [{"bookmaker": {"id": 1, "name": "TestBook"}}]},
             "odds": [
                 {"bettingScope": "FULL_TIME", "bettingType": "OVER_UNDER", "bookmakerId": 1,
-                 "odds": [{"selection": "OVER", "value": 1.45, "handicap": {"value": 2.5}},
-                          {"selection": "UNDER", "value": 3.0, "handicap": {"value": 2.5}}]},
+                 "odds": [{"selection": "OVER", "value": 2.80, "handicap": {"value": 2.5}},
+                          {"selection": "UNDER", "value": 1.60, "handicap": {"value": 2.5}}]},
             ]}
 
 
@@ -79,10 +79,11 @@ def test_real_paired_quote_is_required_for_prematch_candidate(tmp_path, monkeypa
     assert len(result["prematch_candidates"]) == 1
     item = result["prematch_candidates"][0]
     assert item["market"] == "FT_OVER_2.5"
-    assert item["odd"] == 1.45
+    assert item["odd"] == 2.80
     assert item["bookmaker"] == "TestBook"
     assert item["model_probability"] > item["market_probability"]
-    assert item["parlay_safe"]
+    assert not item.get("parlay_safe", False)
+    assert item["brain"] == "FOOTBALL_V5"
 
 
 def test_live_analysis_cannot_send_without_verified_price(tmp_path, monkeypatch):

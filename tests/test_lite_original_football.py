@@ -224,3 +224,53 @@ def test_live_v3_verified_bet_can_request_pricing_without_overriding_v4(tmp_path
     assert v3[0]["confidence_required"]==.78
     assert v3[0]["publishable"] is False
     assert output["filters"]["v3_bet"]==1
+
+
+def test_original_v4_strong_policy_can_price_only_with_quality_and_true_momentum(monkeypatch, tmp_path):
+    """A healthy source policy is not held hostage by the unreachable V4 .78 cap."""
+    from gool_bot2 import lite_football
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_ORIGINAL_V4_POLICY", "1")
+    class FS:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id="ABCDEFGH", home="Alpha FC",
+                                    away="Beta FC", league="Test", minute=28,
+                                    home_score=0, away_score=0, is_halftime=False)]
+        def fetch_stats(self, mid):
+            return {"shots":(13,9), "shots_on_target":(5,3), "big_chances":(2,1)}
+    def v4_no_bet(record):
+        return [SimpleNamespace(
+            market="GOAL_BEFORE_HT", decision="NO_BET", confidence=.73,
+            probability=.94, data_source="attack_proxy",
+            reasons=("momentum_ready=1", "recent_signals=3", "sources=1",
+                     "threshold=0.67", "red_cards=0"),
+        )]
+    def v3_no_bet(record, mid, *, observed_at):
+        return {"brain":"ORIGINAL_BRAIN_V3", "decision":"NO_BET", "status":"WATCH",
+                "strategy":"goal_before_ht", "probability":.65,
+                "data_quality":.80, "blocks":[], "scenarios":[]}
+    monkeypatch.setattr(lite_football, "evaluate_live_goals", v4_no_bet)
+    monkeypatch.setattr(lite_football, "evaluate_live_scenarios", v3_no_bet)
+    result=LiteFootballWorker(tmp_path, provider=FS()).scan_live(now=time.time())
+    assert result["errors"] == 0
+    candidates=[d for d in result["decisions"]
+                if d["brain"] == "ORIGINAL_V4_POLICY_STRONG"]
+    assert len(candidates) == 1
+    assert candidates[0]["decision"] == "BET"
+    assert candidates[0]["confidence_required"] == .62
+    assert candidates[0]["priced"] is False
+    assert result["filters"]["v4_policy_strong"] == 1
+    # This did NOT rewrite or falsely label the original V4 NO_BET.
+    strict=[d for d in result["decisions"] if d["brain"]=="ORIGINAL_LIVE_V4"]
+    assert strict[0]["decision"]=="NO_BET"
+
+    def low_quality(record, mid, *, observed_at):
+        data=v3_no_bet(record, mid, observed_at=observed_at)
+        data["data_quality"] = .40
+        return data
+    monkeypatch.setattr(lite_football, "evaluate_live_scenarios", low_quality)
+    result=LiteFootballWorker(tmp_path/"weak", provider=FS()).scan_live(now=time.time())
+    assert result["filters"]["v4_policy_strong"] == 0
+    assert not [d for d in result["decisions"]
+                if d["brain"] == "ORIGINAL_V4_POLICY_STRONG"]

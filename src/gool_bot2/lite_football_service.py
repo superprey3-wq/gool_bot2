@@ -115,7 +115,14 @@ class LivePriceAdapter:
         if market == "GOAL_BEFORE_HT":
             if not (10 <= minute <= 45):
                 return self._reject("WRONG_1H_MINUTE")
-            lines = (c._markets_for_event(book_id, minute, sum(scoreboard)) or {}).get("first_half_total") or []
+            # The old market collector decodes the embedded first-half subgame
+            # in the SAME verified GetGameZip response. Lite needlessly
+            # fetched the event again, mixing two score/market snapshots.
+            from .xbet_market_robust import decode_standard_markets
+            lines = decode_standard_markets(game).get("first_half_total") or []
+            if not lines:
+                # Some 1xBet events expose the half as a separate child game.
+                lines = (c._markets_for_event(book_id, minute, sum(scoreboard)) or {}).get("first_half_total") or []
             family = "first_half_total"
         elif market == "ANOTHER_GOAL":
             if not (46 <= minute <= 85):

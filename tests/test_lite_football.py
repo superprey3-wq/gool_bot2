@@ -78,7 +78,8 @@ def test_real_paired_quote_is_required_for_prematch_candidate(tmp_path, monkeypa
     assert result["priced"] == 1
     assert len(result["prematch_candidates"]) == 1
     item = result["prematch_candidates"][0]
-    assert item["market"] == "FT_OVER_2.5"
+    assert item["market"] == "match_total"
+    assert item["original_selection"] == "over 2.5"
     assert item["odd"] == 2.80
     assert item["bookmaker"] == "TestBook"
     assert item["model_probability"] > item["market_probability"]
@@ -207,7 +208,8 @@ def test_multisource_live_checks_activity_confidence_and_probability():
     assert not _lite_live_decision(decision, reasons)[0]
 
 
-def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp_path):
+def test_fotmob_verification_uses_true_provider_match_score_not_echoed_names(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
     """FotMob.enrich echoes requested names: old code accepted weak mappings."""
     from collections import deque
     from types import SimpleNamespace

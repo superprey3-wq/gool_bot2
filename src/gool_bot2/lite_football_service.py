@@ -532,7 +532,7 @@ class FootballHost:
         cmd = command.split(maxsplit=1)[0].split("@", 1)[0].lower() if command else ""
         if cmd == "/start":
             telegram.subscribe(chat_id)
-            response = "⚽ GOOL Lite · Футбол. Команды: /status /audit /prematch /live /journal /express /dayreport /stop"
+            response = "⚽ GOOL Lite · Футбол. Команды: /status /audit /oddscheck /prematch /live /journal /express /dayreport /stop"
         elif cmd == "/stop":
             telegram.unsubscribe(chat_id)
             response = "🔕 Уведомления отключены."
@@ -540,6 +540,25 @@ class FootballHost:
             response = self._format_status()
         elif cmd in ("/audit", "/debug", "/diagnostics"):
             response = self._format_audit()
+        elif cmd == "/oddscheck":
+            try:
+                collector = self.price_adapter._get_collector()
+                _, rows = collector._fetch_index()
+                self._count_odds("manual_index_checks")
+                source = str(getattr(collector, "_index_source", "неизвестен"))
+                cached = bool(getattr(collector, "_index_cache_used", False))
+                response = (
+                    "⚽ <b>GOOL · проверка источника 1xBet</b>\n"
+                    f"Найдено событий футбола: {len(rows or [])}\n"
+                    f"Источник: {html.escape(source)} · кэш: {'да' if cached else 'нет'}\n"
+                    "Это тест списка матчей, не проверка доступности LIVE-котировок."
+                )
+            except Exception as exc:
+                response = (
+                    f"⚠️ 1xBet: {html.escape(type(exc).__name__)}\n"
+                    "Смотри консоль; котировки пока не подтверждены."
+                )
+                print(f"GOOL_LITE_ODDSCHECK_ERROR {type(exc).__name__}:{exc}", flush=True)
         elif cmd in ("/prematch", "/footballprematch"):
             response = self._format_prematch()
         elif cmd in ("/live", "/footballlive"):

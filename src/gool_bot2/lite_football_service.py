@@ -246,7 +246,7 @@ class FootballHost:
                            self.session_audit.setdefault(part, {})):
                 bucket["scans"] = int(bucket.get("scans") or 0) + 1
                 for key in ("upcoming", "selected", "analysed", "priced",
-                            "scenario_matches", "errors", "live_total", "eligible"):
+                            "errors", "live_total", "eligible"):
                     if key in detail:
                         bucket[key] = int(bucket.get(key) or 0) + int(detail.get(key) or 0)
                 for key, value in (detail.get("filters") or {}).items():
@@ -297,8 +297,8 @@ class FootballHost:
             f"отказов: {self.session_audit['odds'].get('rejected',0)}\n"
             "PREMATCH\n"
             f"Сканов: {pre.get('scans',0)} · в окне: {pre.get('upcoming',0)} · проверено: {pre.get('analysed',0)}\n"
-            f"История недоступна: {pre.get('no_history',0)} · нет сценария: {pre.get('no_scenario',0)}\n"
-            f"Рынок не поддержан: {pre.get('not_priceable_scenario',0)} · нет линии: {pre.get('quote_empty',0)}\n"
+            f"Не хватает истории матчей: {pre.get('no_history',0)} · "
+            f"нет котировок: {pre.get('quote_empty',0)}\n"
             f"Не прошли фильтры: {pre.get('no_value',0)} · положительных сканов: {pre.get('priced',0)} · "
             f"уникальных матчей (с начала новой проверки): {self.audit.get('prematch_unique',0)}\n"
             "LIVE\n"
@@ -509,8 +509,8 @@ class FootballHost:
         return (
             "⚽ <b>GOOL · оригинальный футбол V5 / LIVE V4</b>\n"
             f"Режим: {os.getenv(KEY, 'shadow').upper()}\n"
-            f"PREMATCH · просмотрено {pre.get('analysed', 0)} · "
-            f"сценариев {pre.get('scenario_matches', 0)} · котировок {pre.get('priced', 0)}\n"
+            f"PREMATCH V5 · просмотрено {pre.get('analysed', 0)} · "
+            f"кандидатов по истории и коэффициентам {pre.get('priced', 0)}\n"
             f"LIVE · матчей {live.get('live_total', 0)} · "
             f"разобрано {live.get('analysed', 0)}\n"
             f"Журнал · {len(self.journal)} отправленных сигналов\n"

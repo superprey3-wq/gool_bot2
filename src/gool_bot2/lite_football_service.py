@@ -277,6 +277,7 @@ class FootballHost:
             f"Вероятность ниже порога: {live.get('low_probability',0)} · мозг BET: {live.get('brain_bet',0)}\n"
             f"Без xG: {live.get('no_xg',0)} · нет решения: {live.get('no_decision',0)}\n"
             f"FotMob: проверок {live.get('fotmob_checked',0)} · подтвердил данные {live.get('fotmob_confirmed',0)}\n"
+            f"365Scores: проверок {live.get('scores365_checked',0)} · подтвердил {live.get('scores365_confirmed',0)} · ошибки {live.get('scores365_error',0)}\n"
             "КОЭФФИЦИЕНТЫ LIVE\n"
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"

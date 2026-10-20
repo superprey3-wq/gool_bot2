@@ -285,7 +285,7 @@ class LiteFootballWorker:
                 if (original_momentum.get("minutes_in_epoch", 0) < 5
                         and fallback_momentum.get("minutes_in_epoch", 0) >= 5):
                     momentum = fallback_momentum
-                else:
+                elif original_momentum.get("minutes_in_epoch", 0) >= 5:
                     filters["momentum_old_collector"] += 1
                 record["live_momentum"] = momentum
                 # Only spend the expensive secondary request on a game that

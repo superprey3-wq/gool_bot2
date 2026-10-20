@@ -55,6 +55,7 @@ class LiteFootballWorker:
         self._prematch_cursor = 0
         self._live_window = 0
         self._live_window_scans = 0
+        self._live_anchor_ids: list[str] = []
         self._fotmob_provider = None
         self._scores365_provider = None
         self._fotmob_last_checked: dict[str, float] = {}
@@ -199,18 +200,36 @@ class LiteFootballWorker:
         self._last_live = now
         matches = self.provider.live_matches()
         relevant = [m for m in matches if m.minute and 10 <= m.minute <= 85 and not m.is_halftime]
-        # Limit detailed per-match requests on the 25% CPU free tier.
+        # The original GOOL observed the SAME fixture continuously. Rotating
+        # every three scans often discarded the only useful 5-minute window.
+        # Track a bounded cohort for five scans (~12.5 minutes), then rotate.
         relevant.sort(key=lambda m: str(m.provider_match_id))
         max_live = max(1, min(8, int(os.getenv("GOOL_LITE_FOOTBALL_LIVE_MAX", "4"))))
+        cohort_scans = max(3, min(8, int(os.getenv("GOOL_LITE_LIVE_COHORT_SCANS", "5"))))
         batches = max(1, (len(relevant) + max_live - 1) // max_live)
-        batch = self._live_window % batches
-        selected = relevant[batch * max_live:(batch + 1) * max_live]
-        self._live_window_scans += 1
-        # Keep a small set of the same games for 3 cycles (5-minute momentum),
-        # then rotate. Avoid treating cumulative stats as 'recent' every cycle.
-        if self._live_window_scans >= 3:
-            self._live_window_scans = 0
+        live_by_id = {str(m.provider_match_id): m for m in relevant}
+        tracked = [live_by_id[mid] for mid in self._live_anchor_ids if mid in live_by_id]
+        renew = self._live_window_scans >= cohort_scans or not tracked
+        if renew:
+            batch = self._live_window % batches
+            selected = relevant[batch * max_live:(batch + 1) * max_live]
+            self._live_anchor_ids = [str(m.provider_match_id) for m in selected]
             self._live_window = (batch + 1) % batches
+            self._live_window_scans = 0
+        else:
+            batch = (self._live_window - 1) % batches
+            selected = tracked
+            # Replace a fixture that ended, but preserve other observations.
+            if len(selected) < max_live:
+                seen_ids = {str(m.provider_match_id) for m in selected}
+                for match in relevant:
+                    if str(match.provider_match_id) not in seen_ids:
+                        selected.append(match)
+                        seen_ids.add(str(match.provider_match_id))
+                        if len(selected) >= max_live:
+                            break
+                self._live_anchor_ids = [str(m.provider_match_id) for m in selected]
+        self._live_window_scans += 1
         decisions: list[dict[str, Any]] = []
         secondary_budget = max(1, min(3, int(
             os.getenv("GOOL_LITE_FOOTBALL_SECONDARY_BUDGET", "2")
@@ -226,6 +245,8 @@ class LiteFootballWorker:
             "secondary_pressure": 0, "secondary_diagnostic": 0,
             "secondary_cache_used": 0, "secondary_due": 0,
             "momentum_old_collector": 0, "momentum_gap": 0,
+            "momentum_reset": 0, "sources_with_xg": 0,
+            "scores365_with_xg": 0, "scores365_without_xg": 0,
         }
         failures = 0
         seen = set()
@@ -239,10 +260,18 @@ class LiteFootballWorker:
                 history = self._live.setdefault(mid, deque(maxlen=12))
                 row = {"ts": now, "minute": m.minute,
                        "score": [m.home_score, m.away_score], "stats": stats}
-                if history and tuple(history[-1].get("score") or ()) != tuple(row["score"]):
-                    # The old collector resets pressure after a goal.
+                if history and (
+                    tuple(history[-1].get("score") or ()) != tuple(row["score"])
+                    or now - float(history[-1]["ts"]) > 480
+                    or m.minute - int(history[-1]["minute"]) > 8
+                    or m.minute < int(history[-1]["minute"])
+                ):
+                    # After a goal OR a long monitoring gap, old cumulative
+                    # pressure cannot become a fictional fresh 5-minute trend.
                     history.clear()
+                    self._momentum_tracker._history.pop(mid, None)
                     self._secondary_cache.pop(mid, None)
+                    filters["momentum_reset"] += 1
                 past = next((x for x in reversed(history) if now - x["ts"] >= 300
                              and x["minute"] <= m.minute
                              and 3 <= m.minute - x["minute"] <= 8), None)
@@ -277,17 +306,10 @@ class LiteFootballWorker:
                               "home": m.home, "away": m.away},
                     "providers": providers,
                 }
-                # This is the ORIGINAL GOOL LiveMomentumTracker, building
-                # consensus deltas from sequential Flashscore/secondary frames.
-                record = self._momentum_tracker.attach(record)
-                original_momentum = record.get("live_momentum") or {}
-                momentum = original_momentum
-                if (original_momentum.get("minutes_in_epoch", 0) < 5
-                        and fallback_momentum.get("minutes_in_epoch", 0) >= 5):
-                    momentum = fallback_momentum
-                elif original_momentum.get("minutes_in_epoch", 0) >= 5:
-                    filters["momentum_old_collector"] += 1
-                record["live_momentum"] = momentum
+                # Preliminary assessment uses real Flashscore deltas. Attach
+                # the original consensus tracker ONCE, after provider enrichment.
+                record["live_momentum"] = fallback_momentum
+                momentum = fallback_momentum
                 # Only spend the expensive secondary request on a game that
                 # already has enough fresh pressure to warrant confirmation.
                 preliminary = evaluate_live_goals(record)
@@ -332,6 +354,10 @@ class LiteFootballWorker:
                                     "stats": dict(extra.stats), "meta": dict(extra.meta or {}),
                                 }
                                 filters["scores365_confirmed"] += 1
+                                if "xg" in (extra.stats or {}):
+                                    filters["scores365_with_xg"] += 1
+                                else:
+                                    filters["scores365_without_xg"] += 1
                             else:
                                 filters["scores365_unmapped"] += 1
                         except Exception as exc:
@@ -365,18 +391,19 @@ class LiteFootballWorker:
                 # provider data. The next scan reuses verified cache for up to
                 # three minutes rather than discarding it immediately.
                 record["providers"] = providers
-                if len(providers) > 1:
-                    original = self._momentum_tracker.attach(record)
-                    fresh_momentum = original.get("live_momentum") or {}
-                    # Old LiveMomentumTracker computes deltas against available
-                    # points in the score epoch, never fictitious xG.
-                    if fresh_momentum.get("minutes_in_epoch", 0) >= 5:
-                        record["live_momentum"] = fresh_momentum
+                record = self._momentum_tracker.attach(record)
+                original_momentum = record.get("live_momentum") or {}
+                if original_momentum.get("minutes_in_epoch", 0) >= 5:
+                    filters["momentum_old_collector"] += 1
+                elif fallback_momentum.get("minutes_in_epoch", 0) >= 5:
+                    record["live_momentum"] = fallback_momentum
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
                     filters["no_decision"] += 1
                 if not any("xg" in source["stats"] for source in providers.values()):
                     filters["no_xg"] += 1
+                else:
+                    filters["sources_with_xg"] += 1
                 for decision in evaluated:
                     reasons = {part.split("=", 1)[0]: part.split("=", 1)[1]
                                for part in decision.reasons if "=" in part}
@@ -429,7 +456,8 @@ class LiteFootballWorker:
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "live_total": len(matches), "eligible": len(relevant),
             "analysed": len(seen), "errors": failures, "selected": len(selected),
-            "batch": batch + 1, "batch_count": batches, "filters": filters,
+            "batch": batch + 1, "batch_count": batches,
+            "cohort_scan": self._live_window_scans, "filters": filters,
             "brain": "ORIGINAL_LIVE_V4",
             "decisions": decisions[:20],
         }

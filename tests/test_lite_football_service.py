@@ -224,7 +224,8 @@ def test_daily_audit_shows_rejections_and_does_not_double_count_cached_scan(tmp_
     assert "нет котировок" in text.lower()
     assert "Не хватает истории матчей: 3" in text
     assert "проверено: 5" in text
-    assert "мозг BET: 0" in text
+    assert "V4 BET: 0" in text
+    assert "LIVE L01–L05 (Brain V3)" in text
     h2 = make_host(tmp_path)
     assert h2.audit["prematch"]["analysed"] == 5
     assert h2.audit["live"]["analysed"] == 4

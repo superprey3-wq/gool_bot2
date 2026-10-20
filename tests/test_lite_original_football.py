@@ -139,3 +139,88 @@ def test_original_v5_accepts_only_history_confirmed_country_suffix_identity(tmp_
     forecast, _ = work._forecast(fixture)
     assert forecast["status"] == "READY"
     assert forecast["home_games"] >= 6 and forecast["away_games"] >= 6
+
+
+def test_scenario_registries_separate_and_prematch_requires_real_v5_quote(tmp_path):
+    from gool_bot2.lite_football_scenarios import prematch_scenarios
+    ctx = history()
+    forecast = forecast_from_history(
+        home="Alpha FC", away="Beta FC", kickoff=time.time() + 3600, context=ctx,
+    )
+    assert forecast["status"] == "READY"
+    offline = prematch_scenarios(forecast, football_quote={}, qualified_picks=[])
+    assert [row["id"] for row in offline["scenarios"]] == [
+        "F01", "F02", "F03", "F04", "F05",
+    ]
+    assert offline["qualified_pattern_count"] == 0
+    approved, _ = original_v5_picks(
+        history=ctx, raw_odds=quote(), event_id="ABCDEFGH",
+        home="Alpha FC", away="Beta FC", league="Test",
+        kickoff=time.time()+3600,
+    )
+    checked = prematch_scenarios(forecast, football_quote=quote(), qualified_picks=approved)
+    assert checked["matched_count"] == offline["matched_count"]
+    assert checked["qualified_pattern_count"] >= 1
+    assert all(row.get("status") in {"MATCH", "WATCH", "NO_DATA"} for row in checked["scenarios"])
+
+
+def test_independent_live_v3_builds_actual_five_minute_memory_from_flashscore():
+    from gool_bot2.lite_football_scenarios import evaluate_live_scenarios, forget_live_history
+    mid = "TEST_LIVE_SCENARIOS_1"
+    forget_live_history(mid)
+    start = time.time()
+    previous = None
+    for offset, minute in enumerate((20, 23, 26, 29)):
+        record = {
+            "match": {"flashscore_event_id":mid, "minute":minute,
+                      "home_score":0, "away_score":0, "is_halftime":False},
+            "providers":{"flashscore":{"stats":{
+                "shots":(3+offset*3, 2+offset),
+                "shots_on_target":(1+offset, 0+offset),
+                "big_chances":(0 if offset < 2 else 1, 0),
+                "corners":(1+offset,1),
+            }, "meta":{}}},
+            "live_momentum": {
+                "minutes_in_epoch": minute-20,
+                "shots_total_last_5m": 4.0,
+                "sot_total_last_5m": 2.0,
+            },
+        }
+        previous = evaluate_live_scenarios(record, mid, observed_at=start+offset*180)
+    assert previous["brain"] == "ORIGINAL_BRAIN_V3"
+    assert previous["market"] == "GOAL_BEFORE_HT"
+    assert previous["momentum_ready"]
+    assert previous["score_epoch_samples"] == 4
+    assert len(previous["scenarios"]) == 5
+    assert {x["id"] for x in previous["scenarios"]} == {"L01","L02","L03","L04","L05"}
+    assert previous["data_quality"] >= .35
+    forget_live_history(mid)
+
+
+def test_live_v3_verified_bet_can_request_pricing_without_overriding_v4(tmp_path, monkeypatch):
+    from gool_bot2 import lite_football
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY","0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY","0")
+    class FS:
+        def live_matches(self):
+            return [SimpleNamespace(provider_match_id="ABCDEFGH",home="Alpha FC",
+                                    away="Beta FC",league="Test",minute=25,
+                                    home_score=0,away_score=0,is_halftime=False)]
+        def fetch_stats(self, mid):
+            return {"shots":(8,4),"shots_on_target":(4,2),"corners":(3,2)}
+    def verified_v3(record, mid, *, observed_at):
+        return {
+            "brain":"ORIGINAL_BRAIN_V3","status":"BET","decision":"BET",
+            "strategy":"goal_before_ht","market":"GOAL_BEFORE_HT",
+            "probability":.83,"bet_min":.78,"data_quality":.65,
+            "blocks":[],"pressure_state":"HOME_SIEGE",
+            "scenarios":[{"id":"L01","status":"BET"}],
+        }
+    monkeypatch.setattr(lite_football, "evaluate_live_scenarios", verified_v3)
+    work = LiteFootballWorker(tmp_path,provider=FS())
+    output = work.scan_live(now=time.time())
+    v3 = [d for d in output["decisions"] if d.get("brain")=="ORIGINAL_BRAIN_V3"]
+    assert len(v3)==1 and v3[0]["decision"]=="BET"
+    assert v3[0]["confidence_required"]==.78
+    assert v3[0]["publishable"] is False
+    assert output["filters"]["v3_bet"]==1

@@ -320,3 +320,25 @@ def test_audit_reports_live_rejection_reason(tmp_path):
     h.audit["odds"] = {"index_checks": 1, "rejected": 1,
                        "reject_GAME_SCORE_MISMATCH": 1}
     assert "GAME_SCORE_MISMATCH=1" in h._format_audit()
+
+
+def test_audit_unique_candidates_not_repeated_positive_scans(tmp_path):
+    host = make_host(tmp_path)
+    for i in range(3):
+        host._track_scans({
+            "prematch": {
+                "captured_at": f"2026-10-20T14:0{i}:00Z",
+                "analysed": 5, "priced": 1,
+            },
+            "prematch_candidates": [
+                {"event_id": "fixtureA", "home": "Alpha FC", "away": "Beta FC",
+                 "selection": "ТБ 2.5", "odd": 1.7},
+            ],
+        })
+    assert host.audit["prematch"]["priced"] == 3
+    assert host.audit["prematch_unique"] == 1
+    assert "положительных сканов: 3" in host._format_audit()
+    assert "уникальных матчей (с начала новой проверки): 1" in host._format_audit()
+    restarted = make_host(tmp_path)
+    assert restarted.audit["prematch_unique"] == 1
+    assert "После перезапуска · LIVE без xG" in restarted._format_audit()

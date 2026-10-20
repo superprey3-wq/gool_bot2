@@ -319,6 +319,9 @@ class FootballHost:
             f"Вероятность ниже порога: {live.get('low_probability',0)} · V4 BET: {live.get('brain_bet',0)}\n"
             f"LIVE L01–L05 (Brain V3): проверено {live.get('v3_evaluated',0)} · READY {live.get('v3_ready',0)} · "
             f"BET {live.get('v3_bet',0)} · сценариев MATCH {live.get('live_scenario_match',0)}\n"
+            f"V4 Policy: проверено {live.get('v4_policy_reviewed',0)} · "
+            f"STRONG {live.get('v4_policy_strong',0)} · "
+            f"недостаточно данных {live.get('v4_policy_poor_data',0)}\n"
             f"V3: не хватает 5-минутной истории {live.get('v3_no_5m',0)} · "
             f"мало снимков {live.get('v3_memory_insufficient',0)} · "
             f"низкое качество данных {live.get('v3_low_quality',0)}\n"
@@ -368,7 +371,11 @@ class FootballHost:
         # Original V3 has its own LIVE scenarios and may independently approve
         # the same fixture as V4. Price at most one decision per match, prioritizing
         # the original authoritative V3 so no duplicate correlated calls/cards.
-        candidates.sort(key=lambda d: 0 if d.get("brain") == "ORIGINAL_BRAIN_V3" else 1)
+        candidates.sort(key=lambda d: (
+            0 if d.get("brain") == "ORIGINAL_BRAIN_V3"
+            else 1 if d.get("brain") == "ORIGINAL_LIVE_V4"
+            else 2
+        ))
         deduped: list[dict[str, Any]] = []
         seen_live: set[str] = set()
         for decision in candidates:
@@ -535,7 +542,7 @@ class FootballHost:
         pre = self.last_state.get("prematch") or {}
         live = self.last_state.get("live") or {}
         return (
-            "⚽ <b>GOOL · оригинальный футбол V5 / LIVE V4</b>\n"
+            "⚽ <b>GOOL · оригинальный футбол V5 / LIVE V3+V4</b>\n"
             f"Режим: {os.getenv(KEY, 'shadow').upper()}\n"
             f"PREMATCH V5 · просмотрено {pre.get('analysed', 0)} · "
             f"кандидатов по истории и коэффициентам {pre.get('priced', 0)}\n"

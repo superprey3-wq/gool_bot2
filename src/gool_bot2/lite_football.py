@@ -171,6 +171,7 @@ class LiteFootballWorker:
         self._live_window = 0
         self._live_window_scans = 0
         self._fotmob_provider = None
+        self._scores365_provider = None
         self._fotmob_last_checked: dict[str, float] = {}
         self._last_result = _load(self.state_path, {})
         self._prematch_cursor = int(self._last_result.get("prematch_cursor") or 0)
@@ -325,6 +326,8 @@ class LiteFootballWorker:
             "no_xg": 0, "no_decision": 0,
             "fotmob_checked": 0, "fotmob_confirmed": 0,
             "fotmob_unmapped": 0, "fotmob_no_shotmap": 0, "fotmob_error": 0,
+            "scores365_checked": 0, "scores365_confirmed": 0,
+            "scores365_unmapped": 0, "scores365_error": 0,
         }
         failures = 0
         seen = set()
@@ -371,32 +374,49 @@ class LiteFootballWorker:
                     for d in preliminary
                 )
                 if (secondary_budget and pressure_candidate
-                        and os.getenv("GOOL_LITE_FOTMOB_VERIFY", "1") == "1"
-                        and now - self._fotmob_last_checked.get(mid, 0) >= 600
-                        and ("xg" not in stats or len(stats) < 4)):
+                        and now - self._fotmob_last_checked.get(mid, 0) >= 600):
                     secondary_budget -= 1
                     self._fotmob_last_checked[mid] = now
-                    filters["fotmob_checked"] += 1
-                    try:
-                        if self._fotmob_provider is None:
-                            from .providers.fotmob import FotMobProvider
-                            self._fotmob_provider = FotMobProvider()
-                        extra = self._fotmob_provider.enrich(m.home, m.away)
-                        # FotMob.enrich echoes requested home/away strings, so
-                        # compare its actual mapping match_score, not echoed names!
-                        mapped_score = float((extra.meta or {}).get("match_score") or 0) if extra else 0.
-                        if (extra is not None and mapped_score >= .88
-                                and (extra.meta or {}).get("has_shotmap")
-                                and sum(extra.stats.get("shots") or (0, 0)) > 0):
-                            providers["fotmob"] = {"stats": extra.stats, "meta": extra.meta}
-                            filters["fotmob_confirmed"] += 1
-                        elif not extra or mapped_score < .88:
-                            filters["fotmob_unmapped"] += 1
-                        else:
-                            filters["fotmob_no_shotmap"] += 1
-                    except Exception as exc:
-                        filters["fotmob_error"] += 1
-                        print(f"GOOL_LITE_SECONDARY_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
+                    # Original V4 is evaluated on independent real provider stats.
+                    # Cap additional HTTP requests on the free server.
+                    if os.getenv("GOOL_LITE_SCORES365_VERIFY", "1") == "1":
+                        filters["scores365_checked"] += 1
+                        try:
+                            if self._scores365_provider is None:
+                                from .providers.scores365 import Scores365Provider
+                                self._scores365_provider = Scores365Provider()
+                            extra = self._scores365_provider.enrich(m.home, m.away)
+                            score = float((extra.meta or {}).get("match_score") or 0) if extra else 0.
+                            if (extra and score >= .88 and
+                                    any(sum(v) > 0 for v in (extra.stats or {}).values()
+                                        if isinstance(v, (tuple, list)) and len(v) == 2)):
+                                providers["365scores"] = {"stats": extra.stats, "meta": extra.meta}
+                                filters["scores365_confirmed"] += 1
+                            else:
+                                filters["scores365_unmapped"] += 1
+                        except Exception as exc:
+                            filters["scores365_error"] += 1
+                            print(f"GOOL_LITE_SCORES365_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
+                    if ("365scores" not in providers and
+                            os.getenv("GOOL_LITE_FOTMOB_VERIFY", "1") == "1"):
+                        filters["fotmob_checked"] += 1
+                        try:
+                            if self._fotmob_provider is None:
+                                from .providers.fotmob import FotMobProvider
+                                self._fotmob_provider = FotMobProvider()
+                            extra = self._fotmob_provider.enrich(m.home, m.away)
+                            score = float((extra.meta or {}).get("match_score") or 0) if extra else 0.
+                            if extra and score >= .88 and (extra.meta or {}).get("has_shotmap") and sum(
+                                    (extra.stats or {}).get("shots") or (0, 0)) > 0:
+                                providers["fotmob"] = {"stats": extra.stats, "meta": extra.meta}
+                                filters["fotmob_confirmed"] += 1
+                            elif not extra or score < .88:
+                                filters["fotmob_unmapped"] += 1
+                            else:
+                                filters["fotmob_no_shotmap"] += 1
+                        except Exception as exc:
+                            filters["fotmob_error"] += 1
+                            print(f"GOOL_LITE_SECONDARY_ERROR event={mid} {type(exc).__name__}:{exc}", flush=True)
                 # Re-evaluate with the independent source, if actually matched.
                 evaluated = evaluate_live_goals(record)
                 if not evaluated:
@@ -406,8 +426,10 @@ class LiteFootballWorker:
                 for decision in evaluated:
                     reasons = {part.split("=", 1)[0]: part.split("=", 1)[1]
                                for part in decision.reasons if "=" in part}
-                    lite_bet, required_confidence, policy = _lite_live_decision(decision, reasons)
-                    if lite_bet:
+                    original_bet = decision.decision == "BET"
+                    required_confidence = .78
+                    policy = "ORIGINAL_LIVE_V4"
+                    if original_bet:
                         filters["brain_bet"] += 1
                     else:
                         if reasons.get("momentum_ready") == "0":
@@ -424,9 +446,10 @@ class LiteFootballWorker:
                         "score": [m.home_score, m.away_score],
                         "observed_at": now,
                         "minute": m.minute, "market": decision.market,
-                        "decision": "BET" if lite_bet else "NO_BET",
+                        "decision": decision.decision,
                         "base_decision": decision.decision,
-                        "policy": policy, "confidence_required": required_confidence,
+                        "policy": policy, "brain": "ORIGINAL_LIVE_V4",
+                        "confidence_required": required_confidence,
                         "confidence": decision.confidence,
                         "probability": decision.probability, "reasons": reasons,
                         "provider_count": len(providers),
@@ -449,6 +472,7 @@ class LiteFootballWorker:
             "live_total": len(matches), "eligible": len(relevant),
             "analysed": len(seen), "errors": failures, "selected": len(selected),
             "batch": batch + 1, "batch_count": batches, "filters": filters,
+            "brain": "ORIGINAL_LIVE_V4",
             "decisions": decisions[:20],
         }
         print("GOOL_LITE_FOOTBALL_LIVE " + json.dumps({

@@ -373,3 +373,44 @@ def test_shadow_verified_real_quote_is_recorded_not_sent_and_settled(tmp_path, m
     assert len(restarted.shadow_journal) == 1
     assert restarted._settle_one(restarted.shadow_journal[0],
                                {"is_finished": True, "home_score": 2, "away_score": 1}, {}) == "won"
+
+
+def test_original_v4_policy_candidate_priced_end_to_end_in_shadow_without_telegram(tmp_path, monkeypatch):
+    """Brain BET -> live index -> same-game score/quote -> verified shadow record."""
+    from gool_bot2 import telegram
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "shadow")
+    now = time.time()
+    notifications = []
+    monkeypatch.setattr(telegram, "broadcast", lambda msg: notifications.append(msg) or 1)
+    class Brain(FakeBrain):
+        def collect_once(self):
+            return {
+                "prematch": {"cached": True},
+                "prematch_candidates": [],
+                "live": {"captured_at": "2026-10-20T17:00:00Z",
+                         "live_total": 1, "analysed": 1,
+                         "decisions": [{
+                             "event_id":"ABCDEFGH","phase":"LIVE",
+                             "home":"Alpha FC","away":"Beta FC","league":"Test",
+                             "market":"GOAL_BEFORE_HT", "minute":28,
+                             "observed_at": now,
+                             "score":[0,0],"decision":"BET",
+                             "brain":"ORIGINAL_V4_POLICY_STRONG",
+                             "confidence":.73,"confidence_required":.62,
+                             "probability":.85,
+                         }],
+                         "filters":{"v4_policy_strong":1}},
+            }
+    collector = FakeCollector()
+    host=FootballHost(tmp_path, brain=Brain(tmp_path),
+                      price_adapter=LivePriceAdapter(tmp_path,collector))
+    host.collect(now=now)
+    assert host.audit["odds"]["index_checks"] == 1
+    assert host.audit["odds"]["priced"] == 1
+    assert len(host.shadow_journal) == 1
+    assert host.shadow_journal[0]["selection"] == "ТБ 0.5 (1-й тайм)"
+    assert host.shadow_journal[0]["odd"] == 1.65
+    assert host.journal == []
+    assert notifications == []
+    host.collect(now=now+151)
+    assert host.audit["odds"]["index_checks"] == 1  # no duplicate quote fetch

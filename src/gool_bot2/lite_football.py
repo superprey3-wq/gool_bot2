@@ -66,6 +66,9 @@ class LiteFootballWorker:
         # The original live collector retained secondary-source snapshots
         # between observations; Lite previously discarded them each scan.
         self._secondary_cache: dict[str, dict[str, Any]] = {}
+        # Count only real, fully collected Flashscore snapshots for the
+        # original Brain V3 two-field-scan selection hardening.
+        self._v3_field_scans: dict[str, int] = {}
         self._last_result = _load(self.state_path, {})
         self._prematch_cursor = int(self._last_result.get("prematch_cursor") or 0)
         self._live_window = int(self._last_result.get("live_window") or 0)
@@ -260,6 +263,8 @@ class LiteFootballWorker:
             "momentum_reset": 0, "sources_with_xg": 0,
             "v3_evaluated": 0, "v3_ready": 0, "v3_bet": 0,
             "v3_no_5m": 0, "v3_low_quality": 0, "v3_memory_insufficient": 0,
+            "v3_strong_live": 0, "v3_under_block": 0,
+            "v3_selection_wait": 0, "v3_selection_block": 0,
             "v4_policy_reviewed": 0, "v4_policy_strong": 0,
             "v4_policy_poor_data": 0, "v4_policy_rank_low": 0,
             "live_scenario_match": 0,
@@ -288,6 +293,7 @@ class LiteFootballWorker:
                     history.clear()
                     self._momentum_tracker._history.pop(mid, None)
                     forget_live_history(mid)
+                    self._v3_field_scans.pop(mid, None)
                     self._secondary_cache.pop(mid, None)
                     filters["momentum_reset"] += 1
                 past = next((x for x in reversed(history) if now - x["ts"] >= 300
@@ -415,12 +421,31 @@ class LiteFootballWorker:
                     filters["momentum_old_collector"] += 1
                 elif fallback_momentum.get("minutes_in_epoch", 0) >= 5:
                     record["live_momentum"] = fallback_momentum
-                # PREMATCH scenarios F01-F05 cannot veto or invent LIVE bets.
-                # LIVE has its own original Brain V3 memory and scenario states.
+                # A field scan is considered complete once its fresh
+                # Flashscore and secondary snapshot have both been collected,
+                # not because the bookmaker was rechecked. This is an actual
+                # cycle-level confirmation, not a synthetic extra observation.
+                if stats:
+                    self._v3_field_scans[mid] = self._v3_field_scans.get(mid, 0) + 1
+                current_scan = self._v3_field_scans.get(mid, 0)
+                record["runtime_field_scan_id"] = current_scan
+                record["runtime_field_scan_confirmed_round"] = current_scan
+                # Original production V3: pressure memory -> full-match
+                # strategy -> guarded STRONG_LIVE -> countercase ->
+                # two genuine completed snapshot checks.
                 live_v3 = evaluate_live_scenarios(record, mid, observed_at=now)
                 filters["v3_evaluated"] += 1
                 if live_v3.get("status") == "READY":
                     filters["v3_ready"] += 1
+                if live_v3.get("strong_live_activated"):
+                    filters["v3_strong_live"] += 1
+                selection_verdict = str(live_v3.get("selection_verdict") or "")
+                if selection_verdict.startswith("WAIT_"):
+                    filters["v3_selection_wait"] += 1
+                elif selection_verdict.startswith("BLOCK_"):
+                    filters["v3_selection_block"] += 1
+                if "brain_v3_under_countercase_strong" in (live_v3.get("blocks") or []):
+                    filters["v3_under_block"] += 1
                 for block in live_v3.get("blocks") or []:
                     if block == "brain_v3_wait_5m_history":
                         filters["v3_no_5m"] += 1
@@ -449,6 +474,9 @@ class LiteFootballWorker:
                         "probability": prob,
                         "data_quality": live_v3.get("data_quality"),
                         "pressure_state": live_v3.get("pressure_state"),
+                        "entry_mode": live_v3.get("entry_mode"),
+                        "selection_verdict": live_v3.get("selection_verdict"),
+                        "under_risk": live_v3.get("under_risk"),
                         "priced": False, "publishable": False,
                     })
                 evaluated = evaluate_live_goals(record)
@@ -552,6 +580,10 @@ class LiteFootballWorker:
         if len(self._live) > 64:
             for key, _ in sorted(self._live.items(), key=lambda item: item[1][-1]["ts"])[:len(self._live) - 64]:
                 del self._live[key]
+        for key in list(self._v3_field_scans):
+            if key not in self._live:
+                del self._v3_field_scans[key]
+                forget_live_history(key)
         # Secondary caches must stay bounded on the 512MB disk / 256MB RAM host.
         for key in list(self._secondary_cache):
             if key not in self._live or now - float(self._secondary_cache[key].get("ts") or 0) > 180:
@@ -562,7 +594,7 @@ class LiteFootballWorker:
             "analysed": len(seen), "errors": failures, "selected": len(selected),
             "batch": batch + 1, "batch_count": batches,
             "cohort_scan": self._live_window_scans, "filters": filters,
-            "brain": "ORIGINAL_LIVE_V4+ORIGINAL_BRAIN_V3+ORIGINAL_V4_POLICY",
+            "brain": "ORIGINAL_V5+PRODUCTION_BRAIN_V3_FULL_MATCH+ORIGINAL_LIVE_V4",
             "scenarios": {"prematch": "F01-F05", "live": "L01-L05"},
             "decisions": decisions[:20],
         }

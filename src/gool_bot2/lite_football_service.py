@@ -131,6 +131,7 @@ class LivePriceAdapter:
         self.collector = collector
         self.data_root = data_root
         self.last_reject_reason: str | None = None
+        self.last_match_debug: dict[str, Any] | None = None
 
     def _get_collector(self):
         if self.collector is None:
@@ -150,6 +151,7 @@ class LivePriceAdapter:
     def price(self, decision: dict[str, Any], index: list[dict[str, Any]], *, now: float) -> dict[str, Any] | None:
         """Fail closed unless bookmaker identity, score and both live prices agree."""
         self.last_reject_reason = None
+        self.last_match_debug = None
         if decision.get("decision") != "BET":
             return self._reject("NO_BRAIN_BET")
         if now - _numeric(decision.get("observed_at")) > 60:
@@ -169,6 +171,16 @@ class LivePriceAdapter:
         )
         best, match_reason = _select_live_index_match(fixture, index, c)
         if best is None:
+            scored = _index_match_scores(fixture, index)
+            top = scored[0] if scored else None
+            self.last_match_debug = {
+                "reason": match_reason,
+                "flashscore": f"{fixture.home} — {fixture.away}"[:140],
+                "closest_1xbet": (f"{top[3].get('home')} — {top[3].get('away')}"[:140]
+                                 if top else "нет в индексе"),
+                "similarity": round(top[0], 3) if top else 0,
+                "index_rows": len(index),
+            }
             return self._reject(match_reason)
         book_id = str(best.get("event_id") or "")
         if not book_id:
@@ -438,7 +450,13 @@ class FootballHost:
             "КОЭФФИЦИЕНТЫ LIVE\n"
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"
-            f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"
+            f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"            + "".join(
+                f"Сопоставление: {html.escape(str(row.get('flashscore')))} / "
+                f"1xBet: {html.escape(str(row.get('closest_1xbet')))} "
+                f"(совпадение {row.get('similarity')}, в индексе {row.get('index_rows')})\n"
+                for row in (self.audit.get("index_match_debug") or [])[-2:]
+            )
+
             f"Отправлено сигналов: {len(self.journal)} · "
             f"SHADOW (не отправлялись): {len(self.shadow_journal)}\n"
             "В SHADOW рассылка отключена. Причины отсева показаны выше."
@@ -514,6 +532,12 @@ class FootballHost:
                                        "WRONG_1H_MINUTE", "WRONG_2H_MINUTE", "NO_BRAIN_BET"}:
                             why = "UNKNOWN"
                         self._count_odds("reject_" + why)
+                        info = getattr(self.price_adapter, "last_match_debug", None)
+                        if why in {"NAME_MISMATCH", "NAME_SIDE_MISMATCH", "MATCH_AMBIGUOUS", "MATCH_NOT_FOUND"} and isinstance(info, dict):
+                            self.audit["index_match_debug"] = (
+                                [*self.audit.get("index_match_debug", []), info][-3:]
+                            )
+                            _save(self.audit_path, self.audit)
                         print(f"GOOL_LITE_LIVE_ODDS_REJECT reason={why}", flush=True)
             except Exception as exc:
                 print(f"GOOL_LITE_LIVE_ODDS_ERROR {type(exc).__name__}:{exc}", flush=True)

@@ -414,3 +414,25 @@ def test_original_v4_policy_candidate_priced_end_to_end_in_shadow_without_telegr
     assert notifications == []
     host.collect(now=now+151)
     assert host.audit["odds"]["index_checks"] == 1  # no duplicate quote fetch
+
+
+def test_original_brain_v3_strong_live_can_reach_real_odds_without_lite_fixed_070_veto(tmp_path):
+    index = [{"event_id": "123", "home": "Alpha FC", "away": "Beta FC"}]
+    strong = _decision()
+    strong.update({"brain":"ORIGINAL_BRAIN_V3", "probability":.67,
+                   "confidence":.67, "confidence_required":.64,
+                   "entry_mode":"STRONG_LIVE"})
+    gateway = LivePriceAdapter(tmp_path, FakeCollector())
+    row = gateway.price(strong, index, now=time.time())
+    assert row is not None
+    assert row["model_probability"] == .67
+    assert row["expected_value"] > .05
+    # The old V4-only route does not inherit the guarded Brain V3 exception.
+    v4 = dict(strong)
+    v4["brain"] = "ORIGINAL_LIVE_V4"
+    assert gateway.price(v4, index, now=time.time()) is None
+    assert gateway.last_reject_reason == "MODEL_VALUE_GATE"
+    # A V3 result below its own minimum is still rejected.
+    invalid = dict(strong)
+    invalid["probability"] = .63
+    assert gateway.price(invalid, index, now=time.time()) is None

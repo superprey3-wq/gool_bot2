@@ -302,3 +302,84 @@ def test_v4_policy_never_promotes_red_card_live_scenario(monkeypatch,tmp_path):
     assert row["filters"]["v4_policy_strong"] == 0
     assert not any(d.get("brain")=="ORIGINAL_V4_POLICY_STRONG"
                    for d in row["decisions"])
+
+
+def test_real_flashscore_only_momentum_can_reach_original_v4_policy_and_shadow_quote(tmp_path, monkeypatch):
+    """True live-brain and price integration: no fabricated xG, no monkeypatched brain.
+
+    Five *distinct* consecutive Flashscore cumulative snapshots feed the
+    original GOOL V3 memory and unchanged V4 calculation. The production V4
+    ranking policy is permitted to price a strong situation with missing xG.
+    """
+    from gool_bot2.lite_football_service import LivePriceAdapter
+    from gool_bot2.lite_football_scenarios import forget_live_history
+    from gool_bot2.brain_v3_memory import _HISTORY
+
+    monkeypatch.setenv("GOOL_FOOTBALL_LITE_MODE", "shadow")
+    monkeypatch.setenv("GOOL_LITE_SCORES365_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_FOTMOB_VERIFY", "0")
+    monkeypatch.setenv("GOOL_LITE_ORIGINAL_V4_POLICY", "1")
+    match_id = "NO_XG_STRONG_FC"
+    forget_live_history(match_id)
+
+    class FlashscoreSnapshots:
+        def __init__(self):
+            self.index = 0
+        def live_matches(self):
+            return [SimpleNamespace(
+                provider_match_id=match_id, home="Alpha FC", away="Beta FC",
+                league="Test league", minute=(16, 19, 22, 25, 28)[self.index],
+                home_score=0, away_score=0, is_halftime=False,
+            )]
+        def fetch_stats(self, _):
+            i = self.index
+            return {
+                "shots": ((6,10,14,18,22)[i], (3,4,5,6,7)[i]),
+                "shots_on_target": ((2,4,6,8,10)[i], (1,1,2,2,3)[i]),
+                "big_chances": ((1,1,2,3,4)[i], (0,0,0,1,1)[i]),
+                "corners": ((2,3,4,5,6)[i], (1,1,2,2,3)[i]),
+            }
+    fs = FlashscoreSnapshots()
+    worker = LiteFootballWorker(tmp_path, provider=fs)
+    now = time.time()
+    last = {}
+    for i in range(5):
+        fs.index = i
+        last = worker.scan_live(now=now+i*151)
+        assert last["errors"] == 0
+        assert last["filters"]["no_xg"] == 1
+
+    assert last["filters"]["momentum_old_collector"] >= 1
+    assert last["filters"]["v3_evaluated"] == 1
+    policy = [d for d in last["decisions"]
+              if d.get("brain") == "ORIGINAL_V4_POLICY_STRONG"]
+    assert policy, f"Flashscore real proxy must reach original strong V4 rank: {last['filters']}"
+    assert policy[0]["confidence"] < .78
+    assert policy[0]["probability"] >= .70
+
+    class Book:
+        def _fetch_index(self):
+            return "verified", [{
+                "event_id":"123", "home":"Alpha FC", "away":"Beta FC",
+            }]
+        def _game(self, event):
+            return {"SC":{"FS":{}}}
+        def _markets_for_event(self, event, minute, total):
+            return {"first_half_total":[{
+                "line":.5, "over":1.80, "under":2.05,
+            }]}
+    import types
+    simple_brain = types.SimpleNamespace(
+        state_path=worker.state_path, provider=fs,
+        collect_once=lambda:{
+            "prematch":{"cached":True}, "live":last, "prematch_candidates":[],
+        },
+    )
+    host=FootballHost(tmp_path, brain=simple_brain,
+                      price_adapter=LivePriceAdapter(tmp_path, collector=Book()))
+    host.collect(now=now+4*151)
+    assert host.audit["odds"]["index_checks"] == 1
+    assert host.audit["odds"]["priced"] == 1
+    assert len(host.shadow_journal) == 1
+    assert host.journal == []
+    forget_live_history(match_id)

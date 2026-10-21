@@ -14,6 +14,7 @@ import signal
 import tempfile
 import time
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 from . import telegram
 from .lite_football import LiteFootballWorker, _load, _save
-from .providers.common import pair_score
+from .providers.common import pair_score, norm_team
 
 TZ = ZoneInfo("Europe/Moscow")
 KEY = "GOOL_FOOTBALL_LITE_MODE"
@@ -47,6 +48,59 @@ def _game_score(game: dict[str, Any]) -> tuple[int, int] | None:
     """
     from .xbet_score_epoch_guard import extract_xbet_score
     return extract_xbet_score(game)
+
+
+def _index_match_scores(fixture: Any, index: list[dict[str, Any]]) -> list[tuple[float, float, float, dict[str, Any]]]:
+    """Rank ordered 1xBet names; the original GOOL accepted pair_score >= .68.
+
+    Averages alone can confuse a namesake with an unrelated opponent.
+    Unlike pair_score (which allows reversed sides), LIVE needs home and away
+    aligned to the separately verified score. Never switch team orientation.
+    """
+    h = norm_team(str(fixture.home))
+    a = norm_team(str(fixture.away))
+    if not h or not a:
+        return []
+    rows: list[tuple[float, float, float, dict[str, Any]]] = []
+    for item in index or []:
+        other_h = norm_team(str(item.get("home") or ""))
+        other_a = norm_team(str(item.get("away") or ""))
+        if not other_h or not other_a:
+            continue
+        hs = SequenceMatcher(None, h, other_h).ratio()
+        aw = SequenceMatcher(None, a, other_a).ratio()
+        rows.append(((hs + aw) / 2.0, hs, aw, item))
+    return sorted(rows, key=lambda item: item[0], reverse=True)
+
+
+def _select_live_index_match(fixture: Any, index: list[dict[str, Any]],
+                             collector: Any) -> tuple[dict[str, Any] | None, str]:
+    """Use original collector mapping + distinct-team/ambiguity safeguards."""
+    scored = _index_match_scores(fixture, index)
+    if not scored:
+        return None, "MATCH_NOT_FOUND"
+    # Reuse old GOOL _map which has its own stable match-id cache and 0.68
+    # lower bound. Do not accept reverse fixtures or ambiguous namesakes.
+    if callable(getattr(collector, "_map", None)):
+        event_id = collector._map(fixture, index)
+        if not event_id:
+            return None, "NAME_MISMATCH"
+        selected = next((v for v in scored if str(v[3].get("event_id")) == str(event_id)), None)
+        if selected is None:
+            return None, "MATCH_NOT_FOUND"
+    else:
+        selected = scored[0]
+    avg, hs, aw, match = selected
+    min_score = max(.68, min(.88, float(os.getenv("XBET_MATCH_MIN_SCORE", ".68"))))
+    if avg < min_score or min(hs, aw) < .57:
+        return None, "NAME_MISMATCH"
+    # Disallow near-ties even with a matching score: the other fixture can
+    # coincidentally be at the same 0:0 or 1:0.
+    challengers = [row for row in scored if str(row[3].get("event_id")) != str(match.get("event_id"))]
+    if challengers and challengers[0][0] >= avg - .07:
+        return None, "MATCH_AMBIGUOUS"
+    return match, "MATCH_OK"
+
 
 class LivePriceAdapter:
     """Look up only promising live matches; never price from a stale index alone."""
@@ -91,18 +145,9 @@ class LivePriceAdapter:
             home=str(decision.get("home") or ""),
             away=str(decision.get("away") or ""),
         )
-        best = max(
-            (index or []),
-            key=lambda row: pair_score(
-                fixture.home, fixture.away, str(row.get("home") or ""), str(row.get("away") or "")
-            ),
-            default=None,
-        )
-        if not best:
-            return self._reject("MATCH_NOT_FOUND")
-        sim = pair_score(fixture.home, fixture.away, str(best["home"]), str(best["away"]))
-        if sim < 0.88:
-            return self._reject("NAME_MISMATCH")
+        best, match_reason = _select_live_index_match(fixture, index, c)
+        if best is None:
+            return self._reject(match_reason)
         book_id = str(best.get("event_id") or "")
         if not book_id:
             return self._reject("BOOK_ID_MISSING")
@@ -441,7 +486,7 @@ class FootballHost:
                         self._count_odds("rejected")
                         why = str(getattr(self.price_adapter, "last_reject_reason", None) or "UNKNOWN")
                         if why not in {"MODEL_VALUE_GATE", "ODDS_PAIR_INVALID", "TARGET_LINE_MISSING",
-                                       "GAME_SCORE_MISMATCH", "NAME_MISMATCH", "MATCH_NOT_FOUND",
+                                       "GAME_SCORE_MISMATCH", "NAME_MISMATCH", "MATCH_AMBIGUOUS", "MATCH_NOT_FOUND",
                                        "STALE_DECISION", "UNSUPPORTED_MARKET", "SCORE_MISSING",
                                        "SCORE_INVALID", "BOOK_ID_MISSING", "GAME_UNAVAILABLE",
                                        "WRONG_1H_MINUTE", "WRONG_2H_MINUTE", "NO_BRAIN_BET"}:

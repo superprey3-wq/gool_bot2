@@ -94,6 +94,28 @@ def _select_live_index_match(fixture: Any, index: list[dict[str, Any]],
     min_score = max(.68, min(.88, float(os.getenv("XBET_MATCH_MIN_SCORE", ".68"))))
     if avg < min_score or min(hs, aw) < .57:
         return None, "NAME_MISMATCH"
+    # The old pair_score can overrate names sharing a city but not the club
+    # (Manchester United vs Manchester City), or a youth/reserve variant.
+    def side_ok(original: str, bookmaker: str) -> bool:
+        left, right = norm_team(original), norm_team(bookmaker)
+        lparts, rparts = left.split(), right.split()
+        if not lparts or not rparts:
+            return False
+        # Team name categories that must match on both sides, including
+        # "II", "B", academy, women and age groups. NFKD normalization
+        # strips "Women/W", so inspect both raw and cleaned forms.
+        import re
+        suffix = r"(?<![a-z0-9])(u(?:17|18|19|20|21|22|23)|ii|reserves?|women|w|femenino|femenil|youth)(?![a-z0-9])"
+        if set(re.findall(suffix, original.casefold())) != set(re.findall(suffix, bookmaker.casefold())):
+            return False
+        if SequenceMatcher(None, left, right).ratio() >= .93:
+            return True
+        if len(lparts) >= 2 and len(rparts) >= 2:
+            if SequenceMatcher(None, lparts[-1], rparts[-1]).ratio() < .60:
+                return False
+        return True
+    if not side_ok(fixture.home, str(match["home"])) or not side_ok(fixture.away, str(match["away"])):
+        return None, "NAME_SIDE_MISMATCH"
     # Disallow near-ties even with a matching score: the other fixture can
     # coincidentally be at the same 0:0 or 1:0.
     challengers = [row for row in scored if str(row[3].get("event_id")) != str(match.get("event_id"))]
@@ -486,7 +508,7 @@ class FootballHost:
                         self._count_odds("rejected")
                         why = str(getattr(self.price_adapter, "last_reject_reason", None) or "UNKNOWN")
                         if why not in {"MODEL_VALUE_GATE", "ODDS_PAIR_INVALID", "TARGET_LINE_MISSING",
-                                       "GAME_SCORE_MISMATCH", "NAME_MISMATCH", "MATCH_AMBIGUOUS", "MATCH_NOT_FOUND",
+                                       "GAME_SCORE_MISMATCH", "NAME_MISMATCH", "NAME_SIDE_MISMATCH", "MATCH_AMBIGUOUS", "MATCH_NOT_FOUND",
                                        "STALE_DECISION", "UNSUPPORTED_MARKET", "SCORE_MISSING",
                                        "SCORE_INVALID", "BOOK_ID_MISSING", "GAME_UNAVAILABLE",
                                        "WRONG_1H_MINUTE", "WRONG_2H_MINUTE", "NO_BRAIN_BET"}:

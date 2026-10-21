@@ -397,6 +397,13 @@ class FootballHost:
         pre = self.audit.get("prematch") or {}
         live = self.audit.get("live") or {}
         odds = self.audit.get("odds") or {}
+        index_debug = "".join(
+                f"Сопоставление: {html.escape(str(row.get('flashscore')))} / "
+                f"1xBet: {html.escape(str(row.get('closest_1xbet')))} "
+                f"(совпадение {row.get('similarity')}, в индексе {row.get('index_rows')})\n"
+                for row in (self.audit.get("index_match_debug") or [])[-2:]
+            
+        )
         return (
             f"🩺 <b>GOOL · {self.audit.get('date', '?')} · Футбол</b>\n"
             f"Режим: {html.escape(os.getenv(KEY, 'shadow').upper())}\n"
@@ -450,13 +457,8 @@ class FootballHost:
             "КОЭФФИЦИЕНТЫ LIVE\n"
             f"Проверок: {odds.get('index_checks',0)} · пустая линия: {odds.get('index_empty',0)}\n"
             f"Котировки подтверждены: {odds.get('priced',0)} · отклонены: {odds.get('rejected',0)}\n"
-            f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"            + "".join(
-                f"Сопоставление: {html.escape(str(row.get('flashscore')))} / "
-                f"1xBet: {html.escape(str(row.get('closest_1xbet')))} "
-                f"(совпадение {row.get('similarity')}, в индексе {row.get('index_rows')})\n"
-                for row in (self.audit.get("index_match_debug") or [])[-2:]
-            )
-
+            f"Причины отказов 1xBet: {', '.join(str(k[7:])+'='+str(v) for k,v in sorted(odds.items()) if k.startswith('reject_')) or 'ещё нет'}\n"
+            f"{index_debug}"
             f"Отправлено сигналов: {len(self.journal)} · "
             f"SHADOW (не отправлялись): {len(self.shadow_journal)}\n"
             "В SHADOW рассылка отключена. Причины отсева показаны выше."

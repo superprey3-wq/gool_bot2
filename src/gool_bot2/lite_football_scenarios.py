@@ -1,8 +1,9 @@
 """Separate football PREMATCH hypotheses and original LIVE V3 scenarios.
 
 PREMATCH F01-F05 are registered hypotheses, not stand-alone bets.
-LIVE V3 is driven by real Flashscore/secondary snapshots and unmodified
-brain_v3_memory + brain_v3_decision. No bookmaker input affects probability.
+LIVE V3 is driven by real Flashscore/secondary snapshots and original
+Brain V3 memory, full-match/STRONG_LIVE and selection audit modules.
+No bookmaker input affects probability.
 """
 from __future__ import annotations
 
@@ -71,7 +72,13 @@ def evaluate_live_scenarios(
 ) -> dict[str, Any]:
     """Run the original independent V3 strategy and pressure/scenario memory."""
     from .brain_v3_memory import build_brain_v3_memory, _HISTORY
-    from .brain_v3_decision import evaluate_brain_v3
+    from .brain_v3_full_match import (
+        install_brain_v3_full_match,
+        apply_full_match_brain_v3_to_experts,
+        apply_full_match_strong_live,
+    )
+    from .brain_v3_decision_audit import audit_brain_v3_decision
+    from .brain_v3_selection_hardening import _apply_tournament
     from .threat_sequence_live import evaluate_live_threat
 
     record["captured_at"] = datetime.fromtimestamp(
@@ -79,7 +86,18 @@ def evaluate_live_scenarios(
     ).isoformat()
     memory = build_brain_v3_memory(record, match_id)
     quality = _original_data_quality(record)
-    decision = evaluate_brain_v3(record, data_quality=quality)
+    experts: dict[str, dict[str, Any]] = {}
+    # Use the production GOOL Brain V3 chain, rather than invoking only the
+    # legacy 35'/73' basic evaluator. Each stage is the original module:
+    # full-half clock -> strong live -> UNDER countercase/rival audit ->
+    # two genuinely completed field scans and final selection.
+    install_brain_v3_full_match()
+    decision = apply_full_match_brain_v3_to_experts(
+        record, experts, data_quality=quality,
+    )
+    decision = apply_full_match_strong_live(record, experts, decision)
+    decision = audit_brain_v3_decision(record, experts, decision)
+    decision = _apply_tournament(record, experts, decision)
     threat = evaluate_live_threat(record)
     state = str((memory.get("pressure") or {}).get("state") or "NO_DATA")
     strategy = str(decision.get("strategy") or "")
@@ -114,6 +132,13 @@ def evaluate_live_scenarios(
         "bet_min": decision.get("bet_min"),
         "data_quality": quality,
         "pressure_state": state,
+        "entry_mode": str(decision.get("entry_mode") or "STANDARD"),
+        "full_match_clock": bool(decision.get("full_match_clock")),
+        "under_risk": (decision.get("countercase") or {}).get("no_more_goal_risk"),
+        "selection_score": (decision.get("selection_audit") or {}).get("score"),
+        "selection_verdict": (decision.get("selection_tournament") or {}).get("verdict"),
+        "strong_live_qualified": bool((decision.get("strong_live") or {}).get("qualified")),
+        "strong_live_activated": bool((decision.get("strong_live") or {}).get("activated")),
         "blocks": list(decision.get("blocks") or []),
         "score_epoch_samples": int((memory.get("score_epoch") or {}).get("samples") or 0),
         "momentum_ready": bool((memory.get("windows") or {}).get("5m")),

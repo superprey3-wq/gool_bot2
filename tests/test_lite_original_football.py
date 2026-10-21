@@ -383,3 +383,81 @@ def test_real_flashscore_only_momentum_can_reach_original_v4_policy_and_shadow_q
     assert len(host.shadow_journal) == 1
     assert host.journal == []
     forget_live_history(match_id)
+
+
+def test_lite_runs_full_original_v3_production_path_at_40_and_84_minutes():
+    """The original base Brain V3 stopped at 35'/73'. Production did not."""
+    from gool_bot2.lite_football_scenarios import (
+        evaluate_live_scenarios, forget_live_history,
+    )
+    from gool_bot2.brain_v3_selection_hardening import _reset_pool_for_tests
+    from gool_bot2.brain_v3_decision_audit import _reset_registry_for_tests
+
+    _reset_pool_for_tests()
+    _reset_registry_for_tests()
+    for minute, market in ((40, "GOAL_BEFORE_HT"), (84, "ANOTHER_GOAL")):
+        event_id = f"ORIGINAL_V3_FULL_{minute}"
+        forget_live_history(event_id)
+        data = {
+            "match": {"flashscore_event_id": event_id, "home": "Alpha",
+                      "away": "Beta", "minute": minute,
+                      "home_score": 0, "away_score": 0,
+                      "is_halftime": False},
+            "providers": {"flashscore": {"stats": {
+                "shots": (10, 7), "shots_on_target": (5, 3),
+                "big_chances": (2, 1), "corners": (5, 4)}, "meta": {}}},
+            "live_momentum": {"minutes_in_epoch": 5,
+                              "shots_total_last_5m": 3.0,
+                              "sot_total_last_5m": 1.0},
+            "runtime_field_scan_id": 1,
+            "runtime_field_scan_confirmed_round": 1,
+        }
+        result = evaluate_live_scenarios(data, event_id, observed_at=time.time())
+        assert result["market"] == market
+        assert result["full_match_clock"] is True
+        assert result["selection_verdict"] is not None
+        assert result["selection_score"] is not None
+        assert result["under_risk"] is not None
+        assert result["status"] != "BET"
+        assert result["score_epoch_samples"] == 1
+        forget_live_history(event_id)
+
+
+def test_full_production_v3_records_original_strong_live_and_under_audit():
+    from gool_bot2.lite_football_scenarios import (
+        evaluate_live_scenarios, forget_live_history,
+    )
+    from gool_bot2.brain_v3_selection_hardening import _reset_pool_for_tests
+    from gool_bot2.brain_v3_decision_audit import _reset_registry_for_tests
+    _reset_pool_for_tests()
+    _reset_registry_for_tests()
+    mid = "ORIGINAL_V3_STRENGTH_CHAIN"
+    forget_live_history(mid)
+    start = time.time()
+    result = None
+    for i, minute in enumerate((18, 21, 24, 27, 30)):
+        record = {
+            "match": {"flashscore_event_id": mid, "minute": minute,
+                      "home": "Alpha", "away": "Beta",
+                      "home_score": 0, "away_score": 0,
+                      "is_halftime": False},
+            "providers": {"flashscore": {"stats": {
+                "shots": (5+4*i, 2+i),
+                "shots_on_target": (1+2*i, i),
+                "big_chances": (i, 0),
+                "corners": (2+i, 1)}, "meta": {}}},
+            "live_momentum": {"minutes_in_epoch": minute-18,
+                             "shots_total_last_5m": 5.0,
+                             "sot_total_last_5m": 2.0},
+            "runtime_field_scan_id": i+1,
+            "runtime_field_scan_confirmed_round": i+1,
+        }
+        result = evaluate_live_scenarios(record, mid, observed_at=start+151*i)
+    assert result is not None
+    assert result["full_match_clock"]
+    assert result["selection_verdict"] is not None
+    assert isinstance(result["under_risk"], (int,float))
+    assert result["score_epoch_samples"] == 5
+    assert "strong_live_qualified" in result
+    assert result["data_quality"] >= 0.35
+    forget_live_history(mid)

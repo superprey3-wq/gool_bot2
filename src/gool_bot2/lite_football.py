@@ -594,7 +594,7 @@ class LiteFootballWorker:
             "analysed": len(seen), "errors": failures, "selected": len(selected),
             "batch": batch + 1, "batch_count": batches,
             "cohort_scan": self._live_window_scans, "filters": filters,
-            "brain": "ORIGINAL_V5+PRODUCTION_BRAIN_V3_FULL_MATCH+ORIGINAL_LIVE_V4",
+            "brain": "ORIGINAL_V5+ORIGINAL_BRAIN_V3_FULL_MATCH+ORIGINAL_LIVE_V4",
             "scenarios": {"prematch": "F01-F05", "live": "L01-L05"},
             "decisions": decisions[:20],
         }

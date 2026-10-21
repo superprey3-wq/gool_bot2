@@ -145,7 +145,16 @@ class LivePriceAdapter:
         p = _numeric(decision.get("probability"))
         confidence = _numeric(decision.get("confidence"))
         required_confidence = max(0.62, float(decision.get("confidence_required") or 0.78))
-        if p < 0.70 or confidence < required_confidence or p - fair < 0.06 or p * over - 1 < 0.05:
+        # Original Brain V3 has a separately validated STRONG_LIVE route
+        # (typically 0.64-0.69). Lite's fixed p>=.70 used to veto it
+        # AFTER the original V3 had already approved BET. Keep the original
+        # decision's guarded bet_min; do NOT relax bookmaker/value checks.
+        if decision.get("brain") == "ORIGINAL_BRAIN_V3":
+            min_probability = max(0.62, required_confidence)
+        else:
+            min_probability = 0.70
+        if (p < min_probability or confidence < required_confidence
+                or p - fair < 0.06 or p * over - 1 < 0.05):
             return self._reject("MODEL_VALUE_GATE")
         return {
             "event_id": fixture.provider_match_id,

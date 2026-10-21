@@ -436,3 +436,44 @@ def test_original_brain_v3_strong_live_can_reach_real_odds_without_lite_fixed_07
     invalid = dict(strong)
     invalid["probability"] = .63
     assert gateway.price(invalid, index, now=time.time()) is None
+
+
+def test_old_gool_name_threshold_accepts_distinct_alias_with_verified_live_score(tmp_path):
+    # Lite's old .88 matching gate rejected this pair although original GOOL
+    # uses .68, preventing an actual, fully score-verified LIVE quote.
+    index = [{"event_id":"123","home":"Man United","away":"Chelsea"}]
+    choice = _decision()
+    choice["home"], choice["away"] = "Manchester United", "Chelsea FC"
+    class OriginalCollector(FakeCollector):
+        def __init__(self):
+            super().__init__()
+            self.mapping = {}
+            self.mapped = 0
+        def _map(self, fs, candidates):
+            self.mapped += 1
+            from gool_bot2.providers.common import pair_score
+            best = max(candidates, key=lambda row: pair_score(fs.home,fs.away,row["home"],row["away"]))
+            return best["event_id"] if pair_score(fs.home,fs.away,best["home"],best["away"]) >= .68 else None
+    collector = OriginalCollector()
+    priced = LivePriceAdapter(tmp_path, collector=collector).price(choice, index, now=time.time())
+    assert collector.mapped == 1
+    assert priced is not None
+    assert priced["book_event_id"] == "123"
+    assert collector.called[0] == ("game", "123")
+
+
+def test_football_live_index_match_rejects_ambiguous_and_different_club_variants(tmp_path):
+    from gool_bot2.lite_football_service import _select_live_index_match
+    from types import SimpleNamespace
+    fs = SimpleNamespace(home="Manchester United", away="Chelsea FC")
+    near = [{"event_id":"1","home":"Man United","away":"Chelsea"},
+            {"event_id":"2","home":"Man United","away":"Chelsea"}]
+    assert _select_live_index_match(fs,near,FakeCollector())[1] == "MATCH_AMBIGUOUS"
+    # A shared city name and correct opponent must not misidentify United as City.
+    wrong = [{"event_id":"1","home":"Manchester City","away":"Chelsea"}]
+    assert _select_live_index_match(fs,wrong,FakeCollector())[1] == "NAME_SIDE_MISMATCH"
+    # Similarly never combine a youth game with the senior game just because
+    # both have the same score and the names are mostly identical.
+    youth = [{"event_id":"1","home":"Manchester United U23","away":"Chelsea"}]
+    assert _select_live_index_match(fs,youth,FakeCollector())[1] == "NAME_SIDE_MISMATCH"
+    assert _select_live_index_match(fs,[],FakeCollector())[1] == "MATCH_NOT_FOUND"

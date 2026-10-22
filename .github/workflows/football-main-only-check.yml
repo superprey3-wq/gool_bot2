@@ -1,0 +1,33 @@
+name: Original MAIN GOOL football-only launcher check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "football_main_start.py"
+      - "tests/test_football_main_start.py"
+      - ".github/workflows/football-main-only-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  main-original-football:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only pytest for launcher tests
+        run: python -m pip install --no-cache-dir pytest
+      - name: Assert old MAIN modules are used and unused sports are disabled
+        run: python -m pytest -q tests/test_football_main_start.py
+      - name: Show safe original worker plan, never launch senders in CI
+        run: python football_main_start.py --plan
+      - name: Diagnose missing real trained model files
+        run: python football_main_start.py --check
+      - name: Compile only new launcher
+        run: python -m py_compile football_main_start.py

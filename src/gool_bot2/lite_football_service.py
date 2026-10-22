@@ -50,6 +50,17 @@ def _game_score(game: dict[str, Any]) -> tuple[int, int] | None:
     return extract_xbet_score(game)
 
 
+def _known_club_alias(original: str, bookmaker: str) -> bool:
+    """Explicit identity equivalences, not city-prefix fuzzy matching.
+
+    The surname of a city is not proof that two football clubs are the same.
+    Every new pair must be independently verified before adding here.
+    """
+    a, b = norm_team(original), norm_team(bookmaker)
+    known = {frozenset(("atlas", "atlas guadalajara"))}
+    return bool(a and b and a != b and frozenset((a, b)) in known)
+
+
 def _index_match_scores(fixture: Any, index: list[dict[str, Any]]) -> list[tuple[float, float, float, dict[str, Any]]]:
     """Rank ordered 1xBet names; the original GOOL accepted pair_score >= .68.
 
@@ -67,8 +78,10 @@ def _index_match_scores(fixture: Any, index: list[dict[str, Any]]) -> list[tuple
         other_a = norm_team(str(item.get("away") or ""))
         if not other_h or not other_a:
             continue
-        hs = SequenceMatcher(None, h, other_h).ratio()
-        aw = SequenceMatcher(None, a, other_a).ratio()
+        hs = (1.0 if _known_club_alias(str(fixture.home), str(item.get("home") or ""))
+              else SequenceMatcher(None, h, other_h).ratio())
+        aw = (1.0 if _known_club_alias(str(fixture.away), str(item.get("away") or ""))
+              else SequenceMatcher(None, a, other_a).ratio())
         rows.append(((hs + aw) / 2.0, hs, aw, item))
     return sorted(rows, key=lambda item: item[0], reverse=True)
 
@@ -108,6 +121,8 @@ def _select_live_index_match(fixture: Any, index: list[dict[str, Any]],
         suffix = r"(?<![a-z0-9])(u(?:17|18|19|20|21|22|23)|ii|reserves?|women|w|femenino|femenil|youth)(?![a-z0-9])"
         if set(re.findall(suffix, original.casefold())) != set(re.findall(suffix, bookmaker.casefold())):
             return False
+        if _known_club_alias(original, bookmaker):
+            return True
         if SequenceMatcher(None, left, right).ratio() >= .93:
             return True
         if len(lparts) >= 2 and len(rparts) >= 2:

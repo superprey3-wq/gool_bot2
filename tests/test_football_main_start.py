@@ -61,6 +61,9 @@ def test_preflight_reports_missing_original_binary_models(monkeypatch, tmp_path)
 
 
 def test_model_bootstrap_reuses_production_raven_downloader(monkeypatch, tmp_path):
+    # The full repository suite sets PYTHONPATH=src; top-level launchers are
+    # not importable by name unless repository root is added explicitly.
+    monkeypatch.syspath_prepend(str(launcher.ROOT))
     import raven_start
     fake_dir = tmp_path / "raven_models"
     monkeypatch.setenv("GOOL_MODEL_DIRECTORY", str(fake_dir))

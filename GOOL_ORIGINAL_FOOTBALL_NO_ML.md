@@ -2,7 +2,7 @@
 
 **Ветка:** `gool-football-original-no-ml` (основана на `main`, не на GOOL Lite).
 
-**Стартовый файл:** `football_original_no_ml.py` на Python 3.11.
+**Стартовый файл:** `football_original_no_ml.py` на Python 3.11.\nТакже оставлен `bot_hosting_lite.py` — прежнее имя Startup в Bot-Hosting.net;\nв этой ветке оно запускает **оригинальный GOOL**, а не Lite.
 Проверка импорта без сети: `python football_original_no_ml.py --smoke`.
 
 Это отдельный однопроцессный запуск сохранённых модулей GOOL:

@@ -33,13 +33,21 @@ python football_main_start.py --check
 `--plan` показывает реальные оригинальные модули. `--check` проверяет,
 доступны ли зависимости, Telegram, все три модели и нужная структура папок.
 
-**Важное ограничение:** три файла не лежат в GitHub. На сервере должны
-существовать `archive_foundation.pkl`, `archive_hazard.pkl` и
-`football_data_goal_models.pkl`. Их можно указать переменными окружения
-`ARCHIVE_FOUNDATION_MODEL`, `ARCHIVE_HAZARD_MODEL`,
-`FOOTBALL_DATA_GOAL_MODEL` или положить в `gool_bot2_deploy/`.
-На старом сервере они могли находиться отдельно от GitHub. Без файлов
-полная оригинальная модель не стартует; пустые заглушки не создаём.
+**Модели восстановлены из оригинального релиза GOOL.** Три файла не лежат
+непосредственно в исходниках, но опубликованы в GitHub Releases
+`raven-models-latest`. Ничего переобучать не нужно: безопасная команда
+
+```bash
+python football_main_start.py --fetch-models
+```
+
+вызывает существующую `raven_start.ensure_models()`, которая скачивает
+`gool-raven-models.zip` и сверяет SHA-256 по манифесту. Полученные файлы
+`archive_foundation.pkl`, `archive_hazard.pkl` и
+`football_data_goal_models.pkl` сохраняются в
+`gool_bot2_deploy/models/`. Для другого пути можно задать
+`GOOL_MODEL_DIRECTORY`. Команда `--check` по-прежнему не загружает
+никаких файлов.
 
 Нужны библиотеки numpy, pandas, scikit-learn, pydantic, pyyaml, Pillow.
 Launcher не скачивает их автоматически. **256 МБ RAM / 25% CPU могут быть

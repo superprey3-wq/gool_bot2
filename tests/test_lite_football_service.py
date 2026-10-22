@@ -477,3 +477,32 @@ def test_football_live_index_match_rejects_ambiguous_and_different_club_variants
     youth = [{"event_id":"1","home":"Manchester United U23","away":"Chelsea"}]
     assert _select_live_index_match(fs,youth,FakeCollector())[1] == "NAME_SIDE_MISMATCH"
     assert _select_live_index_match(fs,[],FakeCollector())[1] == "MATCH_NOT_FOUND"
+
+
+def test_atlas_guadalajara_identity_uses_verified_alias_not_broad_city_prefix(tmp_path):
+    from types import SimpleNamespace
+    from gool_bot2.lite_football_service import _select_live_index_match
+    fixture = SimpleNamespace(
+        provider_match_id="ABCDEFGH", home="Atlas", away="Club America")
+    rows = [{"event_id":"123", "home":"Atlas Guadalajara", "away":"Club America"}]
+    collector = FakeCollector()
+    match, reason = _select_live_index_match(fixture, rows, collector)
+    assert reason == "MATCH_OK"
+    assert match["event_id"] == "123"
+    signal = _decision()
+    signal["home"], signal["away"] = fixture.home, fixture.away
+    adapter = LivePriceAdapter(tmp_path, collector)
+    row = adapter.price(signal, rows, now=time.time())
+    assert row is not None
+    assert row["book_event_id"] == "123"
+    assert adapter.last_reject_reason is None
+
+    # Exact same away team is NOT enough to accept another club / squad.
+    for other in ("Atlas Guadalajara U23", "Atletico Guadalajara",
+                  "Atlas Reserves", "Atlas II"):
+        wrong = [{"event_id":"123", "home":other, "away":"Club America"}]
+        assert _select_live_index_match(fixture, wrong, collector)[0] is None
+
+    ambiguous = [rows[0],
+                 {"event_id":"124", "home":"Atlas", "away":"Club America"}]
+    assert _select_live_index_match(fixture, ambiguous, collector)[1] == "MATCH_AMBIGUOUS"

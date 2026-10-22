@@ -98,3 +98,34 @@ def test_original_collector_processes_only_football_without_telegram_in_smoke(tm
     assert service.scan_prematch()==0
     assert not app.send_text("test")
     assert service.audit.get("prematch_candidates",0)==0
+
+
+def test_original_1xbet_live_price_from_verified_real_time_pair(tmp_path):
+    from gool_bot2.football_original_price_gateway import OriginalFootballPriceGateway
+
+    class OriginalBook:
+        def _map(self, fixture, index):
+            return "123"
+        def _game(self, eid):
+            assert eid == "123"
+            # The old 1xBet parser correctly considers missing S1/S2 as 0:0.
+            return {"SC": {"FS": {}}}
+        def _markets_for_event(self, eid, minute, total):
+            assert minute == 24 and total == 0
+            return {"first_half_total": [
+                {"line": 0.5, "over": 1.85, "under": 1.95},
+            ]}
+    gateway=OriginalFootballPriceGateway(tmp_path,collector=OriginalBook())
+    decision={
+        "event_id":"ABCDEFGH","home":"Alpha FC","away":"Beta FC",
+        "score":[0,0],"minute":24,"market":"GOAL_BEFORE_HT",
+        "observed_at":time.time(),"probability":.88,
+        "confidence":.88,"confidence_required":.70,
+        "decision":"BET","brain":"ORIGINAL_BRAIN_V3",
+    }
+    rows=[{"event_id":"123","home":"Alpha FC","away":"Beta FC"}]
+    priced=gateway.price(decision,rows,now=time.time())
+    assert priced is not None
+    assert priced["odd"]==1.85
+    assert priced["line"]==0.5
+    assert priced["bookmaker"]=="1xBet LIVE"

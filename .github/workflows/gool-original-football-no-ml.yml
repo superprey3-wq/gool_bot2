@@ -37,6 +37,17 @@ jobs:
           GOOL_BROWSER_ENABLE: "0"
           GOOL_FOOTBALL_AUTOINSTALL: "0"
         run: python scripts/original_football_readonly_probe.py
+      - name: Optional full original collector one-cycle integration and memory probe
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
+          GOOL_ORIGINAL_FOOTBALL_MODE: "shadow"
+          RUNTIME_DATA_DIR: "/tmp/gool-original-integration"
+          LIVE_DETAIL_WORKERS: "2"
+          LIVE_HISTORY_WORKERS: "1"
+          GOOL_ORIGINAL_PRE_MAX: "2"
+        run: python football_original_no_ml.py --once
       - name: RAM smoke of actual original modules, no outbound network or Telegram
         env:
           GOOL_ORIGINAL_FOOTBALL_MODE: "shadow"

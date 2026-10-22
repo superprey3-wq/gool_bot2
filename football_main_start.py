@@ -78,11 +78,14 @@ def _deployment_models() -> dict[str, str | None]:
             "ARCHIVE_HAZARD_MODEL": "ARCHIVE_HAZARD_MODEL_PATH",
             "FOOTBALL_DATA_GOAL_MODEL": "FOOTBALL_DATA_GOAL_MODELS_PATH",
         }[key])
-        file = Path(supplied) if supplied else root / name
-        if file.is_file():
-            out[key] = str(file.resolve())
+        if supplied:
+            file = Path(supplied)
         else:
-            out[key] = None
+            # Original monkey_start.find_model searched the entire deploy tree.
+            # Keep that behavior; models may be in nested release directories.
+            matches = list(root.rglob(name)) if root.is_dir() else []
+            file = matches[0] if matches else root / name
+        out[key] = str(file.resolve()) if file.is_file() else None
     return out
 
 
@@ -140,7 +143,7 @@ def commands(env: dict[str, str]) -> dict[str, list[str]]:
 
 def checks(env: dict[str, str]) -> dict[str, object]:
     models = _deployment_models()
-    required = ("numpy", "pandas", "sklearn", "pydantic", "yaml", "PIL")
+    required = ("numpy", "pandas", "sklearn", "pydantic", "yaml", "PIL", "websockets")
     packages = {name: importlib.util.find_spec(name) is not None for name in required}
     # Original signal-worker models are not tracked in this Git repository.
     return {

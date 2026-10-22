@@ -89,6 +89,23 @@ def _deployment_models() -> dict[str, str | None]:
     return out
 
 
+def fetch_original_release_models() -> dict[str, str | None]:
+    """Reuse original Raven model installer, including manifest SHA-256 checks.
+
+    This is the repo's existing raven_start.ensure_models(), not a re-training
+    step or an unverified third-party model download.
+    """
+    import raven_start
+    raven_start.MODEL_DIR = Path(os.getenv(
+        "GOOL_MODEL_DIRECTORY", str(ROOT / "gool_bot2_deploy" / "models")
+    ))
+    raven_start.ensure_models()
+    result = _deployment_models()
+    if not all(result.values()):
+        raise RuntimeError("GOOL_RAVEN_MODEL_BUNDLE_INCOMPLETE")
+    return result
+
+
 def make_env() -> dict[str, str]:
     env = os.environ.copy()
     # Hard-off by design: no multisport process, cards, or bookmaker crawler.
@@ -228,6 +245,8 @@ def main() -> None:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--plan", action="store_true", help="show original MAIN modules; zero side effects")
     action.add_argument("--check", action="store_true", help="check models and required packages")
+    action.add_argument("--fetch-models", action="store_true",
+                        help="download SHA256-checked original GOOL Raven release models")
     action.add_argument("--run", action="store_true", help="launch ORIGINAL MAIN; explicit approval required")
     args = parser.parse_args()
     if args.plan:
@@ -235,6 +254,9 @@ def main() -> None:
     elif args.check:
         state = checks(make_env())
         print(json.dumps(state, ensure_ascii=False, sort_keys=True))
+    elif args.fetch_models:
+        models = fetch_original_release_models()
+        print("GOOL_MAIN_MODELS_READY " + ",".join(models), flush=True)
     else:
         run()
 

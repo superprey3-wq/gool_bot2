@@ -373,12 +373,12 @@ class FootballOriginalService:
         if not once and not (os.getenv("TELEGRAM_CHAT_ID") and os.getenv("TELEGRAM_BOT_TOKEN")):
             raise SystemExit("GOOL_ORIGINAL_FOOTBALL_MISSING_TELEGRAM_CREDS")
         print(f"GOOL_ORIGINAL_FOOTBALL_NO_ML_STARTED mode={'active' if active() else 'shadow'}",flush=True)
-        offset=int(read_json(self.live_path / "telegram_offset.json",0))
         from gool_bot2.storage_runtime import startup_cleanup
         startup_cleanup()
-        try:
+
+        def collection_loop():
             while not self.stop_event.is_set():
-                started=time.monotonic()
+                started = time.monotonic()
                 try:
                     self.scan()
                 except Exception as exc:
@@ -389,13 +389,31 @@ class FootballOriginalService:
                     print(f"GOOL_ORIGINAL_PRE_FAILURE {type(exc).__name__}:{exc}",flush=True)
                 if once:
                     break
-                end=started+max(60,int(os.getenv("GOOL_ORIGINAL_LIVE_INTERVAL","90")))
-                while not self.stop_event.is_set() and time.monotonic()<end:
-                    offset=self.poll(offset)
-                    save_json(self.live_path/"telegram_offset.json",offset)
-                    self.stop_event.wait(min(8,max(0.01,end-time.monotonic())))
+                interval = max(60,int(os.getenv("GOOL_ORIGINAL_LIVE_INTERVAL","90")))
+                self.stop_event.wait(max(1, started + interval - time.monotonic()))
+
+        if once:
+            try:
+                collection_loop()
+            finally:
+                self.collector.stop()
+            return
+
+        # One Python process; the collector runs in its own *thread*. Telegram
+        # keeps answering /status even if a slow Flashscore fixture request is
+        # still in flight. This replaces MAIN's heavyweight 4-process runtime.
+        collection = threading.Thread(target=collection_loop, name="football-original-collector",daemon=True)
+        collection.start()
+        offset=int(read_json(self.live_path / "telegram_offset.json",0))
+        try:
+            while not self.stop_event.is_set():
+                offset=self.poll(offset)
+                save_json(self.live_path/"telegram_offset.json",offset)
+                self.stop_event.wait(3)
         finally:
+            self.stop_event.set()
             self.collector.stop()
+            collection.join(timeout=8)
 
 def smoke() -> None:
     from gool_bot2.storage_live_collector import StorageLiveSnapshotCollector

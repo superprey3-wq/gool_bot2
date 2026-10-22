@@ -58,3 +58,23 @@ def test_preflight_reports_missing_original_binary_models(monkeypatch, tmp_path)
     assert not any(state["models_found"].values())
     assert state["original_main"]
     assert isinstance(state["packages_found"], dict)
+
+
+def test_model_bootstrap_reuses_production_raven_downloader(monkeypatch, tmp_path):
+    import raven_start
+    fake_dir = tmp_path / "raven_models"
+    monkeypatch.setenv("GOOL_MODEL_DIRECTORY", str(fake_dir))
+    called = []
+    def fake_download_with_verified_manifest():
+        called.append(raven_start.MODEL_DIR)
+        raven_start.MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        for name in launcher.MODEL_FILES.values():
+            (raven_start.MODEL_DIR / name).write_bytes(b"test")
+    monkeypatch.setattr(raven_start, "ensure_models", fake_download_with_verified_manifest)
+    original = raven_start.MODEL_DIR
+    try:
+        result = launcher.fetch_original_release_models()
+    finally:
+        raven_start.MODEL_DIR = original
+    assert called == [fake_dir]
+    assert all(result.values())

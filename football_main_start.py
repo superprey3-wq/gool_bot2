@@ -253,23 +253,30 @@ def run() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    action = parser.add_mutually_exclusive_group(required=True)
+    action = parser.add_mutually_exclusive_group()
     action.add_argument("--plan", action="store_true", help="show original MAIN modules; zero side effects")
     action.add_argument("--check", action="store_true", help="check models and required packages")
     action.add_argument("--fetch-models", action="store_true",
                         help="download SHA256-checked original GOOL Raven release models")
     action.add_argument("--run", action="store_true", help="launch ORIGINAL MAIN; explicit approval required")
     args = parser.parse_args()
-    if args.plan:
+    # Pterodactyl-style host panels often accept an entry FILE, not command-line
+    # arguments. Environment lets them choose a startup action safely.
+    configured = os.getenv("GOOL_MAIN_FOOTBALL_START_MODE", "check").strip().lower()
+    selected = ("plan" if args.plan else "check" if args.check else
+                "fetch-models" if args.fetch_models else "run" if args.run else configured)
+    if selected == "plan":
         print(json.dumps(plan(), ensure_ascii=False, sort_keys=True))
-    elif args.check:
+    elif selected == "check":
         state = checks(make_env())
         print(json.dumps(state, ensure_ascii=False, sort_keys=True))
-    elif args.fetch_models:
+    elif selected == "fetch-models":
         models = fetch_original_release_models()
         print("GOOL_MAIN_MODELS_READY " + ",".join(models), flush=True)
-    else:
+    elif selected == "run":
         run()
+    else:
+        raise SystemExit("invalid GOOL_MAIN_FOOTBALL_START_MODE (plan, check, fetch-models, run)")
 
 
 if __name__ == "__main__":

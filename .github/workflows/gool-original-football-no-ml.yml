@@ -32,10 +32,10 @@ jobs:
       - name: Compile startup and bridges
         run: python -m py_compile football_original_no_ml.py src/gool_bot2/football_original_v5_bridge.py src/gool_bot2/football_original_price_gateway.py
       - name: Read-only actual Flashscore live + V3/V4 diagnostic
-        continue-on-error: true
         timeout-minutes: 2
         env:
           GOOL_BROWSER_ENABLE: "0"
+          GOOL_FOOTBALL_AUTOINSTALL: "0"
         run: python scripts/original_football_readonly_probe.py
       - name: RAM smoke of actual original modules, no outbound network or Telegram
         env:

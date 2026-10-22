@@ -162,13 +162,24 @@ def checks(env: dict[str, str]) -> dict[str, object]:
     models = _deployment_models()
     required = ("numpy", "pandas", "sklearn", "pydantic", "yaml", "PIL", "websockets")
     packages = {name: importlib.util.find_spec(name) is not None for name in required}
-    # Original signal-worker models are not tracked in this Git repository.
+    # Original signal-worker models are published in Raven release assets,
+    # but are not tracked in the source Git tree.
+    main_present = (ROOT / "src" / "gool_bot2" / "storage_market_signal_worker_var.py").is_file()
+    telegram_ok = bool(env.get("TELEGRAM_BOT_TOKEN") and env.get("TELEGRAM_CHAT_ID"))
+    missing = [name for name, path in models.items() if not path]
+    missing += [name for name, available in packages.items() if not available]
+    if not main_present:
+        missing.append("main_original_worker")
+    if not telegram_ok:
+        missing.append("telegram_configuration")
     return {
-        "original_main": (ROOT / "src" / "gool_bot2" / "storage_market_signal_worker_var.py").is_file(),
+        "original_main": main_present,
         "models_found": {name: bool(path) for name, path in models.items()},
         "packages_found": packages,
-        "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN") and env.get("TELEGRAM_CHAT_ID")),
+        "telegram_configured": telegram_ok,
         "prematch_layout_supported": "prematch" in commands(env),
+        "ready": not missing,
+        "missing": missing,
     }
 
 

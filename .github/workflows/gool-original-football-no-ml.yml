@@ -1,0 +1,36 @@
+name: GOOL original football without trained models
+on:
+  push:
+    branches: [gool-football-original-no-ml]
+    paths:
+      - "football_original_no_ml.py"
+      - "src/gool_bot2/**"
+      - "tests/test_football_original_no_ml.py"
+      - ".github/workflows/gool-original-football-no-ml.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  football-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pytest only, not trained models or Chromium
+        run: python -m pip install --no-cache-dir pytest
+      - name: Test old original GOOL collector and Brain V3/V4/V5 offline
+        env:
+          PYTHONPATH: "src:."
+          GOOL_ORIGINAL_FOOTBALL_MODE: "shadow"
+        run: python -m pytest -q tests/test_football_original_no_ml.py tests/test_live_goal_brain_v4.py tests/test_prematch_strategy_scenarios.py
+      - name: Compile startup and bridges
+        run: python -m py_compile football_original_no_ml.py src/gool_bot2/football_original_v5_bridge.py src/gool_bot2/football_original_price_gateway.py
+      - name: RAM smoke of actual original modules, no outbound network or Telegram
+        env:
+          GOOL_ORIGINAL_FOOTBALL_MODE: "shadow"
+        run: python football_original_no_ml.py --smoke

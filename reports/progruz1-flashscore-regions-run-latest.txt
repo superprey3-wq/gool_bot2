@@ -1,0 +1,16 @@
+GOOL_AUDIT_CONFIG telegram_mode=shadow brain=PASS_ONLY min_data=0.30 side_pass=0.62 any_pass=0.64 steam_delta=5.0 steam_moves=2 flow30=200 flow_fair_pp=1.5
+GOOL_XBET_TRAJECTORY installed direction=reversal+retrace+latest_step window=120s
+GOOL_LIVE_HAZARD_CONFIG ft_min=0.48 ft_late=0.50 fh_min=0.40 fh_late=0.42 late_xg=1.20
+GOOL_STEAM_QUALITY installed base=6pp/2x two_move=7pp persistent=6pp/3x/2markets extreme=8pp/3x retrace<=1.5pp
+GOOL_STEAM_RED_GUARD installed mode=block_any_current_red_card
+GOOL_BRAIN_V3_MEMORY installed snapshots=continuous windows=3/5/10/15m epochs=score+half mode=active_memory
+GOOL_BROWSER_CONTEXT_RUNTIME installed stats=fallback_only trends=capped_support
+GOOL_BRAIN_V3_LEARNING installed samples=0 min_global=30 min_pattern=15 max_adjust=3.0pp mode=analyze_every_settlement+slow_calibration
+GOOL_BRAIN_V3_LEARNING_RUNTIME installed scope=ordinary_gool settlement_review=on adaptive_calibration=guarded
+GOOL_BRAIN_V3_FULL_MATCH installed first_half=1-45 second_half=46-until-finished halftime=paused fixed_clock_veto=off
+GOOL_BRAIN_V3_TREND_LEARNING installed scope=historical_goal_trends outcome_review=on
+GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative full_match=1-45+46-95 strong_live=guarded_live_only decision_audit=selection+under_countercase live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate
+GOOL_BRAIN_V3_SELECTION installed mode=two_full_field_scans+self_check+tournament 1h_floor=0.72 2h_floor=0.69 strong_live_floor=0.54 field_scans=2
+GOOL_BRAIN_V3_STABILITY installed rule=deterioration_survives_market_rechecks
+GOOL_FIELD_SCAN installed rule=two_completed_football_passes market_rechecks=freshness_only
+FLASH_GEO_AUDIT {"utc": "2026-11-15T17:09:21.136248+00:00", "status": "COMPLETE", "flashscore_live": 92, "full_checked": 92, "sample_checked": 22, "geos_sampled": ["GB", "SE", "DE", "NL", "FI", "IT", "ES"], "geos_full": ["GB", "SE", "ES", "FI"], "full_by_geo": {"GB": {"checked": 92, "ok": 92, "with_any_over_under": 86, "with_active_over_under": 75, "exact_next_goal_line": 48, "exact_goal_1_50": 16, "bookmakers": {"7BetUK": 65, "Betway": 55, "Ladbrokes": 49, "Midnite": 25, "Betfred": 23, "BetMGM.uk": 17, "bet365": 14}, "errors": {}}, "SE": {"checked": 92, "ok": 92, "with_any_over_under": 84, "with_active_over_under": 67, "exact_next_goal_line": 29, "exact_goal_1_50": 12, "bookmakers": {"Dbet": 59, "Unibetse": 35, "1x2": 34, "BetMGM.se": 17, "Expektse": 17, "bet365": 14, "Coolbet": 11}, "errors": {}}, "ES": {"checked": 92, "ok": 92, "with_any_over_under": 85, "with_active_over_under": 72, "exact_next_goal_line": 43, "exact_goal_1_50": 14, "bookmakers": {"Versus.es": 59, "Sportium.es": 57, "Betway": 56, "bet365": 14}, "errors": {}}, "FI": {"checked": 92, "ok": 92, "with_any_over_under": 84, "with_active_over_under": 72, "exact_next_goal_line": 46, "exact_goal_1_50": 15, "bookmakers": {"VivatBet": 67, "1xBet": 65, "Winz.io": 39, "Stake.com": 39, "Coolbet": 15, "bet365": 14}, "errors": {}}}, "combined_live_total_fixtures": 77, "combined_exact_1_50_fixtures": 17, "live_total_additional_vs_GB": 2, "sweden_additional_vs_GB": 1, "exact_additional_vs_GB": 1, "duration_seconds": 48.12, "notes": "Changing geoIpCode is not changing outgoing IP. A 'live' flag is not proof of executable quote."}

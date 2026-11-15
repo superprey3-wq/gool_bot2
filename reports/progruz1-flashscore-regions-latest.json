@@ -1,0 +1,363 @@
+{
+  "utc": "2026-11-15T17:09:21.136248+00:00",
+  "status": "COMPLETE",
+  "flashscore_live": 92,
+  "full_checked": 92,
+  "sample_checked": 22,
+  "geos_sampled": [
+    "GB",
+    "SE",
+    "DE",
+    "NL",
+    "FI",
+    "IT",
+    "ES"
+  ],
+  "geos_full": [
+    "GB",
+    "SE",
+    "ES",
+    "FI"
+  ],
+  "sample_by_geo": {
+    "GB": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 20,
+      "with_active_over_under": 16,
+      "exact_next_goal_line": 9,
+      "exact_goal_1_50": 1,
+      "bookmakers": {
+        "7BetUK": 12,
+        "Ladbrokes": 11,
+        "Betway": 8,
+        "Midnite": 6,
+        "bet365": 4,
+        "Betfred": 3,
+        "BetMGM.uk": 2
+      },
+      "errors": {}
+    },
+    "SE": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 19,
+      "with_active_over_under": 12,
+      "exact_next_goal_line": 3,
+      "exact_goal_1_50": 1,
+      "bookmakers": {
+        "Dbet": 10,
+        "1x2": 7,
+        "Unibetse": 7,
+        "bet365": 4,
+        "BetMGM.se": 2,
+        "Expektse": 2
+      },
+      "errors": {}
+    },
+    "DE": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 18,
+      "with_active_over_under": 8,
+      "exact_next_goal_line": 4,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Oddset.de": 6,
+        "Neobet": 5
+      },
+      "errors": {}
+    },
+    "NL": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 9,
+      "with_active_over_under": 2,
+      "exact_next_goal_line": 0,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Sevelev.nl": 2
+      },
+      "errors": {}
+    },
+    "FI": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 19,
+      "with_active_over_under": 13,
+      "exact_next_goal_line": 7,
+      "exact_goal_1_50": 1,
+      "bookmakers": {
+        "1xBet": 12,
+        "VivatBet": 12,
+        "Winz.io": 11,
+        "Stake.com": 8,
+        "bet365": 4,
+        "Coolbet": 3
+      },
+      "errors": {}
+    },
+    "IT": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 18,
+      "with_active_over_under": 11,
+      "exact_next_goal_line": 5,
+      "exact_goal_1_50": 1,
+      "bookmakers": {
+        "BetssonIT": 10,
+        "GoldBet": 8,
+        "Lottomatica": 8,
+        "Planetwin365": 8,
+        "SNAI": 8,
+        "Sisal": 8,
+        "BetflagIT": 7,
+        "bet365.it": 4
+      },
+      "errors": {}
+    },
+    "ES": {
+      "checked": 22,
+      "ok": 22,
+      "with_any_over_under": 19,
+      "with_active_over_under": 14,
+      "exact_next_goal_line": 8,
+      "exact_goal_1_50": 1,
+      "bookmakers": {
+        "Versus.es": 13,
+        "Betway": 11,
+        "Sportium.es": 10,
+        "bet365": 4
+      },
+      "errors": {}
+    }
+  },
+  "full_by_geo": {
+    "GB": {
+      "checked": 92,
+      "ok": 92,
+      "with_any_over_under": 86,
+      "with_active_over_under": 75,
+      "exact_next_goal_line": 48,
+      "exact_goal_1_50": 16,
+      "bookmakers": {
+        "7BetUK": 65,
+        "Betway": 55,
+        "Ladbrokes": 49,
+        "Midnite": 25,
+        "Betfred": 23,
+        "BetMGM.uk": 17,
+        "bet365": 14
+      },
+      "errors": {}
+    },
+    "SE": {
+      "checked": 92,
+      "ok": 92,
+      "with_any_over_under": 84,
+      "with_active_over_under": 67,
+      "exact_next_goal_line": 29,
+      "exact_goal_1_50": 12,
+      "bookmakers": {
+        "Dbet": 59,
+        "Unibetse": 35,
+        "1x2": 34,
+        "BetMGM.se": 17,
+        "Expektse": 17,
+        "bet365": 14,
+        "Coolbet": 11
+      },
+      "errors": {}
+    },
+    "ES": {
+      "checked": 92,
+      "ok": 92,
+      "with_any_over_under": 85,
+      "with_active_over_under": 72,
+      "exact_next_goal_line": 43,
+      "exact_goal_1_50": 14,
+      "bookmakers": {
+        "Versus.es": 59,
+        "Sportium.es": 57,
+        "Betway": 56,
+        "bet365": 14
+      },
+      "errors": {}
+    },
+    "FI": {
+      "checked": 92,
+      "ok": 92,
+      "with_any_over_under": 84,
+      "with_active_over_under": 72,
+      "exact_next_goal_line": 46,
+      "exact_goal_1_50": 15,
+      "bookmakers": {
+        "VivatBet": 67,
+        "1xBet": 65,
+        "Winz.io": 39,
+        "Stake.com": 39,
+        "Coolbet": 15,
+        "bet365": 14
+      },
+      "errors": {}
+    }
+  },
+  "combined_live_total_fixtures": 77,
+  "combined_exact_1_50_fixtures": 17,
+  "live_total_additional_vs_GB": 2,
+  "sweden_additional_vs_GB": 1,
+  "exact_additional_vs_GB": 1,
+  "regional_bookmakers": {
+    "GB": [
+      "10bet",
+      "7BetUK",
+      "BetMGM.uk",
+      "BetUK",
+      "BetVictor",
+      "Betano.uk",
+      "Betfair",
+      "Betfred",
+      "Betway",
+      "Coral",
+      "Ladbrokes",
+      "Midnite",
+      "Paddy Power",
+      "Parimatch.uk",
+      "Skybet",
+      "SpreadEX",
+      "Talksportbet",
+      "Unibetuk",
+      "William Hill",
+      "bet365"
+    ],
+    "SE": [
+      "1x2",
+      "BetMGM.se",
+      "Coolbet",
+      "Dbet",
+      "Expektse",
+      "MrGreen",
+      "Unibetse",
+      "bet365"
+    ],
+    "ES": [
+      "Betway",
+      "Codere",
+      "Interwetten",
+      "Luckia.es",
+      "Retabet",
+      "Speedybet.es",
+      "Sportium.es",
+      "Versus.es",
+      "William Hill",
+      "bet365"
+    ],
+    "FI": [
+      "1xBet",
+      "Coolbet",
+      "Golissimo",
+      "Stake.com",
+      "VivatBet",
+      "Winz.io",
+      "bet365"
+    ]
+  },
+  "examples_sweden_extra": [
+    {
+      "id": "fgsAG4fl",
+      "match": "Western — Kamboi Eagles",
+      "minute": 45,
+      "se": [
+        "Dbet"
+      ]
+    }
+  ],
+  "sample_response_shape": {
+    "GB": [
+      {
+        "bettingType": "HOME_DRAW_AWAY",
+        "bettingScope": "FIRST_HALF",
+        "hasLiveBettingOffers": true,
+        "selection_example": {
+          "__typename": "EventOddsItem",
+          "eventParticipantId": "pxyJFFvQ",
+          "value": "1.65",
+          "opening": "1.57",
+          "active": true,
+          "handicap": null,
+          "position": null,
+          "selection": null,
+          "winner": null,
+          "score": null,
+          "bothTeamsToScore": null,
+          "result": "NONE"
+        }
+      }
+    ],
+    "SE": [
+      {
+        "bettingType": "HOME_DRAW_AWAY",
+        "bettingScope": "FIRST_HALF",
+        "hasLiveBettingOffers": false,
+        "selection_example": {
+          "__typename": "EventOddsItem",
+          "eventParticipantId": "pxyJFFvQ",
+          "value": "1.62",
+          "opening": "1.6",
+          "active": true,
+          "handicap": null,
+          "position": null,
+          "selection": null,
+          "winner": null,
+          "score": null,
+          "bothTeamsToScore": null,
+          "result": "NONE"
+        }
+      }
+    ],
+    "ES": [
+      {
+        "bettingType": "HOME_DRAW_AWAY",
+        "bettingScope": "FIRST_HALF",
+        "hasLiveBettingOffers": true,
+        "selection_example": {
+          "__typename": "EventOddsItem",
+          "eventParticipantId": "pxyJFFvQ",
+          "value": "1.67",
+          "opening": "1.65",
+          "active": true,
+          "handicap": null,
+          "position": null,
+          "selection": null,
+          "winner": null,
+          "score": null,
+          "bothTeamsToScore": null,
+          "result": "NONE"
+        }
+      }
+    ],
+    "FI": [
+      {
+        "bettingType": "HOME_DRAW_AWAY",
+        "bettingScope": "FIRST_HALF",
+        "hasLiveBettingOffers": true,
+        "selection_example": {
+          "__typename": "EventOddsItem",
+          "eventParticipantId": "pxyJFFvQ",
+          "value": "1.72",
+          "opening": "1.73",
+          "active": true,
+          "handicap": null,
+          "position": null,
+          "selection": null,
+          "winner": null,
+          "score": null,
+          "bothTeamsToScore": null,
+          "result": "NONE"
+        }
+      }
+    ]
+  },
+  "duration_seconds": 48.12,
+  "notes": "Changing geoIpCode is not changing outgoing IP. A 'live' flag is not proof of executable quote."
+}

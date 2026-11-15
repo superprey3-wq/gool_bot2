@@ -26,9 +26,9 @@ def test_short_verified_xg_surge_is_approved_without_10m_history():
     assert verified["id"]=="QUALITY_SURGE"
     assert "QUALITY_SURGE_CONFIRMED_XG_5M" in verified["notes"]
     assert cls(**{k:v for k,v in args.items()
-                  if not k.startswith("recent_5m_xg")})["id"]=="NO_CLEAR_SCENARIO"
-    assert cls(**{**args,"recent_5m_xg_age":999})["id"]=="NO_CLEAR_SCENARIO"
-    assert cls(**{**args,"recent_5m_xg_by_team":(-.1,.1)})["id"]=="NO_CLEAR_SCENARIO"
+                  if not k.startswith("recent_5m_xg")})["id"]=="STATE_RISK"
+    assert cls(**{**args,"recent_5m_xg_age":999})["id"]=="STATE_RISK"
+    assert cls(**{**args,"recent_5m_xg_by_team":(-.1,.1)})["id"]=="STATE_RISK"
 
 
 def test_short_verified_trailing_chase_approved_only_with_strong_pulse():
@@ -36,9 +36,9 @@ def test_short_verified_trailing_chase_approved_only_with_strong_pulse():
               recent_5m_shots_by_team=(4,0),
               recent_5m_sot_by_team=(2,0),recent_5m_age=300)
     assert cls(**args)["id"]=="TRAILING_CHASE"
-    assert cls(**{**args,"recent_5m_sot_by_team":(1,0)})["id"]=="NO_CLEAR_SCENARIO"
-    assert cls(**{**args,"recent_5m_age":700})["id"]=="NO_CLEAR_SCENARIO"
-    assert cls(**{**args,"red_cards":(1,0)})["id"]=="NO_CLEAR_SCENARIO"
+    assert cls(**{**args,"recent_5m_sot_by_team":(1,0)})["id"]=="STATE_RISK"
+    assert cls(**{**args,"recent_5m_age":700})["id"]=="STATE_RISK"
+    assert cls(**{**args,"red_cards":(1,0)})["id"]=="STATE_RISK"
 
 
 def test_short_xg_delta_comes_only_from_distinct_observed_samples():

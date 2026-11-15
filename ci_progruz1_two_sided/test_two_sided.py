@@ -126,3 +126,38 @@ def test_decreasing_provider_counters_do_not_create_fake_recent_pulse():
                 shots=(5,5),on=(2,2))
     assert measured["recent_5m_shots_by_team"] is None
     assert measured["recent_5m_sot_by_team"] is None
+
+
+def test_very_strong_trailing_attack_in_five_minutes_can_qualify():
+    selected=scenario(minute=62,score=(0,1),shots=(12,4),sot=(5,1),
+        recent_shots=5,recent_sot=2,
+        recent_5m_shots_by_team=(4,0),
+        recent_5m_sot_by_team=(2,0),recent_5m_age=300)
+    assert selected["id"]=="TRAILING_CHASE"
+    assert "TRAILING_CHASE_CONFIRMED_SHOTS_5M" in selected["notes"]
+    weak=scenario(minute=62,score=(0,1),shots=(12,4),sot=(5,1),
+        recent_shots=5,recent_sot=2,
+        recent_5m_shots_by_team=(4,0),
+        recent_5m_sot_by_team=(1,0),recent_5m_age=300)
+    assert weak["id"]=="NO_CLEAR_SCENARIO"
+
+
+def test_high_five_minute_xg_surge_can_qualify_and_unverified_cannot():
+    strong=scenario(minute=60,score=(1,1),shots=(12,5),sot=(5,1),
+        recent_shots=5,recent_sot=2,
+        recent_5m_shots_by_team=(4,0),
+        recent_5m_sot_by_team=(2,0),recent_5m_age=300,
+        recent_5m_xg_by_team=(0.46,0.02),recent_5m_xg_age=300)
+    assert strong["id"]=="QUALITY_SURGE"
+    assert "QUALITY_SURGE_CONFIRMED_XG_5M" in strong["notes"]
+    absent=scenario(minute=60,score=(1,1),shots=(12,5),sot=(5,1),
+        recent_shots=5,recent_sot=2,
+        recent_5m_shots_by_team=(4,0),
+        recent_5m_sot_by_team=(2,0),recent_5m_age=300)
+    assert absent["id"]=="NO_CLEAR_SCENARIO"
+    stale=scenario(minute=60,score=(1,1),shots=(12,5),sot=(5,1),
+        recent_shots=5,recent_sot=2,
+        recent_5m_shots_by_team=(4,0),
+        recent_5m_sot_by_team=(2,0),recent_5m_age=300,
+        recent_5m_xg_by_team=(0.46,0.02),recent_5m_xg_age=450)
+    assert stale["id"]=="NO_CLEAR_SCENARIO"

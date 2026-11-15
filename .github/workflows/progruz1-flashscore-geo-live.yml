@@ -1,0 +1,50 @@
+name: PROGRUZ 1 Flashscore SE vs GB LIVE odds geo
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/progruz1-flashscore-geo-live.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  flashscore-geo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing GOOL2 Flashscore source
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Compare LIVE match IDs by SE/GB/DE/NL/FI/IT/ES
+        id: compare
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p reports
+          python scripts/progruz1_flashscore_geo_probe.py \
+            2>&1 | tee reports/progruz1-flashscore-regions-run-latest.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Upload region results and errors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flashscore-live-geo-countries
+          path: |
+            reports/progruz1-flashscore-regions-latest.json
+            reports/progruz1-flashscore-regions-run-latest.txt
+          retention-days: 14
+      - name: Save report to GOOL2 for inspection
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/progruz1-flashscore-regions-latest.json \
+            reports/progruz1-flashscore-regions-run-latest.txt || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Report: Flashscore geo odds comparison"
+            git push origin HEAD:main || echo "Report remains in workflow artifact"
+          fi

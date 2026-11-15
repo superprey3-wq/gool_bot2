@@ -556,8 +556,14 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
         return None,"FS_GOAL_TOO_LATE_OR_HALF_TRANSITION"
     if history.get("state")!="READY":
         return None,"FS_TEAM_HISTORY_UNVERIFIED"
-    if (history.get("avg_total") is None or
-            float(history["avg_total"])<2.15):
+    # A mildly low historical goal average is context, not a decisive
+    # veto against independently verified high-quality LIVE pressure.
+    # Inspect the strong scenarios FIRST before applying the form gate.
+    try:
+        historical_avg=float(history.get("avg_total"))
+    except (TypeError,ValueError,OverflowError):
+        return None,"FS_TEAM_GOAL_FORM_LOW"
+    if not math.isfinite(historical_avg) or historical_avg<0:
         return None,"FS_TEAM_GOAL_FORM_LOW"
     stats=ctx.get("stats") or {}
     shots=_pair(stats.get("shots"))
@@ -664,6 +670,24 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
         prematch_odds=ctx.get("prematch_odds"),
         first_goal_side=ctx.get("first_goal_side"),
         red_cards=ctx.get("red_cards"))
+    # QUALITY_SURGE and TRAILING_CHASE may now be verified by two
+    # independent 4-6-minute observations. Don't let a modest historical
+    # average (1.75..2.15 goals) conceal an exceptional current surge.
+    # This is deliberately NOT a general form threshold reduction:
+    # no xG/5m stats, no independent evidence, weak/0:0 matches and
+    # every TWO_SIDED candidate still require avg_total >= 2.15.
+    strong_fresh_scenario=(
+        isinstance(scenario,dict)
+        and scenario.get("id") in ("QUALITY_SURGE","TRAILING_CHASE")
+        and not scenario.get("risk_flags")
+        and bool(set(scenario.get("notes") or []).intersection({
+            "QUALITY_SURGE_CONFIRMED_XG_5M",
+            "TRAILING_CHASE_CONFIRMED_SHOTS_5M",
+        })))
+    if historical_avg<2.15:
+        if historical_avg<1.75 or not strong_fresh_scenario:
+            return None,"FS_TEAM_GOAL_FORM_LOW"
+        scenario["notes"].append("VERIFIED_5M_PRESSURE_OVERRIDES_MILD_LOW_FORM")
     # Store the mandatory TWO_SIDED safety veto before an optional OFF
     # setting clears experimental scenario details. OFF may disable
     # experiments but must NEVER disable verified-pressure safety.

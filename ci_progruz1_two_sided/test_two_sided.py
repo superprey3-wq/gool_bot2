@@ -83,3 +83,46 @@ def test_trailing_chase_is_not_silenced():
         recent_10m_shots_by_team=(4,0),
         recent_10m_sot_by_team=(2,0),recent_10m_age=540)
     assert r["id"]=="TRAILING_CHASE"
+
+
+def test_production_goal_pressure_real_team_windows():
+    import sqlite3
+    from gool_goal_live import GoalPressure
+
+    db=sqlite3.connect(":memory:")
+    obs=GoalPressure(db)
+    kick=2_000_000_000
+    now=kick+80*60
+    for delta,shots,on in [
+        (-540,(3,2),(1,1)),(-300,(5,4),(2,1)),
+        (0,(7,6),(3,2))]:
+        measured=obs.observe(
+            root="fs:verified",kickoff=kick,now=now+delta,
+            minute=80+delta//60,phase="2-й тайм",
+            score=(1,1),shots=shots,on=on)
+    assert measured["recent_10m_age"]==540
+    assert measured["recent_10m_shots_by_team"]==(4,4)
+    assert measured["recent_10m_sot_by_team"]==(2,1)
+    assert measured["recent_5m_age"]==300
+    assert measured["recent_5m_shots_by_team"]==(2,2)
+    assert measured["recent_5m_sot_by_team"]==(1,1)
+
+
+def test_decreasing_provider_counters_do_not_create_fake_recent_pulse():
+    import sqlite3
+    from gool_goal_live import GoalPressure
+    db=sqlite3.connect(":memory:")
+    obs=GoalPressure(db)
+    kick=2_000_000_000
+    now=kick+75*60
+    obs.observe(root="r",kickoff=kick,now=now-540,minute=66,
+                phase="2-й тайм",score=(0,0),
+                shots=(3,2),on=(1,1))
+    obs.observe(root="r",kickoff=kick,now=now-300,minute=70,
+                phase="2-й тайм",score=(0,0),
+                shots=(6,5),on=(2,2))
+    measured=obs.observe(root="r",kickoff=kick,now=now,minute=75,
+                phase="2-й тайм",score=(0,0),
+                shots=(5,5),on=(2,2))
+    assert measured["recent_5m_shots_by_team"] is None
+    assert measured["recent_5m_sot_by_team"] is None

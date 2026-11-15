@@ -1,87 +1,66 @@
-name: PROGRUZ 1 · 1xBet LIVE full source audit
+name: PROGRUZ 1 · 1xBet full LIVE football benchmark (GOOL2 runner)
 
 on:
   push:
     branches: [main]
     paths:
       - .github/workflows/progruz1-xbet-full-source-audit.yml
+      - scripts/progruz1_xbet_live_standalone_audit.py
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  audit-xbet:
+  xbet-full-live:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout CI host GOOL BOT 2
-        uses: actions/checkout@v4
-        with:
-          path: audit-host
-      - name: Checkout live PROGRUZ 1 branch (no mutations)
-        uses: actions/checkout@v4
-        with:
-          repository: superprey3-wq/Progruz_v1
-          ref: experiment/fonbet-live-probe-20261026
-          path: progruz
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install minimal test dependency
-        run: python -m pip install --disable-pip-version-check pytest
-      - name: Offline 1xBet match and market parser tests
-        id: tests
+      - name: Install GOOL2 existing proven source and tests
+        run: python -m pip install --disable-pip-version-check -e . pytest
+      - name: Offline source regression
         continue-on-error: true
         shell: bash
         run: |
-          cd progruz
           mkdir -p reports
-          PYTHONPATH=. python -m pytest -q \
-            tests/test_progruz1_xbet_catalogue.py \
-            tests/test_progruz1_live_odds_audit.py \
-            tests/test_progruz1_fonbet_first_audit.py \
-            tests/test_progruz1_match_aliases.py \
-            2>&1 | tee reports/progruz1_xbet_tests.txt
+          python -m pytest -q \
+            tests/test_xbet_market_robust.py \
+            tests/test_xbet_multisport_steam.py \
+            tests/test_xbet_first_half_child.py \
+            2>&1 | tee reports/progruz1-xbet-tests-latest.txt
           test "${PIPESTATUS[0]}" -eq 0
-      - name: Fetch full 1xBet LIVE football and compare with Fonbet
-        id: live
+      - name: Query all current LIVE football with 1xBet legacy and v3
+        id: probe
         continue-on-error: true
         shell: bash
         run: |
-          cd progruz
-          PYTHONPATH=. python tools/progruz1_xbet_only_audit.py \
-            2>&1 | tee reports/progruz1_xbet_run.log
+          python scripts/progruz1_xbet_live_standalone_audit.py \
+            2>&1 | tee reports/progruz1-xbet-run-latest.txt
           test "${PIPESTATUS[0]}" -eq 0
-      - name: Upload exact source evidence even on errors
+      - name: Upload source findings
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: progruz1-xbet-full-live
+          name: full-live-xbet-football-audit
           path: |
-            progruz/reports/PROGRUZ1_XBET_SOURCE_COMPARE.json
-            progruz/reports/progruz1_xbet_tests.txt
-            progruz/reports/progruz1_xbet_run.log
+            reports/progruz1-xbet-source-latest.json
+            reports/progruz1-xbet-tests-latest.txt
+            reports/progruz1-xbet-run-latest.txt
           retention-days: 14
-      - name: Copy latest audit into GOOL2 for inspection
+      - name: Save measured summary for review
         if: always()
         shell: bash
         run: |
-          mkdir -p audit-host/reports
-          test -f progruz/reports/PROGRUZ1_XBET_SOURCE_COMPARE.json &&
-            cp progruz/reports/PROGRUZ1_XBET_SOURCE_COMPARE.json \
-              audit-host/reports/progruz1-xbet-source-latest.json || true
-          test -f progruz/reports/progruz1_xbet_tests.txt &&
-            cp progruz/reports/progruz1_xbet_tests.txt \
-              audit-host/reports/progruz1-xbet-tests-latest.txt || true
-          test -f progruz/reports/progruz1_xbet_run.log &&
-            cp progruz/reports/progruz1_xbet_run.log \
-              audit-host/reports/progruz1-xbet-run-latest.txt || true
-          cd audit-host
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add reports/progruz1-xbet-* || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/progruz1-xbet-source-latest.json \
+                  reports/progruz1-xbet-tests-latest.txt \
+                  reports/progruz1-xbet-run-latest.txt || true
           if ! git diff --cached --quiet; then
-            git commit -m "Audit: PROGRUZ 1 full LIVE 1xBet comparison"
-            git push origin HEAD:main || echo 'Report in Actions artifact only'
+            git commit -m "Audit 1xBet LIVE football source coverage"
+            git push origin HEAD:main || echo 'Artifacts retained on GitHub'
           fi

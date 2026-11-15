@@ -6,6 +6,7 @@ guaranteed executable bets. The fixture ID stays fixed across countries.
 from __future__ import annotations
 
 from collections import Counter,defaultdict
+import csv
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from datetime import datetime,timezone
 import json
@@ -18,7 +19,9 @@ from gool_bot2.providers.flashscore import FlashscoreProvider
 
 
 OUT=Path("reports/progruz1-flashscore-regions-latest.json")
-REGIONS=("GB","SE","DE","NL","FI","IT","ES")
+CSV_OUT=Path("reports/progruz1-flashscore-regions-all-matches.csv")
+REGIONS=("GB","SE","FI","ES","IT","DE","NL","FR","NO","PL","US","CA")
+CORE_REGIONS=("GB","SE","FI","ES")
 BASE="https://global.ds.lsapp.eu/odds/pq_graphql"
 
 
@@ -158,79 +161,150 @@ def main():
     }.values())
     ordered=sorted(fixtures,key=lambda f:(
         str(f.league or ""),int(f.minute or 0),str(f.provider_match_id)))
-    sample_count=min(22,len(ordered))
-    sample=[ordered[int(i*len(ordered)/sample_count)]
-            for i in range(sample_count)] if sample_count else []
-    sample_result=query_matches(sample,REGIONS)
-    sample_summary={geo:summarize(d.values())
-                    for geo,d in sample_result.items()}
-    rank=sorted(REGIONS,key=lambda geo:(
-        -sample_summary[geo]["with_active_over_under"],
-        -sample_summary[geo]["exact_goal_1_50"],geo))
-    full_geos=list(dict.fromkeys(("GB","SE",*rank)))[:4]
-    # Complete regional coverage up to 180 fixtures, no false claim
-    # of checking more matches if today's catalogue exceeds that limit.
-    all_games=ordered[:180]
-    sample_ids={str(f.provider_match_id) for f in sample}
-    rest=[f for f in all_games if str(f.provider_match_id) not in sample_ids]
-    bulk=query_matches(rest,full_geos)
-    full={}
-    for geo in full_geos:
-        full[geo]={**sample_result.get(geo,{}),**bulk.get(geo,{})}
-    full_summary={geo:summarize(d.values()) for geo,d in full.items()}
-    union_live=set().union(*[
-        {mid for mid,row in d.items() if row["active_total_books"]}
-        for d in full.values()]) if full else set()
-    union_exact=set().union(*[
-        {mid for mid,row in d.items() if row["exact_1_50_books"]}
-        for d in full.values()]) if full else set()
-    gb_live={mid for mid,r in full.get("GB",{}).items()
-             if r["active_total_books"]}
-    se_live={mid for mid,r in full.get("SE",{}).items()
-             if r["active_total_books"]}
-    gb_exact={mid for mid,r in full.get("GB",{}).items()
+
+    # No slice or arbitrary cap. All Flashscore LIVE event IDs get
+    # exactly the same four-region base pass.
+    core=query_matches(ordered,CORE_REGIONS)
+    core_active={mid for geo in CORE_REGIONS for mid,row in core[geo].items()
+                 if row["active_total_books"]}
+    core_exact={mid for geo in CORE_REGIONS for mid,row in core[geo].items()
+                if row["exact_1_50_books"]}
+
+    # Query eight more regions only where a quote is missing, or the
+    # current goal market is unavailable in an eligible entry window.
+    missing=[f for f in ordered
+        if str(f.provider_match_id) not in core_active or (
+            (1<=int(f.minute or 0)<=35 or 46<=int(f.minute or 0)<=80)
+            and str(f.provider_match_id) not in core_exact)]
+    extra_regions=tuple(g for g in REGIONS if g not in CORE_REGIONS)
+    extras=query_matches(missing,extra_regions)
+    all_by_geo={**core,**extras}
+    base_summary={g:summarize(rows.values()) for g,rows in core.items()}
+    extra_summary={g:summarize(rows.values()) for g,rows in extras.items()}
+
+    matches=[]
+    statuses=Counter()
+    all_active=set()
+    all_exact=set()
+    extra_active=set()
+    extra_exact=set()
+    for fixture in ordered:
+        mid=str(fixture.provider_match_id)
+        responses={g:rows[mid] for g,rows in all_by_geo.items()
+                   if mid in rows}
+        api_errors={g:r["error"] for g,r in responses.items()
+                    if not r["ok"]}
+        active={g:r["active_total_books"]
+                for g,r in responses.items() if r["active_total_books"]}
+        exact={g:r["exact_1_50_books"]
+               for g,r in responses.items() if r["exact_1_50_books"]}
+        market_present=any(r["total_books"] for r in responses.values())
+        minute=int(fixture.minute or 0)
+        in_window=1<=minute<=35 or 46<=minute<=80
+        if active:
+            all_active.add(mid)
+            if not any(g in CORE_REGIONS for g in active):
+                extra_active.add(mid)
+        if exact:
+            all_exact.add(mid)
+            if not any(g in CORE_REGIONS for g in exact):
+                extra_exact.add(mid)
+        # Re-check failures distinguish NO_PRICE from UNKNOWN/API errors.
+        if exact:
+            status="EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+        elif active:
+            status=("ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+                    if in_window else "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW")
+        elif api_errors:
+            status=("ALL_SOURCES_FAILED" if len(api_errors)==len(responses)
+                    else "NO_PRICE_WITH_SOME_API_ERRORS")
+        elif market_present:
+            status="TOTAL_MARKET_PRESENT_NOT_ACTIVE"
+        else:
+            status="NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+        statuses[status]+=1
+        matches.append({
+            "fs_id":mid,
+            "match":str(fixture.home)+" — "+str(fixture.away),
+            "league":str(fixture.league or ""),
+            "minute":minute,
+            "score":[fixture.home_score,fixture.away_score],
+            "in_entry_window":in_window,
+            "regions_checked":sorted(responses),
+            "api_errors":api_errors,
+            "active_total_regions":active,
+            "exact_over_1_50_regions":exact,
+            "status":status,
+        })
+
+    gb_active={mid for mid,r in core.get("GB",{}).items()
+               if r["active_total_books"]}
+    se_active={mid for mid,r in core.get("SE",{}).items()
+               if r["active_total_books"]}
+    gb_exact={mid for mid,r in core.get("GB",{}).items()
               if r["exact_1_50_books"]}
+    n=len(ordered)
+    all_rows={r["fs_id"] for r in matches}
+    missing_any=[r for r in matches if not r["active_total_regions"]]
+    missing_target=[r for r in matches
+                    if r["in_entry_window"] and not r["exact_over_1_50_regions"]]
     report={
         "utc":datetime.now(timezone.utc).isoformat(),
-        "status":"COMPLETE",
-        "flashscore_live":len(fixtures),
-        "full_checked":len(all_games),
-        "sample_checked":len(sample),
-        "geos_sampled":list(REGIONS),
-        "geos_full":full_geos,
-        "sample_by_geo":sample_summary,
-        "full_by_geo":full_summary,
-        "combined_live_total_fixtures":len(union_live),
-        "combined_exact_1_50_fixtures":len(union_exact),
-        "live_total_additional_vs_GB":len(union_live-gb_live),
-        "sweden_additional_vs_GB":len(se_live-gb_live),
-        "exact_additional_vs_GB":len(union_exact-gb_exact),
-        "regional_bookmakers":{
-            geo:sorted(set(b for row in d.values()
-                for b in row["bookmakers_returned"]))[:60]
-            for geo,d in full.items()},
-        "examples_sweden_extra":[
-            {"id":f.provider_match_id,"match":str(f.home)+" — "+str(f.away),
-             "minute":f.minute,
-             "se":full["SE"].get(str(f.provider_match_id),{}).get(
-                 "active_total_books",[])}
-            for f in all_games
-            if str(f.provider_match_id) in se_live-gb_live][:30],
-        "sample_response_shape":{
-            geo:next((r.get("sample",[]) for r in full[geo].values()
-                     if r.get("sample")),[])
-            for geo in full_geos},
+        "status":"COMPLETE" if len(all_rows)==n else "INCOMPLETE_IDS",
+        "flashscore_live":n,
+        "all_live_ids_checked":len(all_rows),
+        "coverage_of_live_ids_pct":round(100*len(all_rows)/n,2) if n else 100,
+        "base_regions":list(CORE_REGIONS),
+        "fallback_regions":list(extra_regions),
+        "fallback_matches":len(missing),
+        "total_requests":sum(len(rows) for rows in all_by_geo.values()),
+        "base_regions_summary":base_summary,
+        "fallback_regions_summary":extra_summary,
+        "with_active_totals_any_region":len(all_active),
+        "with_exact_goal_over_1_50_any_region":len(all_exact),
+        "without_active_totals_any_region":n-len(all_active),
+        "additional_active_totals_fallback":len(extra_active),
+        "additional_exact_goal_fallback":len(extra_exact),
+        "active_total_additional_vs_GB":len(all_active-gb_active),
+        "exact_goal_additional_vs_GB":len(all_exact-gb_exact),
+        "sweden_active_only_vs_GB":len(se_active-gb_active),
+        "entry_window_no_exact_target":len(missing_target),
+        "errors_by_region":{
+            g:dict(Counter(r["error"] for r in rows.values() if r["error"]))
+            for g,rows in all_by_geo.items()},
+        "status_breakdown":dict(statuses),
+        "missing_active_total":[r for r in missing_any],
+        "missing_exact_target_in_window":[r for r in missing_target],
+        "all_matches":matches,
         "duration_seconds":round(time.monotonic()-started,2),
-        "notes":"Changing geoIpCode is not changing outgoing IP. A 'live' flag is not proof of executable quote."
+        "notes":(
+            "100% means every Flashscore LIVE ID was checked; this does not "
+            "mean every match has a live available total. A display geo "
+            "parameter does not alter physical IP, and odds are not "
+            "guaranteed executable. API errors are not no-odds claims.")
     }
     OUT.parent.mkdir(exist_ok=True,parents=True)
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2),
                    encoding="utf-8")
-    print("FLASH_GEO_AUDIT",json.dumps({
-        k:v for k,v in report.items() if k not in (
-            "sample_response_shape","regional_bookmakers",
-            "examples_sweden_extra","sample_by_geo")},
+    with CSV_OUT.open("w",newline="",encoding="utf-8-sig") as handle:
+        columns=["fs_id","match","league","minute","score",
+                 "in_entry_window","status","regions_checked",
+                 "api_errors","active_total_regions",
+                 "exact_over_1_50_regions"]
+        writer=csv.DictWriter(handle,fieldnames=columns)
+        writer.writeheader()
+        for row in matches:
+            writer.writerow({
+                k:json.dumps(row[k],ensure_ascii=False)
+                if isinstance(row[k],(dict,list)) else row[k]
+                for k in columns})
+    print("FLASH_GEO_ALL_LIVE",json.dumps(
+        {k:v for k,v in report.items()
+         if k not in ("all_matches","missing_active_total",
+                      "missing_exact_target_in_window",
+                      "base_regions_summary","fallback_regions_summary")},
         ensure_ascii=False),flush=True)
+    print("MATCHES_CSV",CSV_OUT,flush=True)
     return report
 
 

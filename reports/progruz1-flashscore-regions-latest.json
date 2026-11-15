@@ -1,363 +1,7421 @@
 {
-  "utc": "2026-11-15T17:09:21.136248+00:00",
+  "utc": "2026-11-15T17:17:12.567815+00:00",
   "status": "COMPLETE",
-  "flashscore_live": 92,
-  "full_checked": 92,
-  "sample_checked": 22,
-  "geos_sampled": [
+  "flashscore_live": 91,
+  "all_live_ids_checked": 91,
+  "coverage_of_live_ids_pct": 100.0,
+  "base_regions": [
     "GB",
     "SE",
-    "DE",
-    "NL",
     "FI",
-    "IT",
     "ES"
   ],
-  "geos_full": [
-    "GB",
-    "SE",
-    "ES",
-    "FI"
+  "fallback_regions": [
+    "IT",
+    "DE",
+    "NL",
+    "FR",
+    "NO",
+    "PL",
+    "US",
+    "CA"
   ],
-  "sample_by_geo": {
+  "fallback_matches": 49,
+  "total_requests": 756,
+  "base_regions_summary": {
     "GB": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 20,
-      "with_active_over_under": 16,
-      "exact_next_goal_line": 9,
-      "exact_goal_1_50": 1,
+      "checked": 91,
+      "ok": 91,
+      "with_any_over_under": 85,
+      "with_active_over_under": 74,
+      "exact_next_goal_line": 43,
+      "exact_goal_1_50": 11,
       "bookmakers": {
-        "7BetUK": 12,
-        "Ladbrokes": 11,
-        "Betway": 8,
-        "Midnite": 6,
-        "bet365": 4,
-        "Betfred": 3,
-        "BetMGM.uk": 2
+        "7BetUK": 71,
+        "Betway": 60,
+        "Ladbrokes": 47,
+        "Betfred": 26,
+        "Midnite": 24,
+        "BetMGM.uk": 19,
+        "bet365": 12
       },
       "errors": {}
     },
     "SE": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 19,
-      "with_active_over_under": 12,
-      "exact_next_goal_line": 3,
-      "exact_goal_1_50": 1,
+      "checked": 91,
+      "ok": 91,
+      "with_any_over_under": 83,
+      "with_active_over_under": 68,
+      "exact_next_goal_line": 23,
+      "exact_goal_1_50": 5,
       "bookmakers": {
-        "Dbet": 10,
-        "1x2": 7,
-        "Unibetse": 7,
-        "bet365": 4,
-        "BetMGM.se": 2,
-        "Expektse": 2
-      },
-      "errors": {}
-    },
-    "DE": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 18,
-      "with_active_over_under": 8,
-      "exact_next_goal_line": 4,
-      "exact_goal_1_50": 0,
-      "bookmakers": {
-        "Oddset.de": 6,
-        "Neobet": 5
-      },
-      "errors": {}
-    },
-    "NL": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 9,
-      "with_active_over_under": 2,
-      "exact_next_goal_line": 0,
-      "exact_goal_1_50": 0,
-      "bookmakers": {
-        "Sevelev.nl": 2
+        "Dbet": 61,
+        "1x2": 35,
+        "Unibetse": 35,
+        "BetMGM.se": 17,
+        "Expektse": 17,
+        "Coolbet": 13,
+        "bet365": 12
       },
       "errors": {}
     },
     "FI": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 19,
-      "with_active_over_under": 13,
-      "exact_next_goal_line": 7,
-      "exact_goal_1_50": 1,
+      "checked": 91,
+      "ok": 91,
+      "with_any_over_under": 83,
+      "with_active_over_under": 71,
+      "exact_next_goal_line": 41,
+      "exact_goal_1_50": 10,
       "bookmakers": {
-        "1xBet": 12,
-        "VivatBet": 12,
-        "Winz.io": 11,
-        "Stake.com": 8,
-        "bet365": 4,
-        "Coolbet": 3
-      },
-      "errors": {}
-    },
-    "IT": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 18,
-      "with_active_over_under": 11,
-      "exact_next_goal_line": 5,
-      "exact_goal_1_50": 1,
-      "bookmakers": {
-        "BetssonIT": 10,
-        "GoldBet": 8,
-        "Lottomatica": 8,
-        "Planetwin365": 8,
-        "SNAI": 8,
-        "Sisal": 8,
-        "BetflagIT": 7,
-        "bet365.it": 4
+        "VivatBet": 66,
+        "1xBet": 64,
+        "Stake.com": 38,
+        "Winz.io": 37,
+        "Coolbet": 15,
+        "bet365": 12
       },
       "errors": {}
     },
     "ES": {
-      "checked": 22,
-      "ok": 22,
-      "with_any_over_under": 19,
-      "with_active_over_under": 14,
-      "exact_next_goal_line": 8,
-      "exact_goal_1_50": 1,
+      "checked": 91,
+      "ok": 91,
+      "with_any_over_under": 84,
+      "with_active_over_under": 72,
+      "exact_next_goal_line": 36,
+      "exact_goal_1_50": 10,
       "bookmakers": {
-        "Versus.es": 13,
-        "Betway": 11,
-        "Sportium.es": 10,
+        "Versus.es": 59,
+        "Sportium.es": 58,
+        "Betway": 55,
+        "bet365": 12
+      },
+      "errors": {}
+    }
+  },
+  "fallback_regions_summary": {
+    "IT": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 42,
+      "with_active_over_under": 30,
+      "exact_next_goal_line": 28,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "BetssonIT": 26,
+        "SNAI": 22,
+        "Sisal": 21,
+        "BetflagIT": 18,
+        "GoldBet": 18,
+        "Lottomatica": 18,
+        "Planetwin365": 18,
+        "bet365.it": 4
+      },
+      "errors": {}
+    },
+    "DE": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 42,
+      "with_active_over_under": 19,
+      "exact_next_goal_line": 5,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Neobet": 19,
+        "Oddset.de": 5
+      },
+      "errors": {}
+    },
+    "NL": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 10,
+      "with_active_over_under": 1,
+      "exact_next_goal_line": 0,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Sevelev.nl": 1
+      },
+      "errors": {}
+    },
+    "FR": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 0,
+      "with_active_over_under": 0,
+      "exact_next_goal_line": 0,
+      "exact_goal_1_50": 0,
+      "bookmakers": {},
+      "errors": {}
+    },
+    "NO": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 42,
+      "with_active_over_under": 40,
+      "exact_next_goal_line": 15,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Lilibet": 33,
+        "Betsmith": 27,
+        "Stake.com": 18
+      },
+      "errors": {}
+    },
+    "PL": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 42,
+      "with_active_over_under": 33,
+      "exact_next_goal_line": 22,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "STS.pl": 29,
+        "eFortuna.pl": 19,
+        "Betclic.pl": 8,
+        "Superbet.pl": 2
+      },
+      "errors": {}
+    },
+    "US": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 0,
+      "with_active_over_under": 0,
+      "exact_next_goal_line": 0,
+      "exact_goal_1_50": 0,
+      "bookmakers": {},
+      "errors": {}
+    },
+    "CA": {
+      "checked": 49,
+      "ok": 49,
+      "with_any_over_under": 42,
+      "with_active_over_under": 24,
+      "exact_next_goal_line": 18,
+      "exact_goal_1_50": 0,
+      "bookmakers": {
+        "Sports Interaction": 18,
+        "Stake.com": 15,
         "bet365": 4
       },
       "errors": {}
     }
   },
-  "full_by_geo": {
-    "GB": {
-      "checked": 92,
-      "ok": 92,
-      "with_any_over_under": 86,
-      "with_active_over_under": 75,
-      "exact_next_goal_line": 48,
-      "exact_goal_1_50": 16,
-      "bookmakers": {
-        "7BetUK": 65,
-        "Betway": 55,
-        "Ladbrokes": 49,
-        "Midnite": 25,
-        "Betfred": 23,
-        "BetMGM.uk": 17,
-        "bet365": 14
-      },
-      "errors": {}
-    },
-    "SE": {
-      "checked": 92,
-      "ok": 92,
-      "with_any_over_under": 84,
-      "with_active_over_under": 67,
-      "exact_next_goal_line": 29,
-      "exact_goal_1_50": 12,
-      "bookmakers": {
-        "Dbet": 59,
-        "Unibetse": 35,
-        "1x2": 34,
-        "BetMGM.se": 17,
-        "Expektse": 17,
-        "bet365": 14,
-        "Coolbet": 11
-      },
-      "errors": {}
-    },
-    "ES": {
-      "checked": 92,
-      "ok": 92,
-      "with_any_over_under": 85,
-      "with_active_over_under": 72,
-      "exact_next_goal_line": 43,
-      "exact_goal_1_50": 14,
-      "bookmakers": {
-        "Versus.es": 59,
-        "Sportium.es": 57,
-        "Betway": 56,
-        "bet365": 14
-      },
-      "errors": {}
-    },
-    "FI": {
-      "checked": 92,
-      "ok": 92,
-      "with_any_over_under": 84,
-      "with_active_over_under": 72,
-      "exact_next_goal_line": 46,
-      "exact_goal_1_50": 15,
-      "bookmakers": {
-        "VivatBet": 67,
-        "1xBet": 65,
-        "Winz.io": 39,
-        "Stake.com": 39,
-        "Coolbet": 15,
-        "bet365": 14
-      },
-      "errors": {}
-    }
+  "with_active_totals_any_region": 85,
+  "with_exact_goal_over_1_50_any_region": 12,
+  "without_active_totals_any_region": 6,
+  "additional_active_totals_fallback": 9,
+  "additional_exact_goal_fallback": 0,
+  "active_total_additional_vs_GB": 11,
+  "exact_goal_additional_vs_GB": 1,
+  "sweden_active_only_vs_GB": 1,
+  "entry_window_no_exact_target": 38,
+  "errors_by_region": {
+    "GB": {},
+    "SE": {},
+    "FI": {},
+    "ES": {},
+    "IT": {},
+    "DE": {},
+    "NL": {},
+    "FR": {},
+    "NO": {},
+    "PL": {},
+    "US": {},
+    "CA": {}
   },
-  "combined_live_total_fixtures": 77,
-  "combined_exact_1_50_fixtures": 17,
-  "live_total_additional_vs_GB": 2,
-  "sweden_additional_vs_GB": 1,
-  "exact_additional_vs_GB": 1,
-  "regional_bookmakers": {
-    "GB": [
-      "10bet",
-      "7BetUK",
-      "BetMGM.uk",
-      "BetUK",
-      "BetVictor",
-      "Betano.uk",
-      "Betfair",
-      "Betfred",
-      "Betway",
-      "Coral",
-      "Ladbrokes",
-      "Midnite",
-      "Paddy Power",
-      "Parimatch.uk",
-      "Skybet",
-      "SpreadEX",
-      "Talksportbet",
-      "Unibetuk",
-      "William Hill",
-      "bet365"
-    ],
-    "SE": [
-      "1x2",
-      "BetMGM.se",
-      "Coolbet",
-      "Dbet",
-      "Expektse",
-      "MrGreen",
-      "Unibetse",
-      "bet365"
-    ],
-    "ES": [
-      "Betway",
-      "Codere",
-      "Interwetten",
-      "Luckia.es",
-      "Retabet",
-      "Speedybet.es",
-      "Sportium.es",
-      "Versus.es",
-      "William Hill",
-      "bet365"
-    ],
-    "FI": [
-      "1xBet",
-      "Coolbet",
-      "Golissimo",
-      "Stake.com",
-      "VivatBet",
-      "Winz.io",
-      "bet365"
-    ]
+  "status_breakdown": {
+    "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL": 37,
+    "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW": 36,
+    "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED": 12,
+    "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES": 6
   },
-  "examples_sweden_extra": [
+  "missing_active_total": [
     {
-      "id": "fgsAG4fl",
-      "match": "Western — Kamboi Eagles",
-      "minute": 45,
-      "se": [
-        "Dbet"
-      ]
+      "fs_id": "vRdpyV2F",
+      "match": "Jaraiz — CD Zafra",
+      "league": "SPAIN: Tercera RFEF - Group 14",
+      "minute": 90,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "hf4uNdto",
+      "match": "Alfaro — River Ebro",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 90,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "6J5n32Ab",
+      "match": "Caspe — CD Sietamo",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 86,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "vX3f1tuB",
+      "match": "Fraga — Belchite 97",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 87,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "Oxoz9XtK",
+      "match": "Atletico Monzon — Ejea",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 89,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "zy3CNHlf",
+      "match": "Amurrio Club — Durango",
+      "league": "SPAIN: Tercera RFEF - Group 4",
+      "minute": 62,
+      "score": [
+        0,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
     }
   ],
-  "sample_response_shape": {
-    "GB": [
-      {
-        "bettingType": "HOME_DRAW_AWAY",
-        "bettingScope": "FIRST_HALF",
-        "hasLiveBettingOffers": true,
-        "selection_example": {
-          "__typename": "EventOddsItem",
-          "eventParticipantId": "pxyJFFvQ",
-          "value": "1.65",
-          "opening": "1.57",
-          "active": true,
-          "handicap": null,
-          "position": null,
-          "selection": null,
-          "winner": null,
-          "score": null,
-          "bothTeamsToScore": null,
-          "result": "NONE"
-        }
-      }
-    ],
-    "SE": [
-      {
-        "bettingType": "HOME_DRAW_AWAY",
-        "bettingScope": "FIRST_HALF",
-        "hasLiveBettingOffers": false,
-        "selection_example": {
-          "__typename": "EventOddsItem",
-          "eventParticipantId": "pxyJFFvQ",
-          "value": "1.62",
-          "opening": "1.6",
-          "active": true,
-          "handicap": null,
-          "position": null,
-          "selection": null,
-          "winner": null,
-          "score": null,
-          "bothTeamsToScore": null,
-          "result": "NONE"
-        }
-      }
-    ],
-    "ES": [
-      {
-        "bettingType": "HOME_DRAW_AWAY",
-        "bettingScope": "FIRST_HALF",
-        "hasLiveBettingOffers": true,
-        "selection_example": {
-          "__typename": "EventOddsItem",
-          "eventParticipantId": "pxyJFFvQ",
-          "value": "1.67",
-          "opening": "1.65",
-          "active": true,
-          "handicap": null,
-          "position": null,
-          "selection": null,
-          "winner": null,
-          "score": null,
-          "bothTeamsToScore": null,
-          "result": "NONE"
-        }
-      }
-    ],
-    "FI": [
-      {
-        "bettingType": "HOME_DRAW_AWAY",
-        "bettingScope": "FIRST_HALF",
-        "hasLiveBettingOffers": true,
-        "selection_example": {
-          "__typename": "EventOddsItem",
-          "eventParticipantId": "pxyJFFvQ",
-          "value": "1.72",
-          "opening": "1.73",
-          "active": true,
-          "handicap": null,
-          "position": null,
-          "selection": null,
-          "winner": null,
-          "score": null,
-          "bothTeamsToScore": null,
-          "result": "NONE"
-        }
-      }
-    ]
-  },
-  "duration_seconds": 48.12,
-  "notes": "Changing geoIpCode is not changing outgoing IP. A 'live' flag is not proof of executable quote."
+  "missing_exact_target_in_window": [
+    {
+      "fs_id": "zNejCzJE",
+      "match": "Leuven W — Genk W",
+      "league": "BELGIUM: Super League Women",
+      "minute": 51,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "EcQoYjFa",
+      "match": "ADR Jicaral — Guadalupe",
+      "league": "COSTA RICA: Liga de Ascenso - Apertura - Play Offs",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "WvxvixiK",
+      "match": "Pisek — Benesov",
+      "league": "CZECH REPUBLIC: 3. CFL - Group A",
+      "minute": 52,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Aev4Pw5A",
+      "match": "Asante Kotoko — Bibiani Gold Stars",
+      "league": "GHANA: Premier League",
+      "minute": 55,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "Betclic.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "rTULXS2d",
+      "match": "Purepechas — Inter Playa Del Carmen",
+      "league": "MEXICO: Primera Premier",
+      "minute": 9,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "4Y90iylT",
+      "match": "Twente W — PSV W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 75,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "d86hgcJG",
+      "match": "AZ Alkmaar W — Ajax W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 75,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "GzxdiPNq",
+      "match": "U. San Martin — Union Comercio",
+      "league": "PERU: Liga 2 - Play Offs",
+      "minute": 50,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "fXu9sbcU",
+      "match": "Feirense W — Torreense W",
+      "league": "PORTUGAL: Taça de Portugal Women",
+      "minute": 55,
+      "score": [
+        0,
+        6
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "4j1eFlPq",
+      "match": "Partick Thistle W — Spartans W",
+      "league": "SCOTLAND: SWPL 1 Women",
+      "minute": 55,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "nqA3gtNE",
+      "match": "Dep. A Coruna W — Barcelona W",
+      "league": "SPAIN: Liga F Women",
+      "minute": 17,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NL": [
+          "Sevelev.nl"
+        ],
+        "NO": [
+          "Betsmith",
+          "Stake.com"
+        ],
+        "PL": [
+          "Superbet.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "SnwZay9K",
+      "match": "Lugo — Mirandes",
+      "league": "SPAIN: Primera RFEF - Group 1",
+      "minute": 79,
+      "score": [
+        1,
+        3
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "bet365"
+        ],
+        "SE": [
+          "bet365"
+        ],
+        "FI": [
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "61njcdhg",
+      "match": "Gernika — Oviedo B",
+      "league": "SPAIN: Segunda RFEF - Group 1",
+      "minute": 60,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "za5Qty8C",
+      "match": "Compostela — Ourense CF",
+      "league": "SPAIN: Segunda RFEF - Group 1",
+      "minute": 60,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "dny3LwfA",
+      "match": "Olot — Espanyol B",
+      "league": "SPAIN: Segunda RFEF - Group 2",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "naOlCZGd",
+      "match": "Terrassa — Tudelano",
+      "league": "SPAIN: Segunda RFEF - Group 2",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "by9h2Ua5",
+      "match": "Alcoyano — CF Intercity",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 55,
+      "score": [
+        3,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "zygQGTEb",
+      "match": "La Nucia — Valencia B",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "viYcVSTi",
+      "match": "Yeclano — Castellon B",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 61,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "61C008UH",
+      "match": "Castellonense — Orihuela",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 71,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "YV2pIepL",
+      "match": "Xerez CD — Antoniano",
+      "league": "SPAIN: Segunda RFEF - Group 4",
+      "minute": 16,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "MyJ7L9ZF",
+      "match": "Mijas Las Lagunas — CD Estepona",
+      "league": "SPAIN: Segunda RFEF - Group 4",
+      "minute": 58,
+      "score": [
+        3,
+        3
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "dKlFzBsK",
+      "match": "Puertollano C.F. — CF Talavera",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 55,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "lKGYu6Ja",
+      "match": "Conquense — Guadalajara",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 56,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Kpz9PpZI",
+      "match": "Gimnastica Segoviana — Real Avila",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 60,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "I3Y1bZ4m",
+      "match": "Conil — Xerez D.F.C.",
+      "league": "SPAIN: Tercera RFEF - Group 10",
+      "minute": 57,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "MsjpthkJ",
+      "match": "Linense — Portuense",
+      "league": "SPAIN: Tercera RFEF - Group 10",
+      "minute": 57,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "IwsP2HfU",
+      "match": "PE Sant Jordi — Porreres",
+      "league": "SPAIN: Tercera RFEF - Group 11",
+      "minute": 56,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "pxcIXzfn",
+      "match": "Cotillas CD — CD Algar",
+      "league": "SPAIN: Tercera RFEF - Group 13",
+      "minute": 55,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Y5Blud2T",
+      "match": "Haro Deportivo — Berceo",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "lEBFEKo8",
+      "match": "Caudal Deportivo — CD Colunga",
+      "league": "SPAIN: Tercera RFEF - Group 2",
+      "minute": 14,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "NO": [
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "K0YndCVt",
+      "match": "Langreo — Club Siero",
+      "league": "SPAIN: Tercera RFEF - Group 2",
+      "minute": 54,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "IgeG0csn",
+      "match": "Revilla — Cayon",
+      "league": "SPAIN: Tercera RFEF - Group 3",
+      "minute": 12,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "PL": [
+          "Superbet.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "fHHbrGRH",
+      "match": "Tropezon — Vimenor",
+      "league": "SPAIN: Tercera RFEF - Group 3",
+      "minute": 54,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "zy3CNHlf",
+      "match": "Amurrio Club — Durango",
+      "league": "SPAIN: Tercera RFEF - Group 4",
+      "minute": 62,
+      "score": [
+        0,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "S0hYlCfT",
+      "match": "Ontinyent 1931 — Atzeneta",
+      "league": "SPAIN: Tercera RFEF - Group 6",
+      "minute": 56,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "fmfQjYPG",
+      "match": "Utiel — SC Torrevieja",
+      "league": "SPAIN: Tercera RFEF - Group 6",
+      "minute": 56,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "I7bTA6yo",
+      "match": "Bucaspor 1928 — Karsiyaka",
+      "league": "TURKEY: 3. Lig Group 2",
+      "minute": 57,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ],
+        "IT": [
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    }
+  ],
+  "all_matches": [
+    {
+      "fs_id": "zNejCzJE",
+      "match": "Leuven W — Genk W",
+      "league": "BELGIUM: Super League Women",
+      "minute": 51,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "xpq9RQcL",
+      "match": "Sonabel Ouagadougou — USFA",
+      "league": "BURKINA FASO: Premier League",
+      "minute": 82,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "j7VRWLZ0",
+      "match": "Salitas — Maya",
+      "league": "BURKINA FASO: Premier League",
+      "minute": 84,
+      "score": [
+        2,
+        3
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "ES": [
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "nJUvM4Lr",
+      "match": "Vitesse — CFFEB",
+      "league": "BURKINA FASO: Premier League",
+      "minute": 84,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "EcQoYjFa",
+      "match": "ADR Jicaral — Guadalupe",
+      "league": "COSTA RICA: Liga de Ascenso - Apertura - Play Offs",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "WvxvixiK",
+      "match": "Pisek — Benesov",
+      "league": "CZECH REPUBLIC: 3. CFL - Group A",
+      "minute": 52,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "4z1nvQcc",
+      "match": "Arsenal W — London City Lionesses W",
+      "league": "ENGLAND: WSL",
+      "minute": 45,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "AoaMhFKb",
+      "match": "Belarus — Albania",
+      "league": "EUROPE: UEFA Nations League - League C",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Coolbet",
+          "Dbet",
+          "Expektse",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Coolbet",
+          "Dbet",
+          "Expektse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "bet365"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "dOS9WO3d",
+      "match": "Finland — San Marino",
+      "league": "EUROPE: UEFA Nations League - League C",
+      "minute": 16,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "Aev4Pw5A",
+      "match": "Asante Kotoko — Bibiani Gold Stars",
+      "league": "GHANA: Premier League",
+      "minute": 55,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "Betclic.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Kb7J7sFd",
+      "match": "Pergolettese — Pro Vercelli",
+      "league": "ITALY: Serie C - Group A",
+      "minute": 45,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "SOzOVg1n",
+      "match": "Juventus U23 — Treviso",
+      "league": "ITALY: Serie C - Group A",
+      "minute": 45,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "Coolbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "x0eEBjGU",
+      "match": "Cittadella — Folgore Caratese",
+      "league": "ITALY: Serie C - Group A",
+      "minute": 45,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "rLGaQec3",
+      "match": "Ravenna — Forli",
+      "league": "ITALY: Serie C - Group B",
+      "minute": 44,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "tAaYqV86",
+      "match": "Cosenza — Casertana",
+      "league": "ITALY: Serie C - Group C",
+      "minute": 44,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "Gtyo6LP8",
+      "match": "Barletta — Altamura",
+      "league": "ITALY: Serie C - Group C",
+      "minute": 45,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "dY7TpdIc",
+      "match": "Virtus Verona — Fiorenzuola",
+      "league": "ITALY: Serie D - Group B",
+      "minute": 45,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "I3jfUELj",
+      "match": "Binga — Djoliba",
+      "league": "MALI: Premiere Division",
+      "minute": 61,
+      "score": [
+        0,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "rTULXS2d",
+      "match": "Purepechas — Inter Playa Del Carmen",
+      "league": "MEXICO: Primera Premier",
+      "minute": 9,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "b7cuQMQp",
+      "match": "Yacoub El Mansour — USM Oujda",
+      "league": "MOROCCO: Botola 2",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "Ladbrokes"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "Y7jQ7dY9",
+      "match": "PEC Zwolle W — Utrecht W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 68,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "ES": [
+          "Sportium.es"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "SAmI9I3c",
+      "match": "Feyenoord W — Heerenveen W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 70,
+      "score": [
+        3,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "Betfred",
+          "Betway"
+        ],
+        "FI": [
+          "Stake.com"
+        ],
+        "ES": [
+          "Betway"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "4Y90iylT",
+      "match": "Twente W — PSV W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 75,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "d86hgcJG",
+      "match": "AZ Alkmaar W — Ajax W",
+      "league": "NETHERLANDS: Eredivisie Women",
+      "minute": 75,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "GzxdiPNq",
+      "match": "U. San Martin — Union Comercio",
+      "league": "PERU: Liga 2 - Play Offs",
+      "minute": 50,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "S2Ri6GXj",
+      "match": "Penafiel — Lusitania FC",
+      "league": "PORTUGAL: Liga Portugal 2",
+      "minute": 88,
+      "score": [
+        1,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Coolbet",
+          "Dbet",
+          "Expektse",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "fXu9sbcU",
+      "match": "Feirense W — Torreense W",
+      "league": "PORTUGAL: Taça de Portugal Women",
+      "minute": 55,
+      "score": [
+        0,
+        6
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "4j1eFlPq",
+      "match": "Partick Thistle W — Spartans W",
+      "league": "SCOTLAND: SWPL 1 Women",
+      "minute": 55,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "fu8yxX3j",
+      "match": "Jaraaf — Teungueth",
+      "league": "SENEGAL: Ligue 1",
+      "minute": 17,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "Betway",
+          "Ladbrokes"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "Betway",
+          "Ladbrokes"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "QPH5sgtT",
+      "match": "Pikine — Ouakam",
+      "league": "SENEGAL: Ligue 1",
+      "minute": 45,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "GpmWNn2E",
+      "match": "Bo Rangers — Bullom Stars",
+      "league": "SIERRA LEONE: Premier League",
+      "minute": 45,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "OAjvMQWQ",
+      "match": "Waterloo — Mighty Blackpool",
+      "league": "SIERRA LEONE: Premier League",
+      "minute": 45,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "Betway",
+          "Ladbrokes"
+        ],
+        "FI": [
+          "1xBet"
+        ],
+        "ES": [
+          "Betway"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "fgsAG4fl",
+      "match": "Western — Kamboi Eagles",
+      "league": "SIERRA LEONE: Premier League",
+      "minute": 45,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "nqA3gtNE",
+      "match": "Dep. A Coruna W — Barcelona W",
+      "league": "SPAIN: Liga F Women",
+      "minute": 17,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "DE": [
+          "Neobet",
+          "Oddset.de"
+        ],
+        "NL": [
+          "Sevelev.nl"
+        ],
+        "NO": [
+          "Betsmith",
+          "Stake.com"
+        ],
+        "PL": [
+          "Superbet.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "KrRC5gcM",
+      "match": "Athletic Bilbao B W — Albacete W",
+      "league": "SPAIN: Primera Federacion Women",
+      "minute": 90,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "FI": [
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "SnwZay9K",
+      "match": "Lugo — Mirandes",
+      "league": "SPAIN: Primera RFEF - Group 1",
+      "minute": 79,
+      "score": [
+        1,
+        3
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "bet365"
+        ],
+        "SE": [
+          "bet365"
+        ],
+        "FI": [
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "p6YSlB0J",
+      "match": "UD Logrones — Arenas Getxo",
+      "league": "SPAIN: Primera RFEF - Group 1",
+      "minute": 86,
+      "score": [
+        1,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "M7RBopWj",
+      "match": "Algeciras — Antequera",
+      "league": "SPAIN: Primera RFEF - Group 2",
+      "minute": 90,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "8C3YvFxP",
+      "match": "Coruxo FC — Llanera",
+      "league": "SPAIN: Segunda RFEF - Group 1",
+      "minute": 56,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "61njcdhg",
+      "match": "Gernika — Oviedo B",
+      "league": "SPAIN: Segunda RFEF - Group 1",
+      "minute": 60,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "za5Qty8C",
+      "match": "Compostela — Ourense CF",
+      "league": "SPAIN: Segunda RFEF - Group 1",
+      "minute": 60,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "dny3LwfA",
+      "match": "Olot — Espanyol B",
+      "league": "SPAIN: Segunda RFEF - Group 2",
+      "minute": 15,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "naOlCZGd",
+      "match": "Terrassa — Tudelano",
+      "league": "SPAIN: Segunda RFEF - Group 2",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "by9h2Ua5",
+      "match": "Alcoyano — CF Intercity",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 55,
+      "score": [
+        3,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "zygQGTEb",
+      "match": "La Nucia — Valencia B",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "viYcVSTi",
+      "match": "Yeclano — Castellon B",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 61,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "61C008UH",
+      "match": "Castellonense — Orihuela",
+      "league": "SPAIN: Segunda RFEF - Group 3",
+      "minute": 71,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "YV2pIepL",
+      "match": "Xerez CD — Antoniano",
+      "league": "SPAIN: Segunda RFEF - Group 4",
+      "minute": 16,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "Betclic.pl",
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "MHSDaSCd",
+      "match": "CD Badajoz — Don Benito",
+      "league": "SPAIN: Segunda RFEF - Group 4",
+      "minute": 45,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "MyJ7L9ZF",
+      "match": "Mijas Las Lagunas — CD Estepona",
+      "league": "SPAIN: Segunda RFEF - Group 4",
+      "minute": 58,
+      "score": [
+        3,
+        3
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway",
+          "Ladbrokes"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "VivatBet",
+          "Winz.io"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "dKlFzBsK",
+      "match": "Puertollano C.F. — CF Talavera",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 55,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "lKGYu6Ja",
+      "match": "Conquense — Guadalajara",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 56,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Kpz9PpZI",
+      "match": "Gimnastica Segoviana — Real Avila",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 60,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "BetMGM.se",
+          "Dbet",
+          "Expektse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ],
+        "IT": [
+          "BetflagIT",
+          "BetssonIT",
+          "GoldBet",
+          "Lottomatica",
+          "Planetwin365",
+          "SNAI",
+          "Sisal",
+          "bet365.it"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl",
+          "eFortuna.pl"
+        ],
+        "CA": [
+          "Sports Interaction",
+          "Stake.com",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "UDdTC7kD",
+      "match": "Navalcarnero — Getafe B",
+      "league": "SPAIN: Segunda RFEF - Group 5",
+      "minute": 87,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet",
+          "Winz.io",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "U9MRxcPr",
+      "match": "Barco — Boiro",
+      "league": "SPAIN: Tercera RFEF - Group 1",
+      "minute": 45,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "Kt07kz9l",
+      "match": "Pontevedra B — Atletico Arteixo",
+      "league": "SPAIN: Tercera RFEF - Group 1",
+      "minute": 84,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "0zt2Myu2",
+      "match": "Antela — Sarriana",
+      "league": "SPAIN: Tercera RFEF - Group 1",
+      "minute": 87,
+      "score": [
+        3,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "I3Y1bZ4m",
+      "match": "Conil — Xerez D.F.C.",
+      "league": "SPAIN: Tercera RFEF - Group 10",
+      "minute": 57,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "MsjpthkJ",
+      "match": "Linense — Portuense",
+      "league": "SPAIN: Tercera RFEF - Group 10",
+      "minute": 57,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "YkHYMKun",
+      "match": "Cardassar — Llosetense",
+      "league": "SPAIN: Tercera RFEF - Group 11",
+      "minute": 45,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "IwsP2HfU",
+      "match": "PE Sant Jordi — Porreres",
+      "league": "SPAIN: Tercera RFEF - Group 11",
+      "minute": 56,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "pxcIXzfn",
+      "match": "Cotillas CD — CD Algar",
+      "league": "SPAIN: Tercera RFEF - Group 13",
+      "minute": 55,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "Eg2BMAoo",
+      "match": "Olimpico de Totana — FC Cartagena SAD B",
+      "league": "SPAIN: Tercera RFEF - Group 13",
+      "minute": 90,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "tf55Tw16",
+      "match": "Llerenense — Pueblonuevo",
+      "league": "SPAIN: Tercera RFEF - Group 14",
+      "minute": 86,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "tfoOTnek",
+      "match": "Guadiana — Gevora",
+      "league": "SPAIN: Tercera RFEF - Group 14",
+      "minute": 88,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "vRdpyV2F",
+      "match": "Jaraiz — CD Zafra",
+      "league": "SPAIN: Tercera RFEF - Group 14",
+      "minute": 90,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "Y5Blud2T",
+      "match": "Haro Deportivo — Berceo",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 55,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "drk6cwIc",
+      "match": "Calasancio — Cenicero",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 89,
+      "score": [
+        1,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "SQaZrv34",
+      "match": "Calahorra — Varea",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 90,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "hf4uNdto",
+      "match": "Alfaro — River Ebro",
+      "league": "SPAIN: Tercera RFEF - Group 16",
+      "minute": 90,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "6J5n32Ab",
+      "match": "Caspe — CD Sietamo",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 86,
+      "score": [
+        2,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "vX3f1tuB",
+      "match": "Fraga — Belchite 97",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 87,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "Oxoz9XtK",
+      "match": "Atletico Monzon — Ejea",
+      "league": "SPAIN: Tercera RFEF - Group 17",
+      "minute": 89,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "Ial4BrYa",
+      "match": "Toledo — Villarrobledo",
+      "league": "SPAIN: Tercera RFEF - Group 18",
+      "minute": 87,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "lEBFEKo8",
+      "match": "Caudal Deportivo — CD Colunga",
+      "league": "SPAIN: Tercera RFEF - Group 2",
+      "minute": 14,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "ES": [
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "NO": [
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "K0YndCVt",
+      "match": "Langreo — Club Siero",
+      "league": "SPAIN: Tercera RFEF - Group 2",
+      "minute": 54,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "4QLS8kFn",
+      "match": "L'Entregu — Andes",
+      "league": "SPAIN: Tercera RFEF - Group 2",
+      "minute": 62,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK"
+        ],
+        "FI": [
+          "VivatBet"
+        ],
+        "ES": [
+          "Sportium.es"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "IgeG0csn",
+      "match": "Revilla — Cayon",
+      "league": "SPAIN: Tercera RFEF - Group 3",
+      "minute": 12,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "PL": [
+          "Superbet.pl"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "SUF6tfdU",
+      "match": "Castro — Guarnizo",
+      "league": "SPAIN: Tercera RFEF - Group 3",
+      "minute": 45,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "fHHbrGRH",
+      "match": "Tropezon — Vimenor",
+      "league": "SPAIN: Tercera RFEF - Group 3",
+      "minute": 54,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "p4PWAv5l",
+      "match": "Leioa — Real Sociedad C",
+      "league": "SPAIN: Tercera RFEF - Group 4",
+      "minute": 60,
+      "score": [
+        1,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "FI": [
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "zy3CNHlf",
+      "match": "Amurrio Club — Durango",
+      "league": "SPAIN: Tercera RFEF - Group 4",
+      "minute": 62,
+      "score": [
+        0,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {},
+      "exact_over_1_50_regions": {},
+      "status": "NO_TOTAL_MARKET_IN_12_REGION_RESPONSES"
+    },
+    {
+      "fs_id": "6q7MCwlg",
+      "match": "Peralada — CF Badalona",
+      "league": "SPAIN: Tercera RFEF - Group 5",
+      "minute": 90,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "S0hYlCfT",
+      "match": "Ontinyent 1931 — Atzeneta",
+      "league": "SPAIN: Tercera RFEF - Group 6",
+      "minute": 56,
+      "score": [
+        2,
+        2
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "fmfQjYPG",
+      "match": "Utiel — SC Torrevieja",
+      "league": "SPAIN: Tercera RFEF - Group 6",
+      "minute": 56,
+      "score": [
+        0,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "SE": [
+          "Dbet"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es",
+          "Versus.es"
+        ],
+        "IT": [
+          "BetssonIT"
+        ],
+        "NO": [
+          "Betsmith",
+          "Lilibet",
+          "Stake.com"
+        ],
+        "PL": [
+          "STS.pl"
+        ],
+        "CA": [
+          "Stake.com"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "2XL9O8KN",
+      "match": "San Sebastian Reyes B — RC Alcobendas",
+      "league": "SPAIN: Tercera RFEF - Group 7",
+      "minute": 57,
+      "score": [
+        2,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "FI": [
+          "1xBet",
+          "Stake.com",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "7BetUK",
+          "Betway"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    },
+    {
+      "fs_id": "CAwQKRw1",
+      "match": "Atletico de Porcuna — Torredonjimeno",
+      "league": "SPAIN: Tercera RFEF - Group 9",
+      "minute": 42,
+      "score": [
+        1,
+        2
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "NO": [
+          "Lilibet"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "I7bTA6yo",
+      "match": "Bucaspor 1928 — Karsiyaka",
+      "league": "TURKEY: 3. Lig Group 2",
+      "minute": 57,
+      "score": [
+        0,
+        1
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "CA",
+        "DE",
+        "ES",
+        "FI",
+        "FR",
+        "GB",
+        "IT",
+        "NL",
+        "NO",
+        "PL",
+        "SE",
+        "US"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "Coolbet",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Sportium.es"
+        ],
+        "IT": [
+          "SNAI",
+          "Sisal"
+        ],
+        "DE": [
+          "Neobet"
+        ],
+        "NO": [
+          "Betsmith"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_OTHER_OR_UNVERIFIED_TOTAL"
+    },
+    {
+      "fs_id": "SWn7bYP0",
+      "match": "Al Jazira — Bani Yas",
+      "league": "UNITED ARAB EMIRATES: League Cup",
+      "minute": 84,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Coolbet",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "zcjFdCfD",
+      "match": "Ittihad Kalba — Shabab Al Ahli Dubai",
+      "league": "UNITED ARAB EMIRATES: League Cup",
+      "minute": 85,
+      "score": [
+        1,
+        1
+      ],
+      "in_entry_window": false,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "BetMGM.uk",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "Midnite"
+        ],
+        "SE": [
+          "1x2",
+          "BetMGM.se",
+          "Coolbet",
+          "Dbet",
+          "Expektse",
+          "Unibetse"
+        ],
+        "FI": [
+          "1xBet",
+          "Coolbet",
+          "VivatBet"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es"
+        ]
+      },
+      "exact_over_1_50_regions": {},
+      "status": "ACTIVE_TOTAL_OUTSIDE_ENTRY_WINDOW"
+    },
+    {
+      "fs_id": "pCJTFMmA",
+      "match": "Suriname — Eswatini",
+      "league": "WORLD: Friendly International",
+      "minute": 15,
+      "score": [
+        1,
+        0
+      ],
+      "in_entry_window": true,
+      "regions_checked": [
+        "ES",
+        "FI",
+        "GB",
+        "SE"
+      ],
+      "api_errors": {},
+      "active_total_regions": {
+        "GB": [
+          "7BetUK",
+          "Betfred",
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "1x2",
+          "Dbet",
+          "Unibetse",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "exact_over_1_50_regions": {
+        "GB": [
+          "Betway",
+          "Ladbrokes",
+          "bet365"
+        ],
+        "SE": [
+          "Dbet",
+          "bet365"
+        ],
+        "FI": [
+          "1xBet",
+          "VivatBet",
+          "bet365"
+        ],
+        "ES": [
+          "Betway",
+          "Versus.es",
+          "bet365"
+        ]
+      },
+      "status": "EXACT_NEXT_GOAL_OVER_1_50_OBSERVED"
+    }
+  ],
+  "duration_seconds": 60.59,
+  "notes": "100% means every Flashscore LIVE ID was checked; this does not mean every match has a live available total. A display geo parameter does not alter physical IP, and odds are not guaranteed executable. API errors are not no-odds claims."
 }

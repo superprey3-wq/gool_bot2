@@ -1,0 +1,16 @@
+GOOL_AUDIT_CONFIG telegram_mode=shadow brain=PASS_ONLY min_data=0.30 side_pass=0.62 any_pass=0.64 steam_delta=5.0 steam_moves=2 flow30=200 flow_fair_pp=1.5
+GOOL_XBET_TRAJECTORY installed direction=reversal+retrace+latest_step window=120s
+GOOL_LIVE_HAZARD_CONFIG ft_min=0.48 ft_late=0.50 fh_min=0.40 fh_late=0.42 late_xg=1.20
+GOOL_STEAM_QUALITY installed base=6pp/2x two_move=7pp persistent=6pp/3x/2markets extreme=8pp/3x retrace<=1.5pp
+GOOL_STEAM_RED_GUARD installed mode=block_any_current_red_card
+GOOL_BRAIN_V3_MEMORY installed snapshots=continuous windows=3/5/10/15m epochs=score+half mode=active_memory
+GOOL_BROWSER_CONTEXT_RUNTIME installed stats=fallback_only trends=capped_support
+GOOL_BRAIN_V3_LEARNING installed samples=0 min_global=30 min_pattern=15 max_adjust=3.0pp mode=analyze_every_settlement+slow_calibration
+GOOL_BRAIN_V3_LEARNING_RUNTIME installed scope=ordinary_gool settlement_review=on adaptive_calibration=guarded
+GOOL_BRAIN_V3_FULL_MATCH installed first_half=1-45 second_half=46-until-finished halftime=paused fixed_clock_veto=off
+GOOL_BRAIN_V3_TREND_LEARNING installed scope=historical_goal_trends outcome_review=on
+GOOL_BRAIN_V3_ACTIVE installed ordinary=authoritative full_match=1-45+46-95 strong_live=guarded_live_only decision_audit=selection+under_countercase live=multi_source+chromium_fallback prematch+trends=capped_support 1xbet=odds_only matchbook=separate
+GOOL_BRAIN_V3_SELECTION installed mode=two_full_field_scans+self_check+tournament 1h_floor=0.72 2h_floor=0.69 strong_live_floor=0.54 field_scans=2
+GOOL_BRAIN_V3_STABILITY installed rule=deterioration_survives_market_rechecks
+GOOL_FIELD_SCAN installed rule=two_completed_football_passes market_rechecks=freshness_only
+XBET_GOOL2_FULL_LIVE_REPORT {"observed_at_utc": "2026-11-15T16:27:11.501160+00:00", "status": "COMPLETE", "source": "GOOL2_RobustXBetMarketCollector", "source_mode": "legacy_livefeed", "legacy_root": "https://1xbet.fi/service-api/LiveFeed", "index_football_events": 126, "index_cache_used": false, "flashscore_live": 109, "name_matched_UNVERIFIED": 81, "got_live_market_trees": 77, "game_market_unavailable": 4, "detail_game_score_synced": 12, "detail_score_unknown": 60, "detail_score_mismatch": 5, "exact_live_next_goal_1_50_verified": 7, "duration_seconds": 150.03, "limits": "Name-matched means GOOL2 fuzzy mapping, not confirmed identity. Verified next goal requires detail score agreement, exact period and 1.50-3.00 Over+Under with <=14% margin. No bookmaker executable-order verification."}

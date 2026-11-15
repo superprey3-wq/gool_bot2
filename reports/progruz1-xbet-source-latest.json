@@ -1,0 +1,708 @@
+{
+  "observed_at_utc": "2026-11-15T16:27:11.501160+00:00",
+  "status": "COMPLETE",
+  "source": "GOOL2_RobustXBetMarketCollector",
+  "source_mode": "legacy_livefeed",
+  "legacy_root": "https://1xbet.fi/service-api/LiveFeed",
+  "index_football_events": 126,
+  "index_root_counts": {
+    "https://1xbet.com/service-api/LiveFeed": 0,
+    "https://1xbet.com/LiveFeed": 0,
+    "https://1xbet.fi/service-api/LiveFeed": 126,
+    "https://1xbet.fi/LiveFeed": 0
+  },
+  "v3_attempts": [],
+  "index_cache_used": false,
+  "flashscore_live": 109,
+  "name_matched_UNVERIFIED": 81,
+  "got_live_market_trees": 77,
+  "game_market_unavailable": 4,
+  "detail_game_score_synced": 12,
+  "detail_score_unknown": 60,
+  "detail_score_mismatch": 5,
+  "exact_live_next_goal_1_50_verified": 7,
+  "verified_examples": [
+    {
+      "id": "GpmWNn2E",
+      "match": "Bo Rangers — Bullom Stars",
+      "minute": 4,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.6,
+        "under": 2.25,
+        "margin": 0.0694
+      }
+    },
+    {
+      "id": "OAjvMQWQ",
+      "match": "Waterloo — Mighty Blackpool",
+      "minute": 9,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.755,
+        "under": 2.0,
+        "margin": 0.0698
+      }
+    },
+    {
+      "id": "U9MRxcPr",
+      "match": "Barco — Boiro",
+      "minute": 9,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.625,
+        "under": 2.2,
+        "margin": 0.0699
+      }
+    },
+    {
+      "id": "fgsAG4fl",
+      "match": "Western — Kamboi Eagles",
+      "minute": 10,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.83,
+        "under": 1.91,
+        "margin": 0.07
+      }
+    },
+    {
+      "id": "GzxdiPNq",
+      "match": "U. San Martin — Union Comercio",
+      "minute": 19,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.835,
+        "under": 1.904,
+        "margin": 0.0702
+      }
+    },
+    {
+      "id": "zNejCzJE",
+      "match": "Leuven W — Genk W",
+      "minute": 22,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.536,
+        "under": 2.392,
+        "margin": 0.0691
+      }
+    },
+    {
+      "id": "WvxvixiK",
+      "match": "Pisek — Benesov",
+      "minute": 22,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 1.536,
+        "under": 2.392,
+        "margin": 0.0691
+      }
+    },
+    {
+      "id": "4j1eFlPq",
+      "match": "Partick Thistle W — Spartans W",
+      "minute": 22,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.515,
+        "under": 2.375,
+        "margin": 0.0811
+      }
+    },
+    {
+      "id": "fXu9sbcU",
+      "match": "Feirense W — Torreense W",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        2
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "8C3YvFxP",
+      "match": "Coruxo FC — Llanera",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 1.97,
+        "under": 1.832,
+        "margin": 0.0535
+      }
+    },
+    {
+      "id": "naOlCZGd",
+      "match": "Terrassa — Tudelano",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 1.86,
+        "under": 1.94,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "zygQGTEb",
+      "match": "La Nucia — Valencia B",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.01,
+        "under": 1.8,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "MHSDaSCd",
+      "match": "CD Badajoz — Don Benito",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 2.085,
+        "under": 1.744,
+        "margin": 0.053
+      }
+    },
+    {
+      "id": "lKGYu6Ja",
+      "match": "Conquense — Guadalajara",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 2.01,
+        "under": 1.8,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "dKlFzBsK",
+      "match": "Puertollano C.F. — CF Talavera",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.21,
+        "under": 1.665,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "IwsP2HfU",
+      "match": "PE Sant Jordi — Porreres",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "pxcIXzfn",
+      "match": "Cotillas CD — CD Algar",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.944,
+        "under": 1.8,
+        "margin": 0.07
+      }
+    },
+    {
+      "id": "fHHbrGRH",
+      "match": "Tropezon — Vimenor",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.925,
+        "under": 1.82,
+        "margin": 0.0689
+      }
+    },
+    {
+      "id": "S0hYlCfT",
+      "match": "Ontinyent 1931 — Atzeneta",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "2XL9O8KN",
+      "match": "San Sebastian Reyes B — RC Alcobendas",
+      "minute": 23,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        1
+      ],
+      "xbet_game_score": [
+        1,
+        1
+      ],
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "by9h2Ua5",
+      "match": "Alcoyano — CF Intercity",
+      "minute": 24,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        1
+      ],
+      "xbet_game_score": [
+        1,
+        1
+      ],
+      "score_synced": true,
+      "paired_target_total": true,
+      "exact_over_1_50": true,
+      "actual_price": {
+        "line": 2.5,
+        "over": 2.21,
+        "under": 1.665,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "K0YndCVt",
+      "match": "Langreo — Club Siero",
+      "minute": 24,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.8,
+        "under": 1.944,
+        "margin": 0.07
+      }
+    },
+    {
+      "id": "fmfQjYPG",
+      "match": "Utiel — SC Torrevieja",
+      "minute": 24,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.04,
+        "under": 1.725,
+        "margin": 0.0699
+      }
+    },
+    {
+      "id": "I7bTA6yo",
+      "match": "Bucaspor 1928 — Karsiyaka",
+      "minute": 24,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 1.67,
+        "under": 2.13,
+        "margin": 0.0683
+      }
+    },
+    {
+      "id": "Aev4Pw5A",
+      "match": "Asante Kotoko — Bibiani Gold Stars",
+      "minute": 25,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.31,
+        "under": 1.57,
+        "margin": 0.0698
+      }
+    },
+    {
+      "id": "I3jfUELj",
+      "match": "Binga — Djoliba",
+      "minute": 25,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        1
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 2.62,
+        "under": 1.49,
+        "margin": 0.0528
+      }
+    },
+    {
+      "id": "61njcdhg",
+      "match": "Gernika — Oviedo B",
+      "minute": 25,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "viYcVSTi",
+      "match": "Yeclano — Castellon B",
+      "minute": 25,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 2.01,
+        "under": 1.8,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "Kpz9PpZI",
+      "match": "Gimnastica Segoviana — Real Avila",
+      "minute": 25,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.085,
+        "under": 1.744,
+        "margin": 0.053
+      }
+    },
+    {
+      "id": "za5Qty8C",
+      "match": "Compostela — Ourense CF",
+      "minute": 26,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 0.5,
+        "over": 2.175,
+        "under": 1.688,
+        "margin": 0.0522
+      }
+    },
+    {
+      "id": "MyJ7L9ZF",
+      "match": "Mijas Las Lagunas — CD Estepona",
+      "minute": 26,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        2,
+        1
+      ],
+      "xbet_game_score": [
+        2,
+        1
+      ],
+      "score_synced": true,
+      "paired_target_total": true,
+      "exact_over_1_50": true,
+      "actual_price": {
+        "line": 3.5,
+        "over": 1.86,
+        "under": 1.94,
+        "margin": 0.0531
+      }
+    },
+    {
+      "id": "4QLS8kFn",
+      "match": "L'Entregu — Andes",
+      "minute": 26,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        1,
+        1
+      ],
+      "xbet_game_score": [
+        1,
+        1
+      ],
+      "score_synced": true,
+      "paired_target_total": true,
+      "exact_over_1_50": true,
+      "actual_price": {
+        "line": 2.5,
+        "over": 1.944,
+        "under": 1.8,
+        "margin": 0.07
+      }
+    },
+    {
+      "id": "p4PWAv5l",
+      "match": "Leioa — Real Sociedad C",
+      "minute": 26,
+      "period": "FIRST_HALF",
+      "flashscore_score": [
+        0,
+        1
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": true,
+      "exact_over_1_50": false,
+      "actual_price": {
+        "line": 1.5,
+        "over": 1.8,
+        "under": 1.944,
+        "margin": 0.07
+      }
+    },
+    {
+      "id": "Y7jQ7dY9",
+      "match": "PEC Zwolle W — Utrecht W",
+      "minute": 37,
+      "period": "OUTSIDE_WINDOW",
+      "flashscore_score": [
+        0,
+        0
+      ],
+      "xbet_game_score": null,
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    },
+    {
+      "id": "SAmI9I3c",
+      "match": "Feyenoord W — Heerenveen W",
+      "minute": 38,
+      "period": "OUTSIDE_WINDOW",
+      "flashscore_score": [
+        0,
+        1
+      ],
+      "xbet_game_score": [
+        1,
+        1
+      ],
+      "score_synced": false,
+      "paired_target_total": false,
+      "exact_over_1_50": false,
+      "actual_price": null
+    }
+  ],
+  "duration_seconds": 150.03,
+  "limits": "Name-matched means GOOL2 fuzzy mapping, not confirmed identity. Verified next goal requires detail score agreement, exact period and 1.50-3.00 Over+Under with <=14% margin. No bookmaker executable-order verification."
+}

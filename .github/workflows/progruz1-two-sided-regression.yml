@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/progruz1-two-sided-regression.yml
+      - ci_progruz1_two_sided/**
   workflow_dispatch:
 permissions:
   contents: read

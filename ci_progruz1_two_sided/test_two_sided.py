@@ -62,11 +62,11 @@ def test_late_nil_nil_is_stricter():
 
 
 def test_early_opening_half_can_pass_with_real_shorter_team_delta():
-    r=scenario(minute=5,score=(0,0),shots=(4,3),sot=(2,2),
+    r=scenario(minute=5,score=(0,0),shots=(4,4),sot=(2,2),
         opening_shots_by_team=(2,2),
         opening_sot_by_team=(1,1),opening_sample_age=60)
     assert r["id"]=="TWO_SIDED"
-    unknown=scenario(minute=5,score=(0,0),shots=(4,3),sot=(2,2))
+    unknown=scenario(minute=5,score=(0,0),shots=(4,4),sot=(2,2))
     assert unknown["id"]=="STATE_RISK"
 
 

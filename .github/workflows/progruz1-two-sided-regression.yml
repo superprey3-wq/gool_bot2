@@ -22,4 +22,4 @@ jobs:
       - name: Test exact PROGRUZ1 TWO_SIDED classifier snapshot
         run: |
           cd ci_progruz1_two_sided
-          python -m pytest -q test_two_sided.py test_goal_hard_veto.py
+          python -m pytest -q test_two_sided.py test_goal_hard_veto.py test_fast_strong_scenarios.py

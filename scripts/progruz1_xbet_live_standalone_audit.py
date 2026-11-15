@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import pathlib
 import time
+import threading
 from datetime import datetime, timezone
 from gool_bot2.xbet_market_robust import RobustXBetMarketCollector
+from gool_bot2 import xbet_market_pressure as market
 
 
 OUT=pathlib.Path("reports/progruz1-xbet-source-latest.json")
@@ -24,6 +26,40 @@ def run():
         pathlib.Path("reports/progruz1-xbet-rawstate.json"),
         pathlib.Path("reports/progruz1-xbet-temp-history.jsonl"))
     captured={}
+    indexed_scores={}
+    index_lock=threading.Lock()
+
+    # Preserve the robust collector's original LIVE-index behaviour while
+    # retaining each returned 1xBet event's authoritative score field.
+    # No extra requests, no time-sensitive score guessed from Flashscore.
+    def capture_index_rows(root, query):
+        payload=market._http_json(
+            f"{root}/Get1x2_VZip?{query}",timeout=7.0)
+        values=payload.get("Value") if isinstance(payload,dict) else None
+        if not isinstance(values,list):
+            return root,[]
+        rows=[]
+        for event in values:
+            if not isinstance(event,dict):
+                continue
+            event_id=str(event.get("I") or "").strip()
+            home=str(event.get("O1") or "").strip()
+            away=str(event.get("O2") or "").strip()
+            if not event_id or not home or not away:
+                continue
+            rows.append({"event_id":event_id,"home":home,"away":away,"root":root})
+            sc=(event.get("SC") or {}).get("FS") or {}
+            try:
+                actual=(int(sc["S1"]),int(sc["S2"]))
+            except (KeyError,ValueError,TypeError):
+                continue
+            if min(actual)<0:
+                continue
+            with index_lock:
+                indexed_scores.setdefault(event_id,set()).add(actual)
+        return root,rows
+
+    collector._index_rows=capture_index_rows
     original_game=collector._game
 
     def remember_game(event_id):
@@ -73,6 +109,14 @@ def run():
                                 "under":under,"margin":round(margin,4)})
         paired=bool(matches)
         synced=book_score==fs_score
+        index_options=indexed_scores.get(event_id) or set()
+        index_score=next(iter(index_options)) if len(index_options)==1 else None
+        index_synced=index_score==fs_score
+        # Index score and price are two independent responses; this is a
+        # candidate, not a verified bookmaker executable price.
+        indexed_price=bool(
+            paired and index_synced and first+second==1
+            and 1.50<=matches[0]["over"]<=3.00)
         confirmed_price=bool(
             paired and synced and first+second==1
             and 1.50<=matches[0]["over"]<=3.00)
@@ -83,6 +127,9 @@ def run():
             "period":period,
             "flashscore_score":list(fs_score),
             "xbet_game_score":list(book_score) if book_score else None,
+            "xbet_index_score":list(index_score) if index_score is not None else None,
+            "index_score_synced":index_synced,
+            "potential_price_with_index_score":indexed_price,
             "score_synced":synced,"paired_target_total":paired,
             "exact_over_1_50":confirmed_price,
             "actual_price":matches[0] if matches else None,
@@ -104,6 +151,14 @@ def run():
         "got_live_market_trees":state.get("fetched_live_markets"),
         "game_market_unavailable":state.get("game_market_unavailable"),
         "detail_game_score_synced":synced,
+        "index_game_score_synced":sum(
+            x["index_score_synced"] for x in values),
+        "index_score_unknown":sum(
+            x["xbet_index_score"] is None for x in values),
+        "index_and_detail_score_both_agree":sum(
+            x["score_synced"] and x["index_score_synced"] for x in values),
+        "potential_next_goal_1_50_with_index_score":sum(
+            x["potential_price_with_index_score"] for x in values),
         "detail_score_unknown":sum(x["xbet_game_score"] is None for x in values),
         "detail_score_mismatch":sum(
             x["xbet_game_score"] is not None and not x["score_synced"]

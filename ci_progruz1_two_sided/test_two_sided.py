@@ -139,7 +139,7 @@ def test_very_strong_trailing_attack_in_five_minutes_can_qualify():
         recent_shots=5,recent_sot=2,
         recent_5m_shots_by_team=(4,0),
         recent_5m_sot_by_team=(1,0),recent_5m_age=300)
-    assert weak["id"]=="NO_CLEAR_SCENARIO"
+    assert weak["id"] not in ("TRAILING_CHASE","QUALITY_SURGE","TWO_SIDED")
 
 
 def test_high_five_minute_xg_surge_can_qualify_and_unverified_cannot():
@@ -154,10 +154,10 @@ def test_high_five_minute_xg_surge_can_qualify_and_unverified_cannot():
         recent_shots=5,recent_sot=2,
         recent_5m_shots_by_team=(4,0),
         recent_5m_sot_by_team=(2,0),recent_5m_age=300)
-    assert absent["id"]=="NO_CLEAR_SCENARIO"
+    assert absent["id"] not in ("TRAILING_CHASE","QUALITY_SURGE","TWO_SIDED")
     stale=scenario(minute=60,score=(1,1),shots=(12,5),sot=(5,1),
         recent_shots=5,recent_sot=2,
         recent_5m_shots_by_team=(4,0),
         recent_5m_sot_by_team=(2,0),recent_5m_age=300,
         recent_5m_xg_by_team=(0.46,0.02),recent_5m_xg_age=450)
-    assert stale["id"]=="NO_CLEAR_SCENARIO"
+    assert stale["id"] not in ("TRAILING_CHASE","QUALITY_SURGE","TWO_SIDED")

@@ -104,6 +104,8 @@ def classify_scenario(*, minute: int, score: tuple[int, int],
                       opening_sample_age: int = 0,
                       recent_10m_xg_by_team: tuple[float, float] | None = None,
                       recent_10m_xg_age: int = 0,
+                      recent_5m_xg_by_team: tuple[float, float] | None = None,
+                      recent_5m_xg_age: int = 0,
                       first_half_score: tuple[int, int] | None = None,
                       first_half_sot_total: int | None = None,
                       first_half_xg_total: float | None = None,
@@ -194,26 +196,54 @@ def classify_scenario(*, minute: int, score: tuple[int, int],
     if shots10 is not None and sot10 is not None and any(
             sot10[i] > shots10[i] for i in (0, 1)):
         shots10, sot10 = None, None
+    xg5 = (_verified_pair(recent_5m_xg_by_team)
+           if type(recent_5m_xg_age) is int
+           and 240 <= recent_5m_xg_age <= 360 else None)
     cards = _verified_pair(red_cards, integer=True)
 
-    # Do not rename the failed 2H_DOMINATION logic: this demands xG
-    # growth within a *real 8-10 minute window* and contemporary team shots.
+    # Each scenario can confirm its OWN current LIVE event, but must
+    # use independent snapshots; old full-match shot totals cannot
+    # substitute for newly observed momentum.
     quality = False
     chasing = False
     if second_half and 52 <= minute <= 72 and total >= 1:
+        # Existing 8-10-minute quality signal (unchanged).
         if shots10 is not None and sot10 is not None and xg10 is not None:
             quality = (recent_shots >= 4 and recent_sot >= 2 and
                        any(xg10[i] >= 0.45
                            and shots10[i] >= 3 and sot10[i] >= 1
                            and (cards is None or cards[i] == 0)
                            for i in (0, 1)))
-        if (gap == 1 and trailing is not None
-                and shots10 is not None and sot10 is not None
-                and (cards is None or cards[trailing] == 0)):
-            chasing = (shots[trailing] >= 6 and sot[trailing] >= 2
-                       and shots10[trailing] >= 3
-                       and sot10[trailing] >= 1
-                       and recent_shots >= 4 and recent_sot >= 2)
+        # NEW: a sharp 4-6 minute *verified* xG and SOT burst is also
+        # meaningful, even before a 10-minute baseline exists. This is
+        # NOT permission from a single whole-match xG snapshot.
+        if (not quality and shots5 is not None and sot5 is not None
+                and xg5 is not None and recent_shots >= 4
+                and recent_sot >= 2):
+            quality = any(
+                xg5[i] >= 0.40 and shots5[i] >= 3 and sot5[i] >= 2
+                and (cards is None or cards[i] == 0)
+                for i in (0,1))
+            if quality:
+                notes.append("QUALITY_SURGE_CONFIRMED_XG_5M")
+        if gap == 1 and trailing is not None and (
+                cards is None or cards[trailing] == 0):
+            # Existing 8-10-minute trailing-team chase (unchanged).
+            if shots10 is not None and sot10 is not None:
+                chasing = (shots[trailing] >= 6 and sot[trailing] >= 2
+                           and shots10[trailing] >= 3
+                           and sot10[trailing] >= 1
+                           and recent_shots >= 4 and recent_sot >= 2)
+            # NEW: exceptional verified 4-6-minute trailing attack
+            # avoids waiting for a ten-minute baseline, but needs
+            # stronger real pressure: 4 shots and 2 on target.
+            if (not chasing and shots5 is not None and sot5 is not None):
+                chasing = (shots[trailing] >= 6 and sot[trailing] >= 2
+                           and shots5[trailing] >= 4
+                           and sot5[trailing] >= 2
+                           and recent_shots >= 4 and recent_sot >= 2)
+                if chasing:
+                    notes.append("TRAILING_CHASE_CONFIRMED_SHOTS_5M")
 
     old_two_sided_candidate = (
         min(shots) >= 4 and min(sot) >= 1 and
@@ -262,5 +292,5 @@ def classify_scenario(*, minute: int, score: tuple[int, int],
         "notes": notes,
         "corner_evidence": None,
         "shadow_decision": "RISK" if risk else "RETAIN",
-        "version": 8,
+        "version": 9,
     }

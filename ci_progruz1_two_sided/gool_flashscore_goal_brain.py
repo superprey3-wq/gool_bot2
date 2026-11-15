@@ -654,6 +654,8 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
         opening_sample_age=pressure.get("sample_age",0),
         recent_10m_xg_by_team=ctx.get("recent_10m_xg_by_team"),
         recent_10m_xg_age=ctx.get("recent_10m_xg_age",0),
+        recent_5m_xg_by_team=ctx.get("recent_5m_xg_by_team"),
+        recent_5m_xg_age=ctx.get("recent_5m_xg_age",0),
         first_half_score=ht,
         first_half_sot_total=ctx.get("first_half_sot_total"),
         first_half_xg_total=ctx.get("first_half_xg_total"),
@@ -732,9 +734,19 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
         if isinstance(pressure.get("recent_5m_shots_by_team"),(tuple,list)):
             hs,as_=pressure["recent_5m_shots_by_team"]
             detail+=f"; за ~5м удары {hs}:{as_}"
-    if isinstance(scenario,dict) and scenario.get("id") in (
-            "TWO_SIDED","TRAILING_CHASE","QUALITY_SURGE"):
-        detail+=f"; сценарий {scenario['label']}"
+    if isinstance(scenario,dict):
+        notes=scenario.get("notes") or []
+        if "QUALITY_SURGE_CONFIRMED_XG_5M" in notes:
+            fresh=ctx.get("recent_5m_xg_by_team")
+            if isinstance(fresh,(tuple,list)) and len(fresh)==2:
+                detail+=f"; xG за ~5м +{float(fresh[0]):.2f}:+{float(fresh[1]):.2f}"
+        if "TRAILING_CHASE_CONFIRMED_SHOTS_5M" in notes:
+            pulse=pressure.get("recent_5m_shots_by_team")
+            if isinstance(pulse,(tuple,list)) and len(pulse)==2:
+                detail+=f"; удары за ~5м +{pulse[0]}:+{pulse[1]}"
+        if scenario.get("id") in (
+                "TWO_SIDED","TRAILING_CHASE","QUALITY_SURGE"):
+            detail+=f"; сценарий {scenario['label']}"
     return {
         "quote_provider":str(m.get("quote_provider") or "Fonbet"),
         "quote_region":str(m.get("quote_region") or ""),

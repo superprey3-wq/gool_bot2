@@ -36,9 +36,14 @@ def observe_live_batch(batch_rows, *, now, flashscore,
             fail("FS_PREOBSERVE_ID_OR_SCORE_MISSING")
             continue
         try:
-            ctx=flashscore.context(
-                root=root,home=str(fs.home),away=str(fs.away),
-                kickoff=kick,now=now,score=score,fixture_id=fs_id)
+            # The real adapter scouts only LIVE shots/SoT/xG. Test/fake
+            # adapters can keep supporting the original context API.
+            if callable(getattr(flashscore,"scout_live",None)):
+                ctx=flashscore.scout_live(fixture=fs,now=now)
+            else:
+                ctx=flashscore.context(
+                    root=root,home=str(fs.home),away=str(fs.away),
+                    kickoff=kick,now=now,score=score,fixture_id=fs_id)
         except Exception as exc:
             fail("FS_PREOBSERVE_CONTEXT_"+type(exc).__name__)
             continue

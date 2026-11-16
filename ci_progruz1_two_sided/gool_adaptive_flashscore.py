@@ -327,6 +327,7 @@ class FlashscoreContext:
         self.enabled=network_enabled
         self._list=(0,[],[])
         self._cache={}
+        self._scout_cache={}
         self._history={}
         self._daily_cache={}
         self._alternate_live=(0,[])
@@ -391,9 +392,47 @@ class FlashscoreContext:
         self._daily_cache[offset]=(now,matches)
         return matches
 
+    def scout_live(self,*,fixture,now:int)->dict:
+        """One-stat-request scouting for ALL LIVE fixtures.
+
+        The fixture must originate in the current Flashscore master
+        (unique event ID and displayed score). No bookmaker, history,
+        halftime or goal-timeline request runs at this stage; those are
+        reserved for remembered candidates AFTER they turn interesting.
+        """
+        eid=str(getattr(fixture,"provider_match_id","") or "")
+        try:
+            score=(int(fixture.home_score),int(fixture.away_score))
+            minute=int(fixture.minute)
+        except (TypeError,ValueError,OverflowError):
+            return {"ok":False,"reason":"SCOUT_SCORE_OR_MINUTE_UNVERIFIED"}
+        if (not re.fullmatch(r"[A-Za-z0-9]{8}",eid)
+                or any(v<0 or v>70 for v in score)
+                or minute<0 or minute>130):
+            return {"ok":False,"reason":"SCOUT_FIXTURE_ID_UNVERIFIED"}
+        key=(eid,score)
+        cached=self._scout_cache.get(key)
+        # A short LIVE cache is economical without disguising an old
+        # match-wide total as a fresh observed goal burst.
+        if cached and 0<=now-cached[0]<30:
+            return cached[1]
+        if not self.enabled:
+            return {"ok":False,"reason":"SCOUT_NETWORK_DISABLED"}
+        body=self._feed(f"df_st_1_{eid}")
+        stats=parse_match_stats_body(body) if body else {}
+        result={"ok":bool(stats),"event_id":eid,"score":score,
+                "minute":minute,"stats":stats,"updated_at":now,
+                "reason":"" if stats else "SCOUT_LIVE_STATS_UNAVAILABLE",
+                "source":"flashscore"}
+        self._scout_cache[key]=(now,result)
+        while len(self._scout_cache)>350:
+            self._scout_cache.pop(next(iter(self._scout_cache)))
+        return result
+
     def context(self,*,root: str,home: str,away: str,kickoff:int,
                 now:int,score:tuple[int,int]|None=None,
-                fixture_id:str|None=None) -> dict:
+                fixture_id:str|None=None,
+                preobserved_stats:dict|None=None) -> dict:
         # The provider fixture ID is stable across Fonbet/live-odds
         # market roots. Reuse verified LIVE stats across those roots,
         # always separating score changes so a goal forces revalidation.
@@ -407,7 +446,14 @@ class FlashscoreContext:
         cache_ttl=(min(self.ttl,15) if cached
                    and not cached[1].get("ok") else self.ttl)
         if cached and 0<=now-cached[0]<cache_ttl:
-            return cached[1]
+            if (score is not None and isinstance(preobserved_stats,dict)
+                    and preobserved_stats and cached[1].get("ok")):
+                updated=dict(cached[1],stats=preobserved_stats,
+                             updated_at=now,ok=True,reason="")
+                self._cache[key]=(now,updated)
+                return updated
+            if preobserved_stats is None:
+                return cached[1]
         live,future=self.list_matches(now)
         fixture=choose_fixture(home,away,live if score is not None else future,
                                kickoff=kickoff,live_score=score)
@@ -477,8 +523,13 @@ class FlashscoreContext:
             self.seed_history(eid,history)
         stats={}
         if score is not None:
-            body=self._feed(f"df_st_1_{eid}")
-            stats=parse_match_stats_body(body) if body else {}
+            if isinstance(preobserved_stats,dict) and preobserved_stats:
+                # Same verified fixture and current-score stat sample from
+                # scout_live(), not a fresh extra network request.
+                stats=preobserved_stats
+            else:
+                body=self._feed(f"df_st_1_{eid}")
+                stats=parse_match_stats_body(body) if body else {}
         # PROGRUZ 1: verify 1H score from Flashscore itself before
         # proposing a 2H-only market. A match score cannot be used as
         # 2H goals; never borrow the bookmaker's scoreboard for this.

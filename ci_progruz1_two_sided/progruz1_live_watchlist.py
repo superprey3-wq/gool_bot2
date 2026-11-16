@@ -277,10 +277,10 @@ class LiveWatchlist:
             r=self.db.execute(
                 "SELECT status,interest FROM progruz1_live_watchlist "
                 "WHERE fs_id=?",(fid,)).fetchone()
-            if r and (r[0] in ("WATCH","HOT","WAIT_PRICE","WAIT_ENTRY",
-                              "WAIT_SIGNAL","PRICE_CONFIRM")
-                      or fid in confirmed)
-                      and r[0]!="SENT"):
+            if (r and r[0]!="SENT"
+                    and (r[0] in ("WATCH","HOT","WAIT_PRICE","WAIT_ENTRY",
+                                  "WAIT_SIGNAL","PRICE_CONFIRM")
+                         or fid in confirmed)):
                 chosen.append(item)
         return chosen
 

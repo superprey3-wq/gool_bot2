@@ -19,6 +19,10 @@ jobs:
           python-version: '3.11'
       - name: Install minimal pytest
         run: python -m pip install --disable-pip-version-check pytest
+      - name: Compile production LIVE scanner and Telegram status code
+        run: |
+          cd ci_progruz1_two_sided
+          python -m py_compile gool_adaptive_runtime.py gool_adaptive_flashscore.py progruz1_telegram_journal.py progruz1_flashscore_preobserve.py
       - name: Test exact PROGRUZ1 TWO_SIDED classifier snapshot
         run: |
           cd ci_progruz1_two_sided

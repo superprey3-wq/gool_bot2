@@ -957,7 +957,7 @@ class AdaptiveRuntime:
         # settlement and widgets. No confirmed Flashscore fixture can
         # create a second Telegram signal solely by changing quote source.
         with self.db:
-            for root,kick,fs,book in price_rows
+            for root,kick,fs,book in price_rows:
                 if not priced_batch.get(root,{}).get("quotes"):
                     continue
                 if root.startswith("FS:"):

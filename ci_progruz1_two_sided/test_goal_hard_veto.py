@@ -164,3 +164,75 @@ def test_extremely_low_goal_form_stays_blocked_even_with_fresh_surge(monkeypatch
         [quote],ctx,pressure,{"state":"READY","avg_total":1.60})
     assert pick is None
     assert reason=="FS_TEAM_GOAL_FORM_LOW"
+
+
+def test_unpriced_flashscore_match_builds_shot_and_xg_history_before_price():
+    """First cycle has no bookmaker quote; second cycle reuses stable FS history."""
+    import sqlite3
+    from types import SimpleNamespace
+    from gool_goal_live import GoalPressure
+    from progruz1_scenario_evidence import ScenarioEvidence
+    from progruz1_flashscore_preobserve import observe_live_batch
+
+    db=sqlite3.connect(":memory:")
+    gp=GoalPressure(db)
+    se=ScenarioEvidence(db)
+    kick=2_000_000_000
+    stamp=kick+60*60
+    fs=SimpleNamespace(provider_match_id="AbCd1234",home="Home",
+        away="Away",minute=60,home_score=1,away_score=1,
+        meta={"status_code":"13","scheduled_start_ts":kick})
+    class Flash:
+        def context(self,*,now,**kwargs):
+            if now==stamp:
+                shots=(4,3);sot=(1,1);xg=(0.44,0.20)
+            else:
+                shots=(8,5);sot=(3,2);xg=(0.90,0.23)
+            return {"ok":True,"event_id":"AbCd1234",
+                "score":(1,1),"stats":{"shots":shots,
+                "shots_on_target":sot,"xg":xg}}
+
+    # No quote in cycle one. We still observe the match.
+    first,meta=observe_live_batch(
+        [("FS:AbCd1234",kick,fs,{})],
+        now=stamp,flashscore=Flash(),
+        goal_pressure=gp,scenario_evidence=se)
+    assert meta["observed"]==1
+    assert first["FS:AbCd1234"][1]["sample_age"]==0
+
+    # A new Fonbet root might appear 5m later. Evidence identity stays FS.
+    fs.minute=65
+    again,meta=observe_live_batch(
+        [("47109",kick+10,fs,{})],
+        now=stamp+300,flashscore=Flash(),
+        goal_pressure=gp,scenario_evidence=se)
+    assert meta["observed"]==1
+    _,pressure,evidence,_=again["47109"]
+    assert pressure["sample_age"]==300
+    assert pressure["recent_5m_shots_by_team"]==(4,2)
+    assert pressure["recent_5m_sot_by_team"]==(2,1)
+    assert evidence["recent_5m_xg_age"]==300
+    assert round(evidence["recent_5m_xg_by_team"][0],2)==0.46
+
+
+def test_preobservation_rejects_wrong_flashscore_score_or_identity():
+    import sqlite3
+    from types import SimpleNamespace
+    from gool_goal_live import GoalPressure
+    from progruz1_scenario_evidence import ScenarioEvidence
+    from progruz1_flashscore_preobserve import observe_live_batch
+    db=sqlite3.connect(":memory:")
+    fs=SimpleNamespace(provider_match_id="AbCd1234",home="Home",
+        away="Away",minute=65,home_score=1,away_score=1,
+        meta={"status_code":"13","scheduled_start_ts":2_000_000_000})
+    class WrongFlash:
+        def context(self,**kw):
+            return {"ok":True,"event_id":"Different","score":(1,1),
+                    "stats":{"shots":(8,5),"shots_on_target":(3,2)}}
+    prepared,meta=observe_live_batch(
+        [("FS:AbCd1234",2_000_000_000,fs,{})],
+        now=2_000_003_900,flashscore=WrongFlash(),
+        goal_pressure=GoalPressure(db),scenario_evidence=ScenarioEvidence(db))
+    assert prepared=={}
+    assert meta["observed"]==0
+    assert sum(meta["failures"].values())==1

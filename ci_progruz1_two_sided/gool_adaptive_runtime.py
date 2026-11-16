@@ -920,7 +920,7 @@ class AdaptiveRuntime:
         # still pass the same two-snapshot quote confirmer.
         quote_stats["with_1xbet_direct"]=0
         quote_stats["xbet_status"]="NOT_NEEDED"
-        missing=[(root,kick,fs) for root,kick,fs,book in price_rows:
+        missing=[(root,kick,fs) for root,kick,fs,book in price_rows
                  if not priced_batch.get(root,{}).get("quotes")]
         interval=max(45,min(900,int(os.getenv(
             "GOOL_1XBET_FALLBACK_INTERVAL","120"))))

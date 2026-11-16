@@ -598,6 +598,10 @@ class AdaptiveRuntime:
         live=[]
         fb=[]
         identity_reasons={}
+        from progruz1_live_watchlist import LiveWatchlist
+        watcher=LiveWatchlist(self.db)
+        state["watchlist"]={"registered":0,"watched":0,
+                             "hot":0,"awaiting_price":0}
         def done():
             # Real measured scan coverage, independent of the old RADAR.
             with self.db:
@@ -621,6 +625,7 @@ class AdaptiveRuntime:
                     (now//60,now,state["fs_live"],state["fonbet_live"],
                      state["matched"],state["priced"],
                      state["evaluated"],state["picked"]))
+            state["watchlist"]=watcher.metrics(now=now)
             if live:
                 # Dedicated provider coverage audit. This never gates
                 # price confirmation or the live decision.
@@ -669,6 +674,9 @@ class AdaptiveRuntime:
             rejected("FLASHSCORE_LIVE_LIST_"+type(exc).__name__)
             return done()
         state["fs_live"]=len(live)
+        # Track ALL source fixtures in SQLite, including games with no
+        # bookmaker price, weak attacks and scores outside entry windows.
+        state["fs_cataloged"]=watcher.catalog(live,now=now)
         # Update previously sent LIVE scoreboards even when the match no
         # longer has Fonbet odds or is outside today's entry windows.
         goal_widgets=getattr(self,"signal_widgets",None)
@@ -768,7 +776,11 @@ class AdaptiveRuntime:
         linked_by_fs={
             str(fs.provider_match_id):(root,book,fs)
             for root,(book,fs) in linked.items()}
+        # Track the whole Flashscore LIVE feed (including the part
+        # outside entry windows), not only games already priced by Fonbet.
+        # Watch history starts independently of a bookmaker quote.
         known=[]
+        universe=[]
         for fs in live:
             fs_id=str(fs.provider_match_id or "").strip()
             if not fs_id:
@@ -781,11 +793,7 @@ class AdaptiveRuntime:
             except (ValueError,TypeError,OverflowError):
                 continue
             if (score is None or getattr(fs,"is_halftime",False)
-                    or start_ts<=0 or abs(start_ts-now)>86400):
-                continue
-            code=(getattr(fs,"meta",None) or {}).get("status_code")
-            second=_second_half_started(minute,code)
-            if not (45<=minute<=80 if second else 1<=minute<=35):
+                    or minute<1 or minute>80):
                 continue
             if fs_id in linked_by_fs:
                 root,book,_=linked_by_fs[fs_id]
@@ -797,31 +805,36 @@ class AdaptiveRuntime:
                       "match":f"{fs.home} — {fs.away}",
                       "league":str(fs.league or ""),
                       "sport":"football","phase":"LIVE"}
-            known.append((str(root),int(kick),fs,book))
+            item=(str(root),int(kick),fs,book)
+            universe.append(item)
+            code=(getattr(fs,"meta",None) or {}).get("status_code")
+            second=_second_half_started(minute,code)
+            if not (45<=minute<=80 if second else 1<=minute<=35):
+                continue
+            # Unknown or invalid kickoff must never produce a bet, but
+            # its Flashscore identity can still be watched without odds.
+            if int(kick)<=0 or (start_ts>0
+                    and abs(start_ts-now)>86400):
+                continue
+            known.append(item)
 
-        if not known:
-            rejected("FLASHSCORE_NO_GOAL_ENTRY_WINDOW")
+        if not universe:
+            rejected("FLASHSCORE_NO_LIVE_STATS_UNIVERSE")
             return done()
-        # Fair rotation across ALL Flashscore LIVE candidates, not just
-        # games that Fonbet already priced. A modest per-cycle batch avoids
-        # blocking the Telegram scheduler on 12-region bulk scans.
-        if not hasattr(self,"_flash_goal_cursor"):
-            self._flash_goal_cursor=0
-        cursor=self._flash_goal_cursor%len(known)
-        rotated=known[cursor:]+known[:cursor]
-        confirmed_roots=set()
+        confirmed_ids=set()
         for root,kick,fs,book in known:
             row=self.db.execute("""SELECT first_seen,last_seen FROM
                 adaptive_quote_confirm WHERE root_id=?""",(root,)).fetchone()
             if row and 0<=now-int(row[1])<=80 and now-int(row[0])<=90:
-                confirmed_roots.add(root)
-        # Two-snapshot quote confirmation must be revisited promptly.
-        priority=[v for v in known if v[0] in confirmed_roots]
-        batch_rows=list(dict((v[0],v) for v in priority+rotated).values())
-        batch_rows=batch_rows[:max(1,min(8,int(limit)))]
-        self._flash_goal_cursor=(
-            cursor+max(1,len(batch_rows)-len(priority)))%len(known)
+                confirmed_ids.add(str(fs.provider_match_id))
+        # Strong matches receive repeated observations while a fixed
+        # share explores the rest of the entire LIVE feed. Every match
+        # remains in the durable watch catalog, regardless of price.
+        batch_rows=watcher.schedule(
+            universe,now=now,capacity=max(1,min(8,int(limit))),
+            confirmed_ids=confirmed_ids)
         state["fs_in_window"]=len(known)
+        state["fs_stats_universe"]=len(universe)
         state["sampled"]=len(batch_rows)
 
         # LIVE snapshots are collected for all selected Flashscore
@@ -835,6 +848,27 @@ class AdaptiveRuntime:
             scenario_evidence=self.scenario_evidence)
         state["fs_preobserved"]=observe_stats["observed"]
         state["fs_preobserve_failures"]=observe_stats["failures"]
+        state["fs_watch_new"]=0
+        state["fs_watch_hot"]=0
+        for root,kick,fs,book in batch_rows:
+            observed=prepared.get(root)
+            if observed is None:
+                continue
+            ctx,pressure,evidence,stats=observed
+            watch=watcher.record(
+                fs,now=now,stats=stats,pressure=pressure)
+            if watch and watch["status"] in ("WATCH","HOT"):
+                state["fs_watch_new"]+=1
+                if watch["status"]=="HOT":
+                    state["fs_watch_hot"]+=1
+        # Bookmaker requests are a separate SECOND stage, reserved for
+        # genuinely promising and fresh Flashscore WATCH/HOT matches.
+        price_rows=watcher.price_candidates(
+            batch_rows,prepared,now=now,confirmed_ids=confirmed_ids)
+        state["fs_price_candidates"]=len(price_rows)
+        state["fs_watch_wait_entry"]=sum(
+            item[0] not in {row[0] for row in price_rows}
+            for item in batch_rows if item[0] in prepared)
 
         from progruz1_live_quote_router import priced_round,_regions
         # Check ALL regions over successive fixture visits without
@@ -849,7 +883,7 @@ class AdaptiveRuntime:
         if not hasattr(self,"_flash_geo_offsets"):
             self._flash_geo_offsets={}
         regions_by_root={}
-        for root,kick,fs,book in batch_rows:
+        for root,kick,fs,book in price_rows:
             offset=self._flash_geo_offsets.get(root,0)
             extras=(extra_geos[offset:]+extra_geos[:offset]
                     if extra_geos else ())
@@ -860,7 +894,7 @@ class AdaptiveRuntime:
         state["geo_regions_per_cycle"]=geo_limit
         try:
             priced_batch,quote_stats=priced_round(
-                [(root,kick,fs) for root,kick,fs,_ in batch_rows],
+                [(root,kick,fs) for root,kick,fs,_ in price_rows],
                 fallback_by_root=byroot,max_workers=4,
                 regions_by_root=regions_by_root,
                 max_regions=geo_limit)
@@ -870,14 +904,14 @@ class AdaptiveRuntime:
             priced_batch={
                 root:{"quotes":byroot.get(root,[]),
                       "source":"FONBET_LIVE" if byroot.get(root) else "UNPRICED",
-                      "meta":{}} for root,kick,fs,book in batch_rows}
-            quote_stats={"checked":len(batch_rows),
+                      "meta":{}} for root,kick,fs,book in price_rows}
+            quote_stats={"checked":len(price_rows),
                          "with_flashscore_quote":0,
                          "with_fonbet_fallback":sum(
-                             bool(byroot.get(root)) for root,_,_,_ in batch_rows),
+                             bool(byroot.get(root)) for root,_,_,_ in price_rows),
                          "unpriced":sum(
                              not bool(byroot.get(root))
-                             for root,_,_,_ in batch_rows),
+                             for root,_,_,_ in price_rows),
                          "geo_requests":0}
             rejected("FLASHSCORE_ODDS_ROUTER_"+type(exc).__name__)
         # Direct 1xBet is the final, separately score-verified fallback.
@@ -886,7 +920,7 @@ class AdaptiveRuntime:
         # still pass the same two-snapshot quote confirmer.
         quote_stats["with_1xbet_direct"]=0
         quote_stats["xbet_status"]="NOT_NEEDED"
-        missing=[(root,kick,fs) for root,kick,fs,book in batch_rows
+        missing=[(root,kick,fs) for root,kick,fs,book in price_rows:
                  if not priced_batch.get(root,{}).get("quotes")]
         interval=max(45,min(900,int(os.getenv(
             "GOOL_1XBET_FALLBACK_INTERVAL","120"))))
@@ -915,11 +949,15 @@ class AdaptiveRuntime:
             root in prepared
             and not priced_batch.get(root,{}).get("quotes")
             for root,kick,fs,book in batch_rows)
+        for root,kick,fs,book in price_rows:
+            watcher.note_price(
+                str(fs.provider_match_id),now=now,
+                has_price=bool(priced_batch.get(root,{}).get("quotes")))
         # Synthetic roots are saved to the SAME table used by result
         # settlement and widgets. No confirmed Flashscore fixture can
         # create a second Telegram signal solely by changing quote source.
         with self.db:
-            for root,kick,fs,book in batch_rows:
+            for root,kick,fs,book in price_rows
                 if not priced_batch.get(root,{}).get("quotes"):
                     continue
                 if root.startswith("FS:"):
@@ -932,7 +970,7 @@ class AdaptiveRuntime:
         # Keep the original per-root price/history/scenario/notification
         # pipeline; it now accepts both Fonbet and Flashscore-sourced
         # quotes with identical strict selection and result settlement.
-        batch=[(root,kick,fs,book) for root,kick,fs,book in batch_rows
+        batch=[(root,kick,fs,book) for root,kick,fs,book in price_rows
                if priced_batch.get(root,{}).get("quotes")]
         if not batch:
             rejected("NO_VERIFIED_LIVE_TOTAL_FROM_FLASH_OR_FONBET")
@@ -962,6 +1000,8 @@ class AdaptiveRuntime:
             context,pressure,scenario_evidence,stats=observation
             # The snapshots were already collected before searching for
             # prices; do not reset the attack clock when a market appears.
+            minute=int(fs.minute)
+            status_code=(getattr(fs,"meta",None) or {}).get("status_code")
             history=profile(
                 context.get("history"),str(fs.home),str(fs.away),kick,
                 min_games=max(3,int(os.getenv("GOOL_FS_HISTORY_MIN_GAMES","4"))))
@@ -1004,10 +1044,14 @@ class AdaptiveRuntime:
                     match=str(fb_root.get("match") or
                               f"{fs.home} — {fs.away}"),info=review)
             if candidate is None:
+                watcher.note_decision(
+                    str(fs.provider_match_id),reason=reason)
                 rejected(reason,root,kick)
                 continue
             candidate["match"]=str(fb_root.get("match") or
                                    f"{fs.home} — {fs.away}")
+            watcher.note_decision(
+                str(fs.provider_match_id),reason="VERIFIED_CANDIDATE_WAIT_CONFIRM")
             scenario_name=str((candidate.get("scenario") or {}).get("id")
                               or "WITHOUT_SCENARIO")
             if "VERIFIED_5M_PRESSURE_OVERRIDES_MILD_LOW_FORM" in (
@@ -1051,6 +1095,8 @@ class AdaptiveRuntime:
                 continue
             self.outcomes.track(candidate,now,message_id=msg_id,
                                 message_text=message)
+            watcher.note_decision(
+                str(fs.provider_match_id),reason="SENT",send=True)
             # The owner remains the sole source of journal entries and
             # analysis. Fan out only after the primary signal is delivered,
             # without producing duplicate picks in adaptive_results.

@@ -608,7 +608,15 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
     goals=sum(period_score)
     wanted=goals+0.5
     possible=[]
+    indicative_only=False
     for q in quotes:
+        # The Flashscore odds display may expose an old/pre-match
+        # bookmaker price under a live market flag. It cannot prove a
+        # bet is offered for the current Flashscore score/minute.
+        # Only directly score-verified live bookmaker feeds are actionable.
+        if str(q.get("quote_source") or "")=="FLASHSCORE_ODDS":
+            indicative_only=True
+            continue
         offered=str(q.get("period") or "")
         if (offered!=period and not(period=="2-й тайм" and
                                       offered=="Матч")):
@@ -629,7 +637,9 @@ def evaluate_next_goal(quotes,ctx,pressure,history,*,min_odd=1.50,
             continue
         possible.append((odd,q))
     if not possible:
-        return None,"NEXT_GOAL_LIVE_ODDS_UNAVAILABLE"
+        return None,("FLASHSCORE_ODDS_NOT_LIVE_VERIFIED"
+                     if indicative_only
+                     else "NEXT_GOAL_LIVE_ODDS_UNAVAILABLE")
     from progruz1_confidence import confidence_score,minimum_confidence
     strength=confidence_score(
         minute=minute,shots=shots,sot=sot,xg=xg,

@@ -265,6 +265,9 @@ class ProgruzTelegramJournal:
             elif cmd in {"/model","/модель","/scenarios"}:
                 from progruz1_shadow_audit import analyze,format_summary
                 response=format_summary(analyze(self.db))
+            elif cmd in {"/watch","/наблюдение","/watchlist"}:
+                from progruz1_live_watchlist import LiveWatchlist
+                response=LiveWatchlist(self.db).summary(now=now,limit=12)
             elif cmd in {"/status","/статус","/start"}:
                 info=latest or {}
                 response=(
@@ -290,6 +293,12 @@ class ProgruzTelegramJournal:
                     f"⏱ Всего матчей в окне входа: "
                     f"{info.get('fs_in_window','—')}\n"
                     f"👁 Проверено в этом цикле: {info.get('sampled','—')}\n"
+                    f"🌍 LIVE каталог: {(info.get('watchlist') or {}).get('registered','—')}\n"
+                    f"🔎 Статистика в очереди: {info.get('fs_stats_universe','—')}\n"
+                    f"🎯 В памяти перспективных: {(info.get('watchlist') or {}).get('watched','—')}\n"
+                    f"🔥 Горячих матчей: {(info.get('watchlist') or {}).get('hot','—')}\n"
+                    f"💰 Ждут подходящий коэффициент: {(info.get('watchlist') or {}).get('awaiting_price','—')}\n"
+                    f"📈 На проверку коэффициентов в цикле: {info.get('fs_price_candidates','—')}\n"
                     f"📊 Flashscore: сняты LIVE-статистики до поиска цены: "
                     f"{info.get('fs_preobserved','—')}\n"
                     f"🔍 Снимки матчей без нужной цены: "
@@ -323,6 +332,7 @@ class ProgruzTelegramJournal:
                     "📁 /journal_csv — CSV с моделями и статистикой\n"
                     "🧪 /model — сравнение сценариев с результатами\n"
                     "🤝 /joint — отсеянные и отправленные сигналы\n"
+                    "👁 /watch — перспективные LIVE-матчи и ожидание момента\n"
                     "🔎 /coverage — причины потери матчей\n"
                     "🔬 /funnel — где пропадают сигналы\n"
                     "📁 /coverage_csv — оба списка матчей для проверки\n"

@@ -998,8 +998,29 @@ class AdaptiveRuntime:
                 rejected("FLASHSCORE_PREOBSERVED_STATS_UNAVAILABLE",root,kick)
                 continue
             context,pressure,scenario_evidence,stats=observation
-            # The snapshots were already collected before searching for
-            # prices; do not reset the attack clock when a market appears.
+            # The cheap scout has real current shots/xG but deliberately
+            # not team history and independently published HT score.
+            # Only watched fixtures WITH a current price get full context.
+            if (not isinstance(context.get("history"),dict)
+                    or "first_half_score" not in context):
+                try:
+                    context=self.fs.context(
+                        root=root,home=str(fs.home),away=str(fs.away),
+                        kickoff=kick,now=now,score=score,
+                        fixture_id=str(fs.provider_match_id),
+                        preobserved_stats=stats)
+                except Exception as exc:
+                    rejected("FS_WATCH_FULL_CONTEXT_"+type(exc).__name__,
+                             root,kick)
+                    continue
+                if (not context.get("ok")
+                        or str(context.get("event_id") or "")!=
+                           str(fs.provider_match_id)
+                        or _score(context.get("score"))!=score):
+                    rejected("FS_WATCH_FULL_CONTEXT_UNVERIFIED",root,kick)
+                    continue
+            # Independent goal pressure remains the SAME exact observed
+            # scout history: a bookmaker price cannot reset or replace it.
             minute=int(fs.minute)
             status_code=(getattr(fs,"meta",None) or {}).get("status_code")
             history=profile(

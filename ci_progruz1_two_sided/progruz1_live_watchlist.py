@@ -319,3 +319,40 @@ class LiveWatchlist:
                 "hot":counted.get("HOT",0),
                 "awaiting_price":counted.get("WAIT_PRICE",0),
                 "statuses":counted}
+
+    def summary(self,*,now,limit=12):
+        """Human-readable watched LIVE fixtures; interest is not probability."""
+        metrics=self.metrics(now=now)
+        rows=self.db.execute("""SELECT home,away,minute,score_home,
+                score_away,interest,status,last_observed,last_reason
+            FROM progruz1_live_watchlist
+            WHERE last_seen>=? AND status!='SENT'
+            ORDER BY CASE status
+                WHEN 'HOT' THEN 0 WHEN 'WAIT_PRICE' THEN 1
+                WHEN 'PRICE_CONFIRM' THEN 2 WHEN 'WAIT_SIGNAL' THEN 3
+                WHEN 'WATCH' THEN 4 ELSE 5 END,
+                interest DESC,last_observed DESC
+            LIMIT ?""",(int(now)-90,max(1,min(20,int(limit))))).fetchall()
+        lines=[
+            "👁 ПРОГРУЗ 1 · НАБЛЮДЕНИЕ FLASHScore LIVE",
+            f"⚽ Матчей в LIVE-каталоге: {metrics['registered']}",
+            f"🎯 Перспективных в памяти: {metrics['watched']}",
+            f"🔥 Горячих: {metrics['hot']}",
+            f"💰 Ожидают цену: {metrics['awaiting_price']}",
+        ]
+        titles={"HOT":"🔥 горячий","WATCH":"👁 наблюдаем",
+                "WAIT_PRICE":"💰 ждём кэф",
+                "WAIT_ENTRY":"⏱ ждём вход",
+                "WAIT_SIGNAL":"📊 ждём момент",
+                "PRICE_CONFIRM":"💰 проверка цены",
+                "TRACKING":"🔎 сканируем"}
+        for home,away,minute,h,a,interest,status,observed,reason in rows:
+            age=f"{max(0,(int(now)-observed)//60)}м" if observed else "—"
+            lines.append(
+                f"• {home} — {away} | {int(minute)}' {h}:{a}"
+                f" | {titles.get(status,status)}"
+                f" | интерес {interest}/100 | статистика {age} назад")
+        lines.append("ℹ️ Интерес — приоритет наблюдения, НЕ шанс гола.")
+        lines.append("⚙️ Полный анализ/ставка только при подтверждённых"
+                     " LIVE-атаках и актуальном кэфе ≥1.50.")
+        return "\n".join(lines)

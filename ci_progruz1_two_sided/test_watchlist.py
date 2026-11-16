@@ -70,6 +70,7 @@ def test_all_matches_get_eventual_context_despite_hot_focus():
     # games, so a HOT fixture cannot starve the rest of LIVE football.
     for tick in range(36):
         ts=NOW+tick*70
+        watch.catalog([r[2] for r in all_rows],now=ts)
         rows=watch.schedule(all_rows,now=ts,capacity=6)
         for row in rows:
             visited.add(row[2].provider_match_id)

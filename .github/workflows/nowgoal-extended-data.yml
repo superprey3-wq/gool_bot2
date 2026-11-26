@@ -1,0 +1,131 @@
+name: Nowgoal extended match data audit
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-extended-data.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  extended:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect history, goal distributions and public match data
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,gzip,json,re,ast,datetime,concurrent.futures
+          from html.parser import HTMLParser
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  raw=r.read(4000000)
+                  if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+                  return raw.decode("utf-8","replace")
+          class Scan(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.text=[];self.skip=0;self.links=[];self.rows=[];self.row=None;self.cell=None;self.markers=[]
+              def handle_starttag(self,t,attrs):
+                  a=dict(attrs)
+                  if t in ("script","style"):self.skip+=1
+                  if t=="a" and a.get("href"):self.links.append(a["href"])
+                  if t=="tr":self.row=[]
+                  if t in ("td","th") and self.row is not None:self.cell=[]
+                  mark=" ".join([a.get("id",""),a.get("class","")])
+                  if re.search(r'goalTime|goalDistribution|halfFull|goalStats|scoreTime|goalMinute|h2h|recentMatch',mark,re.I) and len(self.markers)<40:self.markers.append([t,mark[:120]])
+              def handle_endtag(self,t):
+                  if t in ("script","style"):self.skip=max(0,self.skip-1)
+                  if t in ("td","th") and self.row is not None and self.cell is not None:self.row.append(" ".join(self.cell));self.cell=None
+                  if t=="tr" and self.row is not None:self.rows.append(self.row);self.row=None;self.cell=None
+              def handle_data(self,s):
+                  if self.skip:return
+                  s=" ".join(s.split())
+                  if s:self.text.append(s)
+                  if s and self.cell is not None:self.cell.append(s)
+          def catalog():
+              d=datetime.datetime.now(datetime.timezone.utc).date()
+              s=json.loads(get("/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3"))["Data"]
+              out=[]
+              for m in re.finditer(r'^A\[\d+\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      f=ast.literal_eval(m.group(1))
+                      if len(f)>12 and f[7] in (1,2,3):out.append({"id":f[0],"home":f[4],"away":f[5],"state":f[7]})
+                  except (ValueError,SyntaxError):pass
+              return out
+          def inspect(m):
+              o=dict(m);mid=str(m["id"])
+              try:
+                  s=get("/match/h2h-"+mid);p=Scan();p.feed(s)
+                  pat=r'goal.*(time|distribution|scored|conceded)|scored.*conceded|head to head|recent (matches|games|form)|last (10|20|30|50)|half.time|first half|second half|home and away'
+                  hits=[{"label":t,"context":p.text[max(0,i-2):i+22]} for i,t in enumerate(p.text) if re.search(pat,t,re.I)]
+                  o["history"]={"size":len(s),"labels":hits[:35],"markers":p.markers,"score_rows":[r for r in p.rows if len(r)>=5 and any(re.search(r'\d{2}[-/]\d{2}[-/]\d{2,4}',v) for v in r)][:8],"odds_links":sorted(set(x for x in p.links if "odds" in x.lower()))[:15]}
+              except Exception as e:o["history_error"]=str(e)
+              for typ in (15,11,4,5):
+                  try:
+                      obj=json.loads(get("/Ajax/SoccerAjax?type="+str(typ)+"&id="+mid))
+                      v=obj.get("Data")
+                      o["type_"+str(typ)]={"errcode":obj.get("ErrCode"),"state":obj.get("MatchState"),"data_type":type(v).__name__,"sample":str(v)[:1600]}
+                  except Exception as e:o["type_"+str(typ)]={"error":str(e)}
+              return o
+          live=catalog()
+          print("EXTENDED_CATALOG",len(live),flush=True)
+          # Sample different competitions; these are diagnostic requests, not a production crawler.
+          selected=[]
+          for m in live:
+              if m["id"] in (3073730,3062687,3115809,3116761,3073844):selected.append(m)
+          selected=(selected+[m for m in live if m not in selected])[:5]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:
+              for r in p.map(inspect,selected):print("EXTENDED_MATCH",json.dumps(r,ensure_ascii=False),flush=True)
+          PY
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Inspect public history and odds page features
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio,json,re
+          from playwright.async_api import async_playwright
+          from urllib.parse import urlsplit,parse_qsl
+          async def main():
+              async with async_playwright() as p:
+                  b=await p.chromium.launch()
+                  ctx=await b.new_context()
+                  page=await ctx.new_page()
+                  for path in ("/match/h2h-3073730","/match/live-3073730","/oddscomp/3073730"):
+                      out={"path":path,"public_requests":[]};pending=[]
+                      async def response(r):
+                          u=urlsplit(r.url)
+                          if u.hostname!="www.nowgoal.net" or r.request.resource_type not in ("xhr","fetch"):return
+                          if not re.search(r'odds|soccerajax|analysis|statistic',u.path,re.I):return
+                          keys={"type","id","matchid","companyid","company","oddsType","h","t"}
+                          q={k:v for k,v in parse_qsl(u.query) if k in keys and re.fullmatch(r'[a-zA-Z0-9_-]{1,32}',v)}
+                          item={"path":u.path,"params":q,"status":r.status}
+                          try:
+                              raw=await r.body();item["bytes"]=len(raw)
+                              o=json.loads(raw);item["keys"]=list(o)[:20] if isinstance(o,dict) else []
+                          except Exception:pass
+                          out["public_requests"].append(item)
+                      handler=lambda r:pending.append(asyncio.create_task(response(r)))
+                      page.on("response",handler)
+                      try:
+                          res=await page.goto("https://www.nowgoal.net"+path,wait_until="domcontentloaded",timeout=25000)
+                          await page.wait_for_timeout(5000)
+                          lines=[x.strip() for x in (await page.locator("body").inner_text()).splitlines() if x.strip()]
+                          out["http"]=res.status if res else None
+                          out["features"]=[{"label":t,"context":lines[max(0,i-2):i+16]} for i,t in enumerate(lines) if re.search(r'goal.*(time|distribution|scored|conceded)|last (10|20|30|50)|half.time|first half|second half|live odds analysis|odds movement|over/under|head to head|goal get|goal miss',t,re.I)][:30]
+                          out["links"]=await page.locator("a").evaluate_all("(els)=>els.map(a=>({text:(a.innerText||'').trim(),href:a.getAttribute('href')})).filter(a=>/odds|history|analysis/i.test(a.text||'')).slice(0,30)")
+                      except Exception as e:out["error"]=str(e)[:300]
+                      await asyncio.gather(*pending,return_exceptions=True)
+                      page.remove_listener("response",handler)
+                      print("FEATURE_PAGE",json.dumps(out,ensure_ascii=False),flush=True)
+                  await b.close()
+          asyncio.run(main())
+          PY

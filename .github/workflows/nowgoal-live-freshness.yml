@@ -1,0 +1,75 @@
+name: Nowgoal live coverage and freshness
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-live-freshness.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Compare two catalog snapshots and diverse live match details
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, gzip, json, re, ast, datetime, concurrent.futures, time
+          from html.parser import HTMLParser
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=12) as r:
+                  raw=r.read(4000000)
+                  meta={k:r.headers.get(k) for k in ("Date","Age","Cache-Control","Last-Modified")}
+              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+              return raw.decode("utf-8","replace"),meta
+          def arrays(s,k):
+              for m in re.finditer(r'^'+k+r'\[(\d+)\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      x=ast.literal_eval(m.group(2))
+                      if isinstance(x,list):yield int(m.group(1)),x
+                  except (ValueError,SyntaxError):pass
+          def catalog():
+              d=datetime.datetime.now(datetime.timezone.utc).date()
+              s,meta=get("/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3")
+              data=json.loads(s)["Data"]; leagues=dict(arrays(data,"B"))
+              return {f[0]:{"id":f[0],"home":f[4],"away":f[5],"league":leagues.get(f[1],["","",""])[2],"state":f[7],"score":f[8:10],"raw":f} for _,f in arrays(data,"A") if len(f)>=13 and isinstance(f[0],int)},meta
+          class Text(HTMLParser):
+              def __init__(self):super().__init__();self.text=[];self.skip=0;self.ids=[]
+              def handle_starttag(self,t,a):
+                  if t in ("script","style"):self.skip+=1
+                  a=dict(a)
+                  if a.get("id") and re.search(r"time|minute|score|stat",a["id"],re.I):self.ids.append((t,a["id"],a.get("data-time"),a.get("class")))
+              def handle_endtag(self,t):
+                  if t in ("script","style"):self.skip=max(0,self.skip-1)
+              def handle_data(self,s):
+                  if not self.skip and s.strip():self.text.append(" ".join(s.split()))
+          def detail(m):
+              o={k:v for k,v in m.items() if k!="raw"}
+              try:
+                  h,meta=get("/match/live-"+str(m["id"]));p=Text();p.feed(h)
+                  labels={"shots","shots on goal","shots on target","attacks","dangerous attacks","expected goals (xg)","red cards"}
+                  pairs={}
+                  for i,t in enumerate(p.text):
+                      if t.lower() in labels and 0<i<len(p.text)-1 and all(re.fullmatch(r'\d+(?:\.\d+)?%?',v) for v in (p.text[i-1],p.text[i+1])):
+                          pairs.setdefault(t,[p.text[i-1],p.text[i+1]])
+                  o.update(stats=pairs,meta=meta,header=p.text[50:78],clock_candidates=p.ids[:18])
+              except Exception as e:o["error"]=str(e)
+              return o
+          a,am=catalog();live=[m for m in a.values() if m["state"] in (1,2,3)]
+          # Prioritize halftime, second half and less-covered leagues, not just UEFA.
+          live.sort(key=lambda m:(m["state"]==1,m["league"].startswith("UEFA")))
+          sample=live[:40]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:results=list(p.map(detail,sample))
+          for r in results:print("MATCH_CHECK",json.dumps(r,ensure_ascii=False))
+          time.sleep(12)
+          b,bm=catalog()
+          changes=[]
+          for mid,m in a.items():
+              if m["state"] not in (1,2,3) or mid not in b:continue
+              n=b[mid]
+              if m["raw"]!=n["raw"]:changes.append({"id":mid,"home":m["home"],"away":m["away"],"before_state":m["state"],"after_state":n["state"],"before_score":m["score"],"after_score":n["score"]})
+          print("FRESHNESS_RESULT",json.dumps({"first_catalog":len(a),"second_catalog":len(b),"first_meta":am,"second_meta":bm,"live":len(live),"checked":len(results),"any_stats":sum(bool(r.get("stats")) for r in results),"shots":sum("Shots" in r.get("stats",{}) for r in results),"xg":sum("Expected Goals (xG)" in r.get("stats",{}) for r in results),"changed_rows":len(changes),"changes":changes},ensure_ascii=False))
+          PY

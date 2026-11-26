@@ -1,0 +1,91 @@
+name: Nowgoal MARKET trends and period verification
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-market-trends.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Install browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Inspect public total history and period controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio,json,re
+          from urllib.parse import urlsplit,parse_qsl
+          from playwright.async_api import async_playwright
+          BASE="https://www.nowgoal.net"
+          async def snap(page):
+              return await page.evaluate("""()=>({url:location.pathname,format:document.querySelector('#selectedOddsType')?.innerText,controls:Array.from(document.querySelectorAll('a,button,span,li,label')).filter(e=>e.getClientRects().length&&/^(FT|HT|1st Half|2nd Half|Second Half|Trends|Stats|Decimal Odds|Hong Kong Odds|All|More)$/i.test((e.innerText||'').trim())).slice(0,45).map(e=>({text:e.innerText.trim(),id:e.id,cls:String(e.className).slice(0,100),outer:e.outerHTML.slice(0,400)})),tables:Array.from(document.querySelectorAll('table')).filter(t=>t.getClientRects().length&&/Over|Under|Goals|Time|Company/i.test(t.innerText)).slice(0,8).map(t=>({id:t.id,rows:Array.from(t.querySelectorAll('tr')).filter(r=>r.getClientRects().length).slice(0,18).map(r=>r.innerText.trim().slice(0,450))})),tail:document.body.innerText.slice(-3500)})""")
+          async def click_visible(page,label):
+              loc=page.get_by_text(label,exact=True)
+              for i in range(min(await loc.count(),30)):
+                  el=loc.nth(i)
+                  if await el.is_visible():
+                      try:
+                          await el.click(timeout=3000)
+                          await page.wait_for_timeout(1500)
+                          return True
+                      except Exception:pass
+              return False
+          async def main():
+              async with async_playwright() as p:
+                  browser=await p.chromium.launch()
+                  for mid in (3062687,3115809,3073730):
+                      ctx=await browser.new_context()
+                      page=await ctx.new_page()
+                      pending=[];requests=[]
+                      async def inspect(r):
+                          u=urlsplit(r.url)
+                          if u.hostname!="www.nowgoal.net" or r.request.resource_type not in ("xhr","fetch"):return
+                          if not re.search(r'odds|soccerajax',u.path,re.I):return
+                          allowed={"type","t","h","id","matchid","cid","companyid","company","oddstype","half","ishalf","lang","ot"}
+                          q={k:v for k,v in parse_qsl(u.query) if k.lower() in allowed and re.fullmatch(r'[a-zA-Z0-9_-]{1,32}',v)}
+                          out={"path":u.path,"params":q,"status":r.status}
+                          try:
+                              raw=await r.body()
+                              obj=json.loads(raw)
+                              d=obj.get("Data",obj) if isinstance(obj,dict) else obj
+                              out.update(bytes=len(raw),sample=str(d)[:2200])
+                          except Exception:pass
+                          requests.append(out)
+                      def attach(pg):pg.on("response",lambda r:pending.append(asyncio.create_task(inspect(r))))
+                      attach(page);ctx.on("page",attach)
+                      out={"id":mid}
+                      try:
+                          await page.goto(BASE+"/over-under-odds/"+str(mid),wait_until="domcontentloaded",timeout=25000)
+                          await page.wait_for_timeout(3000)
+                          out["original"]=await snap(page)
+                          fmt=page.locator("#selectedOddsType")
+                          if await fmt.count() and await fmt.is_visible():
+                              await fmt.click(timeout=3000)
+                              out["decimal_clicked"]=await click_visible(page,"Decimal Odds")
+                              out["decimal"]=await snap(page)
+                          before=set(ctx.pages)
+                          out["trends_clicked"]=await click_visible(page,"Trends")
+                          await page.wait_for_timeout(2000)
+                          new=[x for x in ctx.pages if x not in before]
+                          out["trends"]=await snap(new[0] if new else page)
+                          for pg in new:await pg.close()
+                          await page.goto(BASE+"/match/live-"+str(mid),wait_until="domcontentloaded",timeout=25000)
+                          await page.wait_for_timeout(2500)
+                          out["live_before"]=await snap(page)
+                          # Inspect only visible period switch inside an odds table container.
+                          candidate=page.locator("#oddsTable8")
+                          out["second_half_odds_controls"]=await candidate.evaluate("""e=>{let x=e;for(let i=0;i<4&&x;i++,x=x.parentElement){let a=Array.from(x.querySelectorAll('a,span,button')).filter(k=>/^(FT|HT|2nd Half|Second Half)$/i.test((k.innerText||'').trim())&&k.getClientRects().length);if(a.length>1)return a.map(k=>k.outerHTML.slice(0,500))}return []}""") if await candidate.count() else []
+                      except Exception as e:out["error"]=str(e)[:350]
+                      await asyncio.gather(*pending,return_exceptions=True)
+                      out["requests"]=requests[:25]
+                      print("MARKET_TRENDS",json.dumps(out,ensure_ascii=False),flush=True)
+                      await ctx.close()
+                  await browser.close()
+          asyncio.run(main())
+          PY

@@ -1,0 +1,54 @@
+name: Nowgoal compressed catalog validation
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-compressed-catalog.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Decode public schedule response
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, gzip, zlib, json, re, datetime, concurrent.futures
+          base="https://www.nowgoal.net"
+          day=datetime.datetime.now(datetime.timezone.utc).date()
+          urls={str(d):base+"/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3" for d in (day,day+datetime.timedelta(days=1))}
+          def probe(item):
+              label,url=item
+              out={"date":label}
+              try:
+                  req=urllib.request.Request(url,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+                  with urllib.request.urlopen(req,timeout=18) as r:
+                      raw=r.read(4000000)
+                      out.update(http=r.status,encoding=r.headers.get("Content-Encoding"),bytes=len(raw))
+                  if raw.startswith(b'\x1f\x8b'):
+                      raw=gzip.decompress(raw);out["decoded"]="gzip"
+                  elif out["encoding"]=="deflate":
+                      raw=zlib.decompress(raw);out["decoded"]="deflate"
+                  s=raw.decode("utf-8","replace")
+                  out["decoded_bytes"]=len(raw)
+                  try:
+                      obj=json.loads(s)
+                      out["type"]=type(obj).__name__
+                      if isinstance(obj,dict):
+                          out["fields"]={k:{"type":type(v).__name__,"length":len(v) if isinstance(v,(str,list,dict)) else None,"sample":str(v)[:900]} for k,v in list(obj.items())[:20]}
+                      elif isinstance(obj,list):
+                          out["count"]=len(obj);out["sample"]=obj[:4]
+                      else:out["sample"]=str(obj)[:2500]
+                  except ValueError:
+                      out["type"]="text"
+                      out["sample"]=s[:4500]
+                      out["match_links"]=len(set(re.findall(r"/match/(?:live|h2h)-(\d+)",s)))
+                      out["array_assignments"]=len(re.findall(r"A\[\d+\]\s*=",s))
+                  out["head"]=s[:250]
+              except Exception as e:out["error"]=str(e)
+              return out
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as p:
+              for out in p.map(probe,urls.items()):print("CATALOG_RESULT",json.dumps(out,ensure_ascii=False))
+          PY

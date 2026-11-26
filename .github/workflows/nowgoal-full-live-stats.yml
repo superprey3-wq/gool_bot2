@@ -1,0 +1,143 @@
+name: Nowgoal full live stats audit
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-full-live-stats.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Audit every live match and inspect missing statistics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, gzip, json, re, ast, datetime, concurrent.futures, collections, html
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(urljoin(BASE,path),headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  raw=r.read(5000000)
+                  if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+                  return raw.decode("utf-8","replace")
+          def arrays(s,k):
+              for m in re.finditer(r'^'+k+r'\[(\d+)\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      x=ast.literal_eval(m.group(2))
+                      if isinstance(x,list):yield int(m.group(1)),x
+                  except (ValueError,SyntaxError):pass
+          def catalog():
+              d=datetime.datetime.now(datetime.timezone.utc).date()
+              data=json.loads(get("/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3"))["Data"]
+              leagues=dict(arrays(data,"B"))
+              return [{"id":f[0],"home":f[4],"away":f[5],"league":leagues.get(f[1],["","",""])[2],"state":f[7],"score":f[8:10]} for _,f in arrays(data,"A") if len(f)>=13 and isinstance(f[0],int) and f[7] in (1,2,3,4,5)]
+          class Scan(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.text=[];self.skip=0;self.scripts=[];self.markers=[]
+              def handle_starttag(self,t,attrs):
+                  a=dict(attrs)
+                  if t in ("script","style"):self.skip+=1
+                  if t=="script" and a.get("src"):self.scripts.append(a["src"])
+                  desc=" ".join([a.get("id",""),a.get("class","")])
+                  if re.search(r'statistic|techni|matchstat|statitem|stat-row|stats|matchTime|liveTime|minute',desc,re.I):
+                      if len(self.markers)<60:self.markers.append([t,desc[:150],a.get("data-id"),a.get("data-type")])
+              def handle_endtag(self,t):
+                  if t in ("script","style"):self.skip=max(0,self.skip-1)
+              def handle_data(self,s):
+                  if not self.skip and s.strip():self.text.append(" ".join(s.split()))
+          names={"shots":"shots","total shots":"shots","shots on goal":"shots_on_target","shots on target":"shots_on_target","shots off goal":"shots_off_target","shots off target":"shots_off_target","attacks":"attacks","dangerous attacks":"dangerous_attacks","possession":"possession","ball possession":"possession","expected goals (xg)":"xg","xg":"xg","red cards":"red_cards","yellow cards":"yellow_cards","corners":"corners"}
+          def inspect(m):
+              out=dict(m)
+              try:
+                  h=get("/match/live-"+str(m["id"]))
+                  p=Scan();p.feed(h)
+                  numeric=lambda x:bool(re.fullmatch(r'\d+(?:[.,]\d+)?%?',x))
+                  pairs={};contexts=[]
+                  for i,t in enumerate(p.text):
+                      k=names.get(t.casefold())
+                      if k and len(contexts)<45:
+                          contexts.append([k,p.text[max(0,i-3):i+4]])
+                      if k and 0<i<len(p.text)-1 and numeric(p.text[i-1]) and numeric(p.text[i+1]):
+                          # First block is match data; keep repeated blocks separate for review.
+                          pairs.setdefault(k,[]).append([p.text[i-1],p.text[i+1]])
+                  core={k:v[0] for k,v in pairs.items() if k in ("shots","shots_on_target","attacks","dangerous_attacks","xg")}
+                  out.update(core=core,pair_blocks=pairs,has_core=bool(core),size=len(h))
+                  if not core or "shots" not in core or "shots_on_target" not in core:
+                      out["label_contexts"]=contexts[:25]
+                      out["markers"]=p.markers[:30]
+                      out["visible_tail"]=p.text[-90:]
+                      out["inline_candidates"]=[re.sub(r'\s+',' ',x)[:400] for x in re.findall(r'<script\b[^>]*>(.*?)</script>',h,re.I|re.S) if re.search(r'statistic|technical|matchstat|techStat|liveTime|matchTime',x,re.I)][:8]
+                  out["scripts"]=[x for x in p.scripts if re.search(r'detail|common|diff',x,re.I)][:5]
+              except Exception as e:out["error"]=str(e)
+              return out
+          live=catalog()
+          print("AUDIT_START",json.dumps({"live":len(live),"states":dict(collections.Counter(str(m["state"]) for m in live))},ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as p:
+              results=list(p.map(inspect,live))
+          for r in results:print("FULL_MATCH",json.dumps(r,ensure_ascii=False),flush=True)
+          print("FULL_SUMMARY",json.dumps({"live":len(live),"attempted":len(results),"http_success":sum("error" not in r for r in results),"core":sum(bool(r.get("core")) for r in results),"fields":dict(collections.Counter(k for r in results for k in r.get("core",{}))),"missing_core":[r["id"] for r in results if not r.get("core")],"missing_shots":[r["id"] for r in results if "shots" not in r.get("core",{})]},ensure_ascii=False))
+          with open("nowgoal-audit.json","w",encoding="utf-8") as f:json.dump(results,f,ensure_ascii=False,indent=2)
+          PY
+      - name: Upload audit records
+        uses: actions/upload-artifact@v4
+        with:
+          name: nowgoal-audit
+          path: nowgoal-audit.json
+          retention-days: 3
+  browser:
+    runs-on: ubuntu-latest
+    needs: audit
+    timeout-minutes: 7
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nowgoal-audit
+      - name: Install browser inspection dependencies
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Inspect missing data in rendered pages
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,re,asyncio
+          from playwright.async_api import async_playwright
+          rows=json.load(open("nowgoal-audit.json",encoding="utf-8"))
+          missing=[r for r in rows if not r.get("core") or "shots" not in r.get("core",{}) or "shots_on_target" not in r.get("core",{})]
+          async def main():
+              async with async_playwright() as p:
+                  browser=await p.chromium.launch(headless=True)
+                  context=await browser.new_context()
+                  sem=asyncio.Semaphore(3)
+                  async def check(m):
+                      async with sem:
+                          page=await context.new_page()
+                          out={"id":m["id"],"home":m["home"],"away":m["away"],"requests":[]}
+                          def on_response(r):
+                              if r.request.resource_type in ("xhr","fetch") and "nowgoal.net" in r.url and len(out["requests"])<30:
+                                  out["requests"].append({"url":r.url.split("?")[0],"status":r.status})
+                          page.on("response",on_response)
+                          try:
+                              resp=await page.goto("https://www.nowgoal.net/match/live-"+str(m["id"]),wait_until="domcontentloaded",timeout=25000)
+                              out["http"]=resp.status if resp else None
+                              await page.wait_for_timeout(6000)
+                              body=await page.locator("body").inner_text(timeout=10000)
+                              lines=[x.strip() for x in body.splitlines() if x.strip()]
+                              labels={"shots","shots on goal","shots on target","total shots","attacks","dangerous attacks","expected goals (xg)","possession","red cards"}
+                              out["contexts"]=[[i,lines[max(0,i-3):i+4]] for i,t in enumerate(lines) if t.casefold() in labels][:40]
+                              out["no_stats_text"]=[x for x in lines if re.search(r'no (data|statistic)|not available|no coverage',x,re.I)][:10]
+                              out["body_preview"]=lines[:60]
+                          except Exception as e:out["error"]=str(e)[:300]
+                          finally:await page.close()
+                          print("BROWSER_MATCH",json.dumps(out,ensure_ascii=False),flush=True)
+                          return out
+                  results=await asyncio.gather(*(check(m) for m in missing))
+                  await browser.close()
+                  print("BROWSER_SUMMARY",json.dumps({"missing_or_partial":len(missing),"checked":len(results),"with_label_context":sum(bool(r.get("contexts")) for r in results)}),flush=True)
+          asyncio.run(main())
+          PY

@@ -1,0 +1,81 @@
+name: Nowgoal live match validation
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-live-validation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Parse in-play matches and validate details
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, gzip, json, re, ast, datetime, concurrent.futures, collections, time
+          from html.parser import HTMLParser
+          base="https://www.nowgoal.net"
+          def fetch(path):
+              req=urllib.request.Request(base+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=12) as r:
+                  raw=r.read(4000000)
+                  if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+                  return raw.decode("utf-8","replace")
+          def arrays(s,kind):
+              for m in re.finditer(r'^'+kind+r'\[(\d+)\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      f=ast.literal_eval(m.group(2))
+                      if isinstance(f,list):yield int(m.group(1)),f
+                  except (ValueError,SyntaxError):pass
+          def catalog():
+              date=datetime.datetime.now(datetime.timezone.utc).date()
+              obj=json.loads(fetch("/ajax/SoccerAjax?type=6&date="+str(date)+"&order=league&timezone=3"))
+              s=obj["Data"]
+              leagues=dict(arrays(s,"B"))
+              rows=[]
+              for _,f in arrays(s,"A"):
+                  if len(f)<13 or not isinstance(f[0],int):continue
+                  rows.append({"id":f[0],"league_index":f[1],"league_raw":leagues.get(f[1],[])[:6],"home":f[4],"away":f[5],"kickoff_raw":f[6],"state":f[7],"score":f[8:10],"ht_raw":f[10:12]})
+              return rows,re.search(r'var matchcount=(\d+)',s).group(1)
+          class Text(HTMLParser):
+              def __init__(self):super().__init__();self.text=[];self.skip=0;self.title=False;self.titles=[]
+              def handle_starttag(self,t,a):
+                  if t in ("script","style"):self.skip+=1
+                  if t=="title":self.title=True
+              def handle_endtag(self,t):
+                  if t in ("script","style"):self.skip=max(0,self.skip-1)
+                  if t=="title":self.title=False
+              def handle_data(self,s):
+                  if self.skip:return
+                  s=" ".join(s.split())
+                  if s:self.text.append(s)
+                  if self.title:self.titles.append(s)
+          def detail(m):
+              out={"match":m}
+              try:
+                  p=Text();p.feed(fetch("/match/live-"+str(m["id"])))
+                  out["title"]=" ".join(p.titles)
+                  labels={"shots","shots on target","shots on goal","dangerous attacks","attacks","possession","expected goals (xg)","xg","red cards"}
+                  def numeric(t):return bool(re.fullmatch(r'\d+(?:\.\d+)?%?',t))
+                  pairs=[]
+                  for i,t in enumerate(p.text):
+                      if t.lower() in labels and 0<i<len(p.text)-1 and numeric(p.text[i-1]) and numeric(p.text[i+1]):
+                          pairs.append([t,p.text[i-1],p.text[i+1]])
+                  out["stat_pairs"]=pairs[:40]
+                  out["has_numeric_stats"]=bool(pairs)
+                  out["header_text"]=p.text[:110]
+              except Exception as e:out["error"]=str(e)
+              return out
+          rows,declared=catalog()
+          live=[m for m in rows if m["state"] in (1,2,3)]
+          print("LIVE_CATALOG",json.dumps({"declared":declared,"parsed":len(rows),"states":dict(collections.Counter(str(m["state"]) for m in rows)),"live":len(live),"matches":live},ensure_ascii=False))
+          # Cap diagnostic requests; all live IDs are reported above.
+          sample=live[:12]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:
+              result=list(p.map(detail,sample))
+          for r in result:print("LIVE_DETAIL",json.dumps(r,ensure_ascii=False))
+          print("LIVE_COVERAGE",json.dumps({"catalog_live":len(live),"details_checked":len(result),"numeric_stats":sum(bool(r.get("has_numeric_stats")) for r in result)}))
+          PY

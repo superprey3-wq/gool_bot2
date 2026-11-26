@@ -1,0 +1,154 @@
+name: Nowgoal MARKET totals and movement audit
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-market-totals.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Inspect totals tables, period switches, decimal format and history
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio,json,re,ast,urllib.request,gzip,datetime
+          from urllib.parse import urlsplit,parse_qsl
+          from playwright.async_api import async_playwright
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=15) as r:raw=r.read(5000000)
+              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+              return json.loads(raw)
+          def catalog():
+              date=datetime.datetime.now(datetime.timezone.utc).date()
+              s=get("/ajax/SoccerAjax?type=6&date="+str(date)+"&order=league&timezone=3")["Data"]
+              rows=[]
+              for m in re.finditer(r'^A\[\d+\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      f=ast.literal_eval(m.group(1))
+                      if len(f)>12 and f[7] in (1,2,3):rows.append({"id":f[0],"home":f[4],"away":f[5],"state":f[7],"score":f[8:10]})
+                  except (ValueError,SyntaxError):pass
+              return rows
+          async def snapshot(page):
+              return await page.evaluate("""()=>({title:document.title,controls:Array.from(document.querySelectorAll('a,button,li,span,label')).filter(e=>e.getClientRects().length&&/^(FT|HT|2nd Half|Second Half|Decimal Odds|Hong Kong Odds|Detail|In-Play|All|More|Odds Change|Odds Movement)$/i.test((e.innerText||'').trim())).slice(0,55).map(e=>({text:e.innerText.trim(),tag:e.tagName,id:e.id,cls:e.className.toString().slice(0,120),href:e.getAttribute('href'),title:e.title})),tables:Array.from(document.querySelectorAll('table')).filter(t=>t.getClientRects().length&&/Over|Under|Goals|Time|Company/i.test(t.innerText)).slice(0,6).map(t=>({id:t.id,cls:t.className,rows:Array.from(t.querySelectorAll('tr')).filter(r=>r.getClientRects().length).slice(0,35).map(r=>({text:r.innerText.trim().slice(0,700),cells:Array.from(r.cells).map(c=>({text:c.innerText.trim().slice(0,150),title:c.title,cls:c.className.toString().slice(0,100)}))}))})),body:document.body.innerText.split('\\n').map(x=>x.trim()).filter(Boolean).slice(0,200)})""")
+          async def switch(page,label):
+              candidates=page.get_by_text(label,exact=True)
+              for i in range(min(await candidates.count(),15)):
+                  x=candidates.nth(i)
+                  if await x.is_visible():
+                      try:
+                          await x.click(timeout=2500)
+                          await page.wait_for_timeout(2200)
+                          return True
+                      except Exception:pass
+              return False
+          async def main():
+              rows=await asyncio.to_thread(catalog)
+              selected=sorted(rows,key=lambda x:(x["state"]!=3,x["id"] not in (3073730,3062687,3115809,3116761,3073844)))[:3]
+              print("MARKET_CATALOG",json.dumps({"live":len(rows),"sample":selected},ensure_ascii=False),flush=True)
+              async with async_playwright() as p:
+                  b=await p.chromium.launch()
+                  ctx=await b.new_context()
+                  for m in selected:
+                      mid=m["id"];page=await ctx.new_page();pending=[];reqs=[]
+                      async def on_response(r):
+                          u=urlsplit(r.url)
+                          if u.hostname!="www.nowgoal.net" or not re.search(r'odds|soccerajax',u.path,re.I) or r.request.resource_type not in ("fetch","xhr"):return
+                          allowed={"type","t","h","id","matchid","companyid","company","oddsType","ot","isHalf","half","lang","oddstype","sid"}
+                          q={k:v for k,v in parse_qsl(u.query) if k.lower() in {x.lower() for x in allowed} and re.fullmatch(r'[a-zA-Z0-9_-]{1,32}',v)}
+                          obj={"path":u.path,"query":q,"status":r.status}
+                          try:
+                              raw=await r.body()
+                              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+                              v=json.loads(raw);d=v.get("Data") if isinstance(v,dict) else v
+                              obj.update(bytes=len(raw),data_type=type(d).__name__,data_preview=str(d)[:3500])
+                          except Exception:pass
+                          reqs.append(obj)
+                      page.on("response",lambda r:pending.append(asyncio.create_task(on_response(r))))
+                      for path in ("/over-under-odds/","/match/live-"):
+                          out={"match":m,"path":path+str(mid)}
+                          try:
+                              res=await page.goto(BASE+path+str(mid),wait_until="domcontentloaded",timeout=25000)
+                              await page.wait_for_timeout(3500)
+                              out["http"]=res.status if res else None
+                              out["default"]=await snapshot(page)
+                              out["ht_clicked"]=await switch(page,"HT")
+                              if out["ht_clicked"]:out["ht"]=await snapshot(page)
+                              out["ft_clicked"]=await switch(page,"FT")
+                              if out["ft_clicked"]:out["ft"]=await snapshot(page)
+                              # Read-only display setting: verify decimal versus Hong Kong odds.
+                              if path=="/over-under-odds/":
+                                  out["decimal_clicked"]=await switch(page,"Decimal Odds")
+                                  if out["decimal_clicked"]:out["decimal"]=await snapshot(page)
+                                  # Inspect links/buttons specifically labeled for history; no betting actions.
+                                  out["history_controls"]=await page.evaluate("""()=>Array.from(document.querySelectorAll('a,button,td,span')).filter(e=>e.getClientRects().length&&(/odds.?change|odds.?history|odds.?detail|movement|trend/i.test([e.title,e.className,e.id].join(' '))||/^(Detail|Trend|History)$/i.test((e.innerText||'').trim()))).slice(0,35).map(e=>({tag:e.tagName,text:(e.innerText||'').trim().slice(0,100),title:e.title,id:e.id,cls:e.className.toString().slice(0,100),href:e.getAttribute('href')}))""")
+                          except Exception as e:out["error"]=str(e)[:300]
+                          await asyncio.gather(*pending,return_exceptions=True)
+                          out["requests"]=reqs[:20];reqs.clear();pending.clear()
+                          print("MARKET_PAGE",json.dumps(out,ensure_ascii=False),flush=True)
+                      await page.close()
+                  await b.close()
+              # Direct history endpoint already observed in normal browser requests.
+              for m in selected:
+                  try:
+                      obj=await asyncio.to_thread(get,"/Ajax/SoccerAjax?type=4&id="+str(m["id"]))
+                      data=obj.get("Data") or ""
+                      groups=[]
+                      for g in data.split("!"):
+                          records=g.split("^")
+                          head=records[0].split(",")
+                          if len(head)<4:continue
+                          groups.append({"provider":head[:3],"records":len(records),"first":head,"last":[r.split(",") for r in records[-4:]]})
+                      print("MARKET_RAW_HISTORY",json.dumps({"match":m,"groups":groups},ensure_ascii=False),flush=True)
+                  except Exception as e:print("MARKET_RAW_ERROR",m["id"],str(e))
+          asyncio.run(main())
+          PY
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check direct historical odds coverage on every live match
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,gzip,json,re,ast,datetime,concurrent.futures,collections
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=15) as r:raw=r.read(5000000)
+              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+              return json.loads(raw)
+          d=datetime.datetime.now(datetime.timezone.utc).date()
+          s=get("/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3")["Data"]
+          rows=[]
+          for m in re.finditer(r'^A\[\d+\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+              try:
+                  f=ast.literal_eval(m.group(1))
+                  if len(f)>12 and f[7] in (1,2,3):rows.append({"id":f[0],"home":f[4],"away":f[5],"state":f[7],"score":f[8:10]})
+              except (ValueError,SyntaxError):pass
+          def inspect(m):
+              o=dict(m)
+              try:
+                  data=get("/Ajax/SoccerAjax?type=4&id="+str(m["id"])).get("Data") or ""
+                  groups=[]
+                  for g in data.split("!"):
+                      rs=g.split("^");head=rs[0].split(",")
+                      if len(head)<4:continue
+                      hist=[x.split(",") for x in rs[1:] if x]
+                      groups.append({"book":head[2].split("#")[0],"rows":len(hist),"timed_rows":sum(bool(re.fullmatch(r'\d+|HT|FT|\d+\+\d+',x[0])) for x in hist),"sample":hist[-1][:3] if hist else [],"lengths":dict(collections.Counter(str(len(x)) for x in hist))})
+                  o["groups"]=groups
+              except Exception as e:o["error"]=str(e)
+              return o
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:out=list(p.map(inspect,rows))
+          for x in out:print("MARKET_COVERAGE_MATCH",json.dumps(x,ensure_ascii=False),flush=True)
+          print("MARKET_COVERAGE",json.dumps({"live":len(rows),"checked":len(out),"with_odds_groups":sum(bool(x.get("groups")) for x in out),"with_timed_history":sum(any(g["timed_rows"] for g in x.get("groups",[])) for x in out),"bookmakers":dict(collections.Counter(g["book"] for x in out for g in x.get("groups",[])))},ensure_ascii=False),flush=True)
+          PY

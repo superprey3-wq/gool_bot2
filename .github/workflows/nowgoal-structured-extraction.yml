@@ -1,0 +1,104 @@
+name: Nowgoal structured live and history extraction
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-structured-extraction.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate direct structured live feeds across all in-play matches
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,gzip,json,re,ast,datetime,concurrent.futures,collections
+          BASE="https://www.nowgoal.net"
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={"User-Agent":"GOOL-Data-Research/1.0","Accept":"*/*"})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  raw=r.read(5000000)
+              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+              return json.loads(raw)
+          def arrays(s,k):
+              for m in re.finditer(r'^'+k+r'\[(\d+)\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      f=ast.literal_eval(m.group(2))
+                      if isinstance(f,list):yield int(m.group(1)),f
+                  except (ValueError,SyntaxError):pass
+          day=datetime.datetime.now(datetime.timezone.utc).date()
+          catalog=get("/ajax/SoccerAjax?type=6&date="+str(day)+"&order=league&timezone=3")["Data"]
+          matches=[{"id":f[0],"home":f[4],"away":f[5],"state":f[7],"score":f[8:10]} for _,f in arrays(catalog,"A") if len(f)>12 and f[7] in (1,2,3)]
+          def inspect(m):
+              o=dict(m);mid=m["id"]
+              try:
+                  response=get("/Ajax/SoccerAjax?type=15&id="+str(mid))
+                  s=response.get("Data") or ""
+                  for key in ("tT_f","tT_o_f","d_f","s_f"):
+                      arr=dict(arrays(s,key)).get(mid)
+                      o[key]=arr
+                  o["errcode"]=response.get("ErrCode")
+                  stats={str(x[0]):x[1:3] for x in (o.get("tT_f") or []) if isinstance(x,list) and len(x)>=3}
+                  o["stats_codes"]=stats
+                  o["half_count"]=len(o.get("tT_o_f") or [])
+                  o["event_count"]=len(o.get("d_f") or [])
+              except Exception as e:o["stats_error"]=str(e)
+              try:
+                  r=get("/Ajax/SoccerAjax/?type=11&id="+str(mid))
+                  d=r.get("Data") or {}
+                  o["clock"]={k:d.get(k) for k in ("state","time","injuryTime")}
+                  o["score_html"]=d.get("html")
+              except Exception as e:o["clock_error"]=str(e)
+              return o
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:rows=list(p.map(inspect,matches))
+          for r in rows:print("DIRECT_MATCH",json.dumps(r,ensure_ascii=False),flush=True)
+          print("DIRECT_SUMMARY",json.dumps({"live":len(matches),"checked":len(rows),"with_stats":sum(bool(r.get("stats_codes")) for r in rows),"with_halves":sum(bool(r.get("half_count")) for r in rows),"with_clock":sum(bool(r.get("clock",{}).get("time")) for r in rows),"field_coverage":dict(collections.Counter(k for r in rows for k in r.get("stats_codes",{})))}),flush=True)
+          PY
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Extract visible numerical history and goal timing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio,json,re
+          from playwright.async_api import async_playwright
+          async def main():
+              async with async_playwright() as p:
+                  b=await p.chromium.launch()
+                  for mid in (3073730,3062687,3115809):
+                      page=await b.new_page()
+                      out={"id":mid}
+                      try:
+                          await page.goto("https://www.nowgoal.net/match/h2h-"+str(mid),wait_until="domcontentloaded",timeout=25000)
+                          await page.wait_for_timeout(5000)
+                          out["history_tables"]=await page.locator("table").evaluate_all("(els)=>els.map(t=>({headers:Array.from(t.querySelectorAll('th')).map(x=>x.innerText),rows:Array.from(t.querySelectorAll('tr')).map(x=>x.innerText).filter(Boolean).slice(0,25)})).filter(x=>x.rows.some(r=>/League|Score|Date/i.test(r))).slice(0,8)")
+                          out["goal_distribution"]=await page.locator(".goalTimeStat").evaluate_all("(els)=>els.map(e=>({text:e.innerText,items:Array.from(e.querySelectorAll('li')).map(x=>x.innerText)}))")
+                          lines=[x.strip() for x in (await page.locator("body").inner_text()).splitlines() if x.strip()]
+                          out["summary_contexts"]=[lines[max(0,i-2):i+32] for i,t in enumerate(lines) if re.search(r'Goals Distribution|Half Time / Full Time|Goal Score/Loss per Game',t,re.I)][:8]
+                          await page.goto("https://www.nowgoal.net/match/live-"+str(mid),wait_until="domcontentloaded",timeout=25000)
+                          await page.wait_for_timeout(4000)
+                          async def timing():
+                              lines=[x.strip() for x in (await page.locator("body").inner_text()).splitlines() if x.strip()]
+                              return [lines[max(0,i-2):i+95] for i,t in enumerate(lines) if "The Rate of Scored / Conceded" in t][:1]
+                          out["timing_default"]=await timing()
+                          selector=page.get_by_text("Last 50 Matches",exact=True)
+                          if await selector.count()==1 and await selector.is_visible():
+                              await selector.click(timeout=5000)
+                              await page.wait_for_timeout(1800)
+                              out["timing_50"]=await timing()
+                          out["timing_50_clicked"]="timing_50" in out
+                      except Exception as e:out["error"]=str(e)[:300]
+                      print("HISTORY_RECORD",json.dumps(out,ensure_ascii=False),flush=True)
+                      await page.close()
+                  await b.close()
+          asyncio.run(main())
+          PY

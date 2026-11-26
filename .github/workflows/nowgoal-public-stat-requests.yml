@@ -1,0 +1,76 @@
+name: Nowgoal public statistics request audit
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-public-stat-requests.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install chromium
+      - name: Inspect public statistics requests made by normal page
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio,json,re,gzip,ast,urllib.request,datetime
+          from urllib.parse import urlsplit,parse_qsl
+          from playwright.async_api import async_playwright
+          BASE="https://www.nowgoal.net"
+          def catalog():
+              d=datetime.datetime.now(datetime.timezone.utc).date()
+              req=urllib.request.Request(BASE+"/ajax/SoccerAjax?type=6&date="+str(d)+"&order=league&timezone=3",headers={"User-Agent":"GOOL-Data-Research/1.0"})
+              with urllib.request.urlopen(req,timeout=15) as r:raw=r.read(4000000)
+              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+              s=json.loads(raw)["Data"]
+              out=[]
+              for m in re.finditer(r'^A\[\d+\]\s*=\s*(\[.*\]);\s*$',s,re.M):
+                  try:
+                      f=ast.literal_eval(m.group(1))
+                      if len(f)>12 and f[7] in (1,2,3):out.append({"id":f[0],"home":f[4],"away":f[5],"state":f[7]})
+                  except (ValueError,SyntaxError):pass
+              return out
+          async def main():
+              matches=await asyncio.to_thread(catalog)
+              preferred={3062687,3115809,3116761,3116762,3073844}
+              selected=[m for m in matches if m["id"] in preferred]
+              selected=(selected+[m for m in matches if m["id"] not in preferred])[:5]
+              async with async_playwright() as p:
+                  browser=await p.chromium.launch()
+                  ctx=await browser.new_context()
+                  for m in selected:
+                      page=await ctx.new_page()
+                      pending=[]
+                      async def inspect(r):
+                          u=urlsplit(r.url)
+                          if u.hostname!="www.nowgoal.net" or u.path.lower().rstrip("/")!="/ajax/soccerajax":return
+                          allowed={"type","id","matchid","sid","h","s","t","lang","language","timezone"}
+                          params={k:v for k,v in parse_qsl(u.query) if k.lower() in allowed and re.fullmatch(r'[a-zA-Z0-9_-]{1,32}',v)}
+                          item={"match_id":m["id"],"path":u.path,"method":r.request.method,"params":params,"status":r.status}
+                          try:
+                              raw=await r.body()
+                              if raw.startswith(b'\x1f\x8b'):raw=gzip.decompress(raw)
+                              item["bytes"]=len(raw)
+                              obj=json.loads(raw)
+                              item["keys"]=list(obj)[:30] if isinstance(obj,dict) else []
+                              if isinstance(obj,dict):
+                                  item["field_shapes"]={k:{"type":type(v).__name__,"length":len(v) if isinstance(v,(list,dict,str)) else None} for k,v in obj.items() if k.lower() in ("data","errcode","matchstate","stats","statistics","events","detail")}
+                          except Exception:pass
+                          print("PUBLIC_REQUEST",json.dumps(item),flush=True)
+                      page.on("response",lambda r:pending.append(asyncio.create_task(inspect(r))))
+                      try:
+                          await page.goto(BASE+"/match/live-"+str(m["id"]),wait_until="domcontentloaded",timeout=20000)
+                          await page.wait_for_timeout(6500)
+                      except Exception as e:print("PAGE_ERROR",m["id"],str(e)[:200])
+                      await asyncio.gather(*pending,return_exceptions=True)
+                      await page.close()
+                  await browser.close()
+              print("REQUEST_AUDIT_COMPLETE",len(selected))
+          asyncio.run(main())
+          PY

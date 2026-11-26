@@ -1,0 +1,65 @@
+name: Nowgoal public data probe
+on:
+  push:
+    branches: [diag/nowgoal-feed-20261126]
+    paths: ['.github/workflows/nowgoal-feed-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check public match and statistics feeds
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, re, ast, json, concurrent.futures
+          sources = {
+              "nowgoal_net_catalog": "https://www.nowgoal.net/gf/data/bf_en-idn.js",
+              "nowgoal_net_stats": "https://www.nowgoal.net/gf/data/detail.js",
+              "nowgoal_com_catalog": "https://www.nowgoal.com/gf/data/bf_en-idn.js",
+              "nowgoal_com_stats": "https://www.nowgoal.com/gf/data/detail.js",
+              "titan_catalog": "https://livestatic.titan007.com/vbsxml/bfdata_ut.js",
+              "titan_stats": "https://livestatic.titan007.com/vbsxml/detail_ut.js",
+          }
+          def probe(item):
+              name, url = item
+              out = {"source": name, "url": url}
+              try:
+                  with urllib.request.urlopen(url, timeout=12) as res:
+                      data = res.read(5000000).decode("utf-8", "replace")
+                      out.update(status=res.status, bytes=len(data), final_url=res.url)
+                  rows = re.findall(r'A\[\d+\]\s*=\s*(\[[^\r\n]*?\])\s*;?', data)
+                  records = []
+                  for row in rows:
+                      try:
+                          f = ast.literal_eval(row)
+                          if len(f) >= 13 and isinstance(f[0], int):
+                              records.append({"id": f[0], "home": f[4], "away": f[5], "state": f[8], "score": [f[9], f[10]]})
+                      except (ValueError, SyntaxError, TypeError):
+                          pass
+                  if name == "titan_catalog":
+                      for row in re.findall(r'A\[\d+\]="([^"]*)"\.split\(\'\^\'\)', data):
+                          f = row.split("^")
+                          if len(f) >= 18 and f[0].isdigit():
+                              records.append({"id": int(f[0]), "home": f[5], "away": f[8], "state": f[13], "score": f[14:16]})
+                  stats_ids = set(re.findall(r'tc\[\d+\]\s*=\s*"(\d+)\^', data))
+                  events_ids = set(re.findall(r'rq\[\d+\]\s*=\s*"(\d+)\^', data))
+                  live = [r for r in records if str(r["state"]) in ("1","2","3","4","5")]
+                  out.update(records=len(records), live_count=len(live), live_sample=live[:3], stats_count=len(stats_ids), events_count=len(events_ids), match_ids=[str(r["id"]) for r in live], stats_ids=sorted(stats_ids), signature=data[:100] if not records and not stats_ids else None)
+              except Exception as e:
+                  out["error"] = str(e)
+              return out
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              results = list(pool.map(probe, sources.items()))
+          for prefix in ["nowgoal_net", "nowgoal_com", "titan"]:
+              catalog = next(x for x in results if x["source"] == prefix+"_catalog")
+              stats = next(x for x in results if x["source"] == prefix+"_stats")
+              print("COVERAGE", prefix, len(set(catalog.get("match_ids", [])) & set(stats.get("stats_ids", []))))
+          for result in results:
+              result.pop("match_ids", None)
+              result.pop("stats_ids", None)
+              print(json.dumps(result, ensure_ascii=False))
+          PY
